@@ -1,70 +1,70 @@
-  name: Deploy My Page
+name: Deploy My Page
 
-  on:
-    push:
-      branch: [master]
-      paths:
-        - 'portfolio/**'
-        - 'blog/**'
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'portfolio/**'
+      - 'blog/**'
 
-  jobs:
-    filter:
-      runs-on: ubuntu-latest 
-      outputs:
-        portfolio: ${{ steps.filter.outputs.portfolio }}
-        blog: ${{ steps.filter.outputs.blog }}
-      steps:
-        - uses: actions/checkout@v3
-        - uses: dorny/paths-filter@v2
-          id: filter
-          with:
-            filters: |
-              portfolio:
-                - 'portfolio/**'
-              blog:
-                - 'blog/**'
+jobs:
+  filter:
+    runs-on: ubuntu-latest 
+    outputs:
+      portfolio: ${{ steps.filter.outputs.portfolio }}
+      blog: ${{ steps.filter.outputs.blog }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            portfolio:
+              - 'portfolio/**'
+            blog:
+              - 'blog/**'
 
-    deploy-portfolio:
-      needs: filter
-      if: needs.filter.outputs.portfolio == 'true' || contains(github.event.head_commit.message, '[deploy portfolio]')
-      runs-on: ubuntu-latest
-      steps:
-        - name: Run portfolio deploy script on VPS
-          uses: appleboy/ssh-action@master
-          with:
-            host: ${{ secrets.VPS_HOST }}
-            username: ${{ secrets.VPS_USERNAME }}
-            key: ${{ secrets.VPS_SSH_KEY }}
-            script: |
-              set -e
+  deploy-portfolio:
+    needs: filter
+    if: needs.filter.outputs.portfolio == 'true' || contains(github.event.head_commit.message, '[deploy portfolio]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run portfolio deploy script on VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
 
-              echo "https://github.com/${{ github.repository }}.git"
-              echo "${{ secrets.GH_PAT }}"
-                  
-              REPO_DIR="/var/dev/my-page"
-              LIVE_DIR="/var/www/portfolio"
-              BRANCH="master"
+            echo "https://github.com/${{ github.repository }}.git"
+            echo "${{ secrets.GH_PAT }}"
+                
+            REPO_DIR="/var/dev/my-page"
+            LIVE_DIR="/var/www/portfolio"
+            BRANCH="master"
 
-              mkdir -p "$REPO_DIR"
-              mkdir -p "$LIVE_DIR"
+            mkdir -p "$REPO_DIR"
+            mkdir -p "$LIVE_DIR"
 
-              if [ ! -d "$REPO_DIR/.git" ]; then
-                git clone -b "$BRANCH" "https://${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git" "$REPO_DIR"
-              else
-                cd "$REPO_DIR"
-                git fetch origin "$BRANCH"
-                git reset --hard origin/"$BRANCH"
-                git clean -fd
-              fi
+            if [ ! -d "$REPO_DIR/.git" ]; then
+              git clone -b "$BRANCH" "https://${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git" "$REPO_DIR"
+            else
+              cd "$REPO_DIR"
+              git fetch origin "$BRANCH"
+              git reset --hard origin/"$BRANCH"
+              git clean -fd
+            fi
 
-              cd "$REPO_DIR/portfolio"
+            cd "$REPO_DIR/portfolio"
 
-              bun install
-              bun run build
+            bun install
+            bun run build
 
-              rm -rf "$LIVE_DIR"/*
-              cp -r dist/* "$LIVE_DIR"
+            rm -rf "$LIVE_DIR"/*
+            cp -r dist/* "$LIVE_DIR"
 
-              sudo systemctl reload nginx
+            sudo systemctl reload nginx
 
-              echo "Portfolio deployed successfully!"
+            echo "Portfolio deployed successfully!"
