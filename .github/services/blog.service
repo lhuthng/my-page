@@ -1,0 +1,17 @@
+[Unit]
+Description=Blazor Server App - blog.huuthang.site
+After=network.target
+
+[Service]
+WorkingDirectory=/var/www/blog
+ExecStart=/usr/bin/dotnet /var/www/blog/Blog.dll
+Restart=always
+RestartSec=10
+SyslogIdentifier=blazor-blog
+User=www-data
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+Environment=ASPNETCORE_URLS=http://localhost:5000
+
+[Install]
+WantedBy=multi-user.target
