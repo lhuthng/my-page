@@ -1,0 +1,7 @@
+@reference "../index.css";
+
+.milestone {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--color-yellow-chalk);
+}

@@ -1,0 +1,15 @@
+@reference "../index.css";
+
+.section {
+    @apply transition-all duration-500;
+    &::after {
+        @apply absolute w-0 right-0 h-1 opacity-0 bg-yellow-chalk bottom-2 rounded-sm transition-all duration-500 translate-x-[50%];
+        content: '';
+    }
+    &:hover {
+        @apply bg-yellow-chalk text-darkboard;
+        &::after {
+            @apply bg-darkboard w-10 left-0 right-10 opacity-100;
+        }
+    }
+}

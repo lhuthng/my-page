@@ -9,8 +9,12 @@
     "start": "NODE_ENV=production bun src/index.tsx"
   },
   "dependencies": {
+    "bun-plugin-tailwind": "^0.0.15",
+    "lottie-react": "^2.4.1",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "roughjs": "^4.6.6",
+    "tailwindcss": "^4.1.12"
   },
   "devDependencies": {
     "@types/react": "^19",
