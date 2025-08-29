@@ -1,9 +1,206 @@
 import Me from "@/Components/SVGR/Me"
+import gsap from "gsap";
+import { useEffect, useReducer } from "react"
+import { useBoundedEase } from "@/Utils/Hooks/ease";
+import Vect from "@/Utils/vector";
+import "@/Styles/Contact.css";
+
+interface Transform {
+    position: Vect,
+    size: Vect
+}
+
+interface MeState {
+    lastOrigin: Transform,
+    getOrigin: () => Transform,
+    children: Record<string, Transform>
+}
+
+type Action = 
+    | { type: "set-get-origin", payload: { getDomRect: () => DOMRect } }
+    | { type: "add", payload: {key: string, domRect: DOMRect} }
+
+
+const initialState: MeState = {
+    lastOrigin: { position: new Vect(), size: new Vect()},
+    getOrigin: () => ({ position: new Vect(), size: new Vect() }),
+    children: {}
+}
+
+function reducer(state: MeState, { type, payload }: Action) {
+    switch(type) {
+        case "set-get-origin": {
+            state.getOrigin = () => {
+                const domRect = payload.getDomRect();
+                return {
+                    position: new Vect(domRect.left, domRect.top),
+                    size: new Vect(domRect.width, domRect.height)
+                }
+            }
+            state.lastOrigin = state.getOrigin();
+            break;
+        }
+        case "add": {
+            state.children[payload.key] = {
+                position: new Vect(payload.domRect.left, payload.domRect.top).sub(state.lastOrigin.position),
+                size: new Vect(payload.domRect.width, payload.domRect.height)
+            }
+            break;
+        }
+    }
+
+    return state;
+}
+
+function findLocal(
+    state: MeState, 
+    position: Vect, 
+    child?: string, 
+    offset?: { 
+        byValue?: { x: number, y: number }, 
+        byPercent?: { x: number, y: number }
+    }
+): Vect {
+    const result = state.getOrigin().position.sub(position);
+    if (!child || !state.children[child]) {
+        return result;
+    }
+    result.add(state.children[child].position);
+
+    if (offset?.byValue) {
+        result.add(new Vect(offset.byValue.x, offset.byValue.y));
+    }
+    if (offset?.byPercent) {
+        result.add(Vect.mul(state.children[child].size, new Vect(offset.byPercent.x, offset.byPercent.y)));
+    }
+    return result;
+}
+
+interface MovementProps {
+    key: string,
+    influence: number
+};
+
+const movements: MovementProps[]  = [
+    { key: "eyes", influence: 0.9 },
+    { key: "glasses", influence: 0.5 },
+    { key: "eyebrows", influence: 0.4 },
+    { key: "smile", influence: 0.4 },
+    { key: "nose", influence: 0.4 },
+    { key: "blushs", influence: 0.4 },
+    { key: "face-base", influence: 0.3 },
+    { key: "ears", influence: 0.2 },
+    { key: "forehair", influence: 0.25 },
+    { key: "hair", influence: 0.2 }
+];
 
 export default function Contact() {
+    const [ state, dispatch ] = useReducer(reducer, initialState);
+    useEffect(() => {
+        const melement = document.querySelector('#me-svg');
+        if (!melement) return;
+
+        dispatch({ type: "set-get-origin", payload: { getDomRect: () => melement.getBoundingClientRect() } });
+
+        const groups = movements.map(({ key, ...others }) => {
+            const element = melement.querySelector(`#${key}`);
+            return element && { key, element, ...others};
+        }).filter(group => group !== null);
+
+        groups.forEach(({ key, element }) => {
+            dispatch({ type: "add", payload: { key, domRect: element.getBoundingClientRect() }});
+        });
+
+
+
+        const boundedEase = useBoundedEase(4, 100, 2);
+
+        const lookAtMouse = (event: MouseEvent) => {
+            const delta = findLocal(state, new Vect(event.clientX, event.clientY), "eyes", { byPercent: { x: .5, y: .5 } }).neg();
+            const dist = Math.sqrt(delta.x * delta.x + delta.y * delta.y);
+            const easedDist = boundedEase(dist);
+            delta.mul2(easedDist / dist);
+            
+            groups.forEach(({ element, influence }) => {
+                const _delta = Vect.mul2(delta, influence);
+                gsap.to(element, {
+                    translateX: _delta.x,
+                    translateY: _delta.y,
+                    duration: 1
+                })
+            });
+        };
+
+        const tl = gsap.timeline({
+            repeat: -1,
+            repeatDelay: 3
+        });
+
+        tl.to("#eyes", {
+            scaleY: 0.2,
+            transformOrigin: "center center",
+            duration: 0.1
+        });
+        
+        tl.to("#eyes", {
+            scaleY: 1,
+            transformOrigin: "center center",
+            duration: 0.1
+        });
+
+        window.addEventListener('mousemove', lookAtMouse);
+
+        return () => {
+            tl.kill();
+            window.removeEventListener('mousemove', lookAtMouse);
+        };
+    }, []);
+
     return (
-        <div>
-            <Me />
+        <div className="w-full bg-orange-chalk">                
+            <div className="py-20 w-[min(75rem,100%-2rem)] mx-auto">
+                <div className="flex flex-col md:flex-row gap-10 md:gap 0 relative items-center bg-white-chalk w-full px-6 pt-20 md:pt-0 md:px-20 h-auto md:h-100 rounded-2xl shadow-2xl shadow-white-chalk-dark">
+                    <div className="absolute text-4xl sm:text-6xl text-nowrap text-blackboard hover:text-darkboard bg-white-chalk hover:bg-yellow-chalk outline-white-chalk hover:outline-yellow-chalk outline-2 outline-offset-2 outline-double -top-8 drop-shadow-2xl px-2 transition-all duration-100">
+                        Hi there!
+                    </div>
+                    <div className="w-full md:w-[60%] text-blackboard text-lg space-y-2">
+                        <p>- I'd love to hear from you! Whether you want to learn more about me and my work or just want to say hi, feel free to send me a message.</p>
+                        <form className="bg-white-chalk-dark/35 py-3 px-4 rounded-lg">
+                            <div className="flex gap-2">
+                                <label htmlFor="email">Email: </label>
+                                <input className="px-2 flex-1 border-b-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100" 
+                                    type="email" 
+                                    id="email" 
+                                    placeholder="Your contact point" 
+                                    autoComplete="off" 
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="message">Message:</label>
+                                <br />
+                                <textarea className="scrollbar-custom px-2 w-full h-22 lg:h-15 border-l-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100 resize-none" 
+                                    id="message" 
+                                    rows={2} 
+                                    placeholder="Your words, my inbox, instant magic." 
+                                    spellCheck="false" 
+                                    autoComplete="off" 
+                                    autoCorrect="off" 
+                                    autoCapitalize="off"
+                                    required
+                                ></textarea>
+                                <br />
+                            </div>                      
+                            <div className="flex justify-end">
+                                <button className="relative submit-button border-2 px-2 py-1 border-white-chalk-dark hover:border-orange-chalk hover:font-bold hover:-translate-x-1 hover:-translate-y-1 active:border-orange-chalk active:font-bold active:-translate-x-0 active:-translate-y-0 transition-all duration-100 cursor-pointer whitespace-nowrap" type="submit">Send Message</button>
+                            </div>  
+                        </form>
+                    </div>
+                    <div className="flex justify-center w-full md:w-[40%] drop-shadow-lg">
+                        <Me id="me-svg" className="w-40 h-auto overflow-visible"/>
+                    </div>
+                </div>
+            </div>
         </div>
     )
 }
