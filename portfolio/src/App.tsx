@@ -1,4 +1,5 @@
 import About from "./Components/About";
+import Contact from "./Components/Contact";
 import Header from "./Components/Header";
 import Landing from "./Components/Landing";
 import "./index.css";
@@ -10,9 +11,10 @@ export function App() {
   return (
     <>
       <Header sections={["Home", "About", "Skills", "Projects", "Contact"]}/>
-      <div className="pt-20 bg-blackboard text-white w-full divide-y divide-gray-300 z-10">
+      <div className="bg-blackboard text-white w-full divide-y divide-gray-300 z-10">
         <Landing/>
         <About/>
+        <Contact/>
       </div>
     </>
   );
