@@ -1,6 +1,6 @@
 import '@/Styles/Landing.css';
 import { useEffect, useRef, useState } from "react";
-import AnimatedEmoji from './AnimatedEmoji';
+import Lottie from './Lottie';
 import useInterval from "@/Utils/Hooks/interval";
 import useRandomizer from "@/Utils/Hooks/randomizer";
 
@@ -111,10 +111,10 @@ export default function Landing() {
                 <div className="flex flex-col-reverse lg:flex-row gap-10 lg:gap-0 justify-between items-center">
                     <div className="w-[min(37.5rem,calc(100%-1rem))] text-2xl opacity-0 animate-[fadeIn_0.5s_ease-in_forwards]">
                         <div className="h-24 sm:h-auto">
-                            <span>Hi <AnimatedEmoji className="inline-block w-6 h-6 translate-y-1" animationData={wink} loop={true}/>, my name is <span className="text-transparent bg-clip-text bg-linear-to-r from-yellow-chalk to-green-chalk">Huu Thang Le</span></span>
+                            <span>Hi <Lottie className="inline-block w-6 h-6 translate-y-1" animationData={wink} loop={true}/>, my name is <span className="text-transparent bg-clip-text bg-linear-to-r from-yellow-chalk to-green-chalk">Huu Thang Le</span></span>
                             <br/>
                             <span>I'm a <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-chalk to-purple-chalk">{role}</span>
-                            {isWaiting && <span>&nbsp;<AnimatedEmoji className="inline-block w-6 h-6 translate-y-1" animationData={getRandomEmoji(true)} loop={true}/></span>}<span className={`inline-block w-0.5 h-8 bg-white-chalk ${isWaiting ? "animate-blink" : ""}`}>&nbsp;</span></span>
+                            {isWaiting && <span>&nbsp;<Lottie className="inline-block w-6 h-6 translate-y-1" animationData={getRandomEmoji(true)} loop={true}/></span>}<span className={`inline-block w-0.5 h-8 bg-white-chalk ${isWaiting ? "animate-blink" : ""}`}>&nbsp;</span></span>
                         </div>
                         <div className="mt-10">
                             <p>Passionate about computer science, I've been coding and building projects for years. Welcome to my portfolio!</p>

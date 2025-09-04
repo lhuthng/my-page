@@ -1,16 +1,16 @@
 import { useLottie } from "lottie-react";
 
-interface AnimatedEmojiProps {
+interface LottieProps {
     className: string;
     animationData?: object;
     loop: boolean;
 }
 
-export default function AnimatedEmoji({
-    className,
+export default function Lottie({
+    className = "",
     animationData,
     loop
-}: AnimatedEmojiProps) {
+}: LottieProps) {
     const options = {
         animationData,
         loop
