@@ -82,7 +82,8 @@ interface MovementProps {
 };
 
 const movements: MovementProps[]  = [
-    { key: "eyes", influence: 0.9 },
+    { key: "left-eye", influence: 0.7 },
+    { key: "right-eye", influence: 0.7},
     { key: "glasses", influence: 0.5 },
     { key: "eyebrows", influence: 0.4 },
     { key: "smile", influence: 0.4 },

@@ -1,48 +1,104 @@
-import React, { useEffect, useState, type ChangeEvent } from "react";
+import React, { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from "react";
 import '@/Styles/About.css';
 import restart from '@/Assets/SVGs/restart.svg';
+import Intro from "./Phases/Intro";
+import FirstEncounter from "./Phases/FirstEncounter";
+import BSJourney from "./Phases/BSJourney";
+import Work from "./Phases/Work";
+import MSAdventure from "./Phases/MSAdventure";
 
 interface PhaseDetail {
+    id?: number;
+    fading?: boolean;
     title: string;
+    Component: ReactElement
 }
+
+const introPhase: PhaseDetail = {
+    id: -1,
+    title: "Intro",
+    Component: <Intro />
+};
 
 const phaseDetails: PhaseDetail[] = [
     {
-        title: "First Encounter"
+        title: "First Encounter",
+        Component: <FirstEncounter />
     },
     {
-        title: "B.Sc Journey"
+        title: "B.Sc Journey",
+        Component: <BSJourney />
     },
     {
-        title: "Work Experience"
+        title: "Work Experience",
+        Component: <Work />
     },
     {
-        title: "M.Sc Adventure"
+        title: "M.Sc Adventure",
+        Component: <MSAdventure />
     },
     {
-        title: "Now"
+        title: "Now",
+        Component: <Intro />
     }
 ];
 
 export default function About() {
     const [phase, setPhase] = useState<number | null>(null);
+    const idRef = useRef(0);
+    const firstId = useRef(0);
+    const [phaseList, setPhaseList] = useState<PhaseDetail[]>([
+        introPhase
+    ])
+    const PhaseComponent = phase !== null && phaseDetails[phase]?.Component ? phaseDetails[phase].Component : Intro;
 
-    const handleChange = (phaseNumber: number | null = null) => {
-        setPhase(phaseNumber);
-    }
+    const handleChange = (newPhaseNumber: number | null = null) => {
+
+        let reload = true;
+        setPhase(phaseNumber => {
+            reload = (newPhaseNumber !== phaseNumber);
+            return newPhaseNumber;
+        });
+            
+        if (!reload) return;
+
+        const newPhase = newPhaseNumber === null || phaseDetails[newPhaseNumber] === undefined
+            ? { ...introPhase, id: idRef.current }
+            : { ...phaseDetails[newPhaseNumber], id: idRef.current };
+
+        setPhaseList(phaseList => {
+            const head = phaseList.slice(0, firstId.current + 1).map(phase => ({
+                ...phase,
+                fading: true
+            }));
+
+            idRef.current = newPhase.id + 1;
+            return [...head, ...phaseList.slice(firstId.current), newPhase];
+        });
+
+        firstId.current++;
+
+        setTimeout(() => {
+            firstId.current--;
+            setPhaseList(phaseList => phaseList.slice(1));
+        }, 1000)
+    };
 
     return (
-        <div className="h-[100dvh] w-[calc(100%-1rem)] sm:w-[calc(100%-5rem)] mx-auto">
+        <div className="flex flex-col w-[calc(100%-1rem)] sm:w-[calc(100%-5rem)] mx-auto">
             <div className="flex h-20 justify-center items-center">
-                <p className="text-4xl after-about-title font-bold text-white-chalk">About me</p>
+                <p className="text-4xl after-about-title w-full text-center font-bold text-white-chalk">About me</p>
             </div>
-            <div className="w-full h-full flex flex-row-reverse sm:flex-col justify-end sm:justify-start">
-                <div className="w-full sm:w-[min(100%,75rem)] h-[calc(100%-14rem)] sm:h-160 ml-4 sm:mx-auto mr-2 my-10 sm:my-0 bg-green-chalk">
-
+            <div className="flex h-[min(max(calc(100dvh-8rem),46.5rem),65rem)] w-full flex-row-reverse sm:flex-col justify-end sm:justify-start">
+                <div className="relative w-full sm:w-[min(100%,75rem)] h-full ml-4 sm:mx-auto mr-2 overflow-y-auto scrollbar-custom bg-darkboard/70 rounded-2xl drop-shadow-darkboard shadow-xl text-justify text-lg xs:text-xl sm:text-2xl">
+                    {phaseList.map(({id, fading, Component}) => <div 
+                        key={id} 
+                        className={`absolute top-0 left-0 p-4 w-full h-full opacity-0 transition-opacity ${fading? "animate-[fadeOut_0.4s_ease-in_forwards]" : "animate-[fadeIn_0.4s_ease-in_forwards]"}`}
+                    >{Component}</div>)}
                 </div>
-                <div className="w-auto sm:w-[min(100%,75rem)] h-[calc(100%-14rem)] sm:h-auto ml-0 sm:mx-auto">
+                <div className="w-auto sm:w-[min(100%,75rem)] h-[calc(100%-6rem)] sm:h-auto ml-0 sm:mx-auto">
                     <div className="relative flex flex-col justify-center w-full h-10">
-                        <span className={`${phase !== null ? "opacity-100" : "opacity-0"} absolute text-nowrap transition-all duration-200`}>
+                        <span className={`${phase !== null ? "opacity-100" : "opacity-0"} hidden sm:block absolute text-nowrap transition-all duration-200`}>
                             Phase {phase !== null && phase + 1}: {phase !== null && phaseDetails[phase]?.title}
                         </span>
                     </div>
@@ -56,7 +112,7 @@ export default function About() {
                             {phaseDetails.map((detail, index) => (
                                 <React.Fragment key={index}>
                                     <div className="relative flex flex-col items-center">
-                                        <input className="milestone cursor-pointer" 
+                                        <input className={`milestone cursor-pointer ${phase === index ? 'checked' : ''}`} 
                                             type="radio" 
                                             name={`phase-${index + 1}`} 
                                             value={index} 
@@ -74,8 +130,8 @@ export default function About() {
                             ))}
                         </div>
                     </div>            
-                    <div className="relative flex flex-col justify-end items-end w-full h-10">
-                        <button className={`${phase !== null ? "opacity-100" : "opacity-0"} left-0 right-auto sm:left-auto sm:right-0 absolute px-4 h-8 font-semibold rounded-xl transition-opacity duration-200 ${phase !== phaseDetails.length - 1 ? "bg-yellow-chalk text-darkboard shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)] cursor-pointer hover:brightness-110 active:translate-y-[0.2rem] active:shadow-none" : "bg-gray-300 text-gray-600 shadow-[0_0.2rem_0_var(--color-gray-400)]"}`}
+                    <div className="relative flex flex-col justify-end items-center w-14 sm:w-full h-10 p-auto sm:p-10">
+                        <button className={`${phase !== null ? "opacity-100" : "opacity-0"} left-0 right-auto sm:left-auto sm:right-0 absolute w-full sm:w-auto  px-auto sm:px-4 h-8 font-semibold rounded-xl transition-opacity duration-200 ${phase !== phaseDetails.length - 1 ? "bg-yellow-chalk text-darkboard shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)] cursor-pointer hover:brightness-110 active:translate-y-[0.2rem] active:shadow-none" : "bg-gray-300 text-gray-600 shadow-[0_0.2rem_0_var(--color-gray-400)]"}`}
                             onClick={() => handleChange(phase !== null ? phase + 1 : 0)}
                             disabled={phase === phaseDetails.length - 1}
                         >

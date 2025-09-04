@@ -4,6 +4,15 @@
     width: 1rem;
     height: 1rem;
     accent-color: var(--color-yellow-chalk);
+
+    &::after {
+        @apply absolute left-0 right-0 w-full h-full bg-yellow-chalk rounded-full opacity-0;
+        content: "";
+    }
+}
+
+.milestone.checked::after {
+    @apply opacity-75 animate-ping;
 }
 
 .after-about-title {
