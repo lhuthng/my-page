@@ -1,22 +1,30 @@
 import { useLottie } from "lottie-react";
+import { useEffect } from "react";
 
 interface LottieProps {
     className: string;
     animationData?: object;
-    loop: boolean;
+    loop?: boolean;
+    speed?: number;
 }
 
 export default function Lottie({
     className = "",
     animationData,
-    loop
+    loop = true,
+    speed = 1
 }: LottieProps) {
     const options = {
         animationData,
-        loop
+        loop,
+        speed
     };
 
-    const { View } = useLottie(options);
+    const { View, setSpeed } = useLottie(options);
+
+    useEffect(() => {
+        setSpeed(speed);
+    }, [speed]);
 
     return <span className={className}>{View}</span>
 }
