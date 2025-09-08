@@ -1,5 +1,5 @@
 export default function MSAdventure() {
-    return (<div className="flex flex-col h-full justify-center gap-6">
+    return (<section className="flex flex-col h-full justify-center gap-6">
         <span>After a year of professional experience, I decided to continue my journey by pursuing a Master's degree in Computer Science. During this program, I have deepened my knowledge in algorithms, mathematical modeling, IT security, and software engineering.</span>
         <span className="flex">
             <span className="hidden sm:block">
@@ -15,5 +15,5 @@ export default function MSAdventure() {
             <span className="block sm:hidden">My current research interest include Computer Algebra, Game Theory, Coding Theory, Software Analysis, and Hardware-oriented Security.</span>
         </span>
         <span>This journey allows me to combine practical experience with advanced theoretical understanding, driving my growth as a researcher and problem solver in the field of computer science.</span>
-    </div>);
+    </section>);
 }

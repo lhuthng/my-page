@@ -6,6 +6,7 @@ import FirstEncounter from "./Phases/FirstEncounter";
 import BSJourney from "./Phases/BSJourney";
 import Work from "./Phases/Work";
 import MSAdventure from "./Phases/MSAdventure";
+import Now from "./Phases/Now";
 
 interface PhaseDetail {
     id?: number;
@@ -39,7 +40,7 @@ const phaseDetails: PhaseDetail[] = [
     },
     {
         title: "Now",
-        Component: <Intro />
+        Component: <Now />
     }
 ];
 
