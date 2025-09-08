@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from "react";
+import React, { useEffect, useRef, useState, type ChangeEvent, type ReactElement, type ReactNode } from "react";
 import '@/Styles/About.css';
 import restart from '@/Assets/SVGs/restart.svg';
 import Intro from "./Phases/Intro";
@@ -14,12 +14,6 @@ interface PhaseDetail {
     title: string;
     Component: ReactElement
 }
-
-const introPhase: PhaseDetail = {
-    id: -1,
-    title: "Intro",
-    Component: <Intro />
-};
 
 const phaseDetails: PhaseDetail[] = [
     {
@@ -48,16 +42,24 @@ export default function About() {
     const [phase, setPhase] = useState<number | null>(null);
     const idRef = useRef(0);
     const firstId = useRef(0);
+    const [specialDiv, setSpecialDiv] = useState<ReactNode>(null);
+    const introPhase: PhaseDetail = {
+        id: -1,
+        title: "Intro",
+        Component: <Intro setSpecialDiv={setSpecialDiv}/>
+    };
     const [phaseList, setPhaseList] = useState<PhaseDetail[]>([
         introPhase
     ])
-    const PhaseComponent = phase !== null && phaseDetails[phase]?.Component ? phaseDetails[phase].Component : Intro;
 
     const handleChange = (newPhaseNumber: number | null = null) => {
 
         let reload = true;
         setPhase(phaseNumber => {
             reload = (newPhaseNumber !== phaseNumber);
+            if (newPhaseNumber !== null) {
+                setSpecialDiv(null);
+            }
             return newPhaseNumber;
         });
             
@@ -90,7 +92,7 @@ export default function About() {
             <div className="flex h-20 justify-center items-center">
                 <p className="text-4xl after-about-title w-full text-center font-bold text-white-chalk">About me</p>
             </div>
-            <div className="flex h-[min(max(calc(100dvh-8rem),46.5rem),65rem)] w-full flex-row-reverse sm:flex-col justify-end sm:justify-start">
+            <div className="relative flex h-[min(max(calc(100dvh-8rem),46.5rem),65rem)] w-full flex-row-reverse sm:flex-col justify-end sm:justify-start">
                 <div className="relative w-full sm:w-[min(100%,75rem)] h-full ml-4 sm:mx-auto mr-2 overflow-y-auto scrollbar-custom bg-darkboard/70 rounded-2xl drop-shadow-darkboard shadow-xl text-justify text-lg xs:text-xl sm:text-2xl">
                     {phaseList.map(({id, fading, Component}) => <div 
                         key={id} 
@@ -140,6 +142,7 @@ export default function About() {
                         </button>
                     </div>
                 </div>
+                {specialDiv}
             </div>
         </div>
     )

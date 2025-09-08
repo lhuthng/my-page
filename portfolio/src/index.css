@@ -97,6 +97,27 @@ body {
   }
 }
 
+@keyframes sineWave {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1rem);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes breath {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+  }
+  30% {
+    transform: scale(1.1) rotate(3deg);
+  }
+}
+
 .animate-blink {
   animation: blink 1s step-start infinite;
 }
