@@ -11,7 +11,7 @@ export function App() {
   return (
     <>
       <Header sections={["Home", "About", "Skills", "Projects", "Contact"]}/>
-      <div className="bg-blackboard text-white w-full divide-y divide-gray-300 z-10">
+      <div className="bg-blackboard text-white w-full divide-y">
         <Landing/>
         <About/>
         <Contact/>
