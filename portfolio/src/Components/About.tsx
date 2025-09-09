@@ -46,7 +46,7 @@ export default function About() {
     const introPhase: PhaseDetail = {
         id: -1,
         title: "Intro",
-        Component: <Intro setSpecialDiv={setSpecialDiv}/>
+        Component: <Intro setSpecialDiv={setSpecialDiv} onClick={() => handleChange(0)}/>
     };
     const [phaseList, setPhaseList] = useState<PhaseDetail[]>([
         introPhase
