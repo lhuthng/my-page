@@ -4,12 +4,22 @@ import { useEffect } from 'react';
 
 
 export default function Intro(
-    { setSpecialDiv }
-    : { setSpecialDiv: React.Dispatch<React.SetStateAction<React.ReactNode>> }
+    { setSpecialDiv, onClick }
+    : { 
+        setSpecialDiv: React.Dispatch<React.SetStateAction<React.ReactNode>>,
+        onClick: () => void
+    }
 ) {
     useEffect(() => {
-        setSpecialDiv(<img className="absolute left-[5rem] sm:left-auto right-auto sm:right-[1rem] bottom-[4rem] sm:bottom-[8rem] w-20 h-auto rotate-35 sm:-rotate-15 animate-[breath_0.75s_ease-in_infinite]" src={arrow}/>);
-    }, [setSpecialDiv]);
+        setSpecialDiv(
+            <div className='absolute w-[min(100%,75rem)] h-0 left-1/2 -translate-x-1/2 bottom-0'>
+                <img className="absolute left-[5rem] sm:left-[calc(100%-7.5rem)] bottom-40 w-20 h-auto rotate-35 sm:-rotate-15 animate-[breath_0.75s_ease-in_infinite] cursor-pointer" 
+                    onClick={onClick}
+                    src={arrow}
+                />
+            </div>
+        );
+    });
 
 
     return (<section className="flex flex-col gap-6">
