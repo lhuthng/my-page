@@ -5,6 +5,7 @@ import Lottie from '../Lottie'
 
 export default function Now() {
     return (<section className='flex flex-col sm:flex-row-reverse w-full h-full gap-6'>
+        <h1 className="block sm:hidden text-2xl text-center">Now</h1>
         <div className='relative min-w-auto sm:min-w-[clamp(18rem,100dvw-30rem,25rem)] h-80 sm:h-full sm:my-auto'>
             <div className='absolute sm:-left-[4rem] w-full sm:w-[calc(100%+4rem)] h-full bg-cover xs:bg-[length:150%] sm:bg-[length:200%] bg-[45%_27%] sm:bg-[40%_50%] bg-no-repeat bg-[url(@/Assets/Images/hiking.webp)] rounded-md [mask-image:linear-gradient(to_bottom,black,black_60%,transparent)] sm:[mask-image:linear-gradient(to_left,black,black_10%,transparent)]'></div>
         </div>
