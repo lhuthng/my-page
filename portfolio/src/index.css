@@ -5,13 +5,23 @@
 :root {
   --yellow-chalk: 250, 214, 42;
   --green-chalk: 120, 220, 150;
+  --aquamarine-chalk: 83, 186, 105; 
   --blue-chalk: 110, 200, 255;
+  --cyan-chalk: 224,255,255;
+  --navi-chalk: 50, 100, 220;
   --orange-chalk: 255, 160, 60;
+  --orange-red-chalk: 205 , 0, 128;
+  --salmon-chalk: 255, 175, 214;
   --gray-chalk: 180, 180, 180;
+  --light-gray-chalk: 180, 180, 180;
   --skin-chalk: 255, 220, 185;
+  --pink-chalk: 226, 178, 245;
   --blush-chalk: 255, 140, 150;
   --purple-chalk: 190, 140, 255;
+  --silver-chalk: 212, 212, 212;
   --white-chalk: 245, 245, 245;
+  --black-chalk: 46, 37, 34;
+  --dark-charcoal-chalk: 26, 26, 26;
   --darkboard: 32, 26, 24;
   --blackboard: 46, 37, 34;
 }
@@ -28,6 +38,7 @@
   --color-gray-chalk: rgb(var(--gray-chalk));
   --color-skin-chalk: rgb(var(--skin-chalk));
   --color-blush-chalk: rgb(var(--blush-chalk));
+  --color-navi-chalk: rgb(var(--navi-chalk));
   
   --color-orange-chalk-dark: rgb(200, 120, 40);
   --color-gray-chalk-dark: rgb(140, 140, 140);
@@ -40,6 +51,7 @@
   --color-yellow-chalk-dark: rgb(200, 170, 30);
 
   --font-cabin-sketch: "Cabin Sketch", sans-serif;
+  --font-courier-prime: "Courier Prime", monospace;
   
   --breakpoint-xs: 30rem;
 }
@@ -52,6 +64,10 @@
   filter: brightness(0) saturate(100%) invert(4%) sepia(10%) saturate(1917%) hue-rotate(329deg) brightness(101%) contrast(86%);
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   font-family: "Open Sans", sans-serif;
   font-optical-sizing: auto;
@@ -59,6 +75,20 @@ body {
   font-style: normal;
   font-variation-settings:
     "wdth" 100;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+@keyframes scrollingBackground {
+  0% {
+    background-position-x: 0%;
+  }
+  50% {
+    background-position-x: 100%;
+  }
+  100% {
+    background-position-x: 0%;
+  }
 }
 
 @keyframes fadeIn {
@@ -115,6 +145,17 @@ body {
   }
   30% {
     transform: scale(1.1) rotate(3deg);
+  }
+}
+
+@keyframes expandWidth {
+  0% {
+      opacity: 0;
+      width: min(75rem, calc(100% - 10rem));
+  }
+  100% {
+      opacity: 1;
+      width: 100%;
   }
 }
 
