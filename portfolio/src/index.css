@@ -5,16 +5,25 @@
 :root {
   --yellow-chalk: 250, 214, 42;
   --green-chalk: 120, 220, 150;
+  --aquamarine-chalk: 83, 186, 105; 
   --blue-chalk: 110, 200, 255;
+  --cyan-chalk: 224,255,255;
+  --navi-chalk: 50, 100, 220;
   --orange-chalk: 255, 160, 60;
+  --orange-red-chalk: 205 , 0, 128;
+  --salmon-chalk: 255, 175, 214;
   --gray-chalk: 180, 180, 180;
+  --light-gray-chalk: 180, 180, 180;
   --skin-chalk: 255, 220, 185;
+  --pink-chalk: 226, 178, 245;
   --blush-chalk: 255, 140, 150;
   --purple-chalk: 190, 140, 255;
+  --silver-chalk: 212, 212, 212;
   --white-chalk: 245, 245, 245;
+  --black-chalk: 46, 37, 34;
+  --dark-charcoal-chalk: 26, 26, 26;
   --darkboard: 32, 26, 24;
   --blackboard: 46, 37, 34;
-  --navi-chalk: 50, 100, 220;
 }
 
 @theme {
