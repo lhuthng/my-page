@@ -1,16 +1,14 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import "@/Styles/Card.css"
-
-const colors = [ "white", "black", "dark-charcoal", "yellow", "orange", "blue", "cyan", "navi", "green", "aquamarine", "lime", "pink", "purple", "silver", "light-gray", "orange-red", "salmon" ] as const;
-type Color = typeof colors[number]
-
-const toRGB = (color: Color, alpha: number = 1) => `rgba(var(--${color}-chalk), ${alpha})`;
+import CardInfo, { type CardInfoProps } from "./CardInfo";
+import { toRGB, type Color } from "@/Utils/color";
 
 interface CardPreset {
     title: Color
     background: Color
     description: Color
     text: Color
+    highlight?: Color,
     textAlt?: Color
 }
 
@@ -33,11 +31,13 @@ const cardPresetBank: Partial<Record<
         background: "yellow",
         description: "orange",
         text: "dark-charcoal",
+        highlight: "orange-red"
     },  
     Intelligent: {
         title: "blue",
         background: "cyan",
         description: "blue",
+        highlight: "navi",
         text: "white",
         textAlt: "blue",
     },
@@ -52,6 +52,7 @@ const cardPresetBank: Partial<Record<
         background: "pink",
         description: "purple",
         text: "black",
+        highlight: "violet"
     }, 
     Wisdom: {
         title: "light-gray",
@@ -70,11 +71,11 @@ export interface CardProps {
     defense?: number,
     effect?: string,
     expanded?: boolean,
+    details: CardInfoProps[],
     onClick?: () => void,
     children: [
         illustration: ReactNode, 
-        description: ReactNode,
-        details?: ReactNode
+        description: ReactNode
     ]
 }
 
@@ -88,14 +89,18 @@ export default function Card(
         defense,
         effect,
         expanded,
+        details,
         onClick,
         children
     }: CardProps
 ) {
     const cardRef = useRef<HTMLDivElement>(null);
     const illustrationRef = useRef<HTMLDivElement>(null);
+    const detailRef = useRef<HTMLDivElement>(null);
+    const [ cardOffset, setCardOffset ] = useState<[number, number]>([0, 0]);
+    const [ hoverDir, setHoverDir ] = useState<[number, number, number]>();
 
-    const [ illustration, description, details ] = children;
+    const [ illustration, description ] = children;
     const colorPreset = cardPresetBank[colorPresetName] ?? defaultPreset;
 
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
@@ -117,7 +122,9 @@ export default function Card(
 
         if (!illustrationRef.current) return;
 
-        illustrationRef.current.style.transform = `translate(${-dirX / 40}px, ${(dirY-10) / 40}px)`;
+        const illusrationYOffset = 72;
+        illustrationRef.current.style.transform = `translate(${-dirX / 40}px, ${(dirY - illusrationYOffset) / 40}px)`;
+        setHoverDir([ -dirX, dirY, illusrationYOffset]);
     };
 
     const handleMouseLeave = () => {
@@ -125,7 +132,10 @@ export default function Card(
         cardRef.current.style.transform = "";
         if (!illustrationRef.current) return;
         illustrationRef.current.style.transform = "";
+        setHoverDir(undefined);
     };
+
+    const width = 280, heigth = 110;
 
     const cardContainer = <div className="card-container perspective-midrange mx-auto my-2 w-70 h-100 cursor-pointer"
         onMouseMove={handleMouseMove}
@@ -139,7 +149,7 @@ export default function Card(
             <div className="level flex flex-col absolute -left-2 -top-1 w-18 h-18 justify-center items-center border-4 pointer-events-none rounded-xl z-1"
                 style={{
                     backgroundColor: toRGB(colorPreset.background),
-                    borderColor: toRGB(colorPreset.title),
+                    borderColor: toRGB(colorPreset.highlight ?? colorPreset.title),
                     color: toRGB(colorPreset.textAlt ?? colorPreset.text)
                 }}
             >
@@ -148,6 +158,7 @@ export default function Card(
             </div>
             <div className="card flex flex-col w-full h-full rounded-2xl border-8 border-double border-blackboard transition-shadow duration-100 overflow-hidden"
                 style={{
+                    borderColor: toRGB(colorPreset.highlight ?? "black"),
                     backgroundColor: toRGB(colorPreset.background)
                 }}
             >
@@ -221,18 +232,51 @@ export default function Card(
                 </div>
             </div>
         </div>
-    </div>
+    </div>;
+
+    const findCardOffset = () => {
+        if (detailRef.current && cardRef.current) {
+            const [ detailRect, cardRect ] = [
+                detailRef.current.getBoundingClientRect(),
+                cardRef.current.getBoundingClientRect()
+            ]
+
+            setCardOffset([detailRect.left - cardRect.left, detailRect.top - cardRect.top]);
+        }
+    }
+
+    useLayoutEffect(() => {
+        findCardOffset();
+    }, [ detailRef ]);
+
+    useEffect(() => {
+        window.addEventListener('resize', findCardOffset);
+        return () => {
+            window.removeEventListener('resize', findCardOffset);
+        }
+    }, [])
 
     return !expanded ? 
         cardContainer
-        : <div className="col-span-full grid-container h-auto">
+        : <div className="flex relative justify-center col-span-full h-auto">
             {cardContainer}
-            <div className="bg-red-500 h-200"
-                style={{
-                    gridColumn: "2/-1"
-                }}
+            <div className="absolute"
+                ref={detailRef}
             >
-
+                {details.map((detail, index) => <CardInfo {...detail}
+                    className="rounded-lg p-2 border-2"
+                    style={{
+                        backgroundColor: toRGB(colorPreset.background),
+                        borderColor: toRGB(colorPreset.highlight ?? colorPreset.title),
+                        color: toRGB(colorPreset.textAlt ?? colorPreset.text),
+                    }}
+                    dx={cardOffset[0]} 
+                    dy={cardOffset[1]} 
+                    hoverSize={[width, heigth]}
+                    hoverDir={hoverDir}
+                    key={index}
+                    strokeColor={toRGB(colorPreset.highlight ?? colorPreset.title)}
+                />)}
             </div>
         </div>
 }
