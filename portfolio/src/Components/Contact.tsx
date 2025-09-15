@@ -1,6 +1,6 @@
 import Me from "@/Components/SVGR/Me"
 import gsap from "gsap";
-import { useEffect, useReducer } from "react"
+import { useEffect, useReducer, useRef } from "react"
 import { useBoundedEase } from "@/Utils/Hooks/ease";
 import Vect from "@/Utils/vector";
 import "@/Styles/Contact.css";
@@ -97,6 +97,9 @@ const movements: MovementProps[]  = [
 
 export default function Contact() {
     const [ state, dispatch ] = useReducer(reducer, initialState);
+    const lookAtMouse = useRef<(event: MouseEvent) => void>(null);
+    const stopLookingAtMouse = useRef<() => void>(null);
+
     useEffect(() => {
         const melement = document.querySelector('#me-svg');
         if (!melement) return;
@@ -116,7 +119,7 @@ export default function Contact() {
 
         const boundedEase = useBoundedEase(4, 100, 2);
 
-        const lookAtMouse = (event: MouseEvent) => {
+        lookAtMouse.current = (event: MouseEvent) => {
             const delta = findLocal(state, new Vect(event.clientX, event.clientY), "eyes", { byPercent: { x: .5, y: .5 } }).neg();
             const dist = Math.sqrt(delta.x * delta.x + delta.y * delta.y);
             const easedDist = boundedEase(dist);
@@ -127,38 +130,59 @@ export default function Contact() {
                 gsap.to(element, {
                     translateX: _delta.x,
                     translateY: _delta.y,
-                    duration: 1
+                    duration: 0.5
                 })
             });
         };
 
+        stopLookingAtMouse.current = () => {
+            groups.forEach(({ element }) => {
+                gsap.to(element, {
+                    translateX: 0,
+                    translateY: 0,
+                    duration: 0.5
+                })
+            });
+        }
+
         const tl = gsap.timeline({
             repeat: -1,
             repeatDelay: 3
-        });
-
-        tl.to("#eyes", {
+        }).to("#eyes", {
             scaleY: 0.2,
-            transformOrigin: "center center",
+            transformOrigin: "center bottom",
             duration: 0.1
-        });
-        
-        tl.to("#eyes", {
+        }).to("#eyes", {
             scaleY: 1,
-            transformOrigin: "center center",
+            transformOrigin: "center bottom",
             duration: 0.1
         });
-
-        window.addEventListener('mousemove', lookAtMouse);
 
         return () => {
             tl.kill();
-            window.removeEventListener('mousemove', lookAtMouse);
+            if (lookAtMouse.current) window.removeEventListener('mousemove', lookAtMouse.current);
         };
     }, []);
 
+    const assignMouseMove = () => {
+        if (!lookAtMouse.current) return;
+        window.addEventListener('mousemove', lookAtMouse.current);
+    }
+
+    const assignMouseLeave = () => {
+        if (lookAtMouse.current) {
+            window.removeEventListener('mousemove', lookAtMouse.current);
+        }
+
+        stopLookingAtMouse.current?.();
+        
+    }
+
     return (
-        <div className="w-full bg-orange-chalk">                
+        <div className="w-full bg-orange-chalk"
+            onMouseEnter={assignMouseMove}
+            onMouseLeave={assignMouseLeave}
+        >                
             <div className="py-20 w-[min(75rem,100%-2rem)] mx-auto">
                 <div className="flex flex-col md:flex-row gap-10 md:gap 0 relative items-center bg-white-chalk w-full px-6 pt-20 md:pt-0 md:px-20 h-auto md:h-100 rounded-2xl shadow-2xl shadow-white-chalk-dark">
                     <div className="absolute text-4xl sm:text-6xl text-nowrap text-blackboard hover:text-darkboard bg-white-chalk hover:bg-yellow-chalk outline-white-chalk hover:outline-yellow-chalk outline-2 outline-offset-2 outline-double -top-8 drop-shadow-2xl px-2 transition-all duration-100">
