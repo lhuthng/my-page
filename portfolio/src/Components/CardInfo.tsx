@@ -1,10 +1,12 @@
-import { useRef, useState, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 
 export interface CardInfoProps {
     x: number,
     y: number,
     dx?: number,
     dy?: number,
+    hoverSize?: [number, number],
+    hoverDir?: [number, number, number],
     paths?: [number, number][],
     strokeColor?: string,
     className?: string,
@@ -58,17 +60,30 @@ export default function CardInfo({
     paths = [], 
     className = "", 
     style = {},
+    hoverDir,
+    hoverSize,
     strokeColor = "black",
     detail
  } : CardInfoProps) {
 
     const [ pathData, viewbox, lastPosition ] = calculatePoints(paths);
-    
+    const [ pivot, setPivot ] = useState<[number, number]>([x - dx, y - dy]);
+
+    useLayoutEffect(() => {
+        if (!hoverDir) {
+            setPivot([x - dx, y - dy]);
+        }
+        else if (hoverSize) {
+            // TODO: Correct position!
+            setPivot([x - dx + hoverDir[0] / 40, (y - dy + (hoverDir[1] - hoverDir[2]) / 40)]);
+        }
+    }, [ hoverDir, x, y, dx, dy ]);
+
     return <div
         style={{
             position: 'absolute',
-            left: `${x - dx}px`,
-            top: `${y - dy}px`,
+            left: `${pivot[0]}px`,
+            top: `${pivot[1]}px`,
             zIndex: 10
         }}
     >
