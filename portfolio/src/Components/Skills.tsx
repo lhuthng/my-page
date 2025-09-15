@@ -201,7 +201,7 @@ export default function Skills() {
     <section className="max-w-340 mx-auto">
         <CoolHeader title="Skills" />
         <div className="grid-container w-full" ref={gridRef}>
-            {selection !== null && cards[selection] && <Card {...cards[selection]} expanded={true}/>}
+            {selection !== null && cards[selection] && <Card {...cards[selection]} key={selection} expanded={true}/>}
             {cards.map((props, index) => selection !== index ? <Card {
                     ...props
                 }

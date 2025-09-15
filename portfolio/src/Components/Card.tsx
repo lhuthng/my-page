@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import "@/Styles/Card.css"
 import CardInfo, { type CardInfoProps } from "./CardInfo";
 import { toRGB, type Color } from "@/Utils/color";
+import gsap from "gsap";
 
 interface CardPreset {
     title: Color
@@ -97,6 +98,8 @@ export default function Card(
     const cardRef = useRef<HTMLDivElement>(null);
     const illustrationRef = useRef<HTMLDivElement>(null);
     const detailRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
     const [ cardOffset, setCardOffset ] = useState<[number, number]>([0, 0]);
     const [ hoverDir, setHoverDir ] = useState<[number, number, number]>();
 
@@ -250,6 +253,29 @@ export default function Card(
     }, [ detailRef ]);
 
     useEffect(() => {
+        if (!containerRef.current) {
+            return;
+        }
+
+        gsap.fromTo(containerRef.current, {
+            opacity: 0,
+        }, {
+            opacity: 1,
+            duration: 0.2,
+            ease: "none"
+        });
+
+        gsap.fromTo(containerRef.current, {
+            y: 30,
+        }, {
+            y: 0,
+            duration: 0.2,
+            ease: "power1.out"
+        })
+
+    }, [containerRef]);
+
+    useEffect(() => {
         window.addEventListener('resize', findCardOffset);
         return () => {
             window.removeEventListener('resize', findCardOffset);
@@ -258,7 +284,9 @@ export default function Card(
 
     return !expanded ? 
         cardContainer
-        : <div className="flex relative justify-center col-span-full h-auto">
+        : <div className="flex relative justify-center col-span-full h-auto"
+            ref={containerRef}
+        >
             {cardContainer}
             <div className="absolute"
                 ref={detailRef}
