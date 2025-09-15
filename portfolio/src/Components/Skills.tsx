@@ -18,7 +18,6 @@ export default function Skills() {
             difficulty: 1,
             attack: 1000,
             defense: 1000,
-            details: [],
             children: [
                 <div className="w-full h-full"
                     style={{
@@ -27,14 +26,24 @@ export default function Skills() {
                     }}
                 />,
                 <p>Raising sleek, interactive UIs from tiny ideas. Bringing up every pixel with care.</p>
-                // <div>
-                //     <ul>
-                //         <li><b>Core:</b> HTML/CSS/JS, TypeScript</li>
-                //         <li><b>Frameworks:</b> React, Angular, Razor Page, Svelte 5</li>
-                //         <li><b>Styling:</b> TailwindCSS</li>
-                //     </ul>
-                // </div>
-            ]
+            ],
+            details: [
+                {
+                    x: 134, y: 130, dx: 0, dy: 0,
+                    detail: <div className="w-56 text-left"><b>Core:</b> HTML/CSS/JS, TypeScript</div>,
+                    paths: [[-45, 60],[0,260]]
+                },
+                {
+                    x: 100, y: 180, dx: 0, dy: 0,
+                    detail: <div className="w-52 text-right"><b>Frameworks:</b> React, Angular, Razor Page, Svelte 5</div>,
+                    paths: [[135,60],[180,184]]
+                },
+                {
+                    x: 140, y: 360, dx: 0, dy: 0,
+                    detail: <div className="w-36 text-right"><b>Styling:</b> TailwindCSS</div>,
+                    paths: [[180,160],[-135,40],[180,80]]
+                }
+            ],
         },
         {
             title: "Backend",
@@ -51,23 +60,16 @@ export default function Skills() {
                     }}
                 />,
                 <p>Just another Tuesday. Building robust services and APIs that fight off the hordes.</p>
-                // <div>
-                //     <ul>
-                //         <li><b>Languages:</b> Node.js, Go, C#, Rust, C++, PHP</li>
-                //         <li><b>Frameworks:</b> Express, Tonic, ASP.NET Core</li>
-                //         <li><b>Communication:</b> WebSocket, REST, gRPC, JSON-RPC</li>
-                //     </ul>
-                // </div>
             ],
             details: [
                 {
                     x: 220, y: 80, dx: 0, dy: 0,
-                    detail: <div className="w-46 text-left"><b>Languages:</b> Node.js, Go, C#, Rust, C++, PHP</div>,
+                    detail: <div className="w-46 text-left"><b>Languages:</b> Go, C#, Rust, Python, C++, PHP</div>,
                     paths: [[45, 60],[0,210]]
                 },
                 {
                     x: 130, y: 85, dx: 0, dy: 0,
-                    detail: <div className="w-41 text-right"><b>Frameworks:</b> Express, Tonic, ASP.NET</div>,
+                    detail: <div className="w-41 text-right"><b>Frameworks:</b> Node.js, FastAPI, ASP.NET</div>,
                     paths: [[180,280]]
                 },
                 {
@@ -84,7 +86,6 @@ export default function Skills() {
             difficulty: 3,
             attack: 1000,
             defense: 2000,
-            details: [],
             children: [
                 <div className="w-full h-full"
                     style={{
@@ -100,7 +101,29 @@ export default function Skills() {
                 //         <li><b>Networking & Infra:</b> Apache2, nginx, Alfahosting, Domain Management, TLS/SSL, VPS, SSH</li>
                 //     </ul>
                 // </div>
-            ]
+            ],
+            details: [
+                {
+                    x: 140, y: 155, dx: 0, dy: 0,
+                    detail: <div className="w-46 text-left"><b>Containerization:</b> Docker</div>,
+                    paths: [[135, 60],[180,210]]
+                },
+                {
+                    x: 220, y: 80, dx: 0, dy: 0,
+                    detail: <div className="w-36 text-left"><b>Auth:</b> JWT, OAuth2, Session-based auth</div>,
+                    paths: [[0, 60],[0,140]]
+                },
+                {
+                    x: 75, y: 120, dx: 0, dy: 0,
+                    detail: <div className="w-46 text-right"><b>Servers:</b> Windows Server, Linux Server</div>,
+                    paths: [[180,100],[-135,30],[180,80]]
+                },
+                {
+                    x: 160, y: 190, dx: 0, dy: 0,
+                    detail: <div className="w-60 text-left"><b>Networking & Infra:</b> Apache2, nginx, Alfahosting, Domain Management, TLS/SSL, VPS, SSH</div>,
+                    paths: [[0,120],[45,100],[0,80]]
+                }
+            ],
         },
         {
             title: "DevOps",
@@ -110,7 +133,6 @@ export default function Skills() {
             attack: 500,
             defense: 1500,
             effect: "Fusion",
-            details: [],
             children: [
                 <div className="w-full h-full"
                     style={{
@@ -121,14 +143,24 @@ export default function Skills() {
                     }}
                 />,
                 <p>Automating workflows with CI/CD, ensuring smooth builds, tests, and deployments.</p>
-                // <div>
-                //     <ul>
-                //         <li><b>Version Control:</b> Git. GitLab, Azure Repos</li>
-                //         <li><b>CI/CD:</b> Jenkins, Github Actions</li>
-                //         <li><b>Testing:</b> unittest, junit, MSTest</li>
-                //     </ul>
-                // </div>
-            ]
+            ],
+            details: [
+                {
+                    x: 140, y: 90, dx: 0, dy: 0,
+                    detail: <div className="w-38 text-left"><b>Version Control:</b> Git, GitLab, Azure Repos</div>,
+                    paths: [[-45,22],[0,240]]
+                },
+                {
+                    x: 140, y: 90, dx: 0, dy: 0,
+                    detail: <div className="w-27 text-right"><b>CI/CD:</b> Jenkins, Github Actions</div>,
+                    paths: [[-135,22], [180,220]]
+                },
+                {
+                    x: 85, y: 200, dx: 0, dy: 0,
+                    detail: <div className="w-31 text-right"><b>Testing:</b> unittest, junit, MSTest</div>,
+                    paths: [[180,40],[135,30],[180,120]]
+                }
+            ],
         },
         {
             title: "Database",
@@ -136,7 +168,6 @@ export default function Skills() {
             colorPresetName: "Wisdom",
             difficulty: 1,
             effect: "Power",
-            details: [],
             children: [
                 <div className="w-full h-full"
                     style={{
@@ -147,14 +178,19 @@ export default function Skills() {
                     }}
                 />,
                 <p>The keeper of secrets. Mastering data integrity to ensure your information is always ready, fast, and sound.</p>
-                // <div>
-                //     <ul>
-                //         <li><b>Version Control:</b> Git. GitLab, Azure Repos</li>
-                //         <li><b>CI/CD:</b> Jenkins, Github Actions</li>
-                //         <li><b>Testing:</b> unittest, junit, MSTest</li>
-                //     </ul>
-                // </div>
-            ]
+            ],
+            details: [
+                {
+                    x: 190, y: 90, dx: 0, dy: 0,
+                    detail: <div className="w-52 text-left"><b>Databases:</b> PostgreSQL, MySQL, OracleDB, MongoDB</div>,
+                    paths: [[45,80],[0,166]]
+                },
+                {
+                    x: 90, y: 90, dx: 0, dy: 0,
+                    detail: <div className="w-48 text-right"><b>Concepts:</b> Schema Design, Data Modeling, Indexing</div>,
+                    paths: [[135,80], [180,160]]
+                },
+            ],
         },        
     ];
 

@@ -1,11 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import "@/Styles/Card.css"
 import CardInfo, { type CardInfoProps } from "./CardInfo";
-
-const colors = [ "white", "black", "dark-charcoal", "yellow", "orange", "blue", "cyan", "navi", "green", "aquamarine", "lime", "pink", "purple", "silver", "light-gray", "orange-red", "salmon" ] as const;
-type Color = typeof colors[number]
-
-const toRGB = (color: Color, alpha: number = 1) => `rgba(var(--${color}-chalk), ${alpha})`;
+import { toRGB, type Color } from "@/Utils/color";
 
 interface CardPreset {
     title: Color
@@ -35,6 +31,7 @@ const cardPresetBank: Partial<Record<
         background: "yellow",
         description: "orange",
         text: "dark-charcoal",
+        highlight: "orange-red"
     },  
     Intelligent: {
         title: "blue",
@@ -55,6 +52,7 @@ const cardPresetBank: Partial<Record<
         background: "pink",
         description: "purple",
         text: "black",
+        highlight: "violet"
     }, 
     Wisdom: {
         title: "light-gray",
@@ -100,6 +98,7 @@ export default function Card(
     const illustrationRef = useRef<HTMLDivElement>(null);
     const detailRef = useRef<HTMLDivElement>(null);
     const [ cardOffset, setCardOffset ] = useState<[number, number]>([0, 0]);
+    const [ hoverDir, setHoverDir ] = useState<[number, number, number]>();
 
     const [ illustration, description ] = children;
     const colorPreset = cardPresetBank[colorPresetName] ?? defaultPreset;
@@ -123,7 +122,9 @@ export default function Card(
 
         if (!illustrationRef.current) return;
 
-        illustrationRef.current.style.transform = `translate(${-dirX / 40}px, ${(dirY-16) / 40}px)`;
+        const illusrationYOffset = 72;
+        illustrationRef.current.style.transform = `translate(${-dirX / 40}px, ${(dirY - illusrationYOffset) / 40}px)`;
+        setHoverDir([ -dirX, dirY, illusrationYOffset]);
     };
 
     const handleMouseLeave = () => {
@@ -131,7 +132,10 @@ export default function Card(
         cardRef.current.style.transform = "";
         if (!illustrationRef.current) return;
         illustrationRef.current.style.transform = "";
+        setHoverDir(undefined);
     };
+
+    const width = 280, heigth = 110;
 
     const cardContainer = <div className="card-container perspective-midrange mx-auto my-2 w-70 h-100 cursor-pointer"
         onMouseMove={handleMouseMove}
@@ -268,6 +272,8 @@ export default function Card(
                     }}
                     dx={cardOffset[0]} 
                     dy={cardOffset[1]} 
+                    hoverSize={[width, heigth]}
+                    hoverDir={hoverDir}
                     key={index}
                     strokeColor={toRGB(colorPreset.highlight ?? colorPreset.title)}
                 />)}
