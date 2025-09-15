@@ -7,6 +7,7 @@ import BSJourney from "./Phases/BSJourney";
 import Work from "./Phases/Work";
 import MSAdventure from "./Phases/MSAdventure";
 import Now from "./Phases/Now";
+import CoolHeader from "./CoolHeader";
 
 interface PhaseDetail {
     id?: number;
@@ -89,9 +90,7 @@ export default function About() {
 
     return (
         <div className="flex flex-col w-[calc(100%-1rem)] sm:w-[calc(100%-5rem)] mx-auto">
-            <div className="flex h-20 justify-center items-center">
-                <p className="text-4xl after-about-title w-full text-center font-bold text-white-chalk">About me</p>
-            </div>
+            <CoolHeader title="About me"/>
             <div className="relative flex h-[min(max(calc(100dvh-8rem),46.5rem),65rem)] w-full flex-row-reverse sm:flex-col justify-end sm:justify-start">
                 <div className="relative w-full sm:w-[min(100%,75rem)] h-full ml-4 sm:mx-auto mr-2 overflow-y-auto scrollbar-custom bg-darkboard/70 rounded-2xl drop-shadow-darkboard shadow-xl text-justify text-lg xs:text-xl sm:text-2xl">
                     {phaseList.map(({id, fading, Component}) => <div 

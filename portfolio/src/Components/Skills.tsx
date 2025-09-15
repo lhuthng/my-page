@@ -5,6 +5,9 @@ import system from "@/Assets/Images/system.jpg";
 import cicd from "@/Assets/Images/cicd.jpg";
 import database from "@/Assets/Images/database.jpg";
 import { useRef, useState } from "react";
+import EmptyCard from "./EmptyCard";
+import CoolHeader from "./CoolHeader";
+import CardInfo from "./CardInfo";
 
 export default function Skills() {
     const cards: CardProps[] = [
@@ -15,6 +18,7 @@ export default function Skills() {
             difficulty: 1,
             attack: 1000,
             defense: 1000,
+            details: [],
             children: [
                 <div className="w-full h-full"
                     style={{
@@ -23,6 +27,13 @@ export default function Skills() {
                     }}
                 />,
                 <p>Raising sleek, interactive UIs from tiny ideas. Bringing up every pixel with care.</p>
+                // <div>
+                //     <ul>
+                //         <li><b>Core:</b> HTML/CSS/JS, TypeScript</li>
+                //         <li><b>Frameworks:</b> React, Angular, Razor Page, Svelte 5</li>
+                //         <li><b>Styling:</b> TailwindCSS</li>
+                //     </ul>
+                // </div>
             ]
         },
         {
@@ -40,7 +51,31 @@ export default function Skills() {
                     }}
                 />,
                 <p>Just another Tuesday. Building robust services and APIs that fight off the hordes.</p>
-            ]
+                // <div>
+                //     <ul>
+                //         <li><b>Languages:</b> Node.js, Go, C#, Rust, C++, PHP</li>
+                //         <li><b>Frameworks:</b> Express, Tonic, ASP.NET Core</li>
+                //         <li><b>Communication:</b> WebSocket, REST, gRPC, JSON-RPC</li>
+                //     </ul>
+                // </div>
+            ],
+            details: [
+                {
+                    x: 220, y: 80, dx: 0, dy: 0,
+                    detail: <div className="w-46 text-left"><b>Languages:</b> Node.js, Go, C#, Rust, C++, PHP</div>,
+                    paths: [[45, 60],[0,210]]
+                },
+                {
+                    x: 130, y: 85, dx: 0, dy: 0,
+                    detail: <div className="w-41 text-right"><b>Frameworks:</b> Express, Tonic, ASP.NET</div>,
+                    paths: [[180,280]]
+                },
+                {
+                    x: 110, y: 170, dx: 0, dy: 0,
+                    detail: <div className="w-54 text-right"><b>Communication:</b> WebSocket, REST, gRPC, JSON-RPC</div>,
+                    paths: [[180,120],[135,100],[180,60]]
+                }
+            ],
         },
         {
             title: "Systems",
@@ -49,6 +84,7 @@ export default function Skills() {
             difficulty: 3,
             attack: 1000,
             defense: 2000,
+            details: [],
             children: [
                 <div className="w-full h-full"
                     style={{
@@ -57,6 +93,13 @@ export default function Skills() {
                     }}
                 />,
                 <p>Hold my coffee. Taming the systems that are built to withstand the blaze.</p>
+                // <div>
+                //     <ul>
+                //         <li><b>Containerization:</b> Docker</li>
+                //         <li><b>Servers:</b> Windows Server, Linux Server</li>
+                //         <li><b>Networking & Infra:</b> Apache2, nginx, Alfahosting, Domain Management, TLS/SSL, VPS, SSH</li>
+                //     </ul>
+                // </div>
             ]
         },
         {
@@ -67,6 +110,7 @@ export default function Skills() {
             attack: 500,
             defense: 1500,
             effect: "Fusion",
+            details: [],
             children: [
                 <div className="w-full h-full"
                     style={{
@@ -77,6 +121,13 @@ export default function Skills() {
                     }}
                 />,
                 <p>Automating workflows with CI/CD, ensuring smooth builds, tests, and deployments.</p>
+                // <div>
+                //     <ul>
+                //         <li><b>Version Control:</b> Git. GitLab, Azure Repos</li>
+                //         <li><b>CI/CD:</b> Jenkins, Github Actions</li>
+                //         <li><b>Testing:</b> unittest, junit, MSTest</li>
+                //     </ul>
+                // </div>
             ]
         },
         {
@@ -85,6 +136,7 @@ export default function Skills() {
             colorPresetName: "Wisdom",
             difficulty: 1,
             effect: "Power",
+            details: [],
             children: [
                 <div className="w-full h-full"
                     style={{
@@ -95,27 +147,41 @@ export default function Skills() {
                     }}
                 />,
                 <p>The keeper of secrets. Mastering data integrity to ensure your information is always ready, fast, and sound.</p>
+                // <div>
+                //     <ul>
+                //         <li><b>Version Control:</b> Git. GitLab, Azure Repos</li>
+                //         <li><b>CI/CD:</b> Jenkins, Github Actions</li>
+                //         <li><b>Testing:</b> unittest, junit, MSTest</li>
+                //     </ul>
+                // </div>
             ]
         },        
     ];
 
     const [ selection, setSelection ] = useState<number | null>(null);
-    const gridRef = useRef<HTMLSelectElement>(null);
+    const gridRef = useRef<HTMLDivElement>(null);
 
-    return (<section className="grid-container max-w-340 mx-auto" ref={gridRef}>
-        {selection !== null && cards[selection] && <Card {...cards[selection]} expanded={true}/>}
-        {cards.map((props, index) => selection !== index && <Card {
-            ...props
-        }
-            onClick={() => {
-                setSelection(index);
-                if (!gridRef.current) return;
-                const elementPosition = gridRef.current.getBoundingClientRect().top;
-                window.scrollTo({
-                    top: window.pageYOffset + elementPosition - 80,
-                    behavior: "smooth"
-                });
-            }}
-        />)}
+    return (
+    <section className="max-w-340 mx-auto">
+        <CoolHeader title="Skills" />
+        <div className="grid-container w-full" ref={gridRef}>
+            {selection !== null && cards[selection] && <Card {...cards[selection]} expanded={true}/>}
+            {cards.map((props, index) => selection !== index ? <Card {
+                    ...props
+                }
+                    key={index}
+                    onClick={() => {
+                        setSelection(index);
+                        if (!gridRef.current) return;
+                        const elementPosition = gridRef.current.getBoundingClientRect().top;
+                        window.scrollTo({
+                            top: window.pageYOffset + elementPosition - 80,
+                            behavior: "smooth"
+                        });
+                    }}
+                />
+                : <EmptyCard key={index}/>
+            )}
+        </div>
     </section>);
 }
