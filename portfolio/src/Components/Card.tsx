@@ -21,7 +21,7 @@ const defaultPreset: CardPreset = {
     text: "black",
 };
 
-const attributes = [ "Resilience", "Agility", "Intelligent", "Charisma", "Wisdom" ] as const;
+const attributes = [ "Resilience", "Agility", "Intelligent", "Charisma", "Wisdom", "Aptitude" ] as const;
 type Attribute = typeof attributes[number];
 
 const cardPresetBank: Partial<Record<
@@ -61,6 +61,13 @@ const cardPresetBank: Partial<Record<
         background: "silver",
         description: "light-gray",
         text: "black",
+    },
+    Aptitude: {
+        text: "white",
+        background: "black",
+        description: "dark-gray",
+        highlight: "white",
+        title: "dark-gray"
     }
 }
 
@@ -181,13 +188,24 @@ export default function Card(
             ease: "none"
         });
 
-        gsap.fromTo(containerRef.current, {
-            y: 30,
-        }, {
-            y: 0,
-            duration: 0.2,
-            ease: "power1.out"
-        })
+        if (expanded) {
+            gsap.fromTo(containerRef.current, {
+                y: 30,
+            }, {
+                y: 0,
+                duration: 0.4,
+                ease: "power1.out"
+            });
+        }
+        else {
+            gsap.fromTo(containerRef.current, {
+                y: -30,
+            }, {
+                y: 0,
+                duration: 0.4,
+                ease: "power1.out"
+            });
+        }
 
     }, [containerRef]);
 
@@ -207,14 +225,14 @@ export default function Card(
                     y: -10
                 }, {
                     y: 0,
-                    duration: 0.1
+                    duration: 0.2
                 });
 
                 gsap.to(detailRef.current, {
                     opacity: 1,
-                    duration: 0.2
+                    duration: 0.4
                 });
-            }, 100);
+            }, 200);
         }
         else {
             gsap.to(detailRef.current, {
@@ -227,16 +245,17 @@ export default function Card(
     return <div className="relative"
         ref={containerRef}
     >
-        <div className="card-container perspective-midrange mx-auto my-2 w-70 h-100 cursor-pointer"
+        <div className="card-container perspective-midrange mx-auto my-2 w-70 h-110 cursor-pointer"
             onMouseMove={handleMouseMove}
             onMouseEnter={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             onClick={onClick}
             style={{
-                pointerEvents: detailSelection === undefined ? "auto" : "none"
+                pointerEvents: detailSelection === undefined ? "auto" : "none",
+                filter: compactSelected ? "grayscale(85%)" : "none"
             }}
         >  
-            <div className="w-full h-full font-cabin-sketch"
+            <div className="w-full h-full font-courier-prime"
                 ref={cardRef}
             >
                 <div className="level flex flex-col absolute -left-2 -top-1 w-18 h-18 justify-center items-center border-4 pointer-events-none rounded-xl z-1"
@@ -246,7 +265,7 @@ export default function Card(
                         color: toRGB(colorPreset.textAlt ?? colorPreset.text)
                     }}
                 >
-                    <span className="text-3xl font-medium h-6">{level}</span>
+                    <span className="text-3xl font-medium h-6">{Number.isFinite(level) ? level : "?"}</span>
                     <span className="text-[0.5rem]">yrs</span>
                 </div>
                 <div className="card flex flex-col w-full h-full rounded-2xl border-8 border-double border-blackboard transition-shadow duration-100 overflow-hidden"
@@ -268,7 +287,7 @@ export default function Card(
                             </span>
                             <div className="absolute left-0 top-[calc(100%-24px)]">
                                 <div className="absolute left-16 top-1.5 text-xs">
-                                    {'☆'.repeat(difficulty)}
+                                    {Number.isFinite(difficulty) ? '☆'.repeat(difficulty) : '?'}
                                 </div>
                                 <svg className="w-full h-6 z-1">
                                     <path 
@@ -289,10 +308,10 @@ export default function Card(
                         >
                             {illustration}
                         </div>
-                        <div className="relative w-full h-43 text-lg z-3"
+                        <div className="relative w-full h-53 text-lg z-3"
                             style={{
-                                backgroundImage: `linear-gradient(to top, ${toRGB(colorPreset.description)} 160px, transparent 12px)`,
-                                maskImage: 'linear-gradient(to top, black 130px, rgba(0,0,0,0.6) 120%)',
+                                backgroundImage: `linear-gradient(to top, ${toRGB(colorPreset.description)} 190px, transparent 12px)`,
+                                maskImage: 'linear-gradient(to top, black 160px, rgba(0,0,0,0.6) 120%)',
                                 color: toRGB(colorPreset.text)
                             }}
                         >
@@ -302,12 +321,12 @@ export default function Card(
                                 </div>
                                 <svg className="w-full h-6 -z-1">
                                     <path
-                                        d="M270 0 L92 0 L68 24 L270 24 Z"
+                                        d="M270 0 L70 0 L46 24 L270 24 Z"
                                         fill={toRGB(colorPreset.description)}
                                     />
                                 </svg>
                             </div>
-                            <div className="flex flex-col h-full pt-8">
+                            <div className="flex flex-col h-full pt-7">
                                 <div className="flex-1 px-2">
                                     {description}
                                 </div>
@@ -318,7 +337,7 @@ export default function Card(
                                     }}
                                 >
                                     <span>1<sup>st</sup> Edition</span>
-                                    {attack && defense && <span>atk/{attack} def/{defense}</span>}
+                                    {attack && defense && <span>atk/{Number.isFinite(attack) ? attack : "?"} def/{Number.isFinite(defense) ? defense : "?"}</span>}
                                 </div>
                             </div>  
                         </div>
@@ -330,7 +349,7 @@ export default function Card(
             ref={detailRef}
         >
             {details.map((detail, index) => <CardInfo {...detail}
-                className="rounded-lg p-2 border-2"
+                className="rounded-lg p-2 border-2 font-courier-prime super-bold"
                 style={{
                     backgroundColor: toRGB(colorPreset.background),
                     borderColor: toRGB(colorPreset.highlight ?? colorPreset.title),
