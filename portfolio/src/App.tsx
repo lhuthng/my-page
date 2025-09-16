@@ -4,6 +4,10 @@ import Header from "./Components/Header";
 import Landing from "./Components/Landing";
 import Skills from "./Components/Skills";
 import "./index.css";
+import { gsap } from 'gsap';
+import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
+
+gsap.registerPlugin(ScrollToPlugin);
 
 export function App() {
   return (
