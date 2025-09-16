@@ -83,6 +83,7 @@ export interface CardProps {
     expanded?: boolean,
     compactSelected?: boolean,
     details: CardInfoProps[],
+    init?: () => void,
     onClick?: (e: React.MouseEvent<HTMLElement>) => void,
     onDetailCallback?: (toggle: boolean) => void,
     children: [
@@ -104,6 +105,7 @@ export default function Card(
         expanded,
         details,
         onClick,
+        init,
         onDetailCallback,
         compactSelected,
         children
@@ -120,7 +122,7 @@ export default function Card(
     const [ illustration, description ] = children;
     const colorPreset = cardPresetBank[colorPresetName] ?? defaultPreset;
 
-    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+    const handleMouseMove = (e: { clientX: number, clientY: number }) => {
         if (!cardRef.current) return;
 
         const rect = cardRef.current.getBoundingClientRect();
@@ -176,70 +178,61 @@ export default function Card(
     }, [ compactSelected ]);
 
     useEffect(() => {
-        if (!containerRef.current) {
-            return;
+        init?.();
+
+        const touchmove = (e: TouchEvent) => {
+            e.preventDefault();
+            if (e.touches?.[0]) handleMouseMove(e.touches[0]);
+        }
+        const touchend = () => {
+            handleMouseLeave();
         }
 
-        gsap.fromTo(containerRef.current, {
-            opacity: 0,
-        }, {
-            opacity: 1,
-            duration: 0.2,
-            ease: "none"
-        });
+        cardRef.current?.addEventListener('touchmove', touchmove);
+        cardRef.current?.addEventListener('touchend', touchend);
 
-        if (expanded) {
-            gsap.fromTo(containerRef.current, {
-                y: 30,
-            }, {
-                y: 0,
-                duration: 0.4,
-                ease: "power1.out"
-            });
-        }
-        else {
-            gsap.fromTo(containerRef.current, {
-                y: -30,
-            }, {
-                y: 0,
-                duration: 0.4,
-                ease: "power1.out"
-            });
-        }
-
-    }, [containerRef]);
-
-    useEffect(() => {
         window.addEventListener('resize', findCardOffset);
         return () => {
             window.removeEventListener('resize', findCardOffset);
+            cardRef.current?.removeEventListener('touchmove', touchmove);
+            cardRef.current?.removeEventListener('touchend', touchmove);
         }
     }, []);
 
     useLayoutEffect(() => {
-        if (!detailRef.current) return;
+        if (detailRef.current) {
+            if (expanded || isSmall) {
+                setTimeout(() => {
+                    gsap.fromTo(detailRef.current, {
+                        y: -10
+                    }, {
+                        y: 0,
+                        duration: 0.2
+                    });
 
-        if (expanded || isSmall) {
-            setTimeout(() => {
-                gsap.fromTo(detailRef.current, {
-                    y: -10
-                }, {
-                    y: 0,
-                    duration: 0.2
-                });
-
+                    gsap.to(detailRef.current, {
+                        opacity: 1,
+                        duration: 0.4
+                    });
+                }, 200);
+            }
+            else {
                 gsap.to(detailRef.current, {
-                    opacity: 1,
-                    duration: 0.4
+                    opacity: 0,
+                    duration: 0
                 });
-            }, 200);
+            }
         }
-        else {
-            gsap.to(detailRef.current, {
-                opacity: 0,
-                duration: 0
+
+        if (containerRef.current) {
+            gsap.fromTo(containerRef.current, {
+                y: expanded ? 10 : -10
+            }, {
+                y: 0,
+                duration: 0.2
             });
         }
+        
     }, [expanded, isSmall])
 
     return <div className="relative"
@@ -275,14 +268,14 @@ export default function Card(
                     }}
                 >
                     <div className="relative w-full h-7 text-darkboard text-xl">
-                        <div className="absolute flex left-0 top-0 w-full h-13 items-center z-2"
+                        <div className="absolute flex left-0 top-0 w-full h-13 z-2"
                             style={{
                                 backgroundImage: `linear-gradient(to bottom, ${toRGB(colorPreset.title)} 40px, transparent 12px)`,
                                 maskImage: `linear-gradient(to bottom, black 28px, rgba(0,0,0,0.6) 120%)`,
                                 color: toRGB(colorPreset.text)
                             }}
                         >
-                            <span className="pl-16 font-bold z-1 underline underline-offset-2">
+                            <span className="pl-16 pt-1.5 font-bold z-1 underline underline-offset-2">
                                 {title}
                             </span>
                             <div className="absolute left-0 top-[calc(100%-24px)]">

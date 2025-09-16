@@ -7,10 +7,12 @@ import database from "@/Assets/Images/database.jpg";
 import customCharacter from "@/Assets/Images/custom-character.webp";
 import customBackground from "@/Assets/Images/custom-background.webp";
 import customForeground from "@/Assets/Images/custom-foreground.webp";
+import whiteBackground from "@/Assets/GIFs/white-background.gif";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import EmptyCard from "./EmptyCard";
 import CoolHeader from "./CoolHeader";
 import { smallWidth } from "@/Utils/common";
+import "@/Styles/Skills.css";
 import gsap from "gsap";
 
 const cards: CardProps[] = [
@@ -199,11 +201,15 @@ const cards: CardProps[] = [
         attack: Infinity,
         defense: Infinity,
         children: [
-            <div className="relative w-full h-full bg-white">
+            <div className="relative w-full h-full [&>div]:absolute [&>div]:w-full [&>div]:h-full bg-white">
+                <div style={{
+                    backgroundImage: `url(${whiteBackground})`,
+                    opacity: 0.3
+                }}/>
                 <div className="illustration-background absolute w-full h-full"
                     style={{
                         backgroundImage: `url(${customBackground})`,
-                        backgroundPosition: `46% 30%`,
+                        backgroundPosition: `46% 25%`,
                         backgroundSize: "100% auto",
                         backgroundRepeat: "no-repeat",
                     }}
@@ -229,7 +235,38 @@ const cards: CardProps[] = [
             <p>The true power of Synergy lies not in a single skill, but in the creative harmony of all of them.</p>
         ],
         details: [
-        ]
+        ],
+        init: () => {
+            gsap.to(".illustration-background", {
+                y: 3,
+                duration: 4,
+                yoyo: true,
+                ease: "sine.inOut",
+                repeat: -1
+            });
+            gsap.to(".illustration-background", {
+                scale: 1.01,
+                duration: 8,
+                transformOrigin: "center center",
+                yoyo: true,
+                ease: "sine.inOut",
+                repeat: -1
+            });
+            gsap.to(".illustration-base", {
+                y: 3,
+                duration: 6,
+                yoyo: true,
+                ease: "sine.inOut",
+                repeat: -1,
+            });
+            gsap.to(".illustration-foreground", {
+                y: 2,
+                duration: 7,
+                yoyo: true,
+                ease: "sine.inOut",
+                repeat: -1,
+            });
+        }
     }
 ];
 
@@ -257,35 +294,6 @@ export default function Skills() {
             });
         };
         onResize();
-
-        gsap.to(".illustration-background", {
-            y: 5,
-            duration: 4,
-            yoyo: true,
-            ease: "sine.inOut",
-            repeat: -1
-        });
-        gsap.to(".illustration-background", {
-            x: 3,
-            duration: 24,
-            yoyo: true,
-            ease: "sine.inOut",
-            repeat: -1
-        });
-        gsap.to(".illustration-base", {
-            y: 3,
-            duration: 6,
-            yoyo: true,
-            ease: "sine.inOut",
-            repeat: -1,
-        });
-        gsap.to(".illustration-foreground", {
-            y: 2,
-            duration: 7,
-            yoyo: true,
-            ease: "sine.inOut",
-            repeat: -1,
-        });
         
         window.addEventListener("resize", onResize);
         return () => {
