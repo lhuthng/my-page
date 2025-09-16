@@ -23,7 +23,7 @@ export default function Intro(
 
 
     return (<section className="relative flex flex-col min-h-full justify-start gap-6">
-        <div className='relative rounded-md overflow-hidden w-full sm:w-4/5 mx-auto h-15 sm:h-30'>
+        <div className='relative rounded-md overflow-hidden w-full sm:w-4/5 mx-auto h-45 sm:h-30'>
             <div className='absolute w-full min-h-full h-30 sm:h-full bg-cover not-sm:translate-y-[-20%] bg-[53%_40%] sm:bg-[60%_40%] bg-no-repeat bg-[url(@/Assets/Images/me-wide.jpg)]'
                 style={{
                     maskImage: 'linear-gradient(to left, transparent,transparent 12%, black, transparent 88%, transparent)'
