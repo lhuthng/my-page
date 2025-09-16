@@ -66,6 +66,12 @@
   filter: brightness(0) saturate(100%) invert(4%) sepia(10%) saturate(1917%) hue-rotate(329deg) brightness(101%) contrast(86%);
 }
 
+.super-bold {
+  b {
+    font-weight: 700;
+  }
+}
+
 html {
   overflow-x: hidden;
 }

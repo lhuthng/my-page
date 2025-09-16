@@ -4,11 +4,15 @@ import backend from "@/Assets/Images/backend.jpg";
 import system from "@/Assets/Images/system.jpg";
 import cicd from "@/Assets/Images/cicd.jpg";
 import database from "@/Assets/Images/database.jpg";
+import customCharacter from "@/Assets/Images/custom-character.webp";
+import customBackground from "@/Assets/Images/custom-background.webp";
+import customForeground from "@/Assets/Images/custom-foreground.webp";
+import whiteBackground from "@/Assets/GIFs/white-background.gif";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import EmptyCard from "./EmptyCard";
 import CoolHeader from "./CoolHeader";
-import CardInfo from "./CardInfo";
 import { smallWidth } from "@/Utils/common";
+import "@/Styles/Skills.css";
 import gsap from "gsap";
 
 const cards: CardProps[] = [
@@ -91,21 +95,22 @@ const cards: CardProps[] = [
             <div className="w-full h-full"
                 style={{
                     backgroundImage: `url(${system})`,
-                    backgroundPosition: `50% 12%`,
+                    backgroundSize: "120% auto",
+                    backgroundPosition: `60% -25%`,
                 }}
             />,
             <p>Hold my coffee. Taming the systems that are built to withstand the blaze.</p>
         ],
         details: [
             {
-                x: 140, y: 155, dx: 0, dy: 0,
-                detail: <div className="w-46 text-left"><b>Containerization:</b> Docker</div>,
+                x: 132, y: 190, dx: 0, dy: 0,
+                detail: <div className="w-46 text-right"><b>Containerization:</b> Docker</div>,
                 paths: [[135, 60],[180,210]]
             },
             {
-                x: 220, y: 80, dx: 0, dy: 0,
+                x: 250, y: 80, dx: 0, dy: 0,
                 detail: <div className="w-36 text-left"><b>Auth:</b> JWT, OAuth2, Session-based auth</div>,
-                paths: [[0, 60],[0,140]]
+                paths: [[0, 140]]
             },
             {
                 x: 75, y: 120, dx: 0, dy: 0,
@@ -113,9 +118,9 @@ const cards: CardProps[] = [
                 paths: [[180,100],[-135,30],[180,80]]
             },
             {
-                x: 160, y: 190, dx: 0, dy: 0,
+                x: 205, y: 190, dx: 0, dy: 0,
                 detail: <div className="w-60 text-left"><b>Networking & Infra:</b> Apache2, nginx, Alfahosting, Domain Management, TLS/SSL, VPS, SSH</div>,
-                paths: [[0,120],[45,100],[0,80]]
+                paths: [[0,30],[45,100],[0,120]]
             }
         ],
     },
@@ -166,7 +171,8 @@ const cards: CardProps[] = [
             <div className="w-full h-full"
                 style={{
                     backgroundImage: `url(${database})`,
-                    backgroundPosition: `50% 0%`,
+                    backgroundPosition: `62% 0%`,
+                    backgroundSize: "120% auto",
                     backgroundRepeat: "no-repeat",
                     backgroundColor: "white"
                 }}
@@ -185,7 +191,83 @@ const cards: CardProps[] = [
                 paths: [[135,80], [180,160]]
             },
         ],
-    },        
+    },
+    {
+        title: "JackOfAllTrades",
+        level: Infinity,
+        colorPresetName: "Aptitude",
+        difficulty: Infinity,
+        effect: "Omnia",
+        attack: Infinity,
+        defense: Infinity,
+        children: [
+            <div className="relative w-full h-full [&>div]:absolute [&>div]:w-full [&>div]:h-full bg-white">
+                <div style={{
+                    backgroundImage: `url(${whiteBackground})`,
+                    opacity: 0.3
+                }}/>
+                <div className="illustration-background absolute w-full h-full"
+                    style={{
+                        backgroundImage: `url(${customBackground})`,
+                        backgroundPosition: `46% 25%`,
+                        backgroundSize: "100% auto",
+                        backgroundRepeat: "no-repeat",
+                    }}
+                />
+                <div className="illustration-base absolute w-full h-full"
+                    style={{
+                        backgroundImage: `url(${customCharacter})`,
+                        backgroundPosition: `50% 40%`,
+                        backgroundSize: "45% auto",
+                        backgroundRepeat: "no-repeat",
+                    }}
+                />
+                <div className="illustration-foreground absolute w-full h-full"
+                    style={{
+                        backgroundImage: `url(${customForeground})`,
+                        backgroundPosition: `50% 30%`,
+                        backgroundSize: "80% auto",
+                        backgroundRepeat: "no-repeat",
+                        filter: "blur(1px)"
+                    }}
+                />
+            </div>,
+            <p>The true power of Synergy lies not in a single skill, but in the creative harmony of all of them.</p>
+        ],
+        details: [
+        ],
+        init: () => {
+            gsap.to(".illustration-background", {
+                y: 3,
+                duration: 4,
+                yoyo: true,
+                ease: "sine.inOut",
+                repeat: -1
+            });
+            gsap.to(".illustration-background", {
+                scale: 1.01,
+                duration: 8,
+                transformOrigin: "center center",
+                yoyo: true,
+                ease: "sine.inOut",
+                repeat: -1
+            });
+            gsap.to(".illustration-base", {
+                y: 3,
+                duration: 6,
+                yoyo: true,
+                ease: "sine.inOut",
+                repeat: -1,
+            });
+            gsap.to(".illustration-foreground", {
+                y: 2,
+                duration: 7,
+                yoyo: true,
+                ease: "sine.inOut",
+                repeat: -1,
+            });
+        }
+    }
 ];
 
 export default function Skills() {
@@ -200,7 +282,6 @@ export default function Skills() {
             setIsSmall((isSmall) => {
                 const newIsSmall = window.innerWidth < smallWidth;
                 setCompactSelection(compactSelection => {
-                    isSmall !== newIsSmall && console.log(isSmall, newIsSmall, compactSelection);
                     if (!isSmall && newIsSmall) {
                         return undefined;
                     }
@@ -213,7 +294,7 @@ export default function Skills() {
             });
         };
         onResize();
-
+        
         window.addEventListener("resize", onResize);
         return () => {
             window.removeEventListener("resize", onResize);
@@ -234,12 +315,13 @@ export default function Skills() {
                     isSmall={isSmall}
                     onClick={(e: React.MouseEvent<HTMLElement>) => {
                         setSelection(index);
+                        setCompactSelection(undefined);
                         if (!gridRef.current) return;
                         gsap.to(window, {
                             duration: 0.2,
                             scrollTo: {
                                 y: isSmall ? e.currentTarget : gridRef.current,
-                                offsetY: 75,
+                                offsetY: isSmall ? window.innerHeight / 2 - 200 : 75,
                                 autoKill: true
                             },
                             ease: "expo.out"
