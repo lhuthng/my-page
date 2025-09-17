@@ -146,17 +146,17 @@ const cards: CardProps[] = [
         details: [
             {
                 x: 140, y: 190, dx: 0, dy: 0,
-                detail: <div className="w-38 text-left"><b>Version Control:</b> Git, GitLab, Azure Repos</div>,
+                detail: <div className="w-32 text-left"><b>Version Control:</b> Git, GitLab, Azure Repos</div>,
                 paths: [[45,22],[0,240]]
             },
             {
                 x: 140, y: 90, dx: 0, dy: 0,
-                detail: <div className="w-27 text-right"><b>CI/CD:</b> Jenkins, Github Actions</div>,
+                detail: <div className="w-20 text-right"><b>CI/CD:</b> Jenkins, Github Actions</div>,
                 paths: [[-135,22], [180,220]]
             },
             {
                 x: 85, y: 200, dx: 0, dy: 0,
-                detail: <div className="w-31 text-right"><b>Testing:</b> unittest, junit, MSTest</div>,
+                detail: <div className="w-22 text-right"><b>Testing:</b> unittest, junit, MSTest</div>,
                 paths: [[180,40],[135,30],[180,120]]
             }
         ],
@@ -195,7 +195,7 @@ const cards: CardProps[] = [
     {
         title: "JackOfAllTrades",
         level: Infinity,
-        colorPresetName: "Aptitude",
+        colorPresetName: "Wildcard",
         difficulty: Infinity,
         effect: "Omnia",
         attack: Infinity,
@@ -206,7 +206,7 @@ const cards: CardProps[] = [
                     backgroundImage: `url(${whiteBackground})`,
                     opacity: 0.3
                 }}/>
-                <div className="illustration-background absolute w-full h-full"
+                <div className="illustration-background"
                     style={{
                         backgroundImage: `url(${customBackground})`,
                         backgroundPosition: `46% 25%`,
@@ -214,7 +214,7 @@ const cards: CardProps[] = [
                         backgroundRepeat: "no-repeat",
                     }}
                 />
-                <div className="illustration-base absolute w-full h-full"
+                <div className="illustration-base"
                     style={{
                         backgroundImage: `url(${customCharacter})`,
                         backgroundPosition: `50% 40%`,
@@ -222,7 +222,7 @@ const cards: CardProps[] = [
                         backgroundRepeat: "no-repeat",
                     }}
                 />
-                <div className="illustration-foreground absolute w-full h-full"
+                <div className="illustration-foreground"
                     style={{
                         backgroundImage: `url(${customForeground})`,
                         backgroundPosition: `50% 30%`,
@@ -232,9 +232,35 @@ const cards: CardProps[] = [
                     }}
                 />
             </div>,
-            <p>The true power of Synergy lies not in a single skill, but in the creative harmony of all of them.</p>
+            <p style={{
+                backgroundImage: 'linear-gradient(-30deg,red,orange,yellow,violet,orange,yellow,violet)',
+                backgroundClip: 'text',
+                color: 'rgba(255, 255, 255, 0.75)'
+            }}
+            >
+                The wildcard. A unique blend of skills that powers the entire deck.
+            </p>
         ],
-        details: [
+        details: [{
+                x: 56, y: 102, dx: 0, dy: 0,
+                detail: <div className="w-42 text-right"><b>Digital Art:</b> Clip Studio Paint, Adobe Photoshop, Illustrator, Aseprite</div>,
+                paths: [[-135,22],[180,160]]
+            },
+            {
+                x: 140, y: 90, dx: 0, dy: 0,
+                detail: <div className="w-42 text-left"><b>Video Production:</b> Adobe Premiere, After Effects, Blender</div>,
+                paths: [[-45,22], [0,240]]
+            },
+            {
+                x: 200, y: 190, dx: 0, dy: 0,
+                detail: <div className="w-31 text-left"><b>Music Production:</b> FL Studio</div>,
+                paths: [[0,60],[45,30],[0,120]]
+            },
+            {
+                x: 40, y: 175, dx: 0, dy: 0,
+                detail: <div className="w-40 text-right"><b>Programming:</b> Visual Studio, Visual Studio Code</div>,
+                paths: [[90, 20], [135,40],[180,90],[135,60]]
+            }
         ],
         init: () => {
             gsap.to(".illustration-background", {
@@ -304,6 +330,14 @@ export default function Skills() {
     return (
     <section className="max-w-340 mx-auto">
         <CoolHeader title="Skills" />
+        <div className="max-w-200 mx-auto p-10 space-y-10">
+            <h1 className="text-4xl">What I Do</h1>
+            <blockquote className="pl-10 text-xl space-y-10 ">
+                <h2 className="skill-quote relative text-2xl w-fit pl-4">"Jack of all trades, master of none."</h2>
+                <p className="italic text-justify">That's what they say. But I see it differently. The true power of synergy lies not in a single skill, but in the creative harmony of all of them. I've honed my abilities across frontend and backend development, DevOps, digital art, and media production to deliver cohesive projects that are expertly produced from every angle.</p>
+            </blockquote>
+            <i className="text-md text-gray-chalk">*To explore each skill in detail, interact with the cards below*</i>
+        </div>
         <div className="grid-container w-full" ref={gridRef}>
             {!isSmall && selection !== undefined && cards[selection] && <div className="col-span-full">
                 <Card {...cards[selection]} key={selection} expanded={true}/>
@@ -314,7 +348,12 @@ export default function Skills() {
                     key={index}
                     isSmall={isSmall}
                     onClick={(e: React.MouseEvent<HTMLElement>) => {
-                        setSelection(index);
+                        setSelection(selection => {
+                            if (selection === index) {
+                                return undefined;
+                            }
+                            return index;
+                        })
                         setCompactSelection(undefined);
                         if (!gridRef.current) return;
                         gsap.to(window, {

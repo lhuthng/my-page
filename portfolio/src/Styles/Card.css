@@ -9,7 +9,7 @@
     will-change: transform;
 
     &:hover {
-        transform: scale(1.05, 1.1);
+        transform: scale(1.05, 1.05);
         &>.card {
             @apply shadow-[-0.5rem_1rem_0.2rem_rgb(var(--darkboard),0.4)];
         }
