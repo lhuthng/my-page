@@ -11,7 +11,8 @@ interface CardPreset {
     description: Color
     text: Color
     highlight?: Color,
-    textAlt?: Color
+    textAlt?: Color,
+    ui?: Color
 }
 
 const defaultPreset: CardPreset = {
@@ -21,7 +22,7 @@ const defaultPreset: CardPreset = {
     text: "black",
 };
 
-const attributes = [ "Resilience", "Agility", "Intelligent", "Charisma", "Wisdom", "Aptitude" ] as const;
+const attributes = [ "Resilience", "Agility", "Intelligent", "Charisma", "Wisdom", "Wildcard" ] as const;
 type Attribute = typeof attributes[number];
 
 const cardPresetBank: Partial<Record<
@@ -62,12 +63,13 @@ const cardPresetBank: Partial<Record<
         description: "light-gray",
         text: "black",
     },
-    Aptitude: {
+    Wildcard: {
         text: "white",
         background: "black",
         description: "dark-gray",
         highlight: "white",
-        title: "dark-gray"
+        title: "dark-gray",
+        ui: "purple"
     }
 }
 
@@ -244,7 +246,7 @@ export default function Card(
             onMouseLeave={handleMouseLeave}
             onClick={onClick}
             style={{
-                pointerEvents: detailSelection === undefined ? "auto" : "none",
+                cursor: expanded ? "default" : "pointer",
                 filter: compactSelected ? "grayscale(85%)" : "none"
             }}
         >  
@@ -275,7 +277,11 @@ export default function Card(
                                 color: toRGB(colorPreset.text)
                             }}
                         >
-                            <span className="pl-16 pt-1.5 font-bold z-1 underline underline-offset-2">
+                            <span className="pl-16 pt-1.5 font-bold z-1 underline underline-offset-2"
+                                style={{
+                                    cursor: expanded ? "text" : "pointer"
+                                }}
+                            >
                                 {title}
                             </span>
                             <div className="absolute left-0 top-[calc(100%-24px)]">
@@ -320,7 +326,11 @@ export default function Card(
                                 </svg>
                             </div>
                             <div className="flex flex-col h-full pt-7">
-                                <div className="flex-1 px-2">
+                                <div className="flex-1 px-2"
+                                    style={{
+                                        cursor: expanded ? "text" : "pointer"
+                                    }}
+                                >
                                     {description}
                                 </div>
                                 <div className="flex w-full h-4 text-xs justify-between px-2"
@@ -345,8 +355,8 @@ export default function Card(
                 className="rounded-lg p-2 border-2 font-courier-prime super-bold"
                 style={{
                     backgroundColor: toRGB(colorPreset.background),
-                    borderColor: toRGB(colorPreset.highlight ?? colorPreset.title),
-                    color: toRGB(colorPreset.textAlt ?? colorPreset.text),
+                    borderColor: toRGB(colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title),
+                    color: toRGB(colorPreset.ui ?? colorPreset.textAlt ?? colorPreset.text),
                 }}
                 dx={cardOffset[0]} 
                 dy={cardOffset[1]} 
@@ -359,7 +369,7 @@ export default function Card(
                     setDetailSelection(toggle ? index : undefined);
                     onDetailCallback?.(toggle);
                 }}
-                strokeColor={toRGB(colorPreset.highlight ?? colorPreset.title)}
+                strokeColor={toRGB(colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title)}
             />)}
         </div>
     </div>

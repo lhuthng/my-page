@@ -155,7 +155,7 @@ export default function CardInfo({
                 strokeWidth={strokeWidth}
                 r={circleRadius}
             />}
-            <circle
+            <circle className="hover:scale-120"
                 style={{
                     pointerEvents: compact ? "auto" : "none",
                     cursor: compact ? "pointer" : "none",
