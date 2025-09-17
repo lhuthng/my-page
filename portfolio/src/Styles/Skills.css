@@ -1,0 +1,8 @@
+@reference "../index.css";
+
+.skill-quote {
+    &:after {
+        content: '';
+        @apply absolute left-0 top-1/2 -translate-y-1/2 w-1 h-full border-l-1;
+    }
+}

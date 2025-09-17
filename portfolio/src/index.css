@@ -69,6 +69,8 @@
 .super-bold {
   b {
     font-weight: 700;
+    text-decoration: underline;
+  
   }
 }
 
