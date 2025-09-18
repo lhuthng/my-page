@@ -1,0 +1,19 @@
+@reference "../index.css";
+
+.grid-flex {
+    @apply flex flex-col;
+
+    @media (width >= 40rem) {
+        @apply grid grid-cols-2;
+
+        & > div {
+            &:nth-child(odd) {
+                grid-column: 2 / -1;
+            }
+            &:nth-child(even) {
+                grid-column: 1 / -1;
+                width: 50%;
+            }
+        }
+    }
+}

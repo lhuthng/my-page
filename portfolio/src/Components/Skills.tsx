@@ -292,6 +292,44 @@ const cards: CardProps[] = [
                 ease: "sine.inOut",
                 repeat: -1,
             });
+
+            const tl = gsap.timeline({
+                repeat: -1,
+                repeatDelay: 4,
+                onRepeat: () => {
+                    gsap.set(".illustration-base", { y: 0, scaleX: 1, skewX: 0 }); // Reset for the next repetition
+                }
+            });
+
+            tl.to(".illustration-base", {
+                duration: 0.05,
+                opacity: 0.5,
+                y: () => Math.random() * 20 - 10,
+                ease: "power1.inOut"
+            }, 0)
+            .to(".illustration-base", {
+                duration: 0.05,
+                opacity: 1,
+                y: 0,
+                scaleX: () => 1 + Math.random() * 0.2, 
+                skewX: () => Math.random() * 20 - 10,
+                transformOrigin: "center center",
+                ease: "power1.inOut"
+            }, 0.05)
+            .to(".illustration-base", {
+                duration: 0.05,
+                opacity: 0.7,
+                y: () => Math.random() * 20 - 10,
+                ease: "power1.inOut"
+            }, 0.1)
+            .to(".illustration-base", {
+                duration: 0.05,
+                opacity: 1,
+                y: 0,
+                scaleX: 1,
+                skewX: 0,
+                ease: "power1.inOut"
+            }, 0.15);
         }
     }
 ];
@@ -330,10 +368,10 @@ export default function Skills() {
     return (
     <section className="max-w-340 mx-auto">
         <CoolHeader title="Skills" />
-        <div className="max-w-200 mx-auto p-10 space-y-10">
+        <div className="max-w-200 mx-auto px-10 py-40 space-y-10">
             <h1 className="text-4xl">What I Do</h1>
             <blockquote className="pl-10 text-xl space-y-10 ">
-                <h2 className="skill-quote relative text-2xl w-fit pl-4">"Jack of all trades, master of none."</h2>
+                <h2 className="skill-quote relative text-2xl w-fit pl-4 font-bold">"Jack of all trades, master of none."</h2>
                 <p className="italic text-justify">That's what they say. But I see it differently. The true power of synergy lies not in a single skill, but in the creative harmony of all of them. I've honed my abilities across frontend and backend development, DevOps, digital art, and media production to deliver cohesive projects that are expertly produced from every angle.</p>
             </blockquote>
             <i className="text-md text-gray-chalk">*To explore each skill in detail, interact with the cards below*</i>
@@ -348,26 +386,26 @@ export default function Skills() {
                     key={index}
                     isSmall={isSmall}
                     onClick={(e: React.MouseEvent<HTMLElement>) => {
-                        setSelection(selection => {
-                            if (selection === index) {
-                                return undefined;
+                        setCompactSelection(compactSelection => {
+                            if (gridRef.current && compactSelection === undefined) {
+                                gsap.to(window, {
+                                    duration: 0.2,
+                                    scrollTo: {
+                                        y: isSmall ? e.currentTarget : gridRef.current,
+                                        offsetY: isSmall ? window.innerHeight / 2 - 200 : 75,
+                                        autoKill: true
+                                    },
+                                    ease: "expo.out"
+                                });
                             }
-                            return index;
-                        })
-                        setCompactSelection(undefined);
-                        if (!gridRef.current) return;
-                        gsap.to(window, {
-                            duration: 0.2,
-                            scrollTo: {
-                                y: isSmall ? e.currentTarget : gridRef.current,
-                                offsetY: isSmall ? window.innerHeight / 2 - 200 : 75,
-                                autoKill: true
-                            },
-                            ease: "expo.out"
+                            return undefined;
                         });
+                        setSelection(index);
                     }}
+                    onDetailCallback={(toggle) => {
+                        setCompactSelection(toggle ? index : undefined);
+                    }}  
                     compactSelected={compactSelection === index}
-                    onDetailCallback={(toggle) => setCompactSelection(toggle ? index : undefined)}
                 />
                 : <EmptyCard key={index}/>
             )}

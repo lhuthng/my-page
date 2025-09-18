@@ -1,5 +1,6 @@
 import About from "./Components/About";
 import Contact from "./Components/Contact";
+import Experience from "./Components/Experience";
 import Header from "./Components/Header";
 import Landing from "./Components/Landing";
 import Skills from "./Components/Skills";
@@ -16,6 +17,7 @@ export function App() {
       <div className="bg-blackboard text-white w-full divide-y space-y-2">
         <Landing/>
         <About/>
+        <Experience />
         <Skills/>
         <Contact/>
       </div>
