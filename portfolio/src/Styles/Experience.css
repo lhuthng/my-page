@@ -1,9 +1,9 @@
 @reference "../index.css";
 
 .grid-flex {
-    @apply flex flex-col;
+    @apply flex flex-col ;
 
-    @media (width >= 40rem) {
+    @media (width >= 64rem) {
         @apply grid grid-cols-2;
 
         & > div {
@@ -15,5 +15,117 @@
                 width: 50%;
             }
         }
+    }
+}
+
+
+.cell-adjust {
+    @apply relative border-b-0 lg:odd:translate-x-[-1px] lg:even:translate-x-[1px]; 
+
+    .title {
+        @apply px-2 justify-center mx-auto lg:mx-0;
+    }
+
+    &:last-child {
+        @apply not-lg:border-b-2;  
+    }
+}
+
+.custom-border {
+    @apply absolute w-full h-full pointer-events-none;
+    i:first-child {
+        @apply absolute content-[''] w-full h-full;
+        &::before {
+            @apply absolute content-[''] w-full h-[2px] top-0 right-0 origin-right bg-white;
+            transform: scaleX(0);
+
+        }
+        &::after {
+            @apply absolute content-[''] w-[2px] h-full left-0 top-0 origin-top bg-white;
+            transform: scaleY(0);
+            animation-delay: 1s;
+        }
+    }
+    i:last-child {
+        @apply absolute content-[''] w-full h-full;
+        &::after {
+            @apply absolute content-[''] w-[2px] h-full right-0 bottom-0 origin-bottom bg-white;
+            transform: scaleY(0);
+            animation-delay: 1s;
+        }
+    }
+}
+
+/* .custom-border.open {
+    i:last-child::before {
+        @apply opacity-0;
+    }
+} */
+
+@keyframes scaleXFull {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
+}
+
+@keyframes scaleYFull {
+    from {
+        transform: scaleY(0);
+    }
+    to {
+        transform: scaleY(1);
+    }
+}
+
+.details-slot {
+    @apply w-full lg:absolute h-0 lg:h-60;
+
+    & > ul {
+        @apply lg:absolute border-x-2 lg:bottom-full translate-y-[2px] transition-all duration-500 ease-in-out;
+        &::before {
+            @apply absolute content-[''] w-[calc(100%+4px)] h-[2px] top-[calc(100%-2px)] left-[-2px] origin-left bg-white;
+            transform: scaleX(0);
+        }
+    }
+}
+
+.custom-border.is-visible {
+    i:first-child {
+        &::before {
+            animation: scaleXFull 1s ease-out forwards;
+        }
+        &::after {
+            animation: scaleYFull 1s ease-out forwards;
+        }
+    }
+    i:last-child::after {
+        animation: scaleYFull 1s ease-out forwards;
+    }
+
+}
+.details-slot.is-visible {
+    & > ul::before {
+        animation: scaleXFull 1s ease-out forwards;
+    }
+}
+
+
+.details-slot.open {
+    @apply h-full lg:h-60;
+}
+
+.details-slot.open {
+    & > ul {
+        @apply lg:translate-y-full;
+    }
+}
+
+.contributions-marker {
+    & > li::marker {
+        @apply font-bold text-gray-chalk/40;
+        content: '> ';
     }
 }
