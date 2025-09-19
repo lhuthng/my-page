@@ -126,16 +126,16 @@ export default function CardInfo({
             opacity: shown ? 1 : 0,
             duration: 0.1
         });
-
         setZIndex(defaultZIndex + (shown ? 1 : 0));
-    }, [ shown, compact ])
+    }, [ shown, compact ]);
+    
 
     return <div
         style={{
             position: 'absolute',
             left: `${pivot[0]}px`,
             top: `${pivot[1]}px`,
-            zIndex
+            zIndex,
         }}
     >
         <svg className="absolute"
@@ -185,8 +185,8 @@ export default function CardInfo({
                 left: lastPosition[0],
                 top: lastPosition[1],
                 transform: `translate(-50%, -50%)`,
-                pointerEvents: shown && compact ? "auto" : "none",
-                cursor: shown && compact ? "pointer" : "none",
+                pointerEvents: shown ? "all" : "none",
+                cursor: shown ? "pointer" : "none",
             }}
             onClick={() => compact && onClick?.(false)}
         >            
