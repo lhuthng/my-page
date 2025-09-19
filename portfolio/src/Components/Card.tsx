@@ -240,7 +240,7 @@ export default function Card(
     return <div className="relative"
         ref={containerRef}
     >
-        <div className="card-container perspective-midrange mx-auto my-2 w-70 h-110 cursor-pointer"
+        <div className="card-container perspective-midrange mx-auto my-2 w-70 h-110"
             onMouseMove={handleMouseMove}
             onMouseEnter={handleMouseMove}
             onMouseLeave={handleMouseLeave}
@@ -348,7 +348,7 @@ export default function Card(
                 </div>
             </div>
         </div>
-        <div className="opacity-0 absolute pointer-events-none"
+        <div className="opacity-0 absolute"
             ref={detailRef}
         >
             {details.map((detail, index) => <CardInfo {...detail}
