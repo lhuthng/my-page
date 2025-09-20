@@ -3,6 +3,19 @@
 .skill-quote {
     &:after {
         content: '';
-        @apply absolute left-0 top-1/2 -translate-y-1/2 w-1 h-full border-l-1;
+        @apply absolute left-0 top-1/2 -translate-y-1/2 w-2 h-full border-l-1;
+    }
+}
+
+blockquote > p {
+    font-family: "Cormorant Garamond", serif;
+    &::first-letter {
+        color: var(--color-red-700);
+        font-size: 4.5rem;
+        float: left;
+        padding-right: 0.6rem;
+        padding-top: 0.6rem;
+        line-height: 0.4;
+        font-family: "Uncial Antiqua", system-ui;
     }
 }

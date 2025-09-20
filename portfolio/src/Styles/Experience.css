@@ -155,9 +155,3 @@
         content: '> ';
     }
 }
-
-.education-container.is-visible {
-    & > i {
-        @apply w-100;
-    }   
-}
