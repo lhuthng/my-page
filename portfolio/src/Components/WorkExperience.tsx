@@ -2,6 +2,7 @@ import type { ReactNode } from "react"
 import { Children, useEffect, useLayoutEffect, useRef, useState } from "react"
 import '@/Styles/Experience.css'
 import gsap from "gsap"
+import { useGSAP } from "@gsap/react"
 
 interface ExperienceInfoProps {
     title: string,
@@ -14,19 +15,19 @@ interface ExperienceInfoProps {
     children: ReactNode
 }
 
-export default function ExperienceInfo({
+export default function WorkExperience({
     title, duration, organization, technologies, project, location, additional = [], children
 }: ExperienceInfoProps) {
     const [ expanded, setExpanded ] = useState(false);
     const borderRef = useRef<HTMLDivElement>(null);
     const slotRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        gsap.utils.toArray(".custom-border").forEach((border) => {
+    useGSAP(() => {
+        gsap.utils.toArray(".cell-adjust").forEach((border) => {
             gsap.to(border as Element, {
                 scrollTrigger: {
                     trigger: border as Element,
-                    start: "bottom bottom",
+                    start: "center bottom",
                     toggleClass: "is-visible",
                     once: true
                 }
@@ -42,23 +43,24 @@ export default function ExperienceInfo({
                 }
             });
         });
-    }, []);
+    });
 
     useEffect(() => {
         borderRef.current?.classList.toggle('open', expanded);
         slotRef.current?.classList.toggle('open', expanded);
     }, [expanded]);
 
+
     return (<div className={`cell-adjust w-full space-y-2 bg-blackboard z-0}`}>
         <div ref={borderRef} className="custom-border z-11"><i/><i/></div>
-        <div className="relative m-0 pb-2 bg-blackboard z-10">
-            <div className="relative p-4 pb-2">
+        <div className="relative m-0 pb-2 bg-blackboard space-y-4 z-10">
+            <div className="relative space-y-4 p-4 pb-2">
                 <div className="relative w-full">
                     <div className="absolute inset-y-1/2 w-full h-[2px] bg-white z-0"></div>
-                    <div className="relative title flex font-bold text-2xl w-fit bg-blackboard z-10">{title}</div>
+                    <div className="relative title flex font-bold text-2xl w-fit bg-white text-blackboard z-10">{title}</div>
                 </div>
                 <div className="flex justify-between italic">
-                    <div><div>{organization}</div><div>{location ?? "(remote)"}</div></div>
+                    <div><div className="font-bold">{organization}</div><div>{location ?? "(remote)"}</div></div>
                     <span className="text-gray-chalk">{duration}</span>
                 </div>
                 <div><b>Technologies:</b> {technologies.join(', ')}.</div>
@@ -73,8 +75,8 @@ export default function ExperienceInfo({
                 onClick={() => setExpanded(expanded => !expanded)}
             >{expanded ? "collapse" : "expand" }</span></div>
         </div>          
-        <div ref={slotRef} className="details-slot overflow-y-hidden z-9">
-            <ul className="contributions-marker space-y-2 pl-10 pb-2">
+        <div ref={slotRef} className="details-slot not-lg:bg-blackboard overflow-y-hidden z-9">
+            <ul className="contributions-marker bg-blackboard space-y-2 pl-10 pr-2 pb-4">
                 {Children.map(children, (child, index) => <li key={index}>{child}</li>)}
             </ul>
         </div>
