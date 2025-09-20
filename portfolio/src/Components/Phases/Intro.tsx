@@ -32,7 +32,6 @@ export default function Intro(
         </div>
         <h1 className="text-2xl sm:text-3xl text-center">Me in a nutshell</h1>
         <p>I'm a full-stack developer passionate about building projects from the ground up. I specialize in software design, with a keen interest in microservices and scalable architectures. I enjoy turning ideas into efficient, maintainable solutions that can grow with users' needs.</p>
-        <p>If you'd like a quick look at my journey so far, you can explore the timeline below.</p>
         <figure className='max-w-full w-60 sm:w-100 mx-auto space-y-2'>
             <div className="w-full h-20 animate-[scrollingBackground_20s_linear_infinite]"
                 style={{
@@ -46,5 +45,6 @@ export default function Intro(
             />
             <figcaption className='text-center text-base xs:texl-lg sm:text-xl'>Fig. 0: My journey to be a developer.</figcaption>
         </figure>
+        <p className='text-sm text-right sm:text-center italic text-gray-chalk'>*If you'd like a quick look at my journey so far, you can explore the timeline <span className='hidden sm:inline'>below</span><span className='sm:hidden'>on the left</span>.*</p>
     </section>);
 }

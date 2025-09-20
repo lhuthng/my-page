@@ -1,3 +1,4 @@
+import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 
@@ -95,7 +96,7 @@ export default function CardInfo({
         }
     }, [ hoverDir, x, y, dx, dy ]);
 
-    useLayoutEffect(() => {
+    useGSAP(() => {
         if (compact) {
             setLastPosition([0, 0]);
             if (detailRef.current) {
@@ -116,7 +117,7 @@ export default function CardInfo({
         }
     }, [ compact ]);
 
-    useEffect(() => {
+    useGSAP(() => {
         if (!compact || !detailRef.current) {
             setZIndex(defaultZIndex)
             return;
@@ -139,6 +140,7 @@ export default function CardInfo({
         }}
     >
         <svg className="absolute"
+            xmlns="http://www.w3.org/2000/svg"
             width={viewbox.width + strokeWidth} 
             height={viewbox.height + strokeWidth} 
             viewBox={`${viewbox.x - strokeWidth / 2} ${viewbox.y - strokeWidth / 2} ${viewbox.width + strokeWidth} ${viewbox.height + strokeWidth}`}
