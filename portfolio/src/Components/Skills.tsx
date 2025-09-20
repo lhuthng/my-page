@@ -368,13 +368,19 @@ export default function Skills() {
     return (
     <section className="max-w-340 mx-auto">
         <CoolHeader title="Skills" />
-        <div className="max-w-200 mx-auto px-10 py-40 space-y-10">
-            <h1 className="text-4xl">What I Do</h1>
-            <blockquote className="pl-10 text-xl space-y-10 ">
-                <h2 className="skill-quote relative text-2xl w-fit pl-4 font-bold">"Jack of all trades, master of none."</h2>
-                <p className="italic text-justify">That's what they say. But I see it differently. The true power of synergy lies not in a single skill, but in the creative harmony of all of them. I've honed my abilities across frontend and backend development, DevOps, digital art, and media production to deliver cohesive projects that are expertly produced from every angle.</p>
-            </blockquote>
-            <i className="text-md text-gray-chalk">*To explore each skill in detail, interact with the cards below*</i>
+        <div className="max-w-200 mx-auto py-20 mb-20 bg-amber-50 text-darkboard space-y-10"
+            style={{
+                maskImage: "linear-gradient(transparent, black, black, black, black, transparent)"
+            }}
+        >
+            <h1 className="px-10 py-4 font-bold text-4xl bg-red-700/90 text-white">What I Do</h1>
+            <div className="flex flex-col px-10 gap-6">
+                <blockquote className="pl-10 text-xl space-y-10 ">
+                    <h2 className="skill-quote relative text-2xl w-fit pl-4 font-bold">"Jack of all trades, master of none."</h2>
+                    <p className="italic text-justify">That's what they say. But I see it differently. The true power of synergy lies not in a single skill, but in the creative harmony of all of them. I've honed my abilities across frontend and backend development, DevOps, digital art, and media production to deliver cohesive projects that are expertly produced from every angle.</p>
+                </blockquote>
+                <i className="text-md text-gray-chalk-dark">*To explore each skill in detail, interact with the cards below*</i>
+            </div>            
         </div>
         <div className="grid-container w-full" ref={gridRef}>
             {!isSmall && selection !== undefined && cards[selection] && <div className="col-span-full">
