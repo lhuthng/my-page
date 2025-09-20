@@ -87,8 +87,7 @@ export default function Experience() {
             display: "block",
             pointerEvents: "all",
             duration: 0.2,
-            ease: "power1.out",
-            onComplete: () => ScrollTrigger.refresh() 
+            ease: "power1.out"
         }, "-=0.2");
     }, []);
 

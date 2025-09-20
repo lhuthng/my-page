@@ -61,7 +61,7 @@ export default function Education({
         });
     }, [onTab])
 
-    return <div ref={containerRef} className="py-10">
+    return <div ref={containerRef} className="min-h-60 h-[calc(100dvh-20rem)] flex items-center">
         <div className="education-container relative flex flex-col sm:flex-row mx-auto w-full h-100 sm:h-50 justify-center">
             <i ref={iRef} className="absolute content-[''] top-1/2 left-1/2 h-1 rounded-sm bg-white z-10"/>
             <div className="relative w-full h-full overflow-hidden">
