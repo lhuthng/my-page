@@ -4,6 +4,7 @@ import CardInfo, { type CardInfoProps } from "./CardInfo";
 import { toRGB, type Color } from "@/Utils/color";
 import gsap from "gsap";
 import { smallWidth } from "@/Utils/common";
+import { useGSAP } from "@gsap/react";
 
 interface CardPreset {
     title: Color
@@ -201,7 +202,7 @@ export default function Card(
         }
     }, []);
 
-    useLayoutEffect(() => {
+    useGSAP(() => {
         if (detailRef.current) {
             if (expanded || isSmall) {
                 setTimeout(() => {

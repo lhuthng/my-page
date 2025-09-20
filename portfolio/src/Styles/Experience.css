@@ -20,7 +20,7 @@
 
 
 .cell-adjust {
-    @apply relative border-b-0 lg:odd:translate-x-[-1px] lg:even:translate-x-[1px]; 
+    @apply relative border-b-0 lg:odd:translate-x-[-1px] lg:even:translate-x-[1px] opacity-0 transition-opacity duration-1000;
 
     .title {
         @apply px-2 justify-center mx-auto lg:mx-0;
@@ -28,6 +28,19 @@
 
     &:last-child {
         @apply not-lg:border-b-2;  
+    }
+
+    &:nth-child(odd):not(:last-child) {
+        &::before {
+            @apply z-0 lg:z-4 absolute content-[''] opacity-0 w-0 h-0 bg-blackboard border-double border-white border-6 left-0 bottom-0 -translate-x-1/2 translate-y-1/2 transition-all duration-1000 delay-500;
+            transform: rotate(45deg) scale(1);
+        }
+    }
+    &:nth-child(even):not(:last-child) {
+        &::before {
+            @apply z-0 lg:z-4 absolute content-[''] opacity-0 w-0 h-0 bg-blackboard border-double border-white border-6 rotate-45 right-0 bottom-0 translate-x-1/2 translate-y-1/2 transition-all duration-1000 delay-500;
+            transform: rotate(45deg);
+        }
     }
 }
 
@@ -81,7 +94,7 @@
 }
 
 .details-slot {
-    @apply w-full lg:absolute h-0 lg:h-60;
+    @apply w-full lg:absolute h-0 lg:h-66;
 
     & > ul {
         @apply lg:absolute border-x-2 lg:bottom-full translate-y-[2px] transition-all duration-500 ease-in-out;
@@ -92,19 +105,33 @@
     }
 }
 
-.custom-border.is-visible {
-    i:first-child {
-        &::before {
-            animation: scaleXFull 1s ease-out forwards;
+.cell-adjust.is-visible {
+    @apply opacity-100;
+    & > .custom-border {
+        i:first-child {
+            &::before {
+                animation: scaleXFull 1s ease-out forwards;
+            }
+            &::after {
+                animation: scaleYFull 1s ease-out forwards;
+            }
         }
-        &::after {
+        i:last-child::after {
             animation: scaleYFull 1s ease-out forwards;
         }
     }
-    i:last-child::after {
-        animation: scaleYFull 1s ease-out forwards;
+    &:nth-child(odd):not(:last-child) {
+        &::before {
+            @apply w-20 h-20 opacity-100;
+            transform: rotate(-45deg);
+        }
     }
-
+    &:nth-child(even):not(:last-child) {
+        &::before {
+            @apply w-20 h-20 opacity-100;
+            transform: rotate(135deg);
+        }
+    }
 }
 .details-slot.is-visible {
     & > ul::before {
@@ -112,9 +139,8 @@
     }
 }
 
-
 .details-slot.open {
-    @apply h-full lg:h-60;
+    @apply h-full lg:h-66;
 }
 
 .details-slot.open {
@@ -128,4 +154,10 @@
         @apply font-bold text-gray-chalk/40;
         content: '> ';
     }
+}
+
+.education-container.is-visible {
+    & > i {
+        @apply w-100;
+    }   
 }

@@ -45,7 +45,7 @@ const cards: CardProps[] = [
             },
             {
                 x: 140, y: 245, dx: 0, dy: 0,
-                detail: <div className="w-36 text-right"><b>Styling:</b> TailwindCSS</div>,
+                detail: <div className="w-36 text-right"><b>Styling:</b> GSAP, TailwindCSS</div>,
                 paths: [[0,160],[45,40],[0,80]]
             }
         ],
@@ -386,25 +386,27 @@ export default function Skills() {
                     key={index}
                     isSmall={isSmall}
                     onClick={(e: React.MouseEvent<HTMLElement>) => {
-                        setCompactSelection(compactSelection => {
-                            if (gridRef.current && compactSelection === undefined) {
-                                gsap.to(window, {
-                                    duration: 0.2,
-                                    scrollTo: {
-                                        y: isSmall ? e.currentTarget : gridRef.current,
-                                        offsetY: isSmall ? window.innerHeight / 2 - 200 : 75,
-                                        autoKill: true
-                                    },
-                                    ease: "expo.out"
-                                });
-                            }
-                            return undefined;
-                        });
-                        setSelection(index);
+                        setSelection(selection => {
+                            setCompactSelection(compactSelection => {
+                                if (gridRef.current && compactSelection === undefined) {
+                                    gsap.to(window, {
+                                        duration: 0.2,
+                                        scrollTo: {
+                                            y: isSmall ? e.currentTarget : gridRef.current,
+                                            offsetY: isSmall ? window.innerHeight / 2 - 200 : 75,
+                                            autoKill: true
+                                        },
+                                        ease: "expo.out"
+                                    });
+                                }
+                                return undefined;
+                            });
+                            return index;
+                        })
                     }}
                     onDetailCallback={(toggle) => {
-                        setCompactSelection(toggle ? index : undefined);
-                    }}  
+                        setCompactSelection(toggle ? index : undefined)
+                    }}
                     compactSelected={compactSelection === index}
                 />
                 : <EmptyCard key={index}/>
