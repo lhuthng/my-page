@@ -278,25 +278,25 @@ export default function Card(
 
     useGSAP(() => {
         if (detailRef.current) {
-            if (expanded || isSmall) {
-                setTimeout(() => {
-                    gsap.fromTo(detailRef.current, {
-                        y: -10
-                    }, {
-                        y: 0,
-                        duration: 0.2
-                    });
+            
+            gsap.killTweensOf([detailRef.current]);
 
-                    gsap.to(detailRef.current, {
-                        opacity: 1,
-                        duration: 0.4
-                    });
-                }, 200);
+            if (expanded || isSmall) {
+                gsap.fromTo(detailRef.current, {
+                    y: -10
+                }, {
+                    y: 0,
+                    duration: 0.2
+                });
+
+                gsap.to(detailRef.current, {
+                    opacity: 1,
+                    duration: 0.4
+                });
             }
             else {
-                gsap.to(detailRef.current, {
+                gsap.set(detailRef.current, {
                     opacity: 0,
-                    duration: 0
                 });
             }
         }
