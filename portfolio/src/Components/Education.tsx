@@ -65,13 +65,13 @@ export default function Education({
         <div className="education-container relative flex flex-col sm:flex-row mx-auto w-full h-100 sm:h-50 justify-center">
             <i ref={iRef} className="absolute content-[''] top-1/2 left-1/2 h-1 rounded-sm bg-white z-10"/>
             <div className="relative w-full h-full overflow-hidden">
-                <div ref={leftRef} className="absolute flex flex-col gap-2 sm:justify-center items-center sm:items-start h-40 sm:w-74 right-0 top-1/2 opacity-0 translate-x-full -translate-y-1/2">
+                <div ref={leftRef} className="absolute flex flex-col gap-2 sm:justify-center items-center sm:items-start h-40 sm:max-w-74 right-0 top-1/2 opacity-0 translate-x-full -translate-y-1/2">
                     <h1 className="text-lg xs:text-xl font-bold">B.Sc. in Computer Science</h1>
                     <p className="text-sm xs:text-base">Frankfurt University of Applied Science</p>
                 </div>
             </div>
             <div  className="relative w-full h-full overflow-hidden ">
-                <div ref={rightRef} className="absolute flex flex-col gap-2 justify-end sm:justify-center items-center sm:items-end h-40 sm:w-74 left-0 top-1/2 opacity-0 -translate-x-full -translate-y-1/2">
+                <div ref={rightRef} className="absolute flex flex-col gap-2 justify-end sm:justify-center items-center sm:items-end h-40 sm:max-w-74 left-0 top-1/2 opacity-0 -translate-x-full -translate-y-1/2">
                     <h1 className="text-lg xs:text-xl font-bold">M.Sc. in Computer Science</h1>
                     <p className="text-xs xs:text-base">University of Passau</p>
                 </div>
