@@ -10,6 +10,7 @@ import { gsap } from 'gsap';
 import { Flip } from "gsap/all";
 import { ScrollToPlugin } from 'gsap/ScrollToPlugin';
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import Projects from "./Components/Projects";
 
 gsap.registerPlugin(Flip);
 gsap.registerPlugin(ScrollToPlugin);
@@ -19,12 +20,24 @@ gsap.registerPlugin(useGSAP);
 export function App() {
   return (
     <>
+      <svg className="absolute" width="0" height="0">
+          <filter id="grainy">
+            <feTurbulence 
+              type="fractalNoise" 
+              baseFrequency="3" 
+              numOctaves="3" 
+              stitchTiles="stitch"
+            />
+          </filter>
+      </svg>
+      <div id="modal-root"/>
       {/* <Header sections={["Home", "About", "Skiplls", "Projects", "Contact"]}/> */}
       <div className="bg-blackboard text-white w-full divide-y space-y-2">
         <Landing/>
         <About/>
         <Experience />
         <Skills/>
+        <Projects/>
         <Contact/>
       </div>
     </>

@@ -14,6 +14,8 @@ import CoolHeader from "./CoolHeader";
 import { smallWidth } from "@/Utils/common";
 import "@/Styles/Skills.css";
 import gsap from "gsap";
+import svelte from "@/Assets/SVGs/svelte.svg";
+import { useGSAP } from "@gsap/react";
 
 const cards: CardProps[] = [
     {
@@ -95,8 +97,8 @@ const cards: CardProps[] = [
             <div className="w-full h-full"
                 style={{
                     backgroundImage: `url(${system})`,
-                    backgroundSize: "120% auto",
-                    backgroundPosition: `60% -25%`,
+                    backgroundSize: "100% auto",
+                    backgroundPosition: `50% 3%`,
                 }}
             />,
             <p>Hold my coffee. Taming the systems that are built to withstand the blaze.</p>
@@ -136,8 +138,9 @@ const cards: CardProps[] = [
             <div className="w-full h-full"
                 style={{
                     backgroundImage: `url(${cicd})`,
-                    backgroundPosition: `50% 10%`,
+                    backgroundPosition: `50% 3%`,
                     backgroundRepeat: "no-repeat",
+                    backgroundSize: "90% auto",
                     backgroundColor: "white"
                 }}
             />,
@@ -347,6 +350,15 @@ export default function Skills() {
     const [ isSmall, setIsSmall ] = useState(false);
     const [ preventIndex, setPreventIndex ] = useState<number>();
 
+    useGSAP(() => {
+        gsap.killTweensOf([ ".card-holder"]);
+
+        gsap.to(".card-holder", {
+            opacity: isSmall ? 0 : 1,
+            duration: 0.3
+        })
+    }, [ isSmall])
+
     useLayoutEffect(() => {
         const onResize = () => {
             setIsSmall((isSmall) => {
@@ -378,11 +390,17 @@ export default function Skills() {
     return (
     <section className="max-w-340 mx-auto">
         <CoolHeader title="Skills" />
-        <div className="max-w-200 mx-auto py-20 mb-20 bg-amber-50 text-darkboard space-y-10"
+        <div className="relative max-w-200 mx-auto py-20 bg-amber-50 text-darkboard space-y-10"
             style={{
                 maskImage: "linear-gradient(transparent, black, black, black, black, transparent)"
             }}
         >
+            <i className="absolute right-0 top-10 w-80 h-80 bg-yellow-chalk-dark opacity-20" 
+                style={{
+                    maskRepeat: "no-repeat",
+                    maskImage: `url(${svelte})`
+                }}
+            />
             <h1 className="px-10 py-4 font-bold text-4xl bg-red-700/90 text-white">What I Do</h1>
             <div className="flex flex-col px-10 gap-6">
                 <blockquote className="pl-10 text-xl space-y-10 ">
@@ -392,14 +410,32 @@ export default function Skills() {
                 <i className="text-md text-gray-chalk-dark">*To explore each skill in detail, interact with the cards below*</i>
             </div>            
         </div>
-        <div className="grid-container w-full py-10" ref={gridRef}>
-            {!isSmall && selection !== undefined && cards[selection] && <div className="col-span-full">
-                <Card {...cards[selection]} key={selection} preventFlipping={true} expanded={true}/>
+        <div className="relative grid-container w-full py-20" ref={gridRef}>
+            <i className="absolute flex flex-col top-0 left-1/2 -translate-x-1/2 w-full max-w-200 [&>i]:w-full [&>i]:bg-amber-50 h-full opacity-100 lg:opacity-20 transition-opacity duration-500">
+                <i className="h-20"
+                    style={{
+                        maskImage: 'linear-gradient(transparent, black)'
+                    }}
+                />
+                <i className="flex-1"/>
+                <i className="h-20"
+                    style={{
+                        maskImage: 'linear-gradient(black, transparent)'
+                    }}
+                />
+            </i>
+            <i className="card-holder absolute w-full top-15 bottom-10 bg-amber-100/90 z-8" 
+                style={{
+                    maskImage: `radial-gradient(rgba(0,0,0,0.6), black)`
+                }}
+            />
+            {!isSmall && selection !== undefined && cards[selection] && <div className="relative col-span-full z-9" key={selection}>
+                <Card {...cards[selection]} preventFlipping={true} expanded={true}/>
             </div>}
-            {cards.map((props, index) => (isSmall || selection !== index) ? <Card {
+            {cards.map((props, index) => <div className="relative z-9" key={index}>
+                {(isSmall || selection !== index) ? <Card {
                     ...props
                 }
-                    key={index}
                     isSmall={isSmall}
                     preventFlipping={preventIndex === index}
                     onClick={(target: HTMLDivElement) => {  
@@ -427,10 +463,10 @@ export default function Skills() {
                     }}
                     compactSelected={compactSelection === index}
                 />
-                : <EmptyCard key={index}/>
-            )}
+                : <EmptyCard key={index}/>}
+            </div>)}
         </div>
-        <div className="skills-section-remark max-w-200 mx-auto bg-amber-50 text-darkboard p-10 pt-30 mb-20 space-y-10"
+        <div className="relative skills-section-remark max-w-200 mx-auto bg-amber-50 text-darkboard p-10 pt-30 mb-20 space-y-10"
             style = {{
                 maskImage: "linear-gradient(transparent, black 8rem, black)"
             }}
@@ -445,6 +481,7 @@ export default function Skills() {
                 <p>View the Campaign Log</p>
                 <p>Propose a New Quest</p>
             </div>
+            <span className="absolute right-4 bottom-4">4</span>
         </div>
     </section>);
 }

@@ -193,7 +193,7 @@ body {
 }
 
 .scrollbar-custom {
-  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .scrollbar-custom::-webkit-scrollbar {
@@ -205,12 +205,22 @@ body {
 }
 
 .scrollbar-custom::-webkit-scrollbar-thumb {
-  background-color: var(--color-orange-chalk);
-  border-radius: 9999px; /* fully rounded */
+  border-radius: 9999px;
 }
 
-/* Firefox */
-.scrollbar-custom {
-  scrollbar-width: thin;
+
+.scroll-thumb-orange.scrollbar-custom::-webkit-scrollbar-thumb {
+  background-color: var(--color-orange-chalk);
+}
+
+.scroll-thumb-orange.scrollbar-custom {
   scrollbar-color: var(--color-orange-chalk) transparent;
+}
+
+.scroll-thumb-black.scrollbar-custom::-webkit-scrollbar-thumb {
+  background-color: var(--color-blackboard);
+}
+
+.scroll-thumb-black.scrollbar-custom {
+  scrollbar-color: var(--color-blackboard) transparent;
 }
