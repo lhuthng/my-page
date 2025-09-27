@@ -1,5 +1,9 @@
 @reference "../index.css";
 
+.grid-container {
+    @apply grid sm:grid-cols-[repeat(auto-fit,minmax(19rem,1fr))] gap-y-6;
+}
+
 .skill-quote {
     &:after {
         content: '';

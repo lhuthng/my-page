@@ -11,12 +11,18 @@ interface ExperienceInfoProps {
     location?: string,
     technologies: string[],
     project: string,
-    additional?: ReactNode[],
+    additional?: {
+        externalDocument?: {
+            name: string,
+            url: string
+        }[],
+        caseStudy?: string
+    },
     children: ReactNode
 }
 
 export default function WorkExperience({
-    title, duration, organization, technologies, project, location, additional = [], children
+    title, duration, organization, technologies, project, location, additional, children
 }: ExperienceInfoProps) {
     const [ expanded, setExpanded ] = useState(false);
     const borderRef = useRef<HTMLDivElement>(null);
@@ -76,8 +82,31 @@ export default function WorkExperience({
             >{expanded ? "collapse" : "expand" }</span></div>
         </div>          
         <div ref={slotRef} className="details-slot not-lg:bg-blackboard overflow-y-hidden z-9">
-            <ul className="contributions-marker bg-blackboard space-y-2 pl-10 pr-2 pb-4">
+            <ul className="contributions-marker bg-blackboard space-y-2 pl-10 pr-4 pb-4">
                 {Children.map(children, (child, index) => <li key={index}>{child}</li>)}
+                {additional && <li className="list-none flex" 
+                    style={{
+                        justifyContent: additional.externalDocument && additional.caseStudy ? 
+                            "space-between" 
+                            : additional.externalDocument ? 
+                                "flex-start"
+                                : "flex-end"
+                    }}
+                >
+                    {additional?.externalDocument && 
+                        <span className="text-sm">
+                            Links: <span className="space-x-2">{additional.externalDocument.map((doc, index) => <a 
+                                key={index} 
+                                className="underline text-nowrap" 
+                                href={doc.url} 
+                                target="_blank"
+                            >
+                                {doc.name}
+                            </a>)}</span>
+                        </span>
+                    }
+                    {additional?.caseStudy && <span className="text-sm opacity-60 text-blue-chalk hover:brightness-110 cursor-pointer text-nowrap"><span className="select-none opacity-20">[ </span>Read the Case Study<span className="select-none opacity-20"> ]</span></span>}
+                </li>}
             </ul>
         </div>
     </div>)

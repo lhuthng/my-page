@@ -47,13 +47,15 @@ const cardPresetBank: Partial<Record<
         description: "blue",
         highlight: "navi",
         text: "white",
-        textAlt: "blue",
+        textAlt: "black",
     },
     Agility: {
         title: "aquamarine",
         background: "green",
         description: "aquamarine",
+        highlight: "aquamarine",
         text: "white",
+        textAlt: "black",
         logo: "green"
     },
     Charisma: {
@@ -67,6 +69,7 @@ const cardPresetBank: Partial<Record<
         title: "light-gray",
         background: "silver",
         description: "light-gray",
+        highlight: "light-gray",
         text: "black",
         logo: "white"
     },
