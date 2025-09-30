@@ -19,3 +19,9 @@ blockquote > p {
         font-family: "Uncial Antiqua", system-ui;
     }
 }
+
+.skills-section-remark {
+    p {
+        font-family: "Cormorant Garamond", serif;
+    }
+}
