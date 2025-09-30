@@ -40,7 +40,7 @@ const cards: CardProps[] = [
             },
             {
                 x: 100, y: 180, dx: 0, dy: 0,
-                detail: <div className="w-52 text-right"><b>Frameworks:</b> React, Angular, Razor Page, Svelte 5</div>,
+                detail: <div className="w-52 text-right"><b>Frameworks:</b> React, AngularJS, Razor Page, Svelte 5</div>,
                 paths: [[135,60],[180,184]]
             },
             {
@@ -74,7 +74,7 @@ const cards: CardProps[] = [
             },
             {
                 x: 130, y: 85, dx: 0, dy: 0,
-                detail: <div className="w-41 text-right"><b>Frameworks:</b> Node.js, FastAPI, ASP.NET</div>,
+                detail: <div className="w-41 text-right"><b>Frameworks:</b> Node.js, ASP.NET</div>,
                 paths: [[180,280]]
             },
             {
@@ -86,7 +86,7 @@ const cards: CardProps[] = [
     },
     {
         title: "Systems",
-        level: 3,
+        level: 2,
         colorPresetName: "Resilience",
         difficulty: 3,
         attack: 1000,
@@ -247,19 +247,24 @@ const cards: CardProps[] = [
                 paths: [[-135,22],[180,160]]
             },
             {
-                x: 140, y: 90, dx: 0, dy: 0,
+                x: 200, y: 90, dx: 0, dy: 0,
                 detail: <div className="w-42 text-left"><b>Video Production:</b> Adobe Premiere, After Effects, Blender</div>,
-                paths: [[-45,22], [0,240]]
+                paths: [[-45,22], [0,180]]
             },
             {
                 x: 200, y: 190, dx: 0, dy: 0,
-                detail: <div className="w-31 text-left"><b>Music Production:</b> FL Studio</div>,
+                detail: <div className="w-42 text-left"><b>Music Production:</b> FL Studio</div>,
                 paths: [[0,60],[45,30],[0,120]]
             },
             {
                 x: 40, y: 175, dx: 0, dy: 0,
-                detail: <div className="w-40 text-right"><b>Programming:</b> Visual Studio, Visual Studio Code</div>,
+                detail: <div className="w-44 text-right"><b>Programming Tools:</b> Visual Studio, Visual Studio Code</div>,
                 paths: [[90, 20], [135,40],[180,90],[135,60]]
+            },
+            {
+                x: 138, y: 175, dx: 0, dy: 0,
+                detail: <div className="w-46 text-left"><b>Game Programming:</b> Unity, Game Maker Studio 2</div>,
+                paths: [[45, 55], [0, 60], [45, 66], [90, 80], [0, 80]]
             }
         ],
         init: () => {
@@ -340,6 +345,7 @@ export default function Skills() {
     const [ compactSelection, setCompactSelection ] = useState<number>();
     const gridRef = useRef<HTMLDivElement>(null);
     const [ isSmall, setIsSmall ] = useState(false);
+    const [ preventIndex, setPreventIndex ] = useState<number>();
 
     useLayoutEffect(() => {
         const onResize = () => {
@@ -347,6 +353,10 @@ export default function Skills() {
                 const newIsSmall = window.innerWidth < smallWidth;
                 setCompactSelection(compactSelection => {
                     if (!isSmall && newIsSmall) {
+                        setSelection(selection => {
+                            setPreventIndex(selection);
+                            return selection;
+                        })
                         return undefined;
                     }
                     if (isSmall && !newIsSmall) {
@@ -377,38 +387,40 @@ export default function Skills() {
             <div className="flex flex-col px-10 gap-6">
                 <blockquote className="pl-10 text-xl space-y-10 ">
                     <h2 className="skill-quote relative text-2xl w-fit pl-4 font-bold">"Jack of all trades, master of none."</h2>
-                    <p className="italic text-justify">That's what they say. But I see it differently. The true power of synergy lies not in a single skill, but in the creative harmony of all of them. I've honed my abilities across frontend and backend development, DevOps, digital art, and media production to deliver cohesive projects that are expertly produced from every angle.</p>
+                    <p className="italic text-justify [&>b]:font-bold">Some believe true mastery is found only in a single craft. I hold a different view. The finest creations are not born from one skill, but from the artful union of many. I have apprenticed in the arts of <b>the architect</b> and <b>the engineer</b>, <b>the illuminator</b> and <b>the storyteller</b>, allowing me to forge singular works, expertly wrought from foundation to flourish.</p>
                 </blockquote>
                 <i className="text-md text-gray-chalk-dark">*To explore each skill in detail, interact with the cards below*</i>
             </div>            
         </div>
-        <div className="grid-container w-full" ref={gridRef}>
+        <div className="grid-container w-full py-10" ref={gridRef}>
             {!isSmall && selection !== undefined && cards[selection] && <div className="col-span-full">
-                <Card {...cards[selection]} key={selection} expanded={true}/>
+                <Card {...cards[selection]} key={selection} preventFlipping={true} expanded={true}/>
             </div>}
             {cards.map((props, index) => (isSmall || selection !== index) ? <Card {
                     ...props
                 }
                     key={index}
                     isSmall={isSmall}
-                    onClick={(e: React.MouseEvent<HTMLElement>) => {
+                    preventFlipping={preventIndex === index}
+                    onClick={(target: HTMLDivElement) => {  
                         setSelection(selection => {
-                            setCompactSelection(compactSelection => {
-                                if (gridRef.current && compactSelection === undefined) {
-                                    gsap.to(window, {
-                                        duration: 0.2,
-                                        scrollTo: {
-                                            y: isSmall ? e.currentTarget : gridRef.current,
-                                            offsetY: isSmall ? window.innerHeight / 2 - 200 : 75,
-                                            autoKill: true
-                                        },
-                                        ease: "expo.out"
-                                    });
-                                }
-                                return undefined;
-                            });
+                            setPreventIndex(selection);
                             return index;
-                        })
+                        });
+                        setCompactSelection(compactSelection => {
+                            if (gridRef.current) {
+                                gsap.to(window, {
+                                    duration: 0.2,
+                                    scrollTo: {
+                                        y: isSmall ? target : gridRef.current,
+                                        offsetY: isSmall ? window.innerHeight / 2 - 200 : 75,
+                                        autoKill: true
+                                    },
+                                    ease: "expo.out"
+                                });
+                            }
+                            return undefined;
+                        });
                     }}
                     onDetailCallback={(toggle) => {
                         setCompactSelection(toggle ? index : undefined)
@@ -417,6 +429,22 @@ export default function Skills() {
                 />
                 : <EmptyCard key={index}/>
             )}
+        </div>
+        <div className="skills-section-remark max-w-200 mx-auto bg-amber-50 text-darkboard p-10 pt-30 mb-20 space-y-10"
+            style = {{
+                maskImage: "linear-gradient(transparent, black 8rem, black)"
+            }}
+        >
+            <div className="space-y-10">
+                <h1 className="font-bold text-2xl italic">A new challenge?</h1>
+                <p className="text-xl italic">These cards represent the skills I command. The following works are the proof of what they can build when artfully united. If you have a vision of your own, I invite you to begin the conversation.</p>
+            </div>
+            <div className="relative flex justify-center items-center gap-10 bg-amber-100 w-full h-20 border-t-2 border-b-2 border-gray-chalk-dark text-xl [&>p]:bg-red-600 [&>p]:p-[2px_12px] [&>p]:rounded-md [&>p]:cursor-pointer [&>p]:hover:brightness-110 [&>p]:hover:scale-105 [&>p]:transition-all [&>p]:duration-100 text-white z-0"
+            >
+                <span className="absolute left-1/2 top-1/2 -translate-1/2 h-1 w-20 bg-red-600 -z-1"/>
+                <p>View the Campaign Log</p>
+                <p>Propose a New Quest</p>
+            </div>
         </div>
     </section>);
 }

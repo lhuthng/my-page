@@ -179,7 +179,7 @@ export default function CardInfo({
                 strokeLinejoin="round"
             />}
         </svg>
-        <div className={className}
+        <div className={className + " not-lg:[&>div]:text-center"}
             ref={detailRef}
             style={{
                 ...style,
