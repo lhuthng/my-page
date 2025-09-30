@@ -19,7 +19,7 @@ gsap.registerPlugin(useGSAP);
 export function App() {
   return (
     <>
-      {/* <Header sections={["Home", "About", "Skills", "Projects", "Contact"]}/> */}
+      {/* <Header sections={["Home", "About", "Skiplls", "Projects", "Contact"]}/> */}
       <div className="bg-blackboard text-white w-full divide-y space-y-2">
         <Landing/>
         <About/>

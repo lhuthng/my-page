@@ -87,8 +87,7 @@ export default function Experience() {
             display: "block",
             pointerEvents: "all",
             duration: 0.2,
-            ease: "power1.out",
-            onComplete: () => ScrollTrigger.refresh() 
+            ease: "power1.out"
         }, "-=0.2");
     }, []);
 
@@ -96,7 +95,7 @@ export default function Experience() {
     return (<section className="max-w-340 mx-auto pb-4 ">
         <div className="w-[calc(100%-4rem)] lg:w-auto max-w-300 mx-auto">
             <CoolHeader title="Experience & Education" />
-            <div ref={containerRef} className="experience-selector grid grid-cols-2 gap-2 mx-auto w-60">
+            <div ref={containerRef} className="experience-selector grid grid-cols-2 gap-2 mx-auto w-60 py-10">
                 <UserSVG className="w-20 ml-auto cursor-pointer" 
                     fill={tab === "work" ? "white" : "none"}
                     stroke={tab === "work" ? "none" : "white"}

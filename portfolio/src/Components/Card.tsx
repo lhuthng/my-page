@@ -5,6 +5,9 @@ import { toRGB, type Color } from "@/Utils/color";
 import gsap from "gsap";
 import { smallWidth } from "@/Utils/common";
 import { useGSAP } from "@gsap/react";
+import medievalReact from "@/Assets/SVGs/react.svg";
+import trianglePattern from "@/Assets/SVGs/triangle.svg";
+import FantasyReact from "./FantasyReact";
 
 interface CardPreset {
     title: Color
@@ -13,7 +16,8 @@ interface CardPreset {
     text: Color
     highlight?: Color,
     textAlt?: Color,
-    ui?: Color
+    ui?: Color,
+    logo?: Color
 }
 
 const defaultPreset: CardPreset = {
@@ -35,7 +39,7 @@ const cardPresetBank: Partial<Record<
         background: "yellow",
         description: "orange",
         text: "dark-charcoal",
-        highlight: "orange-red"
+        highlight: "orange-red",
     },  
     Intelligent: {
         title: "blue",
@@ -49,7 +53,8 @@ const cardPresetBank: Partial<Record<
         title: "aquamarine",
         background: "green",
         description: "aquamarine",
-        text: "white"
+        text: "white",
+        logo: "green"
     },
     Charisma: {
         title: "purple",
@@ -63,6 +68,7 @@ const cardPresetBank: Partial<Record<
         background: "silver",
         description: "light-gray",
         text: "black",
+        logo: "white"
     },
     Wildcard: {
         text: "white",
@@ -85,9 +91,10 @@ export interface CardProps {
     isSmall?: boolean,
     expanded?: boolean,
     compactSelected?: boolean,
+    preventFlipping?: boolean,
     details: CardInfoProps[],
     init?: () => void,
-    onClick?: (e: React.MouseEvent<HTMLElement>) => void,
+    onClick?: (target: HTMLDivElement) => void,
     onDetailCallback?: (toggle: boolean) => void,
     children: [
         illustration: ReactNode, 
@@ -109,6 +116,7 @@ export default function Card(
         details,
         onClick,
         init,
+        preventFlipping,
         onDetailCallback,
         compactSelected,
         children
@@ -117,7 +125,10 @@ export default function Card(
     const cardRef = useRef<HTMLDivElement>(null);
     const illustrationRef = useRef<HTMLDivElement>(null);
     const detailRef = useRef<HTMLDivElement>(null);
+    const detailContainerRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const backRef = useRef<HTMLElement>(null);
+    const levelRef = useRef<HTMLDivElement>(null);
     const [ cardOffset, setCardOffset ] = useState<[number, number]>([0, 0]);
     const [ hoverDir, setHoverDir ] = useState<[number, number, number]>();
     const [ detailSelection, setDetailSelection ] = useState<number>();
@@ -203,26 +214,89 @@ export default function Card(
     }, []);
 
     useGSAP(() => {
-        if (detailRef.current) {
-            if (expanded || isSmall) {
-                setTimeout(() => {
-                    gsap.fromTo(detailRef.current, {
-                        y: -10
-                    }, {
-                        y: 0,
-                        duration: 0.2
-                    });
+        if (preventFlipping) return;
 
-                    gsap.to(detailRef.current, {
-                        opacity: 1,
-                        duration: 0.4
-                    });
-                }, 200);
+        const timeline = gsap.timeline({ paused: true });
+
+        gsap.set(backRef.current, {
+            rotateY: "0deg",
+            backfaceVisibility: "hidden",
+        });
+
+        gsap.set(detailContainerRef.current, {
+            opacity: 0
+        })
+
+        gsap.set(cardRef.current, {
+            rotateY: "180deg",
+        });
+
+        gsap.set(containerRef.current, {
+            pointerEvents: "none"
+        });
+
+        gsap.set(levelRef.current, {
+            opacity: 0,
+            width: "60px",
+            height: "60px",
+        })
+        timeline.to(cardRef.current, {
+            rotateY: "0deg",
+            duration: 1,
+            ease: "circ.out",
+            delay: 0.5
+        }).to(backRef.current, {
+            rotateY: "-180deg",
+            duration: 1,
+            ease: "circ.out" 
+        }, "-=1")
+        .to(containerRef.current, {
+            pointerEvents: "all",
+            duration: 0
+        }).to(levelRef.current, {
+            opacity: 1,
+            width: "72px",
+            height: "72px",
+            transformOrigin: "center center",
+            duration: 0.3,
+            ease: "power1.in"
+        }, "-=0.25").to(detailContainerRef.current, {
+            opacity: 1,
+            duration: 0.3,
+            ease: "power1.in"
+        }, "-=0.3");
+
+        gsap.to(detailContainerRef.current, {
+            scrollTrigger: {
+                trigger: detailContainerRef.current,
+                start: "bottom bottom",
+                once: true,
+                onEnter: () => timeline.play()
+            }
+        })
+    }, [])
+
+    useGSAP(() => {
+        if (detailRef.current) {
+            
+            gsap.killTweensOf([detailRef.current]);
+
+            if (expanded || isSmall) {
+                gsap.fromTo(detailRef.current, {
+                    y: -10
+                }, {
+                    y: 0,
+                    duration: 0.2
+                });
+
+                gsap.to(detailRef.current, {
+                    opacity: 1,
+                    duration: 0.4
+                });
             }
             else {
-                gsap.to(detailRef.current, {
+                gsap.set(detailRef.current, {
                     opacity: 0,
-                    duration: 0
                 });
             }
         }
@@ -245,16 +319,35 @@ export default function Card(
             onMouseMove={handleMouseMove}
             onMouseEnter={handleMouseMove}
             onMouseLeave={handleMouseLeave}
-            onClick={onClick}
+            onClick={e => onClick?.(e.currentTarget)}
             style={{
                 cursor: expanded ? "default" : "pointer",
                 filter: compactSelected ? "grayscale(85%)" : "none"
             }}
         >  
-            <div className="w-full h-full font-courier-prime"
+            <i className="absolute [&>i]:absolute [&>i]:left-1/2 [&>i]:top-1/2 [&>i]:-translate-1/2 left-0 top-0 w-full h-full bg-white-chalk rounded-2xl -rotate-y-180 backface-hidden"
+                ref={backRef}
+            >
+                <i className="h-[calc(100%-1rem)] w-[calc(100%-1rem)] bg-red-600 rounded-[0.5rem]"/>
+                <i className="h-[calc(100%-1.5rem)] w-[calc(100%-1.5rem)] bg-white-chalk rounded-[0.25rem]"/>
+                <i className="h-[calc(100%-1.8rem)] w-[calc(100%-1.8rem)] rounded-[0.rem]"
+                    style={{
+                        opacity: "0.6",
+                        backgroundColor: "var(--color-red-600)",
+                        maskImage: `url(${trianglePattern})`,
+                        maskSize: "16px"
+                    }}
+                />
+                <i className="h-60 w-60 [&>svg]:absolute [&>svg]:top-1/2 [&>svg]:left-1/2 [&>svg]:-translate-1/2">
+                    <FantasyReact width={200} fill="var(--color-white-chalk)" stroke="var(--color-white-chalk)" strokeWidth={4}/>
+                    <FantasyReact width={200} fill="var(--color-red-600)"/>
+                </i>
+            </i>
+            <div className="w-full h-full font-courier-prime backface-hidden"
                 ref={cardRef}
             >
-                <div className="level flex flex-col absolute -left-2 -top-1 w-18 h-18 justify-center items-center border-4 pointer-events-none rounded-xl z-1"
+                <div className="level flex flex-col absolute left-7 top-7 -translate-1/2 w-18 h-18 justify-center items-center border-4 pointer-events-none rounded-xl z-1"
+                    ref={levelRef}
                     style={{
                         backgroundColor: toRGB(colorPreset.background),
                         borderColor: toRGB(colorPreset.highlight ?? colorPreset.title),
@@ -343,35 +436,47 @@ export default function Card(
                                     <span>1<sup>st</sup> Edition</span>
                                     {attack && defense && <span>atk/{Number.isFinite(attack) ? attack : "?"} def/{Number.isFinite(defense) ? defense : "?"}</span>}
                                 </div>
-                            </div>  
+                            </div>
+                            <span className="absolute left-1/2 top-1/2 animate-pulse">
+                                <span className="absolute w-40 h-35 bg-contain opacity-20 bg-no-repeat -translate-1/2"
+                                    style={{
+                                        backgroundColor: toRGB(colorPreset.logo ?? colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title),
+                                        maskImage: `url(${medievalReact})`
+                                    }}
+                                />
+                            </span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div className="opacity-0 absolute"
-            ref={detailRef}
+        <div className="absolute top-1/2"
+            ref={detailContainerRef}
         >
-            {details.map((detail, index) => <CardInfo {...detail}
-                className="rounded-lg p-2 border-2 font-courier-prime super-bold"
-                style={{
-                    backgroundColor: toRGB(colorPreset.background),
-                    borderColor: toRGB(colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title),
-                    color: toRGB(colorPreset.ui ?? colorPreset.textAlt ?? colorPreset.text),
-                }}
-                dx={cardOffset[0]} 
-                dy={cardOffset[1]} 
-                hoverSize={[width, heigth]}
-                hoverDir={hoverDir}
-                key={index}
-                compact={isSmall}
-                shown={detailSelection === index}
-                onClick={(toggle) => {
-                    setDetailSelection(toggle ? index : undefined);
-                    onDetailCallback?.(toggle);
-                }}
-                strokeColor={toRGB(colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title)}
-            />)}
+            <div className="opacity-0 absolute"
+                ref={detailRef}
+            >
+                {details.map((detail, index) => <CardInfo {...detail}
+                    className="rounded-lg p-2 border-2 font-courier-prime super-bold"
+                    style={{
+                        backgroundColor: toRGB(colorPreset.background),
+                        borderColor: toRGB(colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title),
+                        color: toRGB(colorPreset.ui ?? colorPreset.textAlt ?? colorPreset.text),
+                    }}
+                    dx={cardOffset[0]} 
+                    dy={cardOffset[1]} 
+                    hoverSize={[width, heigth]}
+                    hoverDir={hoverDir}
+                    key={index}
+                    compact={isSmall}
+                    shown={detailSelection === index}
+                    onClick={(toggle) => {
+                        setDetailSelection(toggle ? index : undefined);
+                        onDetailCallback?.(toggle);
+                    }}
+                    strokeColor={toRGB(colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title)}
+                />)}
+            </div>
         </div>
     </div>
 }
