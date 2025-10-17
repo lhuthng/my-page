@@ -46,7 +46,7 @@ interface ProjectProps {
     details: ReactNode
 }
 
-export default function ProjetTemplate({
+export default function ProjectTemplate({
     illustration, description, details
 } : ProjectProps) {
     const containerRef = useRef<HTMLDivElement>(null);
