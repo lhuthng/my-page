@@ -4,11 +4,12 @@ import gsap from "gsap";
 import { Flip } from "gsap/all";
 import ThisPortfolio from "./Projects/ThisPortfolio";
 import useDebounce from "./Hooks/debounce";
+import Balatro from "./Projects/Balatro";
 
 export default function Projects() {
     const projects = [
         <ThisPortfolio />,
-        <ThisPortfolio />,
+        <Balatro />,
         <ThisPortfolio />,
         <ThisPortfolio />,
         <ThisPortfolio />,
