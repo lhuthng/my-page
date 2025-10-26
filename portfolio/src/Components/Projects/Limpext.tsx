@@ -1,7 +1,7 @@
 import type { ProjectProps } from "./ProjectTemplate";
 import ProjectTemplate from "./ProjectTemplate";
 
-export default function ThisPortfolio({ active, onClick }: ProjectProps) {
+export default function Limpext({ active, onClick }: ProjectProps) {
   return (
     <ProjectTemplate
       active={active}
@@ -9,15 +9,15 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
       illustration={<div></div>}
       description={
         <div className="flex flex-col justify-center w-full h-full space-y-4 p-4 text-black">
-          <h1>Personal Technical Portfolio</h1>
+          <h1>Client Web Development & SEO</h1>
           <p>
-            <strong>Brief:</strong> The site you're viewing! Built with React to
-            present my professional history and technical skills in a clean,
-            modern interface.
+            <strong>Brief:</strong> Developed custom, high-performance landing
+            pages using Svelte 5 and Tailwind CSS, featuring dynamic
+            localization and deployment support.
           </p>
           <p>
-            <strong>Technology:</strong> React, HTML5, CSS3, JavaScript, GSAP,
-            UI/UX Design
+            <strong>Technology:</strong> Svelte 5, HTML5, CSS3, JavaScript,
+            Tailwind CSS, GSAP, PHP, Apache, SEO
           </p>
         </div>
       }

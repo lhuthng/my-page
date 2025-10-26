@@ -2,6 +2,7 @@ import { Flip } from "gsap/all";
 import gsap from "gsap";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import ClosingButton from "./ClosingButton";
+import "@/Styles/ProjectTemplate.css";
 
 const classState = {
   container: {
@@ -11,26 +12,27 @@ const classState = {
   panel: {
     off: ["w-full", "h-full", "top-0", "left-0"],
     on: [
-      "w-[calc(100%-2rem)]",
-      "md:w-[calc(100%-4rem)]",
-      "h-[calc(100%-2rem)]",
-      "md:h-[max(40rem,calc(100%-4rem))]",
+      "w-[calc(100%-1rem)]",
+      "md:w-[calc(100%-2rem)]",
+      "h-[calc(100%-1rem)]",
+      "md:h-[max(40rem,calc(100%-2rem))]",
       "border-2",
-      "top-8",
+      "md:top-4",
+      "top-2",
       "left-1/2",
     ],
   },
   compact: {
-    off: ["w-full", "h-full"],
-    on: ["w-full", "md:w-[clamp(20rem,50%,40rem)]", "h-80", "md:h-full"],
+    off: ["w-full"],
+    on: ["w-full", "md:w-[clamp(20rem,30%,40rem)]", "md:rounded-tr-none"],
   },
   detail: {
     off: ["w-full", "md:w-0", "h-0", "md:h-full"],
-    on: ["w-full", "flex-1", "md:h-full"],
+    on: ["w-full", "flex-1", "md:h-full", "md:rounded-tl-none"],
   },
   illustration: {
     off: ["h-60"],
-    on: ["h-100"],
+    on: ["h-[clamp(15rem,40%,25rem)]"],
   },
 };
 
@@ -44,9 +46,15 @@ const turn = (
   element.classList.add(...state[on ? "on" : "off"]);
 };
 
-interface ProjectProps {
+export interface ProjectProps {
   active: boolean;
   onClick: (active: boolean) => void;
+}
+
+interface ProjectTemplateProps {
+  active: boolean;
+  onClick: (active: boolean) => void;
+  className?: string;
   illustration: ReactNode;
   description: ReactNode;
   details: ReactNode;
@@ -55,10 +63,11 @@ interface ProjectProps {
 export default function ProjectTemplate({
   active,
   onClick,
+  className,
   illustration,
   description,
   details,
-}: ProjectProps) {
+}: ProjectTemplateProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,6 +86,7 @@ export default function ProjectTemplate({
       illustration,
       detail,
     ]);
+    const duration = 0.5;
 
     if (active) {
       gsap.set(container, {
@@ -95,7 +105,7 @@ export default function ProjectTemplate({
       turn(illustration, "illustration", true);
 
       Flip.from(state, {
-        duration: 0.5,
+        duration,
         ease: "power2.inOut",
       });
     } else {
@@ -112,7 +122,7 @@ export default function ProjectTemplate({
       turn(illustration, "illustration", false);
 
       Flip.from(state, {
-        duration: 0.5,
+        duration,
         ease: "power2.inOut",
         onComplete: () => {
           gsap.set(container, {
@@ -124,7 +134,7 @@ export default function ProjectTemplate({
   }, [active]);
 
   return (
-    <>
+    <div className={className ?? "h-130"}>
       <div
         className="relative flex flex-col w-full h-full top-0 left-0 bg-none"
         ref={containerRef}
@@ -134,30 +144,33 @@ export default function ProjectTemplate({
           onClick={() => onClick(!active)}
         />
         <div
-          className="panel absolute left-0 top-0 w-full h-full rounded-2xl scrollbar-custom bg-white-chalk scroll-thumb-black overflow-hidden"
+          className="panel absolute flex flex-col left-0 top-0 w-full h-full rounded-2xl scrollbar-custom bg-white-chalk scroll-thumb-black overflow-hidden"
           onClick={() => !active && onClick(true)}
         >
-          <div className="illustration-view relative w-full h-60">
-            <ClosingButton
-              className="absolute right-2 top-2 z-10"
-              onClick={() => active && onClick(false)}
-              active={active}
-              width={40}
-              height={40}
-            />
+          <div className="illustration-view relative w-full shrink-0 h-60">
             <i className="absolute left-0 top-0 w-full" />
-            {illustration}
+            <div style={{ position: "relative", height: "calc(100% + 1rem)" }}>
+              {illustration}
+            </div>
           </div>
-          <div className="flex flex-col md:flex-row relative w-full">
-            <div className="compact-view relative w-full h-full rounded-t-4xl ">
+          <div className="flex flex-col md:flex-row relative w-full max-h-fit">
+            <div className="compact-view relative rounded-t-xl w-full h-fit bg-white-chalk">
               {description}
             </div>
-            <div className="detail-view relative w-0 rounded-t-none md:rounded-t-4xl">
+            <div className="detail-view relative rounded-t-xl w-0 h-0 md:h-auto overflow-hidden">
               {details}
             </div>
           </div>
         </div>
+
+        <ClosingButton
+          className="absolute right-6 top-4 md:right-10 md:top-8 z-12"
+          onClick={() => active && onClick(false)}
+          active={active}
+          width={40}
+          height={40}
+        />
       </div>
-    </>
+    </div>
   );
 }

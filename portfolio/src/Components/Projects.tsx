@@ -5,17 +5,28 @@ import { Flip } from "gsap/all";
 import ThisPortfolio from "./Projects/ThisPortfolio";
 import useDebounce from "./Hooks/debounce";
 import Balatro from "./Projects/Balatro";
+import DXC from "./Projects/DXC";
+import MaxPlanck from "./Projects/MaxPlanck";
+import Limpext from "./Projects/Limpext";
+import StyledPortfolio from "./Projects/StyledPortfolio";
 
 export default function Projects() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const projects = [Balatro];
+  const projects = [
+    Balatro,
+    DXC,
+    MaxPlanck,
+    Limpext,
+    StyledPortfolio,
+    ThisPortfolio,
+  ];
   return (
     <section className="w-full p-4">
       <CoolHeader title="Projects" />
       <div className="w-full inset-au m-auto">
         <div className="grid grid-cols-1 md:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] grid-rows- gap-4 w-full ">
           {projects.map((ProjectComponent, index) => (
-            <div className="project-container w-full h-120" key={index}>
+            <div className="project-container w-full" key={index}>
               <ProjectComponent
                 active={index === activeIndex}
                 onClick={(active) => setActiveIndex(active ? index : null)}

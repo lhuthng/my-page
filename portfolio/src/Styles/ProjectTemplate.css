@@ -1,0 +1,7 @@
+@reference "../index.css";
+
+.compact-view {
+    h1 {
+        @apply text-xl font-bold text-center;
+    }
+}
