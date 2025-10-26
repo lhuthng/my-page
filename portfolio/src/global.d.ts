@@ -8,7 +8,7 @@ declare module "*.gif" {
   export default value;
 }
 
-declare module "*.mp4" {
+declare module "*.webm" {
   const value: string;
   export default value;
 }

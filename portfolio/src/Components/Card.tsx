@@ -346,207 +346,213 @@ export default function Card({
   }, [expanded, isSmall]);
 
   return (
-    <div className="relative" ref={containerRef}>
-      <div
-        className="card-container perspective-midrange mx-auto my-2 w-70 h-110"
-        onMouseMove={handleMouseMove}
-        onMouseEnter={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        onClick={(e) => onClick?.(e.currentTarget)}
-        style={{
-          cursor: expanded ? "default" : "pointer",
-          filter: compactSelected ? "grayscale(85%)" : "none",
-        }}
-      >
-        <i
-          className="absolute [&>i]:absolute [&>i]:left-1/2 [&>i]:top-1/2 [&>i]:-translate-1/2 left-0 top-0 w-full h-full bg-white-chalk rounded-2xl -rotate-y-180 backface-hidden"
-          ref={backRef}
-        >
-          <i className="h-[calc(100%-1rem)] w-[calc(100%-1rem)] bg-red-600 rounded-[0.5rem]" />
-          <i className="h-[calc(100%-1.5rem)] w-[calc(100%-1.5rem)] bg-white-chalk rounded-[0.25rem]" />
-          <i
-            className="h-[calc(100%-1.8rem)] w-[calc(100%-1.8rem)] rounded-[0.rem]"
-            style={{
-              opacity: "0.6",
-              backgroundColor: "var(--color-red-600)",
-              maskImage: `url(${trianglePattern})`,
-              maskSize: "16px",
-            }}
-          />
-          <i className="h-60 w-60 [&>svg]:absolute [&>svg]:top-1/2 [&>svg]:left-1/2 [&>svg]:-translate-1/2">
-            <FantasyReact
-              width={200}
-              fill="var(--color-white-chalk)"
-              stroke="var(--color-white-chalk)"
-              strokeWidth={4}
-            />
-            <FantasyReact width={200} fill="var(--color-red-600)" />
-          </i>
-        </i>
+    <div className="not-sm:scale-75 origin-center">
+      <div className="relative" ref={containerRef}>
         <div
-          className="w-full h-full font-courier-prime backface-hidden"
-          ref={cardRef}
+          className="card-container perspective-midrange mx-auto my-2 w-70 h-110"
+          onMouseMove={handleMouseMove}
+          onMouseEnter={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+          onClick={(e) => onClick?.(e.currentTarget)}
+          style={{
+            cursor: expanded ? "default" : "pointer",
+            filter: compactSelected ? "grayscale(85%)" : "none",
+          }}
         >
-          <div
-            className="level flex flex-col absolute left-7 top-7 -translate-1/2 w-18 h-18 justify-center items-center border-4 pointer-events-none rounded-xl z-1"
-            ref={levelRef}
-            style={{
-              backgroundColor: toRGB(colorPreset.background),
-              borderColor: toRGB(colorPreset.highlight ?? colorPreset.title),
-              color: toRGB(colorPreset.textAlt ?? colorPreset.text),
-            }}
+          <i
+            className="absolute [&>i]:absolute [&>i]:left-1/2 [&>i]:top-1/2 [&>i]:-translate-1/2 left-0 top-0 w-full h-full bg-white-chalk rounded-2xl -rotate-y-180 backface-hidden"
+            ref={backRef}
           >
-            <span className="text-3xl font-medium h-6">
-              {Number.isFinite(level) ? level : "?"}
-            </span>
-            <span className="text-[0.5rem]">yrs</span>
-          </div>
-          <div
-            className="card flex flex-col w-full h-full rounded-2xl border-8 border-double border-blackboard transition-shadow duration-100 overflow-hidden"
-            style={{
-              borderColor: toRGB(colorPreset.highlight ?? "black"),
-              backgroundColor: toRGB(colorPreset.background),
-            }}
-          >
-            <div className="relative w-full h-7 text-darkboard text-xl">
-              <div
-                className="absolute flex left-0 top-0 w-full h-13 z-2"
-                style={{
-                  backgroundImage: `linear-gradient(to bottom, ${toRGB(colorPreset.title)} 40px, transparent 12px)`,
-                  maskImage: `linear-gradient(to bottom, black 28px, rgba(0,0,0,0.6) 120%)`,
-                  color: toRGB(colorPreset.text),
-                }}
-              >
-                <span
-                  className="pl-16 pt-1.5 font-bold z-1 underline underline-offset-2"
-                  style={{
-                    cursor: expanded ? "text" : "pointer",
-                  }}
-                >
-                  {title}
-                </span>
-                <div className="absolute left-0 top-[calc(100%-24px)]">
-                  <div className="absolute left-16 top-1.5 text-xs">
-                    {Number.isFinite(difficulty) ? "☆".repeat(difficulty) : "?"}
-                  </div>
-                  <svg className="w-full h-6 z-1">
-                    <path
-                      d="M0 0 L212 0 L188 24 L0 24 Z"
-                      fill={toRGB(colorPreset.title)}
-                    />
-                  </svg>
-                </div>
-              </div>
-            </div>
-            <div
-              className="relative flex flex-col flex-1 justify-end overflow-hidden z-1"
+            <i className="h-[calc(100%-1rem)] w-[calc(100%-1rem)] bg-red-600 rounded-[0.5rem]" />
+            <i className="h-[calc(100%-1.5rem)] w-[calc(100%-1.5rem)] bg-white-chalk rounded-[0.25rem]" />
+            <i
+              className="h-[calc(100%-1.8rem)] w-[calc(100%-1.8rem)] rounded-[0.rem]"
               style={{
-                transformStyle: "preserve-3d",
+                opacity: "0.6",
+                backgroundColor: "var(--color-red-600)",
+                maskImage: `url(${trianglePattern})`,
+                maskSize: "16px",
+              }}
+            />
+            <i className="h-60 w-60 [&>svg]:absolute [&>svg]:top-1/2 [&>svg]:left-1/2 [&>svg]:-translate-1/2">
+              <FantasyReact
+                width={200}
+                fill="var(--color-white-chalk)"
+                stroke="var(--color-white-chalk)"
+                strokeWidth={4}
+              />
+              <FantasyReact width={200} fill="var(--color-red-600)" />
+            </i>
+          </i>
+          <div
+            className="w-full h-full font-courier-prime backface-hidden"
+            ref={cardRef}
+          >
+            <div
+              className="level flex flex-col absolute left-7 top-7 -translate-1/2 w-18 h-18 justify-center items-center border-4 pointer-events-none rounded-xl z-1"
+              ref={levelRef}
+              style={{
+                backgroundColor: toRGB(colorPreset.background),
+                borderColor: toRGB(colorPreset.highlight ?? colorPreset.title),
+                color: toRGB(colorPreset.textAlt ?? colorPreset.text),
               }}
             >
-              <div
-                className="absolute left-1/2 top-1/2 -translate-1/2 w-[120%] h-[120%] z-2"
-                ref={illustrationRef}
-              >
-                {illustration}
-              </div>
-              <div
-                className="relative w-full h-53 text-lg z-3"
-                style={{
-                  backgroundImage: `linear-gradient(to top, ${toRGB(colorPreset.description)} 190px, transparent 12px)`,
-                  maskImage:
-                    "linear-gradient(to top, black 160px, rgba(0,0,0,0.6) 120%)",
-                  color: toRGB(colorPreset.text),
-                }}
-              >
-                <div className="absolute left-0 bottom-[calc(100%-24px)]">
-                  <div className="absolute right-0 m-1 text-xs">
-                    {`[${colorPresetName} ${effect ? "/ " + effect : ""} / Effect]`}
-                  </div>
-                  <svg className="w-full h-6 -z-1">
-                    <path
-                      d="M270 0 L70 0 L46 24 L270 24 Z"
-                      fill={toRGB(colorPreset.description)}
-                    />
-                  </svg>
-                </div>
-                <div className="flex flex-col h-full pt-7">
-                  <div
-                    className="flex-1 px-2"
+              <span className="text-3xl font-medium h-6">
+                {Number.isFinite(level) ? level : "?"}
+              </span>
+              <span className="text-[0.5rem]">yrs</span>
+            </div>
+            <div
+              className="card flex flex-col w-full h-full rounded-2xl border-8 border-double border-blackboard transition-shadow duration-100 overflow-hidden"
+              style={{
+                borderColor: toRGB(colorPreset.highlight ?? "black"),
+                backgroundColor: toRGB(colorPreset.background),
+              }}
+            >
+              <div className="relative w-full h-7 text-darkboard text-xl">
+                <div
+                  className="absolute flex left-0 top-0 w-full h-13 z-2"
+                  style={{
+                    backgroundImage: `linear-gradient(to bottom, ${toRGB(colorPreset.title)} 40px, transparent 12px)`,
+                    maskImage: `linear-gradient(to bottom, black 28px, rgba(0,0,0,0.6) 120%)`,
+                    color: toRGB(colorPreset.text),
+                  }}
+                >
+                  <span
+                    className="pl-16 pt-1.5 font-bold z-1 underline underline-offset-2"
                     style={{
                       cursor: expanded ? "text" : "pointer",
                     }}
                   >
-                    {description}
-                  </div>
-                  <div
-                    className="flex w-full h-4 text-xs justify-between px-2"
-                    style={{
-                      backgroundColor: toRGB(colorPreset.background),
-                      color: toRGB(colorPreset.textAlt ?? colorPreset.text),
-                    }}
-                  >
-                    <span>
-                      1<sup>st</sup> Edition
-                    </span>
-                    {attack && defense && (
-                      <span>
-                        atk/{Number.isFinite(attack) ? attack : "?"} def/
-                        {Number.isFinite(defense) ? defense : "?"}
-                      </span>
-                    )}
+                    {title}
+                  </span>
+                  <div className="absolute left-0 top-[calc(100%-24px)]">
+                    <div className="absolute left-16 top-1.5 text-xs">
+                      {Number.isFinite(difficulty)
+                        ? "☆".repeat(difficulty)
+                        : "?"}
+                    </div>
+                    <svg className="w-full h-6 z-1">
+                      <path
+                        d="M0 0 L212 0 L188 24 L0 24 Z"
+                        fill={toRGB(colorPreset.title)}
+                      />
+                    </svg>
                   </div>
                 </div>
-                <span className="absolute left-1/2 top-1/2 animate-pulse">
-                  <span
-                    className="absolute w-40 h-35 bg-contain opacity-20 bg-no-repeat -translate-1/2"
-                    style={{
-                      backgroundColor: toRGB(
-                        colorPreset.logo ??
-                          colorPreset.ui ??
-                          colorPreset.highlight ??
-                          colorPreset.title,
-                      ),
-                      maskImage: `url(${medievalReact})`,
-                    }}
-                  />
-                </span>
+              </div>
+              <div
+                className="relative flex flex-col flex-1 justify-end overflow-hidden z-1"
+                style={{
+                  transformStyle: "preserve-3d",
+                }}
+              >
+                <div
+                  className="absolute left-1/2 top-1/2 -translate-1/2 w-[120%] h-[120%] z-2"
+                  ref={illustrationRef}
+                >
+                  {illustration}
+                </div>
+                <div
+                  className="relative w-full h-53 text-lg z-3"
+                  style={{
+                    backgroundImage: `linear-gradient(to top, ${toRGB(colorPreset.description)} 190px, transparent 12px)`,
+                    maskImage:
+                      "linear-gradient(to top, black 160px, rgba(0,0,0,0.6) 120%)",
+                    color: toRGB(colorPreset.text),
+                  }}
+                >
+                  <div className="absolute left-0 bottom-[calc(100%-24px)]">
+                    <div className="absolute right-0 m-1 text-xs">
+                      {`[${colorPresetName} ${effect ? "/ " + effect : ""} / Effect]`}
+                    </div>
+                    <svg className="w-full h-6 -z-1">
+                      <path
+                        d="M270 0 L70 0 L46 24 L270 24 Z"
+                        fill={toRGB(colorPreset.description)}
+                      />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col h-full pt-7">
+                    <div
+                      className="flex-1 px-2"
+                      style={{
+                        cursor: expanded ? "text" : "pointer",
+                      }}
+                    >
+                      {description}
+                    </div>
+                    <div
+                      className="flex w-full h-4 text-xs justify-between px-2"
+                      style={{
+                        backgroundColor: toRGB(colorPreset.background),
+                        color: toRGB(colorPreset.textAlt ?? colorPreset.text),
+                      }}
+                    >
+                      <span>
+                        1<sup>st</sup> Edition
+                      </span>
+                      {attack && defense && (
+                        <span>
+                          atk/{Number.isFinite(attack) ? attack : "?"} def/
+                          {Number.isFinite(defense) ? defense : "?"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="absolute left-1/2 top-1/2 animate-pulse">
+                    <span
+                      className="absolute w-40 h-35 bg-contain opacity-20 bg-no-repeat -translate-1/2"
+                      style={{
+                        backgroundColor: toRGB(
+                          colorPreset.logo ??
+                            colorPreset.ui ??
+                            colorPreset.highlight ??
+                            colorPreset.title,
+                        ),
+                        maskImage: `url(${medievalReact})`,
+                      }}
+                    />
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-      <div className="absolute top-1/2" ref={detailContainerRef}>
-        <div className="opacity-0 absolute" ref={detailRef}>
-          {details.map((detail, index) => (
-            <CardInfo
-              {...detail}
-              className="rounded-lg p-2 border-2 font-courier-prime super-bold"
-              style={{
-                backgroundColor: toRGB(colorPreset.background),
-                borderColor: toRGB(
+        <div className="absolute top-1/2" ref={detailContainerRef}>
+          <div className="opacity-0 absolute" ref={detailRef}>
+            {details.map((detail, index) => (
+              <CardInfo
+                {...detail}
+                className="rounded-lg p-2 border-2 font-courier-prime super-bold"
+                style={{
+                  backgroundColor: toRGB(colorPreset.background),
+                  borderColor: toRGB(
+                    colorPreset.ui ??
+                      colorPreset.highlight ??
+                      colorPreset.title,
+                  ),
+                  color: toRGB(
+                    colorPreset.ui ?? colorPreset.textAlt ?? colorPreset.text,
+                  ),
+                }}
+                dx={cardOffset[0]}
+                dy={cardOffset[1]}
+                hoverSize={[width, heigth]}
+                hoverDir={hoverDir}
+                key={index}
+                compact={isSmall}
+                shown={detailSelection === index}
+                onClick={(toggle) => {
+                  setDetailSelection(toggle ? index : undefined);
+                  onDetailCallback?.(toggle);
+                }}
+                strokeColor={toRGB(
                   colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title,
-                ),
-                color: toRGB(
-                  colorPreset.ui ?? colorPreset.textAlt ?? colorPreset.text,
-                ),
-              }}
-              dx={cardOffset[0]}
-              dy={cardOffset[1]}
-              hoverSize={[width, heigth]}
-              hoverDir={hoverDir}
-              key={index}
-              compact={isSmall}
-              shown={detailSelection === index}
-              onClick={(toggle) => {
-                setDetailSelection(toggle ? index : undefined);
-                onDetailCallback?.(toggle);
-              }}
-              strokeColor={toRGB(
-                colorPreset.ui ?? colorPreset.highlight ?? colorPreset.title,
-              )}
-            />
-          ))}
+                )}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
