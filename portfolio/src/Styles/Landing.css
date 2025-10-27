@@ -23,3 +23,23 @@
             rgba(var(--blue-chalk), 0.2) 0px 1px 1px inset;
     }
 }
+
+.duolingo-button {
+    @apply rounded-full cursor-pointer;
+
+    &:hover {
+        @apply brightness-110 translate-y-[0.05rem];
+    }
+
+    &:active {
+        @apply translate-y-[0.2rem] active:shadow-none;
+    }
+}
+
+.yellow-button {
+    @apply bg-yellow-chalk shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)];
+
+    &:hover {
+        @apply shadow-[0_0.15rem_0_var(--color-yellow-chalk-dark)];
+    }
+}
