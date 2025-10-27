@@ -1,25 +1,25 @@
 import { Flip } from "gsap/all";
 import gsap from "gsap";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Activity, useEffect, useRef, useState, type ReactNode } from "react";
 import ClosingButton from "./ClosingButton";
 import "@/Styles/ProjectTemplate.css";
 
 const classState = {
   container: {
-    off: ["relative"],
+    off: ["absolute"],
     on: ["fixed"],
   },
   panel: {
     off: ["w-full", "h-full", "top-0", "left-0"],
     on: [
       "w-[calc(100%-1rem)]",
+      "max-w-420",
       "md:w-[calc(100%-2rem)]",
       "h-[calc(100%-1rem)]",
       "md:h-[max(40rem,calc(100%-2rem))]",
       "border-2",
       "md:top-4",
       "top-2",
-      "left-1/2",
     ],
   },
   compact: {
@@ -54,7 +54,6 @@ export interface ProjectProps {
 interface ProjectTemplateProps {
   active: boolean;
   onClick: (active: boolean) => void;
-  className?: string;
   illustration: ReactNode;
   description: ReactNode;
   details: ReactNode;
@@ -63,12 +62,32 @@ interface ProjectTemplateProps {
 export default function ProjectTemplate({
   active,
   onClick,
-  className,
   illustration,
   description,
   details,
 }: ProjectTemplateProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLElement>(null);
+  const overlayTimelineRef = useRef<GSAPTimeline>(null);
+
+  useEffect(() => {
+    if (!overlayRef.current) {
+      return;
+    }
+
+    const tl = (overlayTimelineRef.current = gsap.timeline({
+      paused: true,
+    }));
+
+    tl.to(overlayRef.current, {
+      opacity: 1,
+      duration: 0.1,
+    });
+
+    return () => {
+      tl.revert();
+    };
+  }, [overlayRef]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -94,6 +113,7 @@ export default function ProjectTemplate({
       });
 
       gsap.set(panel, {
+        left: "50%",
         transform: "translateX(-50%)",
         overflowY: "scroll",
       });
@@ -107,10 +127,18 @@ export default function ProjectTemplate({
       Flip.from(state, {
         duration,
         ease: "power2.inOut",
+        onComplete: () => {
+          if (!overlayTimelineRef.current) {
+            return;
+          }
+
+          overlayTimelineRef.current.play();
+        },
       });
     } else {
       gsap.set(panel, {
-        transform: "translateX(0px)",
+        left: "0%",
+        transform: "translateX(0%)",
         overflowY: "hidden",
         scrollTo: 0,
       });
@@ -124,6 +152,13 @@ export default function ProjectTemplate({
       Flip.from(state, {
         duration,
         ease: "power2.inOut",
+        onStart: () => {
+          if (!overlayTimelineRef.current) {
+            return;
+          }
+
+          overlayTimelineRef.current.revert();
+        },
         onComplete: () => {
           gsap.set(container, {
             zIndex: "auto",
@@ -134,42 +169,49 @@ export default function ProjectTemplate({
   }, [active]);
 
   return (
-    <div className={className ?? "h-130"}>
+    <div className="relative">
+      <div className="dummy w-full opacity-0">
+        <div className="h-60"></div>
+        <div>{description}</div>
+      </div>
       <div
-        className="relative flex flex-col w-full h-full top-0 left-0 bg-none"
+        className="absolute flex flex-col rounded-3xl w-full h-full top-0 left-0 bg-none"
         ref={containerRef}
       >
         <i
-          className="absolute w-full h-full cursor-not-allowed"
-          onClick={() => onClick(!active)}
+          ref={overlayRef}
+          className="fixed top-0 left-0 w-screen h-screen cursor-not-allowed pointer-events-none opacity-0 bg-black/20"
+          onClick={() => {
+            if (active) onClick(!active);
+          }}
         />
         <div
-          className="panel absolute flex flex-col left-0 top-0 w-full h-full rounded-2xl scrollbar-custom bg-white-chalk scroll-thumb-black overflow-hidden"
+          className="panel absolute flex flex-col left-0 bg-white-chalk top-0 w-full h-full rounded-2xl scrollbar-custom scroll-thumb-black overflow-hidden"
+          style={{ cursor: active ? "auto" : "pointer" }}
           onClick={() => !active && onClick(true)}
         >
-          <div className="illustration-view relative w-full shrink-0 h-60">
+          <ClosingButton
+            className="absolute right-4 top-4 md:right-8 md:top-8 z-12"
+            onClick={() => active && onClick(false)}
+            active={active}
+            width={40}
+            height={40}
+          />
+          <div className="illustration-view relative w-full shrink-0 h-60 z-10">
             <i className="absolute left-0 top-0 w-full" />
             <div style={{ position: "relative", height: "calc(100% + 1rem)" }}>
               {illustration}
             </div>
           </div>
-          <div className="flex flex-col md:flex-row relative w-full max-h-fit">
-            <div className="compact-view relative rounded-t-xl w-full h-fit bg-white-chalk">
+          <div className="flex flex-col md:flex-row relative grow w-full z-11">
+            <div className="compact-view relative rounded-t-xl w-full overflow-hidden">
               {description}
             </div>
-            <div className="detail-view relative rounded-t-xl w-0 h-0 md:h-auto overflow-hidden">
+            <div className="detail-view relative not-md:rounded-t-none! rounded-t-xl w-0 h-0 md:h-auto overflow-hidden">
               {details}
             </div>
           </div>
         </div>
-
-        <ClosingButton
-          className="absolute right-6 top-4 md:right-10 md:top-8 z-12"
-          onClick={() => active && onClick(false)}
-          active={active}
-          width={40}
-          height={40}
-        />
       </div>
     </div>
   );

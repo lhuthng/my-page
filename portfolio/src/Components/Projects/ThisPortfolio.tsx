@@ -8,16 +8,20 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
       onClick={onClick}
       illustration={<div></div>}
       description={
-        <div className="flex flex-col justify-center w-full h-full space-y-4 p-4 text-black">
-          <h1>Personal Technical Portfolio</h1>
+        <div className="flex flex-col w-full h-full space-y-4 p-4 bg-orange-chalk text-black">
+          <h1>Personal Web Server</h1>
           <p>
-            <strong>Brief:</strong> The site you're viewing! Built with React to
-            present my professional history and technical skills in a clean,
-            modern interface.
+            A VPS-based, full-stack environment that hosts this portfolio, a
+            personal blog, backend services, and live development demos for
+            clients. The entire platform features automated deployment via
+            GitHub Actions (CI/CD). The architecture demonstrates advanced
+            server management using Nginx as a reverse proxy alongside Apache2,
+            and utilizes both React and Svelte with a Node.js backend.
           </p>
           <p>
-            <strong>Technology:</strong> React, HTML5, CSS3, JavaScript, GSAP,
-            UI/UX Design
+            <strong>Technology:</strong> GitHub Actions (CI/CD), VPS, Nginx,
+            Apache2, Node.js, React, Svelte, UI/UX Design, HTML5, CSS3,
+            JavaScript
           </p>
         </div>
       }

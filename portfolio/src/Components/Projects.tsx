@@ -13,17 +13,17 @@ import StyledPortfolio from "./Projects/StyledPortfolio";
 export default function Projects() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const projects = [
-    Balatro,
     DXC,
     MaxPlanck,
     Limpext,
+    Balatro,
     StyledPortfolio,
     ThisPortfolio,
   ];
   return (
     <section className="w-full p-4">
       <CoolHeader title="Projects" />
-      <div className="w-full inset-au m-auto">
+      <div className="w-full inset-au max-w-340 m-auto">
         <div className="grid grid-cols-1 md:grid-cols-[repeat(auto-fit,minmax(20rem,1fr))] grid-rows- gap-4 w-full ">
           {projects.map((ProjectComponent, index) => (
             <div className="project-container w-full" key={index}>

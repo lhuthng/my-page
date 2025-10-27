@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import gsap from "gsap";
 
 interface ClosingButtonProps {
@@ -17,8 +17,9 @@ export default function ClosingButton({
   className,
 }: ClosingButtonProps) {
   const svg = useRef<SVGSVGElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (svg.current === null) {
       return;
     }
@@ -27,6 +28,7 @@ export default function ClosingButton({
 
     gsap.to(paths, {
       scale: active ? 1 : 0,
+      opacity: active ? 1 : 0,
       duration: 0.5,
       x: active ? 0 : 4,
       y: active ? 0 : -4,
@@ -36,10 +38,12 @@ export default function ClosingButton({
 
   return (
     <button
+      ref={btn}
       className={className}
       onClick={onClick}
       style={{
         cursor: active ? "pointer" : "default",
+        pointerEvents: active ? "auto" : "none",
       }}
     >
       <svg
