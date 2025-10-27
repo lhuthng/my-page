@@ -1,8 +1,5 @@
 @reference "../index.css";
 
-.grid-container {
-    @apply grid sm:grid-cols-[repeat(auto-fit,minmax(19rem,1fr))] gap-y-6;
-}
 
 .card-container {
     transition: transform 0.2s cubic-bezier(0.68, 0, 0.27, 1.55);
@@ -11,15 +8,15 @@
     &:hover {
         transform: scale(1.05, 1.05);
         &>.card {
-            @apply shadow-[-0.5rem_1rem_0.2rem_rgb(var(--darkboard),0.4)];
+            @apply shadow-[-0.3rem_1rem_0.2rem_rgb(var(--darkboard),0.4)];
         }
     }
     &>div>.level {
-        @apply shadow-[0rem_0.2rem_0.1rem_rgb(var(--darkboard),0.2)];
+        @apply shadow-[-0.2rem_0.2rem_0.1rem_rgb(var(--darkboard),0.1)];
     }
 }
 
 .card {
-    @apply shadow-[-0.5rem_1rem_0.2rem_rgb(var(--darkboard),0.2)];
+    @apply shadow-[-0.3rem_1rem_0.2rem_rgb(var(--darkboard),0.2)];
     transform-style: preserve-3d;
 }
