@@ -16,7 +16,7 @@
     "react": "^19.2.0",
     "react-dom": "19.2",
     "roughjs": "^4.6.6",
-    "tailwindcss": "^4.1.13"
+    "tailwindcss": "^4.1.16"
   },
   "devDependencies": {
     "@types/bun": "latest",

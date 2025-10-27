@@ -12,6 +12,7 @@ import { ScrollToPlugin } from "gsap/ScrollToPlugin";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Projects from "./Components/Projects";
 import { Draggable } from "gsap/Draggable";
+import TurbelenceFilter from "./Components/TurbelenceFilter";
 
 gsap.registerPlugin(Flip);
 gsap.registerPlugin(ScrollToPlugin);
@@ -23,6 +24,11 @@ export function App() {
   return (
     <>
       <svg className="absolute" width="0" height="0">
+        <defs>
+          {Array.from({ length: 5 }, (_, index) => (
+            <TurbelenceFilter key={index} id={index} />
+          ))}
+        </defs>
         <filter id="grainy">
           <feTurbulence
             type="fractalNoise"

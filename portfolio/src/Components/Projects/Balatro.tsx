@@ -5,6 +5,7 @@ import balatroDemo from "@/Assets/Images/balatro.webp";
 import viSrc from "@/Assets/Videos/vi-balatro.webm";
 import enSrc from "@/Assets/Videos/en-balatro.webm";
 import { Draggable } from "gsap/Draggable";
+import github from "@/Assets/SVGs/github.svg";
 
 export default function Balatro({ active, onClick }: ProjectProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -110,7 +111,6 @@ export default function Balatro({ active, onClick }: ProjectProps) {
     <ProjectTemplate
       active={active}
       onClick={onClick}
-      className="h-160 3xs:h-146 2xs:h-120"
       illustration={
         <div
           ref={illustration}
@@ -159,56 +159,75 @@ export default function Balatro({ active, onClick }: ProjectProps) {
         </div>
       }
       description={
-        <div className="flex flex-col justify-center w-full h-full space-y-4 p-4 text-black">
+        <div className="flex flex-col w-full h-full space-y-4 p-4 bg-white-chalk text-black">
           <h1>Balatro Localization</h1>
           <p>
-            <strong>Brief:</strong> Full Vietnamese localization for the popular
-            Poker-builder game Balatro, including custom font support and
-            cultural adjustments.
+            Full Vietnamese localization for the popular Poker-builder game
+            Balatro, including custom font support and cultural adjustments.
           </p>
           <p>
-            <strong>Technology:</strong> Lua, Bash, Custom Localization Tool
+            <strong>Technologies:</strong> Lua, Bash, Custom Localization Tool
             (HTML/JS)
           </p>
         </div>
       }
       details={
-        <div className="bg-yellow-500 p-4 w-full overflow-hidden">
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
-          <p>Test</p>
+        <div className="bg-orange-chalk w-full h-full text-black overflow-hidden p-4 space-y-4">
+          <p>
+            As a passionate player of Balatro, I initiated a full Vietnamese
+            localization project after discovering the game was built on the
+            highly accessible <strong>Löve (Lua) engine</strong>). This required
+            me to reverse-engineer the game's source code, gaining a deep
+            understanding of its internal logic, data handling, and rendering
+            pipelines to correctly inject custom translation and logic hooks.{" "}
+            <strong>
+              You can interact with the red strip on the video above to see the
+              translation in action - it's draggable!
+            </strong>
+          </p>
+          <p>
+            To support the Vietnamese language's complex character set, I
+            performed essential font engineering. I used{" "}
+            <strong>FontForge</strong> to modify and extend the game's typeface,
+            ensuring proper rendering of all diacritics. The project also
+            included the development of technical tooling, such as a Bash script
+            to reliably locate and inject the custom fonts and localization
+            files into the game directory.
+          </p>
+          <p>
+            Finally, I built a custom, user-friendly localization tool using{" "}
+            <strong>HTML/JavaScript</strong>. This utility streamlined the
+            process of reading, modifying, and managing the translation data,
+            significantly improving the iteration speed and accuracy of the
+            overall localization effort.
+          </p>
+          <p>
+            View the full installation instructions here:{" "}
+            <a
+              href="https://github.com/lhuthng/balatro-vi-localization"
+              target="_blank"
+            >
+              <div
+                className="inline-block w-8 h-8 translate-y-2 hover:scale-105"
+                style={{
+                  backgroundColor: "black",
+                  maskImage: `url(${github})`,
+                }}
+              />
+            </a>
+          </p>
+          <p>
+            For an in-depth write-up on the technical challenges, you can read
+            more on my blog{" "}
+            <a
+              className="font-bold text-purple-500 hover:brightness-110"
+              target="_blank"
+              href="/"
+            >
+              here
+            </a>
+            .
+          </p>
         </div>
       }
     />

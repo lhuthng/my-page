@@ -2,6 +2,20 @@
 
 @source "Styles/";
 
+@font-face {
+    font-family: "Omori1";
+    src: url("./Assets/Fonts/OMORI_GAME.ttf") format("truetype");
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: "Omori2";
+    src: url("./Assets/Fonts/OMORI_GAME2.ttf") format("truetype");
+    font-weight: normal;
+    font-style: normal;
+}
+
 :root {
     --yellow-chalk: 250, 214, 42;
     --green-chalk: 120, 220, 150;
@@ -35,6 +49,9 @@
     --color-white-chalk: rgb(var(--white-chalk));
     --color-blue-chalk: rgb(var(--blue-chalk));
     --color-purple-chalk: rgb(var(--purple-chalk));
+    --color-violet-chalk: rgb(var(--violet-chalk));
+    --color-deep-violet: #5f249f;
+    --color-mpg-green: #006c66;
     --color-green-chalk: rgb(var(--green-chalk));
     --color-orange-chalk: rgb(var(--orange-chalk));
     --color-gray-chalk: rgb(var(--gray-chalk));
@@ -54,6 +71,8 @@
 
     --font-cabin-sketch: "Cabin Sketch", sans-serif;
     --font-courier-prime: "Courier Prime", monospace;
+    --font-omori-1: "Omori1", sans-serif;
+    --font-omori-2: "Omori2", sans-serif;
 
     --breakpoint-xs: 30rem;
     --breakpoint-2xs: 21rem;
