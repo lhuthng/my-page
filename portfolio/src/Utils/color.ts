@@ -3,7 +3,9 @@ export type Color =
     "black" |
     "dark-charcoal" |
     "yellow" |
+    "yellow-2" |
     "orange" |
+    "orange-2" |
     "blue" |
     "cyan" |
     "navi" |
@@ -12,6 +14,7 @@ export type Color =
     "lime" |
     "pink" |
     "purple" |
+    "purple-2" |
     "silver" |
     "dark-gray" |
     "light-gray" |

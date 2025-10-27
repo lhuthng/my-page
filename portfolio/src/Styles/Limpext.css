@@ -1,0 +1,29 @@
+@reference "../index.css";
+
+.st0 {
+    fill: url(#linear-gradient2);
+}
+
+.st1 {
+    fill: url(#linear-gradient1);
+}
+
+.st2 {
+    fill: url(#linear-gradient3);
+}
+
+.st3 {
+    fill: url(#linear-gradient);
+}
+
+#limpext-logo {
+    @apply max-w-fit flex-1;
+}
+
+.mask-stroke {
+    fill: none;
+    stroke: white;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 16px;
+}

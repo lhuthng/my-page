@@ -118,22 +118,36 @@ export default function Experience() {
                 <div ref={workContainer} className="lg:pb-50" >
                     <div className="grid-flex py-4 space-x-2">
                         <WorkExperience
-                            title="Full-stack Developer (freelance)"
-                            duration="May 2025 - Present"
+                            title="Freelance Web Developer"
+                            duration="May 2025 - Jul 2025"
                             organization="Limpext"
                             technologies={['HTML/CSS/JS', 'Svelte 5', 'PHP', 'Apache']}
                             project="Designed, developed, and launched a custom, professional website for Limpext."
+                            additional={{
+                                externalDocument: [{
+                                    name: "limpext.de",
+                                    url: "https://limpext.de"
+                                }],
+                                caseStudy: "a"
+                            }}
                         >
                             <span><b>Enhanced Visibility: </b> Drove a significant increase in web traffic and improved organic search rankings by implementing comprehensive SEO strategies.</span>
                             <span><b>Full-stack Development: </b> Oversaw all aspects of development, from designing the front-end user interface to crafting the back-end logic.</span>
                         </WorkExperience>
                         <WorkExperience
                             title="Programmer Analyst"
-                            duration="January 2020 – February 2021"
+                            duration="Jan 2020 – Feb 2021"
                             organization="DXC Technology Vietnam"
                             location="Ho Chi Minh City"
                             technologies={['HTML/CSS/JS', 'AngularJS', 'C#', 'ASP.NET Framework', 'MongoDB', 'OracleDB', 'IIS', 'Task Scheduler']}
                             project="Resolved technical debt and built new features to maintain and enhance enterprise applications for a variety of clients."
+                            additional={{
+                                externalDocument: [{
+                                    name: "Certificate of Employment",
+                                    url: ""
+                                }],
+                                caseStudy: "a"
+                            }}
                         >
                             <span><b>Front-end Implementation: </b> Utilized AngularJS to implement user-facing features, ensuring a seamless and reliable experience across multiple client projects.</span>
                             <span><b>API Development: </b> Developed new API endpoints using ASP.NET to enhance an internal portal, streamlining data retrieval for an internal sales team.</span>
@@ -141,11 +155,24 @@ export default function Experience() {
                         </WorkExperience>
                         <WorkExperience
                             title="Scientific Assistant"
-                            duration="July 2022 – October 2024"
+                            duration="Jul 2022 – Oct 2024"
                             organization="Max-Planck Institute für Biophysics"
                             location="Frankfurt am Main"
                             technologies={['Python', 'MATLAB', 'NumPy', 'SciPy', 'Pandas', 'Matplotlib', 'pytest']}
                             project="Transformed a legacy data processing workflow by porting and optimizing MATLAB scripts to Python, enhancing collaboration and research efficiency."
+                            additional={{
+                                externalDocument: [{
+                                    name: "GitHub",
+                                    url: ""
+                                }, {
+                                    name: "GitLab",
+                                    url: ""
+                                }, {
+                                    name: "Recommendation Letter",
+                                    url: ""
+                                }],
+                                caseStudy: "a"
+                            }}
                         >
                             <span><b>Performance Optimization: </b>Accelerated data processing by rewriting legacy MATLAB scripts in Python and leveraging optimized libraries like NumPy and Pandas.</span>
                             <span><b>Workflow Automation: </b>Developed a custom Python module to parse and process a specialized data format, reducing manual data handling time by 50%.</span>
@@ -153,7 +180,7 @@ export default function Experience() {
                         </WorkExperience>
                         <WorkExperience
                             title="Teaching Assistant"
-                            duration="March 2021 – October 2021"
+                            duration="Mar 2021 – Oct 2021"
                             organization="Frankfurt University of Applied Science"
                             location="Frankfurt am Main"
                             technologies={['Java']}

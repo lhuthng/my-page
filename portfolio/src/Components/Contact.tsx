@@ -204,7 +204,7 @@ export default function Contact() {
                             <div>
                                 <label htmlFor="message">Message:</label>
                                 <br />
-                                <textarea className="scrollbar-custom px-2 w-full h-22 lg:h-15 border-l-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100 resize-none" 
+                                <textarea className="scrollbar-custom scroll-thumb-orange px-2 w-full h-22 lg:h-15 border-l-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100 resize-none" 
                                     id="message" 
                                     rows={2} 
                                     placeholder="Your words, my inbox, instant magic." 

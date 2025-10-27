@@ -94,7 +94,7 @@
 }
 
 .details-slot {
-    @apply w-full lg:absolute h-0 lg:h-66;
+    @apply w-full lg:absolute h-0 lg:h-full;
 
     & > ul {
         @apply lg:absolute border-x-2 lg:bottom-full translate-y-[2px] transition-all duration-500 ease-in-out;
@@ -140,7 +140,7 @@
 }
 
 .details-slot.open {
-    @apply h-full lg:h-66;
+    @apply h-full;
 }
 
 .details-slot.open {
@@ -153,5 +153,8 @@
     & > li::marker {
         @apply font-bold text-gray-chalk/40;
         content: '> ';
+    }
+    & > li.list-none::marker {
+        content: '';
     }
 }
