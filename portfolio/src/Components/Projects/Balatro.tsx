@@ -207,7 +207,7 @@ export default function Balatro({ active, onClick }: ProjectProps) {
               href="https://github.com/lhuthng/balatro-vi-localization"
               target="_blank"
             >
-              <div
+              <i
                 className="inline-block w-8 h-8 translate-y-2 hover:scale-105"
                 style={{
                   backgroundColor: "black",
