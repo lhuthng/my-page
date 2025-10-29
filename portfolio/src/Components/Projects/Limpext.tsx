@@ -139,7 +139,74 @@ export default function Limpext({ active, onClick }: ProjectProps) {
         </div>
       }
       details={
-        <div className="w-full h-full bg-white border-blue-400 md:rounded-tr-xl not-md:rounded-bl-xl p-2 border-2"></div>
+        <div className="w-full h-full bg-white text-black border-blue-400 md:rounded-tr-xl not-md:rounded-bl-xl p-4 border-2 space-y-4">
+          <h1>
+            Client Web Development &amp; SEO: High-Performance Landing Pages
+          </h1>
+          <p>
+            As a freelancer, I delivered a complete web solution for{" "}
+            <a
+              className="text-blue-500 hover:brightness-110 hover:underline"
+              href="https://limpext.de"
+            >
+              Limpext
+            </a>
+            , focusing on speed, custom design, and integrated SEO to boost
+            their online presence.
+          </p>
+          <div className="flex flex-col gap-2">
+            <div>
+              <strong>Core Contributions:</strong>
+              <ul className="ml-4 list-disc list-inside">
+                <li>
+                  <strong>Custom Site Development: </strong>Built two fully
+                  customized, high-performance landing sites using{" "}
+                  <strong>Svelte 5</strong> and <strong>Tailwind CSS</strong>. I
+                  used no templates, ensuring the design and layout perfectly
+                  matched the client's brand and needs.
+                </li>
+                <li>
+                  <strong>Performance &amp; Localization: </strong>Engineered a
+                  seamless localization framework directly into the sites to
+                  maximize speed and support dynamic language switching without
+                  slow page reloads.
+                </li>
+                <li>
+                  <strong>Interactive Features:</strong> Developed and
+                  integrated an interactive map directly onto the page to
+                  improve user engagement and usability for location-based
+                  information.
+                </li>
+                <li>
+                  <strong>Design &amp; Animation:</strong> Redesigned the
+                  client's logos and created engaging animations using GSAP
+                  (GreenSock Animation Platform) to modernize the look and feel
+                  of the site.
+                </li>
+              </ul>
+            </div>
+            <div>
+              <strong>Technical &amp; Backend Integration:</strong>
+              <ul className="ml-4 list-disc list-inside">
+                <li>
+                  <strong>Deployment and Hosting:</strong> Assisted in the full
+                  deployment process with <strong>Alfahosting</strong>, setting
+                  up the environment on <strong>Apache2</strong>.
+                </li>
+                <li>
+                  <strong>Backend Service: </strong>Integrated a simple backend
+                  service (using PHP) to successfully handle and manage
+                  submissions from the contact forms.
+                </li>
+                <li>
+                  <strong>SEO Implementation:</strong> Optimized the sites for
+                  search engines by implementing structured metadata to ensure
+                  better indexing and visibility on search results pages.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
       }
     />
   );
