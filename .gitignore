@@ -1,13 +1,2 @@
 .vscode
-
-# Build Folders
-bin/
-obj/
-out/
-
-# Modules
-node_modules
-
-# Blazor / WebAssembly specific
-wwwroot/_framework/
-wwwroot/_content/
+target
