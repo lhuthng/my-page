@@ -22,3 +22,6 @@ That's a very practical question when setting up a new Rust project!When working
 # Build artifacts for C/C++ dependencies
 # (If your project uses C/C++ crates like "cc" or "bindgen")
 # out/
+
+data/*
+.sqlx

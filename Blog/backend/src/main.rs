@@ -1,20 +1,14 @@
-use axum::{Router, extract::Path, http::StatusCode, response::IntoResponse, routing::get};
 use tokio;
 
-async fn api_handler(Path(text): Path<String>) -> impl IntoResponse {
-    let processed_text = text.to_uppercase();
+use crate::infrastructure::web::server::HTTPServer;
 
-    let response_message = format!("API response for: {}", processed_text);
-
-    (StatusCode::OK, response_message)
-}
+mod application;
+mod domain;
+mod infrastructure;
 
 #[tokio::main]
-async fn main() {
-    let app = Router::new().route("/api/{text}", get(api_handler));
-
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-
-    println!("Server has started!");
-    axum::serve(listener, app).await.unwrap();
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = HTTPServer::new("127.0.0.1:3000", "sqlite:data/blog.db");
+    server.start().await?;
+    Ok(())
 }
