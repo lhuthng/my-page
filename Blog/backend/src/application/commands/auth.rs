@@ -12,6 +12,6 @@ pub struct RegisterCommand {
 }
 
 #[derive(serde::Deserialize)]
-pub struct RefreshTokenCommand {
-    pub access_token: String,
+pub struct RefreshAccessTokenCommand {
+    pub refresh_token: String,
 }

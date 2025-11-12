@@ -3,9 +3,13 @@ import { derived, writable } from "svelte/store";
 
 export let user = writable(undefined);
 
-export async function saveLogin({ displayName, token, tokenType }) {
+export async function clearLogin() {
+	user.set(undefined);
+}
+export async function saveLogin({ displayName, token, tokenType, role }) {
 	user.set({
 		displayName,
+		role,
 		token,
 		tokenType,
 	});
@@ -32,9 +36,10 @@ export async function login(username, password) {
 		token,
 		token_type: tokenType,
 		display_name: displayName,
+		role,
 	} = await res.json();
 
-	saveLogin({ token, tokenType, displayName });
+	saveLogin({ token, tokenType, displayName, role });
 }
 
 export async function logout() {

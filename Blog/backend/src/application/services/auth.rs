@@ -14,10 +14,9 @@ pub trait AuthService {
         &self,
         cmd: commands::auth::RegisterCommand,
     ) -> Result<(), errors::auth::AuthError>;
-    async fn refresh_token(
+    async fn refresh_access_token(
         &self,
-        cmd: commands::auth::RefreshTokenCommand,
-        refresh_token: String,
+        cmd: commands::auth::RefreshAccessTokenCommand,
         config: entities::auth::AuthConfig,
     ) -> Result<entities::auth::AuthTokens, errors::auth::AuthError>;
 }

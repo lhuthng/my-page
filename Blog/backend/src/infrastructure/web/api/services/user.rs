@@ -8,6 +8,7 @@ use crate::{
 #[derive(FromRow, Debug)]
 struct MeRow {
     display_name: String,
+    role: String,
 }
 
 pub struct UserServiceImpl {
@@ -25,8 +26,8 @@ impl UserService for UserServiceImpl {
     async fn me(&self, cmd: MeCommand) -> Result<Me, UserError> {
         let me_row = sqlx::query_as::<_, MeRow>(
             r#"
-			SELECT display_name
-			FROM user_meta
+			SELECT display_name, role
+			FROM user_meta JOIN users ON users.id = user_id
 			WHERE user_id = ?
 			"#,
         )
@@ -37,6 +38,7 @@ impl UserService for UserServiceImpl {
 
         Ok(Me {
             display_name: me_row.display_name,
+            role: me_row.role,
         })
     }
 }
