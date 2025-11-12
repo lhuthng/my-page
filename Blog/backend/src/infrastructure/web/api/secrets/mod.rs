@@ -4,21 +4,10 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, deco
 use crate::domain::{entities::secret::Claims, errors::auth::AuthError};
 
 pub async fn encode_into_jwt_token(
-    value: String,
-    expire_hours: i64,
+    claims: Claims,
     header: &Header,
     encoding_key: &EncodingKey,
 ) -> Result<String, AuthError> {
-    let expiration = Utc::now()
-        .checked_add_signed(Duration::hours(expire_hours))
-        .expect("valid timestamp")
-        .timestamp() as usize;
-
-    let claims = Claims {
-        sub: value.to_string(),
-        exp: expiration,
-    };
-
     encode(&header, &claims, &encoding_key)
         .map_err(|_| AuthError::InternalError("Access Token Creation".to_string()))
 }

@@ -8,7 +8,10 @@ use axum::{
 use chrono::Utc;
 
 use crate::{
-    domain::errors::auth::AuthError,
+    domain::{
+        entities::{secret::Claims, user::UserRole},
+        errors::{auth::AuthError, user::UserError},
+    },
     infrastructure::web::{api::secrets::decode_from_jwt_token, server::AppState},
 };
 
@@ -25,10 +28,7 @@ pub async fn user_guard(
         .and_then(|value| value.strip_prefix("Bearer "))
         .ok_or(AuthError::InvalidToken);
 
-    let token = match access_token {
-        Ok(token) => token,
-        Err(error) => return Err(error),
-    };
+    let token = access_token?;
 
     let claims = decode_from_jwt_token(
         token.to_string(),
@@ -43,4 +43,20 @@ pub async fn user_guard(
 
     request.extensions_mut().insert(claims);
     Ok(next.run(request).await)
+}
+
+#[axum::debug_middleware]
+pub async fn mod_check(request: Request, next: Next) -> Result<impl IntoResponse, UserError> {
+    let claims = request
+        .extensions()
+        .get::<Claims>()
+        .ok_or(UserError::Unauthorized)?;
+
+    let role = UserRole::try_from(claims.role.clone()).map_err(|_| UserError::Unauthorized)?;
+
+    if UserRole::Moderator.include(&role) {
+        Ok(next.run(request).await)
+    } else {
+        Err(UserError::Unauthorized)
+    }
 }

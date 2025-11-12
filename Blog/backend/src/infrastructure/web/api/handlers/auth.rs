@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::{
     application::{
-        commands::auth::{LoginCommand, RefreshTokenCommand, RegisterCommand},
+        commands::auth::{LoginCommand, RefreshAccessTokenCommand, RegisterCommand},
         services::auth::AuthService,
     },
     domain::errors::auth::AuthError,
@@ -16,14 +16,14 @@ use crate::{
 
 #[derive(Debug, Serialize)]
 pub struct LoginResponse {
-    access_token: String,
+    token: String,
     token_type: String,
 }
 
 impl LoginResponse {
     fn new(access_token: String) -> Self {
         Self {
-            access_token,
+            token: access_token,
             token_type: "Bearer".to_string(),
         }
     }
@@ -42,7 +42,7 @@ pub async fn login(
     {
         Ok(auth_tokens) => {
             let jar = jar.add(
-                Cookie::build(("refresh_token", auth_tokens.refresh_token))
+                Cookie::build(("refresh-token", auth_tokens.refresh_token))
                     .http_only(true)
                     .secure(true)
                     .path("/")
@@ -73,43 +73,29 @@ pub async fn register(
     }
 }
 
-#[derive(Debug, Serialize)]
-pub struct RefreshTokenResponse {
-    access_token: String,
-    refresh_token: String,
-    token_type: String,
-}
-
-impl RefreshTokenResponse {
-    fn new(access_token: String, refresh_token: String) -> Self {
-        Self {
-            access_token,
-            refresh_token,
-            token_type: "Bearer".to_string(),
-        }
-    }
-}
-
 #[axum::debug_handler]
 pub async fn refresh_token(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
-    Json(payload): Json<RefreshTokenCommand>,
 ) -> Result<impl IntoResponse, AuthError> {
     let refresh_token = jar
-        .get("refresh_token")
+        .get("refresh-token")
         .ok_or(AuthError::InvalidToken)?
         .value()
         .to_string();
 
+    let cmd = RefreshAccessTokenCommand {
+        refresh_token: refresh_token,
+    };
+
     match state
         .auth_service
-        .refresh_token(payload, refresh_token, state.config.auth.clone())
+        .refresh_access_token(cmd, state.config.auth.clone())
         .await
     {
         Ok(auth_tokens) => {
             let jar = jar.add(
-                Cookie::build(("refresh_token", auth_tokens.refresh_token))
+                Cookie::build(("refresh-token", auth_tokens.refresh_token))
                     .http_only(true)
                     .secure(true)
                     .path("/")
