@@ -1,31 +1,26 @@
-use bcrypt::{BcryptError, DEFAULT_COST, hash, verify};
+use base64::{Engine, engine::general_purpose};
+use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{DateTime, Duration, Utc};
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use rand::RngCore;
-use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
 use tokio::join;
 
 use crate::{
     application::{
-        commands::auth::{LoginCommand, RefreshTokenCommand, RegisterCommand},
+        commands::auth::{LoginCommand, RefreshAccessTokenCommand, RegisterCommand},
         services::auth::AuthService,
     },
     domain::{
         entities::{
             auth::{AuthConfig, AuthTokens},
-            user::{User, UserRole},
-            value_objects::{Email, HashedPassword},
+            secret::Claims,
         },
         errors::auth::AuthError,
     },
+    infrastructure::web::api::secrets::encode_into_jwt_token,
 };
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct Claims {
-    sub: String,
-    exp: usize,
-}
+const DELIMITER: char = '`';
 
 pub struct AuthServiceImpl {
     pub pool: SqlitePool,
@@ -36,18 +31,13 @@ struct UserRow {
     id: i64,
     username: String,
     password_hash: String,
-}
-
-#[derive(FromRow, Debug)]
-struct UserMetaRow {
-    user_id: i64,
-    display_name: String,
-    bio: String,
+    role: String,
 }
 
 #[derive(FromRow, Debug)]
 struct SessionRow {
     user_id: i64,
+    role: String,
     token_hash: String,
     expires_at: DateTime<Utc>,
 }
@@ -58,41 +48,15 @@ impl AuthServiceImpl {
     }
 }
 
-async fn create_jwt_token(
-    value: String,
-    expire_hours: i64,
-    header: &Header,
-    encoding_key: &EncodingKey,
-) -> Result<String, AuthError> {
-    let expiration = Utc::now()
-        .checked_add_signed(Duration::hours(expire_hours))
-        .expect("valid timestamp")
-        .timestamp() as usize;
-
-    let claims = Claims {
-        sub: value.to_string(),
-        exp: expiration,
-    };
-
-    encode(&header, &claims, &encoding_key)
-        .map_err(|_| AuthError::InternalError("Access Token Creation".to_string()))
-}
-
-async fn decode_jwt_token(token: String, decoding_key: &DecodingKey) -> Result<String, String> {
-    let validation = Validation::default();
-
-    match decode::<Claims>(&token, decoding_key, &validation) {
-        Ok(token_data) => Ok(token_data.claims.sub),
-        Err(err) => Err(format!("Invalid token: {}", err)),
-    }
-}
-
-async fn generate_token_pair() -> (String, String) {
+async fn generate_token_pair(id: &i64) -> (String, String) {
     let mut token_bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut token_bytes);
-    let token = hex::encode(token_bytes);
+    let mut token = hex::encode(token_bytes);
 
     let token_hash = hash(&token, DEFAULT_COST).unwrap();
+
+    let raw = format!("{}{}{}", id, DELIMITER, token);
+    token = general_purpose::URL_SAFE_NO_PAD.encode(raw);
 
     (token, token_hash)
 }
@@ -102,7 +66,7 @@ impl AuthService for AuthServiceImpl {
     async fn login(&self, cmd: LoginCommand, config: AuthConfig) -> Result<AuthTokens, AuthError> {
         let user_row = sqlx::query_as::<_, UserRow>(
             r#"
-            SELECT id, username, password_hash
+            SELECT id, username, password_hash, role
             FROM users
             WHERE username = ?
             "#,
@@ -111,7 +75,6 @@ impl AuthService for AuthServiceImpl {
         .fetch_one(&self.pool)
         .await
         .map_err(|_| AuthError::InvalidCredentials)?;
-
         let is_valid = match verify(&cmd.password, &user_row.password_hash) {
             Ok(valid) => valid,
             Err(e) => return Err(AuthError::InternalError(e.to_string())),
@@ -121,14 +84,15 @@ impl AuthService for AuthServiceImpl {
             return Err(AuthError::InvalidCredentials);
         }
 
+        let claims = Claims::new(
+            user_row.id.to_string(),
+            user_row.role,
+            config.access_expire_hours,
+        );
+
         let (access_token_res, refresh_token_res) = join!(
-            create_jwt_token(
-                user_row.id.to_string(),
-                config.access_expire_hours,
-                &config.header,
-                &config.encoding_key,
-            ),
-            generate_token_pair(),
+            encode_into_jwt_token(claims, &config.header, &config.encoding_key,),
+            generate_token_pair(&user_row.id),
         );
 
         let access_token = access_token_res?;
@@ -140,6 +104,10 @@ impl AuthService for AuthServiceImpl {
             r#"
             INSERT INTO sessions (user_id, token_hash, expires_at)
             VALUES ($1, $2, $3)
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                token_hash = excluded.token_hash,
+                expires_at = excluded.expires_at;
             "#,
         )
         .bind(user_row.id)
@@ -207,49 +175,61 @@ impl AuthService for AuthServiceImpl {
         }
     }
 
-    async fn refresh_token(
+    async fn refresh_access_token(
         &self,
-        cmd: RefreshTokenCommand,
-        refresh_token: String,
+        cmd: RefreshAccessTokenCommand,
         config: AuthConfig,
     ) -> Result<AuthTokens, AuthError> {
-        let user_id = decode_jwt_token(cmd.access_token, &config.decoding_key).await?;
+        let raw = general_purpose::URL_SAFE_NO_PAD
+            .decode(&cmd.refresh_token)
+            .map_err(|_| AuthError::InvalidToken)?;
+        let raw = String::from_utf8(raw).map_err(|_| AuthError::InvalidToken)?;
+
+        let parts: Vec<&str> = raw.splitn(2, DELIMITER).collect();
+        if parts.len() != 2 {
+            return Err(AuthError::InvalidToken);
+        }
+        let user_id = parts[0];
+        let token = parts[1];
 
         match sqlx::query_as::<_, SessionRow>(
             r#"
-            SELECT user_id, token_hash, expires_at
-            FROM sessions
+            SELECT user_id, token_hash, expires_at, role
+            FROM sessions JOIN users ON users.id = user_id
             WHERE user_id = ?
             "#,
         )
-        .bind(user_id)
+        .bind(&user_id)
         .fetch_one(&self.pool)
         .await
         {
             Ok(row) => {
-                let is_valid = match verify(&refresh_token, &row.token_hash) {
-                    Ok(valid) => valid,
-                    Err(BcryptError::InvalidHash(_)) => false,
-                    Err(e) => return Err(AuthError::InternalError(e.to_string())),
-                };
-
-                if !is_valid {
-                    return Err(AuthError::InvalidCredentials);
+                match verify(token, &row.token_hash) {
+                    Ok(value) => {
+                        if !value {
+                            return Err(AuthError::InvalidToken);
+                        }
+                    }
+                    Err(error) => {
+                        return Err(AuthError::InternalError(error.to_string()));
+                    }
                 }
                 if Utc::now() > row.expires_at {
                     return Err(AuthError::ExpiredToken);
                 }
-                let access_token = create_jwt_token(
+
+                let claims = Claims::new(
                     row.user_id.to_string(),
+                    row.role.to_string(),
                     config.access_expire_hours,
-                    &config.header,
-                    &config.encoding_key,
-                )
-                .await?;
+                );
+
+                let access_token =
+                    encode_into_jwt_token(claims, &config.header, &config.encoding_key).await?;
 
                 Ok(AuthTokens {
                     access_token,
-                    refresh_token,
+                    refresh_token: cmd.refresh_token,
                 })
             }
             Err(sqlx::Error::RowNotFound) => Err(AuthError::InvalidToken),

@@ -1,7 +1,6 @@
-use std::env;
+use std::{env, path::PathBuf};
 
-use dotenvy::dotenv;
-use jsonwebtoken::{DecodingKey, EncodingKey, Header};
+use jsonwebtoken::Algorithm;
 
 use crate::{
     domain::entities::auth::AuthConfig,
@@ -12,9 +11,16 @@ pub struct AppConfig {
     pub auth: AuthConfig,
 }
 
+pub struct MediaConfig {
+    pub dir: PathBuf,
+}
+
 pub struct AppState {
     pub config: AppConfig,
+    pub media_config: MediaConfig,
     pub auth_service: services::auth::AuthServiceImpl,
+    pub user_service: services::user::UserServiceImpl,
+    pub media_service: services::media::MediaServiceImpl,
 }
 
 pub struct HTTPServer {
@@ -22,10 +28,20 @@ pub struct HTTPServer {
     db_url: String,
 }
 
+impl MediaConfig {
+    pub fn from_env() -> Self {
+        let path = env::var("MEDIA_PATH").expect("MEDIA_PATH must be set");
+
+        let dir = PathBuf::from(&path);
+        if !dir.exists() {
+            std::fs::create_dir_all(&dir).expect("Failed to create media directory");
+        }
+        return Self { dir };
+    }
+}
+
 impl AppConfig {
     pub fn from_env() -> Self {
-        dotenv().ok();
-
         let jwt_secret = env::var("JWT_SECRET")
             .expect("JWT_SECRET must be set")
             .into_bytes();
@@ -41,13 +57,12 @@ impl AppConfig {
             .expect("REFRESH_JWT_EXP_HOURS must be an integer");
 
         Self {
-            auth: AuthConfig {
-                header: Header::default(),
-                encoding_key: EncodingKey::from_secret(&jwt_secret),
-                decoding_key: DecodingKey::from_secret(&jwt_secret),
+            auth: AuthConfig::new(
+                Algorithm::HS256,
+                jwt_secret,
                 access_expire_hours,
                 refresh_expire_hours,
-            },
+            ),
         }
     }
 }
@@ -63,7 +78,10 @@ impl HTTPServer {
         let pool = sqlx::SqlitePool::connect(&self.db_url).await?;
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
+            media_config: MediaConfig::from_env(),
             auth_service: services::auth::AuthServiceImpl::new(pool.clone()),
+            user_service: services::user::UserServiceImpl::new(pool.clone()),
+            media_service: services::media::MediaServiceImpl::new(pool.clone()),
         });
         let router = api::router::create(state);
 

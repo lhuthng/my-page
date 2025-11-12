@@ -1,16 +1,45 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
-use axum::{Router, routing::post};
+use axum::{
+    Router, middleware,
+    routing::{get, get_service, post},
+};
+use tower_http::services::ServeDir;
 
-use crate::infrastructure::web::{api::handlers::auth, server::AppState};
+use crate::infrastructure::web::{
+    api::{handlers, middlewares, services},
+    server::AppState,
+};
 
 // This MUST retuns Router<()> instead of Router<AppState>
 pub fn create(state: Arc<AppState>) -> Router<()> {
-    let router = Router::new()
-        .route("/auth/login", post(auth::login))
-        .route("/auth/register", post(auth::register))
-        .route("/auth/refresh-token", post(auth::refresh_token))
-        .with_state(state);
+    let static_media_service = get_service(ServeDir::new(&state.media_config.dir));
 
-    router
+    let auth_routes = Router::new()
+        .route("/login", post(handlers::auth::login))
+        .route("/register", post(handlers::auth::register))
+        .route("/refresh", post(handlers::auth::refresh_token));
+
+    let user_routes =
+        Router::new()
+            .route("/me", get(handlers::user::me))
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                middlewares::auth::user_guard,
+            ));
+
+    let media_routes = Router::new()
+        .route("/", post(handlers::media::upload))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            middlewares::auth::user_guard,
+        ))
+        .layer(middleware::from_fn(middlewares::auth::mod_check));
+
+    Router::new()
+        .nest_service("/media", static_media_service)
+        .nest("/media", media_routes)
+        .nest("/auth", auth_routes)
+        .nest("/user", user_routes)
+        .with_state(state)
 }

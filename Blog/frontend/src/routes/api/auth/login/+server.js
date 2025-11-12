@@ -13,6 +13,7 @@ export async function POST({ request, fetch }) {
 		const text = await res.text();
 		return new Response(text, { status: res.status });
 	}
+	const setCookieHeader = res.headers.get("Set-Cookie");
 
 	const { token, token_type } = await res.json();
 
@@ -29,14 +30,20 @@ export async function POST({ request, fetch }) {
 		return new Response(text, { status: res.status });
 	}
 
-	const { display_name } = await res.json();
+	const { display_name, role } = await res.json();
+
+	const headers = new Headers({
+		"Content-Type": "application/json",
+	});
+	headers.set("Set-Cookie", setCookieHeader);
 
 	return new Response(
 		JSON.stringify({
 			display_name,
+			role,
 			token,
 			token_type,
 		}),
-		{ status: 200, headers: { "Content-Type": "application/json" } },
+		{ status: 200, headers },
 	);
 }

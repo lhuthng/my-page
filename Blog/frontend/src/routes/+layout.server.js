@@ -1,6 +1,7 @@
 export function load(event) {
-	const { user } = event.locals;
+	const { user, accessToken } = event.locals;
 	return {
 		user,
+		accessToken,
 	};
 }
