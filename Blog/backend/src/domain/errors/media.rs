@@ -8,10 +8,12 @@ use tracing::error;
 pub enum MediaError {
     InvalidFileType,
     FileTooLarge,
+    Duplication,
     UploadFailed(String),
     FileNotFound,
     PermissionDenied,
     InternalError(String),
+    ExposedInternalError(String),
 }
 
 impl From<String> for MediaError {
@@ -37,6 +39,7 @@ impl IntoResponse for MediaError {
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "Uploaded file exceeds size limit".to_string(),
             ),
+            MediaError::Duplication => (StatusCode::CONFLICT, "Duplication detected.".to_string()),
             MediaError::UploadFailed(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             MediaError::FileNotFound => (
                 StatusCode::NOT_FOUND,
@@ -52,6 +55,10 @@ impl IntoResponse for MediaError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal Server Error".to_string(),
                 )
+            }
+            MediaError::ExposedInternalError(msg) => {
+                error!("Internal media error: {}", msg);
+                (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string())
             }
         };
 
