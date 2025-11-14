@@ -7,7 +7,6 @@
 </svelte:head>
 
 <div class="flex flex-col gap-8 py-8 md:h-screen min-h-200">
-	<div class="h-18 shrink-0"></div>
 	<div class="w-cap bg-yello-200">
 		<div class="flex justify-between">
 			<span>Software</span>
