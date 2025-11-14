@@ -30,14 +30,14 @@ pub fn create(state: Arc<AppState>) -> Router<()> {
 
     let media_routes = Router::new()
         .route("/", post(handlers::media::upload))
+        .layer(middleware::from_fn(middlewares::auth::mod_check))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             middlewares::auth::user_guard,
-        ))
-        .layer(middleware::from_fn(middlewares::auth::mod_check));
+        ));
 
     Router::new()
-        .nest_service("/media", static_media_service)
+        .nest_service("/media/static", static_media_service)
         .nest("/media", media_routes)
         .nest("/auth", auth_routes)
         .nest("/user", user_routes)

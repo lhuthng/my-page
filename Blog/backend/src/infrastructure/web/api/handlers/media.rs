@@ -22,7 +22,7 @@ pub async fn upload(
 ) -> Result<(), MediaError> {
     let mut opt_short_name: Option<String> = None;
     let mut opt_description: Option<String> = None;
-    let mut opt_file_name: Option<String> = None;
+    let mut opt_filename: Option<String> = None;
     let mut opt_content_type: Option<String> = None;
     let mut opt_bytes: Option<Bytes> = None;
 
@@ -47,7 +47,7 @@ pub async fn upload(
                 })?);
             }
             "file" => {
-                if opt_file_name.is_some() {
+                if opt_filename.is_some() {
                     return Err(MediaError::UploadFailed(
                         "Only one media is allowed at a time.".to_string(),
                     ));
@@ -72,7 +72,7 @@ pub async fn upload(
                     MediaError::UploadFailed(format!("Cannot read bytes of {}.", file_name))
                 })?;
 
-                opt_file_name = Some(file_name);
+                opt_filename = Some(file_name);
                 opt_content_type = Some(content_type);
                 opt_bytes = Some(bytes);
             }
@@ -88,8 +88,8 @@ pub async fn upload(
         opt_short_name.ok_or_else(|| MediaError::UploadFailed("Missing short_name".to_string()))?;
     let description = opt_description
         .ok_or_else(|| MediaError::UploadFailed("Missing description".to_string()))?;
-    let file_name =
-        opt_file_name.ok_or_else(|| MediaError::UploadFailed("Missing file".to_string()))?;
+    let filename =
+        opt_filename.ok_or_else(|| MediaError::UploadFailed("Missing file".to_string()))?;
     let content_type = opt_content_type
         .ok_or_else(|| MediaError::UploadFailed("Missing content type".to_string()))?;
     let bytes =
@@ -104,17 +104,13 @@ pub async fn upload(
         uploader_id,
         short_name,
         description,
-        file_name,
+        filename,
         content_type,
         bytes,
     };
 
     match state.media_service.upload(cmd, &state.media_config).await {
-        Ok(_) => {}
-        Err(_) => {
-            return Err(MediaError::PermissionDenied);
-        }
+        Ok(()) => Ok(()),
+        Err(e) => Err(e),
     }
-
-    Err(MediaError::PermissionDenied) // Filler for now
 }

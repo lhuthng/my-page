@@ -1,10 +1,12 @@
 <script>
+	import { goto } from "$app/navigation";
 	import { logout, user } from "$lib/client/user";
 
 	let displayName = $derived($user?.displayName);
+	let role = $derived($user?.role);
 </script>
 
-<header class="fixed w-full h-18 bg-gray-200">
+<header class="fixed w-full h-18 bg-gray-200 z-10">
 	<div class="flex w-full justify-between p-4">
 		<div class="bg-red-500 rounded-full w-10 h-10"></div>
 		<div class="flex flex-col items-end">
@@ -14,12 +16,18 @@
 				<span>Portfolio</span>
 				<span>About</span>
 			</div>
-			<div>
+			<div class="flex gap-4">
 				{#if displayName}
 					<span
 						>Hi <span class="text-blue-700">{displayName}</span
 						></span
 					>
+					{#if role === "admin"}
+						<a
+							class="ring-1 rounded-full px-2"
+							href="/media/manager">Management</a
+						>
+					{/if}
 					<button
 						class="ring-1 rounded-full px-2"
 						type="button"
@@ -27,7 +35,10 @@
 					>
 				{:else}
 					<span>Sign up</span>
-					<a class="text-white bg-black px-2" href="/login">Log in</a>
+					<a
+						class="text-white rounded-full bg-black px-2"
+						href="/login">Log in</a
+					>
 				{/if}
 			</div>
 		</div>

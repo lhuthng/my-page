@@ -22,7 +22,7 @@ impl IntoResponse for UserError {
             UserError::NotFound => (StatusCode::NOT_FOUND, "User not found".to_string()),
             UserError::AlreadyExists => (StatusCode::CONFLICT, "User already exists".to_string()),
             UserError::InvalidData(msg) => (StatusCode::BAD_REQUEST, msg),
-            UserError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
+            UserError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized role".to_string()),
             UserError::InternalError(msg) => {
                 error!("Internal error: {}", msg);
                 (

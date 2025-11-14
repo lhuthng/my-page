@@ -3,7 +3,7 @@ use std::{env, path::PathBuf};
 use jsonwebtoken::Algorithm;
 
 use crate::{
-    domain::entities::auth::AuthConfig,
+    domain::entities::{auth::AuthConfig, media::MediaType},
     infrastructure::web::api::{self, services},
 };
 
@@ -13,6 +13,7 @@ pub struct AppConfig {
 
 pub struct MediaConfig {
     pub dir: PathBuf,
+    pub allowed_file_types: Vec<MediaType>,
 }
 
 pub struct AppState {
@@ -30,13 +31,23 @@ pub struct HTTPServer {
 
 impl MediaConfig {
     pub fn from_env() -> Self {
-        let path = env::var("MEDIA_PATH").expect("MEDIA_PATH must be set");
+        let media_path = env::var("MEDIA_PATH").expect("MEDIA_PATH must be set");
 
-        let dir = PathBuf::from(&path);
+        let dir = PathBuf::from(&media_path);
         if !dir.exists() {
             std::fs::create_dir_all(&dir).expect("Failed to create media directory");
         }
-        return Self { dir };
+
+        let allowed_file_types = vec![
+            MediaType::ImagePng,
+            MediaType::ImageGif,
+            // MediaType::ImageWebp,
+        ];
+
+        return Self {
+            dir,
+            allowed_file_types,
+        };
     }
 }
 
