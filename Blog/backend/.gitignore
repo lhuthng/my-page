@@ -26,3 +26,4 @@ That's a very practical question when setting up a new Rust project!When working
 data/*
 .sqlx
 media/*
+api_test/*

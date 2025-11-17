@@ -50,11 +50,14 @@ impl IntoResponse for MediaError {
                 "You do not have permission to perform this action".to_string(),
             ),
             MediaError::InternalError(msg) => {
-                error!("Internal media error: {}", msg);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Internal Server Error".to_string(),
-                )
+                if cfg!(debug_assertions) {
+                    (StatusCode::INTERNAL_SERVER_ERROR, msg)
+                } else {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Internal Server Error".to_string(),
+                    )
+                }
             }
             MediaError::ExposedInternalError(msg) => {
                 error!("Internal media error: {}", msg);
@@ -63,5 +66,11 @@ impl IntoResponse for MediaError {
         };
 
         (status, body).into_response()
+    }
+}
+
+impl From<sqlx::Error> for MediaError {
+    fn from(err: sqlx::Error) -> Self {
+        MediaError::InternalError(err.to_string())
     }
 }

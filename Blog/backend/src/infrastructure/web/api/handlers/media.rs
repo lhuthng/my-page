@@ -1,15 +1,22 @@
 use std::sync::Arc;
 
 use axum::{
-    Extension,
+    Extension, Json,
     body::Bytes,
-    extract::{Multipart, State},
+    extract::{Multipart, Path, Query, State},
     response::IntoResponse,
 };
-use serde_json::to_string;
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    application::{commands::media::UploadMediaCommand, services::media::MediaService},
+    application::{
+        commands::media::{
+            AddAliasCommand, ChangeAliasCommand, ChangeMediaDetailsCommand, DeleteAliasCommand,
+            GetAliasesCommand, GetLinkCommand, GetMediaDetailsCommand, SearchMediaCommand,
+            UploadMediaCommand,
+        },
+        services::media::MediaService,
+    },
     domain::{entities::secret::Claims, errors::media::MediaError},
     infrastructure::web::server::AppState,
 };
@@ -113,4 +120,174 @@ pub async fn upload(
         Ok(()) => Ok(()),
         Err(e) => Err(e),
     }
+}
+
+#[derive(Deserialize)]
+pub struct MediaQuery {
+    pub term: Option<String>,
+    pub size: Option<u32>,
+    pub skip: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetLinkResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    short_name: Option<String>,
+    url: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SearchResponse {
+    results: Vec<GetLinkResponse>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct GetMediaDetailsResponse {
+    short_name: String,
+    file_type: String,
+    description: String,
+    aliases: Vec<String>,
+}
+
+#[axum::debug_handler]
+pub async fn search(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<MediaQuery>,
+) -> Result<impl IntoResponse, MediaError> {
+    let cmd = SearchMediaCommand {
+        term: query.term,
+        size: query.size.unwrap_or(0),
+        skip: query.skip.unwrap_or(0),
+    };
+    match state.media_service.search(cmd).await {
+        Ok(link_results) => Ok(Json(SearchResponse {
+            results: link_results
+                .iter()
+                .map(|r| GetLinkResponse {
+                    short_name: r.short_name.clone(),
+                    url: r.url.clone(),
+                })
+                .collect(),
+        })),
+        Err(e) => Err(e),
+    }
+}
+
+#[axum::debug_handler]
+pub async fn get_link(
+    State(state): State<Arc<AppState>>,
+    Path(short_name): Path<String>,
+) -> Result<impl IntoResponse, MediaError> {
+    let link = state
+        .media_service
+        .get_link(GetLinkCommand { short_name })
+        .await?;
+
+    Ok(Json(GetLinkResponse {
+        short_name: link.short_name,
+        url: link.url,
+    }))
+}
+
+#[axum::debug_handler]
+pub async fn get_details(
+    State(state): State<Arc<AppState>>,
+    Path(short_name): Path<String>,
+) -> Result<impl IntoResponse, MediaError> {
+    let details = state
+        .media_service
+        .get_details(GetMediaDetailsCommand { short_name })
+        .await?;
+
+    Ok(Json(GetMediaDetailsResponse {
+        short_name: details.short_name,
+        description: details.description,
+        file_type: details.file_type,
+        aliases: details.aliases,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct ChangeDetailsPayload {
+    pub description: String,
+}
+
+#[axum::debug_handler]
+pub async fn change_details(
+    State(state): State<Arc<AppState>>,
+    Path(short_name): Path<String>,
+    Json(payload): Json<ChangeDetailsPayload>,
+) -> Result<(), MediaError> {
+    let cmd = ChangeMediaDetailsCommand {
+        short_name,
+        description: payload.description,
+    };
+
+    Ok(state.media_service.change_details(cmd).await?)
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct GetAliasesResponse {
+    pub aliases: Vec<String>,
+}
+
+#[axum::debug_handler]
+pub async fn get_aliases(
+    State(state): State<Arc<AppState>>,
+    Path(short_name): Path<String>,
+) -> Result<impl IntoResponse, MediaError> {
+    let cmd = GetAliasesCommand { short_name };
+
+    Ok(Json(GetAliasesResponse {
+        aliases: state.media_service.get_aliases(cmd).await?,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct AddAliasPayload {
+    pub alias: String,
+}
+
+#[axum::debug_handler]
+pub async fn add_alias(
+    State(state): State<Arc<AppState>>,
+    Path(short_name): Path<String>,
+    Json(payload): Json<AddAliasPayload>,
+) -> Result<(), MediaError> {
+    let cmd = AddAliasCommand {
+        short_name,
+        alias: payload.alias,
+    };
+
+    Ok(state.media_service.add_alias(cmd).await?)
+}
+
+#[derive(Deserialize)]
+pub struct ChangeAliasPayload {
+    new_alias: String,
+}
+
+#[axum::debug_handler]
+pub async fn change_alias(
+    State(state): State<Arc<AppState>>,
+    Path((short_name, alias)): Path<(String, String)>,
+    Json(payload): Json<ChangeAliasPayload>,
+) -> Result<(), MediaError> {
+    let cmd = ChangeAliasCommand {
+        short_name,
+        old_alias: alias,
+        new_alias: payload.new_alias,
+    };
+
+    Ok(state.media_service.change_alias(cmd).await?)
+}
+
+#[axum::debug_handler]
+pub async fn delete_alias(
+    State(state): State<Arc<AppState>>,
+    Path((short_name, alias)): Path<(String, String)>,
+) -> Result<(), MediaError> {
+    let cmd = DeleteAliasCommand { short_name, alias };
+
+    Ok(state.media_service.delete_alias(cmd).await?)
 }
