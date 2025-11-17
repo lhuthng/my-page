@@ -94,7 +94,7 @@ impl HTTPServer {
             user_service: services::user::UserServiceImpl::new(pool.clone()),
             media_service: services::media::MediaServiceImpl::new(pool.clone()),
         });
-        let router = api::router::create(state);
+        let router = api::router::build_router(state);
 
         let listener = tokio::net::TcpListener::bind(self.addr).await?;
         axum::serve(listener, router).await.unwrap();

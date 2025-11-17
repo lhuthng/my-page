@@ -1,5 +1,7 @@
 use std::str::FromStr;
 
+use serde::Serialize;
+
 use crate::domain::errors::media::MediaError;
 
 #[derive(Debug, PartialEq)]
@@ -48,4 +50,18 @@ impl FromStr for MediaType {
             _ => Err(MediaError::InvalidFileType),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct LinkResult {
+    pub short_name: Option<String>,
+    pub url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MediaDetailResult {
+    pub short_name: String,
+    pub file_type: String,
+    pub description: String,
+    pub aliases: Vec<String>,
 }
