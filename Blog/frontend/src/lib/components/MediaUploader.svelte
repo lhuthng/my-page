@@ -5,7 +5,7 @@
     import MediaEntity from "./MediaEntity.svelte";
     import Portal from "./Portal.svelte";
 
-    let { detailPanel } = $props();
+    let { detailPanel, openDetails } = $props();
 
     let mediaList = $state([]);
     let hasMedia = $derived(mediaList.length > 0);
@@ -96,49 +96,6 @@
             </div>
         </div>
     {/if}
-    <Portal class="p-2" target={detailPanel}>
-        {#if !hasMedia}
-            <div>Upload and select any media prepare the file.</div>
-        {:else}
-            <div>
-                {#if selection !== undefined}
-                    <form
-                        method="post"
-                        enctype="multipart/form-data"
-                        onsubmit={handleSubmit}
-                    >
-                        <label for="filename">
-                            Filename: {mediaList[selection].name}<br />
-                        </label>
-                        <label for="content-type">
-                            Content type: ${mediaList[selection].type}<br />
-                        </label>
-                        <label>
-                            Short name:
-                            <input
-                                class="border"
-                                type="text"
-                                name="short_name"
-                                bind:value={shortName}
-                                required
-                            />
-                        </label>
-                        <label>
-                            Description:
-                            <input
-                                class="border"
-                                type="text"
-                                name="description"
-                                bind:value={description}
-                                required
-                            />
-                        </label>
-                        <button type="submit">Submit</button>
-                    </form>
-                {/if}
-            </div>
-        {/if}
-    </Portal>
     <MediaDirectory
         class="full p-2"
         cellWidth="120px"
@@ -154,8 +111,52 @@
                 size={80}
                 file={media}
                 onclick={() => (selection = index)}
+                ondoubleclick={() => openDetails?.()}
                 isSelected={index === selection}
             />
         {/each}
     </MediaDirectory>
 </div>
+<Portal class="p-2" target={detailPanel}>
+    {#if !hasMedia}
+        <div>Upload and select any media to prepare the file.</div>
+    {:else}
+        <div>
+            {#if selection !== undefined}
+                <form
+                    method="post"
+                    enctype="multipart/form-data"
+                    onsubmit={handleSubmit}
+                >
+                    <label for="filename">
+                        Filename: {mediaList[selection].name}<br />
+                    </label>
+                    <label for="content-type">
+                        Content type: {mediaList[selection].type}<br />
+                    </label>
+                    <label>
+                        Short name:
+                        <input
+                            class="border"
+                            type="text"
+                            name="short_name"
+                            bind:value={shortName}
+                            required
+                        />
+                    </label>
+                    <label>
+                        Description:
+                        <input
+                            class="border"
+                            type="text"
+                            name="description"
+                            bind:value={description}
+                            required
+                        />
+                    </label>
+                    <button type="submit">Submit</button>
+                </form>
+            {/if}
+        </div>
+    {/if}
+</Portal>
