@@ -40,9 +40,9 @@
             >
                 <div class="grow bg-blue-100 min-h-full">
                     {#if editMode}
-                        <MediaEditor {detailPanel} {searchKeywords}/>
+                        <MediaEditor {detailPanel} {searchKeywords} openDetails={() => tab = 1}/>
                     {:else}
-                        <MediaUploader {detailPanel} />
+                        <MediaUploader {detailPanel} openDetails={() => tab = 1}></MediaUploader>/>
                     {/if}
                 </div>
                 <div
