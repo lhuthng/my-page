@@ -5,9 +5,12 @@ export function route(path) {
     return `${API_URL}/${path}`;
 }
 
-export async function proxyFallback({ request, params }) {
-    const url = `${API_URL}/${params.path}`;
-    console.log(url);
+export function fix_client_route(path) {
+    return `/api/${path}`.replace("/./", "/");
+}
+
+export async function proxyFallback({ request, params, search }) {
+    const url = `${API_URL}/${params.path}${search ?? ""}`;
     const proxyRequest = new Request(url, {
         headers: request.headers,
         method: request.method,

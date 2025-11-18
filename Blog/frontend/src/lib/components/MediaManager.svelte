@@ -4,6 +4,7 @@
     import MediaUploader from "./MediaUploader.svelte";
 
     let { editMode, changeMode, ...rest } = $props();
+    let searchKeywords = $state("");
     let tab = $state(0);
     let detailPanel = $state();
 </script>
@@ -17,6 +18,7 @@
                     class="rounded-sm ring-1 px-1 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                     type="text"
                     placeholder="keywords"
+                    bind:value={searchKeywords}
                 />
                 <button
                     disabled={editMode !== true}
@@ -38,7 +40,7 @@
             >
                 <div class="grow bg-blue-100 min-h-full">
                     {#if editMode}
-                        <MediaEditor />
+                        <MediaEditor {detailPanel} {searchKeywords}/>
                     {:else}
                         <MediaUploader {detailPanel} />
                     {/if}

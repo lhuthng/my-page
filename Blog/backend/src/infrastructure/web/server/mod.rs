@@ -41,7 +41,8 @@ impl MediaConfig {
         let allowed_file_types = vec![
             MediaType::ImagePng,
             MediaType::ImageGif,
-            // MediaType::ImageWebp,
+            MediaType::ImageWebp,
+            MediaType::ImageJpeg
         ];
 
         return Self {
