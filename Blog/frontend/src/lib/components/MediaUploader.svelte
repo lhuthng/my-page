@@ -1,18 +1,16 @@
 <script>
-    import { getAuthorization } from "$lib/client/user";
+    import { auth } from "$lib/client/user";
     import { preventDefault } from "$lib/common";
     import MediaDirectory from "./MediaDirectory.svelte";
     import MediaEntity from "./MediaEntity.svelte";
+    import MediaUploaderForm from "./MediaUploaderForm.svelte";
     import Portal from "./Portal.svelte";
 
     let { detailPanel, openDetails } = $props();
 
     let mediaList = $state([]);
-    let hasMedia = $derived(mediaList.length > 0);
-    let selection = $state(undefined);
-    let dragBox = $state(undefined);
-    let shortName = $state("");
-    let description = $state("");
+    let selection = $state();
+    let dragBox = $state();
 
     function appendMedia(files) {
         for (let index = 0; index < files.length; index++) {
@@ -34,35 +32,6 @@
         e.preventDefault();
         appendMedia(e.dataTransfer.files);
     }
-    async function handleSubmit(e) {
-        e.preventDefault();
-
-        if (
-            selection === undefined ||
-            mediaList.length < selection ||
-            selection < 0
-        ) {
-            return;
-        }
-
-        const formData = new FormData();
-        const { file, name } = mediaList[selection];
-
-        formData.append("file", file, name);
-        formData.append("short_name", shortName);
-        formData.append("description", description);
-
-        try {
-            const authorization = getAuthorization();
-            const res = await fetch("/api/media", {
-                method: "POST",
-                headers: { Authorization: authorization },
-                body: formData,
-            });
-        } catch (e) {
-            console.error(e);
-        }
-    }
     function handleDragEnter(e) {
         if (e.target === e.currentTarget && dragBox) {
             dragBox.style.pointerEvents = "auto";
@@ -81,7 +50,7 @@
     ondragleave={handleDragLeave}
     role="listitem"
 >
-    {#if !hasMedia}
+    {#if mediaList.length === 0}
         <div
             bind:this={dragBox}
             class="absolute full p-2 pointer-events-none"
@@ -113,50 +82,17 @@
                 onclick={() => (selection = index)}
                 ondoubleclick={() => openDetails?.()}
                 isSelected={index === selection}
+                ok={media.ok}
             />
         {/each}
     </MediaDirectory>
 </div>
 <Portal class="p-2" target={detailPanel}>
-    {#if !hasMedia}
-        <div>Upload and select any media to prepare the file.</div>
-    {:else}
-        <div>
-            {#if selection !== undefined}
-                <form
-                    method="post"
-                    enctype="multipart/form-data"
-                    onsubmit={handleSubmit}
-                >
-                    <label for="filename">
-                        Filename: {mediaList[selection].name}<br />
-                    </label>
-                    <label for="content-type">
-                        Content type: {mediaList[selection].type}<br />
-                    </label>
-                    <label>
-                        Short name:
-                        <input
-                            class="border"
-                            type="text"
-                            name="short_name"
-                            bind:value={shortName}
-                            required
-                        />
-                    </label>
-                    <label>
-                        Description:
-                        <input
-                            class="border"
-                            type="text"
-                            name="description"
-                            bind:value={description}
-                            required
-                        />
-                    </label>
-                    <button type="submit">Submit</button>
-                </form>
-            {/if}
-        </div>
-    {/if}
+    <MediaUploaderForm
+        media={mediaList[selection]}
+        onsuccess={() =>
+            mediaList[selection] && (mediaList[selection].ok = true)}
+        onfailed={() =>
+            mediaList[selection] && (mediaList[selection].ok = false)}
+    />
 </Portal>

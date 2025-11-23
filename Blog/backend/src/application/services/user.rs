@@ -9,4 +9,8 @@ pub trait UserService {
         &self,
         cmd: commands::user::MeCommand,
     ) -> Result<entities::user::Me, errors::user::UserError>;
+    async fn get_user(
+        &self,
+        cmd: commands::user::GetUserCommand,
+    ) -> Result<entities::user::User, errors::user::UserError>;
 }

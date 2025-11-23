@@ -211,21 +211,45 @@ impl MediaService for MediaServiceImpl {
     }
 
     async fn change_details(&self, cmd: ChangeMediaDetailsCommand) -> Result<(), MediaError> {
-        sqlx::query(
-            r#"
-            UPDATE media
-            SET description = ?, file_type = ?
-            WHERE short_name = ?
-            "#,
-        )
-        .bind(&cmd.description)
-        .bind(&cmd.short_name)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::RowNotFound => MediaError::FileNotFound,
-            other => MediaError::InternalError(other.to_string()),
-        })?;
+        let mut tx = self.pool.begin().await?;
+
+        if let Some(description) = cmd.description {
+            sqlx::query(
+                r#"
+                UPDATE media
+                SET description = ?
+                WHERE short_name = ?
+                "#,
+            )
+            .bind(description)
+            .bind(&cmd.short_name)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => MediaError::FileNotFound,
+                other => MediaError::InternalError(other.to_string()),
+            })?;
+        }
+
+        if let Some(new_short_name) = cmd.new_short_name {
+            sqlx::query(
+                r#"
+                UPDATE media
+                SET short_name = ?
+                WHERE short_name = ?
+                "#,
+            )
+            .bind(new_short_name)
+            .bind(&cmd.short_name)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => MediaError::FileNotFound,
+                other => MediaError::InternalError(other.to_string()),
+            })?;
+        }
+
+        tx.commit().await?;
 
         Ok(())
     }
