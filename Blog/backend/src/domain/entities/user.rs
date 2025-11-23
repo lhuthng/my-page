@@ -37,6 +37,15 @@ impl TryFrom<String> for UserRole {
 
 #[derive(Debug, Clone)]
 pub struct Me {
+    pub username: String,
     pub display_name: String,
+    pub role: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct User {
+    pub username: String,
+    pub display_name: String,
+    pub bio: String,
     pub role: String,
 }

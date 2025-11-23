@@ -209,7 +209,8 @@ pub async fn get_details(
 
 #[derive(Deserialize)]
 pub struct ChangeDetailsPayload {
-    pub description: String,
+    pub new_short_name: Option<String>,
+    pub description: Option<String>,
 }
 
 #[axum::debug_handler]
@@ -220,6 +221,7 @@ pub async fn change_details(
 ) -> Result<(), MediaError> {
     let cmd = ChangeMediaDetailsCommand {
         short_name,
+        new_short_name: payload.new_short_name,
         description: payload.description,
     };
 

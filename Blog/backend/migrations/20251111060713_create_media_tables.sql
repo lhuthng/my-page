@@ -20,7 +20,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_media_short_name ON media(short_name);
 
 -- Media Aliases table
 CREATE TABLE IF NOT EXISTS media_aliases (
-    media_id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
+    media_id INTEGER,
     alias TEXT NOT NULL,
     FOREIGN KEY (media_id) REFERENCES media(id) ON DELETE CASCADE
 );
