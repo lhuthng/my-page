@@ -24,8 +24,9 @@ pub struct GetMediaDetailsCommand {
 }
 
 pub struct ChangeMediaDetailsCommand {
-    pub description: String,
+    pub description: Option<String>,
     pub short_name: String,
+    pub new_short_name: Option<String>,
 }
 
 pub struct GetAliasesCommand {

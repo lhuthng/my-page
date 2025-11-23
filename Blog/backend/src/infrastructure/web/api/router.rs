@@ -18,28 +18,18 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/register", post(handlers::auth::register))
         .route("/refresh", post(handlers::auth::refresh_token));
 
-    let user_routes =
-        Router::new()
-            .route("/me", get(handlers::user::me))
-            .layer(middleware::from_fn_with_state(
-                state.clone(),
-                middlewares::auth::user_guard,
-            ));
+    let user_routes = Router::new()
+        .merge(Router::new().route("/{username}", get(handlers::user::get_user)))
+        // protected route
+        .merge(Router::new().route("/me", get(handlers::user::me)).layer(
+            middleware::from_fn_with_state(state.clone(), middlewares::auth::user_guard),
+        ));
 
     let media_routes = Router::new()
         // protected route
         .merge(
             Router::new()
-                .route("/", post(handlers::media::upload))
-                .layer(middleware::from_fn(middlewares::auth::mod_check))
-                .layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    middlewares::auth::user_guard,
-                )),
-        )
-        // public route
-        .merge(
-            Router::new()
+                .route("/upload", post(handlers::media::upload))
                 .route("/d/{short_name}", get(handlers::media::get_details))
                 .route("/d/{short_name}", patch(handlers::media::change_details))
                 .route("/d/{short_name}/aliases", get(handlers::media::get_aliases))
@@ -52,6 +42,15 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     "/d/{short_name}/aliases/{alias}",
                     delete(handlers::media::delete_alias),
                 )
+                .layer(middleware::from_fn(middlewares::auth::mod_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        )
+        // public route
+        .merge(
+            Router::new()
                 .route("/s/{short_name}", get(handlers::media::get_link))
                 .route("/", get(handlers::media::search)),
         )
@@ -60,6 +59,6 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
     Router::new()
         .nest("/media", media_routes)
         .nest("/auth", auth_routes)
-        .nest("/user", user_routes)
+        .nest("/users", user_routes)
         .with_state(state)
 }

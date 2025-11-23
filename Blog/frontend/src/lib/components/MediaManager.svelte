@@ -15,7 +15,7 @@
             <div class="flex gap-2">
                 <input
                     disabled={editMode !== true}
-                    class="rounded-sm ring-1 px-1 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    class="rounded-xl ring-1 px-2 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                     type="text"
                     placeholder="keywords"
                     bind:value={searchKeywords}
@@ -36,13 +36,20 @@
         </div>
         <div class="relative z-9">
             <div
-                class="relative flex rounded-lg ring-1 h-120 overflow-hidden z-10"
+                class="relative flex rounded-lg ring-1 h-180 overflow-hidden z-10"
             >
                 <div class="grow bg-blue-100 min-h-full">
                     {#if editMode}
-                        <MediaEditor {detailPanel} {searchKeywords} openDetails={() => tab = 1}/>
+                        <MediaEditor
+                            {detailPanel}
+                            {searchKeywords}
+                            openDetails={() => (tab = 1)}
+                        />
                     {:else}
-                        <MediaUploader {detailPanel} openDetails={() => tab = 1}></MediaUploader>/>
+                        <MediaUploader
+                            {detailPanel}
+                            openDetails={() => (tab = 1)}
+                        ></MediaUploader>/>
                     {/if}
                 </div>
                 <div

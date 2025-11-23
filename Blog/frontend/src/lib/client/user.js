@@ -6,8 +6,9 @@ export let user = writable(undefined);
 export function clearLogin() {
     user.set(undefined);
 }
-export function saveLogin({ displayName, token, tokenType, role }) {
+export function saveLogin({ username, displayName, token, tokenType, role }) {
     user.set({
+        username,
         displayName,
         role,
         token,
@@ -15,7 +16,7 @@ export function saveLogin({ displayName, token, tokenType, role }) {
     });
 }
 
-export function getAuthorization() {
+export function auth() {
     let { token, tokenType } = get(user);
     return `${tokenType} ${token}`;
 }
@@ -44,7 +45,7 @@ export async function login(username, password) {
         role,
     } = await res.json();
 
-    saveLogin({ token, tokenType, displayName, role });
+    saveLogin({ username, token, tokenType, displayName, role });
 }
 
 export async function logout() {
