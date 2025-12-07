@@ -1,4 +1,4 @@
-use crate::domain::errors::{auth::AuthError, user::UserError};
+use crate::domain::errors::user::UserError;
 
 // use super::value_objects::{Email, HashedPassword};
 

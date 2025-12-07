@@ -17,7 +17,7 @@ export async function POST({ request, fetch }) {
 
     const { token, token_type } = await res.json();
 
-    res = await fetch(route("user/me"), {
+    res = await fetch(route("users/me"), {
         method: "GET",
         headers: {
             Authorization: `${token_type} ${token}`,

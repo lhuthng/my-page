@@ -12,7 +12,7 @@ pub trait AuthService {
     ) -> Result<entities::auth::AuthTokens, errors::auth::AuthError>;
     async fn register(
         &self,
-        cmd: commands::auth::RegisterCommand,
+        reg_creds: entities::auth::RegisterCredentials,
     ) -> Result<(), errors::auth::AuthError>;
     async fn refresh_access_token(
         &self,

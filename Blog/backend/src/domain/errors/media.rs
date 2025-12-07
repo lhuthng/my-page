@@ -40,9 +40,9 @@ impl IntoResponse for MediaError {
                 "Uploaded file exceeds size limit".to_string(),
             ),
             MediaError::Duplication => (StatusCode::CONFLICT, "Duplication detected.".to_string()),
-            MediaError::UploadFailed(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            MediaError::UploadFailed(msg) => (StatusCode::BAD_REQUEST, msg),
             MediaError::FileNotFound => (
-                StatusCode::NOT_FOUND,
+                StatusCode::BAD_REQUEST,
                 "Requested file not found".to_string(),
             ),
             MediaError::PermissionDenied => (

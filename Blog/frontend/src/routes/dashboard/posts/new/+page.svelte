@@ -1,5 +1,5 @@
 <script>
-    import PostEditor from "$lib/components/post/PostEditor.svelte";
+    import PostEditor from "$lib/components/post/PostUploader.svelte";
 </script>
 
 <div class="w-cap">

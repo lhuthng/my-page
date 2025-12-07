@@ -5,6 +5,7 @@ use crate::infrastructure::web::server::HTTPServer;
 
 mod application;
 mod domain;
+mod helper;
 mod infrastructure;
 
 #[tokio::main]

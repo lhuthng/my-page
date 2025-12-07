@@ -15,3 +15,10 @@
         />
     </svg>
 </button>
+
+<style lang="postcss">
+    @reference "../../../app.css";
+    button {
+        @apply not-disabled:hover:cursor-pointer;
+    }
+</style>

@@ -1,3 +1,5 @@
 export function preventDefault(e) {
-	e.preventDefault();
+    e.preventDefault();
 }
+
+export const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;

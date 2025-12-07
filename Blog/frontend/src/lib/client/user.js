@@ -2,6 +2,10 @@ import { goto } from "$app/navigation";
 import { derived, get, writable } from "svelte/store";
 
 export let user = writable(undefined);
+export let isMod = derived(user, ($user) => {
+    const role = $user?.role;
+    return role === "moderator" || role === "admin";
+});
 
 export function clearLogin() {
     user.set(undefined);
@@ -35,7 +39,10 @@ export async function login(username, password) {
 
     if (!res.ok) {
         user.set(undefined);
-        return;
+        return {
+            status: false,
+            message: await res.text(),
+        };
     }
 
     const {
@@ -46,6 +53,10 @@ export async function login(username, password) {
     } = await res.json();
 
     saveLogin({ username, token, tokenType, displayName, role });
+
+    return {
+        status: true,
+    };
 }
 
 export async function logout() {
@@ -69,13 +80,13 @@ export async function register(username, password, email) {
 
     if (!res.ok) {
         return {
-            ok: false,
-            error: await res.text(),
+            status: false,
+            message: await res.text(),
         };
     }
 
     return {
-        ok: true,
+        status: true,
         success: await res.json(),
     };
 }

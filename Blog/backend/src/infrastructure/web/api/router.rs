@@ -19,11 +19,22 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/refresh", post(handlers::auth::refresh_token));
 
     let user_routes = Router::new()
-        .merge(Router::new().route("/{username}", get(handlers::user::get_user)))
+        .merge(
+            Router::new()
+                .route("/{username}", get(handlers::user::get_user))
+                .route("/{username}/posts", get(handlers::user::get_posts)),
+        )
         // protected route
-        .merge(Router::new().route("/me", get(handlers::user::me)).layer(
-            middleware::from_fn_with_state(state.clone(), middlewares::auth::user_guard),
-        ));
+        .merge(
+            Router::new()
+                .route("/me", get(handlers::user::me))
+                .route("/me", patch(handlers::user::change_details))
+                .route("/me/check-mod", get(handlers::user::check_mod))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        );
 
     let media_routes = Router::new()
         // protected route
@@ -56,9 +67,43 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         )
         .fallback_service(get_service(ServeDir::new(&state.media_config.dir)));
 
+    let post_routes = Router::new()
+        // optional
+        .merge(
+            Router::new()
+                .route("/{post_id}/comments", post(handlers::post::new_comment))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::optional_user_guard,
+                )),
+        )
+        // user protected
+        .merge(
+            Router::new()
+                .route("/new", post(handlers::post::new_post))
+                .route("/id/{post_id}", patch(handlers::post::publish))
+                .route("/id/{post_id}", get(handlers::post::get_post_details))
+                .layer(middleware::from_fn(middlewares::auth::mod_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        )
+        // public
+        .merge(
+            Router::new()
+                .route("/{post_slug}", get(handlers::post::get_post_by_slug))
+                // .route("/{post_id}/")
+                .route("/featured", get(handlers::post::get_featured_posts))
+                .route("/latest", get(handlers::post::get_latest_posts))
+                .route("/check", get(handlers::post::check_post))
+                .route("/categories", get(handlers::post::get_categories)),
+        );
+
     Router::new()
         .nest("/media", media_routes)
         .nest("/auth", auth_routes)
         .nest("/users", user_routes)
+        .nest("/posts", post_routes)
         .with_state(state)
 }

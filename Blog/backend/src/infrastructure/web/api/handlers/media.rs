@@ -13,7 +13,7 @@ use crate::{
         commands::media::{
             AddAliasCommand, ChangeAliasCommand, ChangeMediaDetailsCommand, DeleteAliasCommand,
             GetAliasesCommand, GetLinkCommand, GetMediaDetailsCommand, SearchMediaCommand,
-            UploadMediaCommand,
+            UploadMediumCommand,
         },
         services::media::MediaService,
     },
@@ -95,7 +95,7 @@ pub async fn upload(
         opt_short_name.ok_or_else(|| MediaError::UploadFailed("Missing short_name".to_string()))?;
     let description = opt_description
         .ok_or_else(|| MediaError::UploadFailed("Missing description".to_string()))?;
-    let filename =
+    let file_name =
         opt_filename.ok_or_else(|| MediaError::UploadFailed("Missing file".to_string()))?;
     let content_type = opt_content_type
         .ok_or_else(|| MediaError::UploadFailed("Missing content type".to_string()))?;
@@ -107,11 +107,11 @@ pub async fn upload(
         .parse::<i64>()
         .map_err(|_| MediaError::InternalError("Cannot parse id".to_string()))?;
 
-    let cmd = UploadMediaCommand {
+    let cmd = UploadMediumCommand {
         uploader_id,
         short_name,
         description,
-        filename,
+        file_name,
         content_type,
         bytes,
     };

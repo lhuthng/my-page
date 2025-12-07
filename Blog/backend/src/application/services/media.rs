@@ -19,7 +19,12 @@ pub trait MediaService {
     -> Result<bool, MediaError>;
     async fn upload(
         &self,
-        cmd: commands::media::UploadMediaCommand,
+        cmd: commands::media::UploadMediumCommand,
+        config: &MediaConfig,
+    ) -> Result<(), errors::media::MediaError>;
+    async fn bulk_upload(
+        &self,
+        cmd: commands::media::UploadMediaWithoutDescriptionCommand,
         config: &MediaConfig,
     ) -> Result<(), errors::media::MediaError>;
     async fn get_link(

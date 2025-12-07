@@ -8,25 +8,29 @@ export async function load(event) {
         throw error(401, "You are not logged in. Redirecting...");
     }
 
-    let res = await event.fetch(route("auth/refresh"), {
-        method: "POST",
-    });
+    let { accessToken } = await event.parent();
 
-    if (!res.ok) {
-        event.cookies.delete("refresh-token", {
-            path: "/",
-            httpOnly: true,
-            secure: true,
+    if (!accessToken) {
+        const res = await event.fetch(route("auth/refresh"), {
+            method: "POST",
         });
-        throw error(401, "Session expired. Redirecting...");
+
+        if (!res.ok) {
+            event.cookies.delete("refresh-token", {
+                path: "/",
+                httpOnly: true,
+                secure: true,
+            });
+            throw error(401, "Session expired. Redirecting...");
+        }
+        const { token_type: type, token } = await res.json();
+        accessToken = { type, token };
     }
 
-    const { token_type: type, token } = await res.json();
-
-    res = await event.fetch(route("users/me/check-mod"), {
+    const res = await event.fetch(route("users/me/check-mod"), {
         method: "GET",
         headers: {
-            Authorization: `${type} ${token}`,
+            Authorization: `${accessToken.type} ${accessToken.token}`,
             "Content-Type": "application/json",
         },
     });
@@ -38,5 +42,8 @@ export async function load(event) {
         );
     }
 
-    return { ...(await res.json()) };
+    return {
+        accessToken,
+        ...(await res.json()),
+    };
 }

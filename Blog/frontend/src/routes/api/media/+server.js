@@ -1,10 +1,10 @@
-import { proxyFallback, route, fix_client_route } from "$lib/server/proxy.js";
+import { proxyFallback, route, fixClientRoute } from "$lib/server/proxy.js";
 
 export async function GET({ request, fetch, url }) {
     let res = await proxyFallback({
         request,
         params: { path: "media" },
-        search: url.search
+        search: url.search,
     });
 
     if (!res.ok) {
@@ -13,10 +13,6 @@ export async function GET({ request, fetch, url }) {
     }
 
     const { results } = await res.json();
-    for (let result of results) {
-        result.url = fix_client_route(result.url);
-    }
-    return new Response(
-        JSON.stringify({ results }), { status: 200 }
-    );
+    results.forEach((result) => (result.url = fixClientRoute(result.url)));
+    return new Response(JSON.stringify({ results }), { status: 200 });
 }
