@@ -13,11 +13,18 @@ use crate::{
     application::{
         commands::{
             media::UploadMediaWithoutDescriptionCommand,
-            post::{CheckSlugCommand, GetCategoriesCommand, PostCommand, PublishCommand},
+            post::{
+                CheckSlugCommand, GetCategoriesCommand, GetDetailedPostsCommand,
+                GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand, PostCommand,
+                PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
+            },
         },
         services::{media::MediaService, post::PostService},
     },
-    domain::{entities::secret::Claims, errors::post::PostError},
+    domain::{
+        entities::{post::PostDetails, secret::Claims},
+        errors::post::PostError,
+    },
     helper::string::replace_range_unicode,
     infrastructure::web::server::AppState,
 };
@@ -49,19 +56,115 @@ pub async fn check_post(
 pub async fn publish(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    Path(slug): Path<String>,
+    Path(post_id_str): Path<String>,
 ) -> Result<(), PostError> {
+    let post_id = post_id_str
+        .parse::<i64>()
+        .map_err(|_| PostError::PostNotFound)?;
+
     let cmd = PublishCommand {
         user_id: claims
             .user_id
             .parse::<i64>()
             .map_err(|e| PostError::InternalError(e.to_string()))?,
-        slug,
+        post_id,
     };
 
     state.post_service.publish(cmd).await?;
 
     Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct GetPostDetailsResponse {
+    pub id: i64,
+    pub title: String,
+    pub slug: String,
+    pub tags: Vec<String>,
+    pub excerpt: String,
+    pub content: String,
+    pub draft: String,
+    pub is_featured: i64,
+    pub cover_url: Option<String>,
+}
+
+pub async fn get_post_details(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Path(post_id): Path<String>,
+) -> Result<impl IntoResponse, PostError> {
+    let required_author_id = Some(
+        claims
+            .user_id
+            .parse::<i64>()
+            .map_err(|e| PostError::InternalError(e.to_string()))?,
+    );
+    let post_id = post_id
+        .parse::<i64>()
+        .map_err(|e| PostError::InternalError(e.to_string()))?;
+    let PostDetails {
+        id,
+        title,
+        slug,
+        tags,
+        excerpt,
+        content,
+        draft,
+        is_featured,
+        cover_url,
+    } = state
+        .post_service
+        .get_post_details(GetDetailedPostsCommand {
+            required_author_id,
+            post_id,
+        })
+        .await?;
+
+    Ok(Json(GetPostDetailsResponse {
+        id,
+        title,
+        slug,
+        tags,
+        excerpt,
+        content,
+        draft,
+        is_featured,
+        cover_url,
+    }))
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PostResponse {
+    pub title: String,
+    pub tags: Vec<String>,
+    pub author_name: String,
+    pub author_slug: String,
+    pub content: String,
+    pub medium_urls: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_url: Option<String>,
+}
+
+pub async fn get_post_by_slug(
+    State(state): State<Arc<AppState>>,
+    Path(post_slug): Path<String>,
+) -> Result<impl IntoResponse, PostError> {
+    let post = state
+        .post_service
+        .get_post(GetPostCommand { slug: post_slug })
+        .await?;
+    Ok(Json(PostResponse {
+        title: post.title,
+        author_name: post.author_name,
+        author_slug: post.author_slug,
+        tags: post.tags,
+        content: post.content,
+        medium_urls: post.medium_urls,
+        published_at: post.published_at,
+        cover_url: post.cover_url,
+    }))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -83,7 +186,10 @@ pub async fn get_categories(
     Ok(Json(GetCategoriesResponse {
         categories: categories
             .into_iter()
-            .map(|(name, slug)| CategoryResponse { name, slug })
+            .map(|category_result| CategoryResponse {
+                name: category_result.name,
+                slug: category_result.slug,
+            })
             .collect(),
     }))
 }
@@ -281,5 +387,133 @@ pub async fn new_post(
 
     state.post_service.post(cmd).await?;
 
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct GetFeaturedPostsBody {
+    pub limit: i64,
+}
+
+#[derive(Serialize)]
+pub struct Post {
+    pub id: i64,
+    pub title: String,
+    pub slug: String,
+    pub tag_names: Vec<String>,
+    pub tag_slugs: Vec<String>,
+    pub excerpt: String,
+    pub author_name: String,
+    pub author_slug: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct GetFeaturedPostsResponse {
+    pub featured_posts: Vec<Post>,
+}
+
+#[axum::debug_handler]
+pub async fn get_featured_posts(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<GetFeaturedPostsBody>,
+) -> Result<impl IntoResponse, PostError> {
+    let cmd = GetFeaturedPostsCommand { limit: query.limit };
+    let featured_posts = state.post_service.get_featured_post_snapshots(cmd).await?;
+
+    let wrapped_featured_posts = GetFeaturedPostsResponse {
+        featured_posts: featured_posts
+            .into_iter()
+            .map(|post| Post {
+                id: post.id,
+                title: post.title,
+                slug: post.slug,
+                tag_names: post.tag_names,
+                tag_slugs: post.tag_slugs,
+                excerpt: post.excerpt,
+                author_name: post.author_name,
+                author_slug: post.author_slug,
+                url: post.url,
+            })
+            .collect(),
+    };
+
+    Ok(Json(wrapped_featured_posts))
+}
+
+#[derive(Deserialize)]
+pub struct GetFeaturedPostsQuery {
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[axum::debug_handler]
+pub async fn get_latest_posts(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<GetFeaturedPostsQuery>,
+) -> Result<impl IntoResponse, PostError> {
+    let cmd = GetLatestPostsCommand {
+        limit: query.limit,
+        offset: query.offset,
+    };
+    let featured_posts = state.post_service.get_latest_post_snapshots(cmd).await?;
+
+    let wrapped_featured_posts = GetFeaturedPostsResponse {
+        featured_posts: featured_posts
+            .into_iter()
+            .map(|post| Post {
+                id: post.id,
+                title: post.title,
+                slug: post.slug,
+                tag_names: post.tag_names,
+                tag_slugs: post.tag_slugs,
+                excerpt: post.excerpt,
+                author_name: post.author_name,
+                author_slug: post.author_slug,
+                url: post.url,
+            })
+            .collect(),
+    };
+
+    Ok(Json(wrapped_featured_posts))
+}
+
+#[derive(Deserialize)]
+pub struct NewCommentBody {
+    pub content: String,
+}
+
+pub async fn new_comment(
+    State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    Path(post_id_str): Path<String>,
+    Json(body): Json<NewCommentBody>,
+) -> Result<impl IntoResponse, PostError> {
+    let post_id: i64 = post_id_str.parse().map_err(|_| PostError::PostNotFound)?;
+    if let Some(claims) = opt_claims {
+        let user_id = claims
+            .user_id
+            .parse::<i64>()
+            .map_err(|e| PostError::InternalError(e.to_string()))?;
+
+        state
+            .post_service
+            .post_new_comment(PostNewCommentCommand {
+                post_id,
+                user_id,
+                content: body.content,
+            })
+            .await?;
+    } else {
+        state
+            .post_service
+            .post_new_anonymous_comment(PostNewAnynymouseCommentCommand {
+                post_id,
+                content: body.content,
+            })
+            .await?;
+    }
     Ok(())
 }

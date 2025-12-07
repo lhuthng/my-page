@@ -21,28 +21,48 @@
 </script>
 
 <div>
-    <div class="sticky top-32 w-46 space-y-8">
+    <div
+        class="sticky not-lg:top-26.5 top-32 lg:w-46 space-y-4 lg:space-y-8 transition-transform duration-200"
+    >
         <ul class="space-y-2 bg-white/90 p-2 rounded-xl" id="side-bar">
             {#each routes as [Icon, text, path, routeName, secret], index}
                 {#if !secret || $isMod}
                     <li class={routeName === route ? "selected" : undefined}>
-                        <a href={path}
-                            ><Icon
-                                class="w-8 transition-all duration-100"
-                            />{text}</a
-                        >
+                        <a href={path}>
+                            <Icon class="w-8 transition-all duration-100" />
+                            <span class="not-lg:hidden">{text}</span>
+                        </a>
                     </li>
                 {/if}
             {/each}
         </ul>
-        <div class="space-y-2 bg-white/90 p-2 rounded-xl">
-            <div>
-                <span class="block text-center">Connect with me on:</span>
-                <div class="flex justify-evenly [&>a]:hover:fill-black/90">
-                    <FacebookButton as="a" class="w-10 fill-dark" href="/" />
-                    <GithubButton as="a" class="w-10 fill-dark" href="/" />
+        <div class="flex flex-col gap-4 bg-white/90 p-2 rounded-xl">
+            <div class="flex flex-col">
+                <span class="block not-lg:hidden text-center"
+                    >Connect with me on:</span
+                >
+                <div
+                    class="flex w-full not-lg:flex-col lg:justify-evenly items-center [&>a]:hover:fill-black/90"
+                >
+                    <FacebookButton
+                        as="a"
+                        class="w-10 fill-dark"
+                        href="https://www.facebook.com/lhuthng/"
+                    />
+                    <GithubButton
+                        as="a"
+                        class="w-10 fill-dark"
+                        href="https://github.com/lhuthng"
+                    />
                     <LinkedinButton as="a" class="w-10 fill-dark" href="/" />
                 </div>
+            </div>
+            <div class="not-lg:hidden px-2 flex flex-col font-medium">
+                <span class="font-normal">more: </span>
+                <ul class="list-disc list-inside">
+                    <li><a href="portfolio.huuthang.site">Portfolio</a></li>
+                    <li><a href="/">About</a></li>
+                </ul>
             </div>
         </div>
     </div>
@@ -56,11 +76,15 @@
             @apply w-full rounded-lg bg-background/40 hover:bg-background/60 transition-colors text-dark duration-50;
 
             & > a {
-                @apply flex items-center gap-1 px-2 py-1 w-full [&>button]:fill-dark [&>button]:stroke-dark;
+                @apply flex items-center gap-1 px-1 lg:px-2 py-1 w-full [&>button]:fill-dark [&>button]:stroke-dark;
             }
         }
         & > li.selected {
             @apply text-white bg-dark hover:bg-dark/90 [&>a>button]:fill-white [&>a>button]:stroke-white;
         }
+    }
+
+    a {
+        @apply no-underline!;
     }
 </style>

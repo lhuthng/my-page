@@ -7,7 +7,9 @@ export async function handle({ event, resolve }) {
         const refreshToken = event.cookies.get("refresh-token");
 
         if (!refreshToken) {
+            event.locals.accessToken = null;
             event.locals.user = null;
+            event.locals.role = null;
             return await resolve(event);
         }
 
@@ -44,6 +46,8 @@ export async function handle({ event, resolve }) {
 
         event.locals.accessToken = { type, token };
         event.locals.user = { username, displayName, role };
+        event.locals.role = role;
     }
+
     return resolve(event);
 }

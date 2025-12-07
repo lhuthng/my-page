@@ -22,6 +22,7 @@ pub struct AppState {
     pub auth_service: services::auth::AuthServiceImpl,
     pub user_service: services::user::UserServiceImpl,
     pub media_service: services::media::MediaServiceImpl,
+    pub post_service: services::post::PostServiceImpl,
 }
 
 pub struct HTTPServer {
@@ -42,7 +43,7 @@ impl MediaConfig {
             MediaType::ImagePng,
             MediaType::ImageGif,
             MediaType::ImageWebp,
-            MediaType::ImageJpeg
+            MediaType::ImageJpeg,
         ];
 
         return Self {
@@ -94,6 +95,7 @@ impl HTTPServer {
             auth_service: services::auth::AuthServiceImpl::new(pool.clone()),
             user_service: services::user::UserServiceImpl::new(pool.clone()),
             media_service: services::media::MediaServiceImpl::new(pool.clone()),
+            post_service: services::post::PostServiceImpl::new(pool.clone()),
         });
         let router = api::router::build_router(state);
 

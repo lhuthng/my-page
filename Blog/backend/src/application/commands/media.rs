@@ -1,12 +1,21 @@
 use axum::body::Bytes;
 
-pub struct UploadMediaCommand {
+pub struct UploadMediumCommand {
     pub uploader_id: i64,
     pub short_name: String,
     pub description: String,
-    pub filename: String,
+    pub file_name: String,
     pub content_type: String,
     pub bytes: Bytes,
+}
+
+pub struct UploadMediaWithoutDescriptionCommand {
+    pub uploader_id: i64,
+    pub number_of_files: usize,
+    pub short_names: Vec<String>,
+    pub file_names: Vec<String>,
+    pub content_types: Vec<String>,
+    pub bytes_list: Vec<Bytes>,
 }
 
 pub struct SearchMediaCommand {
