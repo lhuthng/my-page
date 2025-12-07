@@ -1,102 +1,162 @@
 <script>
     import PostCard from "./PostCard.svelte";
+    import gsap from "gsap";
+    import { Flip } from "gsap/Flip";
+    import { tick, untrack } from "svelte";
+    import { fade, fly } from "svelte/transition";
 
-    let tab = $state(1);
-    let defaultTags = $state(
+    const { featuredPosts } = $props();
+
+    let categories = $state(
         ["programming", "art", "music"].map((tag) => ({
             value: tag,
             selected: false,
         })),
     );
+
+    let tabContainer = $state();
+    let discoverTab = $state();
+    let freshTab = $state();
+
+    let tab = $state({
+        preindex: 1,
+        index: 1,
+        container: null,
+        discover: null,
+        fresh: null,
+    });
+
+    let fresh = $state({
+        status: "unset",
+        cache: [],
+    });
+
+    $effect(() => {
+        if (!tab.container || !tab.discover || !tab.fresh) return;
+
+        if (tab.preindex === tab.index) return;
+
+        tab.preindex = tab.index;
+
+        const state = Flip.getState(tab.container);
+
+        if (tab.index !== 1) {
+            tab.discover.classList.toggle("hidden", true);
+            tab.fresh.classList.toggle("hidden", false);
+            tab.fresh.classList.toggle("grid", true);
+        } else {
+            tab.discover.classList.toggle("hidden", false);
+            tab.fresh.classList.toggle("hidden", true);
+            tab.fresh.classList.toggle("grid", false);
+        }
+        Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
+    });
+
+    $effect(async () => {
+        if (tab.index !== 2) return;
+
+        const { status } = untrack(() => fresh);
+        if (status === "fetched" || status === "pending") return;
+        fresh.status = "pending";
+
+        const delay = new Promise((_) => setTimeout(_, 700));
+        const res = await fetch("api/posts/latest?limit=5&offset=0", {
+            method: "GET",
+        });
+
+        if (res.ok) {
+            await delay;
+            const state = Flip.getState(tab.container);
+            fresh.cache = (await res.json()).featured_posts;
+            fresh.status = "fetched";
+
+            await tick();
+
+            Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
+        } else {
+            fresh.cache = [];
+            fresh.status = "failed";
+        }
+    });
 </script>
 
-<div class="space-y-4">
+{#snippet exploreMore(link)}
+    <li
+        class="flex justify-center items-center full min-h-22 md:min-h-30 rounded-lg border-2 border-dashed"
+    >
+        <div class="duo-btn duo-blue">
+            <a class="no-underline!" href={link}>explore more</a>
+        </div>
+    </li>
+{/snippet}
+
+<div class="space-y-4 pt-4">
     <div class="flex justify-between">
         <ul id="home-tab" class="text-xl font-medium h-8">
-            <li class:left={true} class:selected={tab === 1}>
-                <button onclick={() => (tab = 1)}>Discover</button>
+            <li class:left={true} class:selected={tab.index === 1}>
+                <button onclick={() => (tab.index = 1)}>Discover</button>
             </li>
-            <li class:right={true} class:selected={tab === 2}>
-                <button onclick={() => (tab = 2)}>Fresh</button>
+            <li class:right={true} class:selected={tab.index === 2}>
+                <button onclick={() => (tab.index = 2)}>Fresh</button>
             </li>
         </ul>
-        <div class="text-base flex gap-2 items-center">
-            <span>Popular tags: </span>
-            <div id="tag-container" class="space-x-2">
-                {#each defaultTags as { value, selected }, index}
-                    <button
-                        class:selected
-                        onclick={() =>
-                            (defaultTags[index].selected = !selected)}
-                        >{value}</button
-                    >
-                {/each}
-            </div>
-        </div>
     </div>
-    <ul class="grid grid-cols-2 gap-4">
-        <li>
-            <PostCard
-                title="Whispers Beneath the Hollow Sky"
-                excerpt="A thin veil of mist drifted across the abandoned field, carrying with it the faint scent of rain and forgotten stories. Mara paused, sensing the quiet hum beneath the earth—a vibration too delicate to hear yet impossible to ignore. Something ancient was waking, and with each heartbeat she felt the world tilt a little closer to the truth she wasn’t ready to face."
-                author={{
-                    name: "Tèo em",
-                    slug: "teo-em",
-                }}
-                link="/"
-                src="missing.png"
-                tags={[
-                    "game",
-                    "programming",
-                    "programming",
-                    "programming",
-                    "programming",
-                    "programming",
-                ]}
-                series={{
-                    name: "Introduction",
-                    order: 1,
-                    slug: "intro",
-                }}
-            />
-        </li>
-        <li>
-            <PostCard
-                title="Whispers Beneath the Hollow Sky Whispers Beneath the Hollow Sky"
-                excerpt="A thin veil of mist drifted across the abandoned field, carrying with it the faint scent of rain and forgotten stories. Mara paused, sensing the quiet hum beneath the earth—a vibration too delicate to hear yet impossible to ignore. Something ancient was waking, and with each heartbeat she felt the world tilt a little closer to the truth she wasn’t ready to face."
-                author="teo-em"
-                link="/"
-                src="missing.png"
-            />
-        </li>
-        <li>
-            <PostCard
-                title="Title"
-                excerpt="This is a demo text"
-                author="teo-em"
-                link="/"
-                src="missing.png"
-            />
-        </li>
-        <li>
-            <PostCard
-                title="Title"
-                excerpt="This is a demo text"
-                author="teo-em"
-                link="/"
-                src="missing.png"
-            />
-        </li>
-        <li>
-            <PostCard
-                title="Title"
-                excerpt="This is a demo text"
-                author="teo-em"
-                link="/"
-                src="missing.png"
-            />
-        </li>
-    </ul>
+    <div bind:this={tab.container} class="pb-2">
+        <ul
+            bind:this={tab.discover}
+            class="grid grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+        >
+            {#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
+                <li
+                    in:fly={{ y: -20, duration: 500 }}
+                    out:fade={{ duration: 150 }}
+                >
+                    <PostCard
+                        {title}
+                        {slug}
+                        {excerpt}
+                        author={{
+                            name: author_name,
+                            slug: author_slug,
+                        }}
+                        tags={tag_slugs}
+                        src={url}
+                    />
+                </li>
+            {/each}
+            {@render exploreMore("/posts")}
+        </ul>
+        <ul
+            bind:this={tab.fresh}
+            class="hidden grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+        >
+            {#if fresh.status === "fetched"}
+                {#each fresh.cache as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
+                    <li
+                        in:fly={{ y: -20, duration: 500 }}
+                        out:fade={{ duration: 150 }}
+                    >
+                        <PostCard
+                            {title}
+                            {slug}
+                            {excerpt}
+                            author={{
+                                name: author_name,
+                                slug: author_slug,
+                            }}
+                            tags={tag_slugs}
+                            src={url}
+                        />
+                    </li>
+                {/each}
+                {@render exploreMore("/posts")}
+            {:else}
+                <div class="w-full col-span-full py-10 text-center">
+                    Loading
+                </div>
+            {/if}
+        </ul>
+    </div>
 </div>
 
 <style lang="postcss">
@@ -106,26 +166,34 @@
         @apply flex gap-4;
         li {
             @apply relative;
-            &::after {
-                @apply absolute content-[""] bottom-0 h-1 w-0 bg-dark transition-all duration-200;
+            button {
+                @apply text-dark/70 relative z-10;
             }
-            &.left::after {
+
+            &::before {
+                @apply absolute z-9 content-[""] -top-1 h-[calc(100%+0.25rem)] w-0 bg-linear-to-t from-background/40 via-background/30 to-primary/0 transition-all duration-200;
+            }
+            &::after {
+                @apply absolute z-9 content-[""] bottom-0 h-1 w-0 bg-dark transition-all duration-200;
+            }
+            &.left::after,
+            &.left::before {
                 right: -0.5rem;
             }
-            &.right::after {
+            &.right::after,
+            &.right::before {
                 left: -0.5rem;
             }
         }
-        li.selected::after {
+        li.selected > button {
+            @apply text-dark relative z-10;
+        }
+        li.selected::after,
+        li.selected::before {
             @apply w-[calc(100%+1rem)];
         }
     }
-    #tag-container {
-        & > button {
-            @apply border-2 border-dark bg-white rounded-full px-2;
-            &.selected {
-                @apply bg-dark text-white;
-            }
-        }
+    button {
+        @apply focus:outline-none;
     }
 </style>

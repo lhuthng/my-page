@@ -1,5 +1,10 @@
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
+use axum::body::Bytes;
+use futures::{
+    TryFutureExt,
+    future::{join_all, try_join_all},
+};
 use sha2::{Digest, Sha256};
 use sqlx::{SqlitePool, prelude::FromRow};
 use tokio::fs;
@@ -9,7 +14,7 @@ use crate::{
         commands::media::{
             AddAliasCommand, ChangeAliasCommand, ChangeMediaDetailsCommand, DeleteAliasCommand,
             GetAliasesCommand, GetLinkCommand, GetMediaDetailsCommand, SearchMediaCommand,
-            UploadMediaCommand,
+            UploadMediaWithoutDescriptionCommand, UploadMediumCommand,
         },
         services::media::MediaService,
     },
@@ -36,6 +41,55 @@ impl MediaServiceImpl {
     }
 }
 
+struct HashData {
+    pub hash: String,
+    pub size: i64,
+    pub dir_path: PathBuf,
+    pub file_path: PathBuf,
+}
+
+async fn hash_bytes(
+    bytes: &Bytes,
+    root: &PathBuf,
+    extension: String,
+) -> Result<HashData, MediaError> {
+    let hash = format!("{:x}", Sha256::digest(&bytes));
+    if hash.len() < 4 {
+        return Err(MediaError::InternalError("Hash too short.".to_string()));
+    }
+
+    let dir1 = &hash[0..2];
+    let dir2 = &hash[2..4];
+
+    let dir_path = root.join(dir1).join(dir2);
+    let file_name = format!("{}{}", hash, extension);
+    let file_path = dir_path.join(file_name);
+    let size = bytes.len() as i64;
+
+    Ok(HashData {
+        hash,
+        size,
+        dir_path,
+        file_path,
+    })
+}
+
+async fn clean_up_files(file_paths: &Vec<PathBuf>) -> Result<(), MediaError> {
+    let futures = file_paths.iter().map(|p| fs::remove_file(p));
+    let mut errors: Vec<String> = Vec::new();
+    let results = join_all(futures).await;
+    for result in results {
+        if let Some(e) = result.err() {
+            errors.push(format!("{}", e.to_string()));
+        }
+    }
+    if !errors.is_empty() {
+        let msg = errors.join(" | ");
+        return Err(MediaError::UploadFailed(msg));
+    }
+    Ok(())
+}
+
 #[async_trait::async_trait]
 impl MediaService for MediaServiceImpl {
     async fn is_supported(
@@ -49,29 +103,20 @@ impl MediaService for MediaServiceImpl {
     }
     async fn upload(
         &self,
-        cmd: UploadMediaCommand,
+        cmd: UploadMediumCommand,
         config: &MediaConfig,
     ) -> Result<(), MediaError> {
         if !self.is_supported(&cmd.content_type, config).await? {
             return Err(MediaError::InvalidFileType);
         }
-        let media_type = MediaType::from_str(&cmd.content_type)?;
-        let extension = media_type.get_extension();
+        let extension = MediaType::from_str(&cmd.content_type)?.get_extension();
 
-        let hash = format!("{:x}", Sha256::digest(&cmd.bytes));
-
-        if hash.len() < 4 {
-            return Err(MediaError::ExposedInternalError(
-                "Hash too short".to_string(),
-            ));
-        }
-        let dir1 = &hash[0..2];
-        let dir2 = &hash[2..4];
-
-        let dir_path = config.dir.join(dir1).join(dir2);
-        let h_filename = format!("{}{}", hash, extension);
-        let file_path = dir_path.join(h_filename);
-        let size = cmd.bytes.len() as i64;
+        let HashData {
+            hash,
+            size,
+            dir_path,
+            file_path,
+        } = hash_bytes(&cmd.bytes, &config.dir, extension.to_string()).await?;
 
         if fs::try_exists(&dir_path).await? {
             return Err(MediaError::Duplication);
@@ -91,7 +136,7 @@ impl MediaService for MediaServiceImpl {
         )
         .bind(&hash)
         .bind(&cmd.short_name)
-        .bind(&cmd.filename)
+        .bind(&cmd.file_name)
         .bind(&cmd.content_type)
         .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
             "Failed to get file path".to_string(),
@@ -116,6 +161,103 @@ impl MediaService for MediaServiceImpl {
 
         Ok(())
     }
+    async fn bulk_upload(
+        &self,
+        cmd: UploadMediaWithoutDescriptionCommand,
+        config: &MediaConfig,
+    ) -> Result<(), MediaError> {
+        for content_type in &cmd.content_types {
+            if !self.is_supported(&content_type, config).await? {
+                return Err(MediaError::InvalidFileType);
+            }
+        }
+
+        let mut tx = self.pool.begin().await?;
+        let mut got_error: Option<MediaError> = None;
+        let mut file_paths = Vec::<PathBuf>::new();
+
+        for i in 0..cmd.number_of_files {
+            let extension = match MediaType::from_str(&cmd.content_types[i]) {
+                Ok(media_type) => media_type.get_extension(),
+                Err(e) => {
+                    got_error = Some(e);
+                    break;
+                }
+            };
+
+            let HashData {
+                hash,
+                size,
+                dir_path,
+                file_path,
+            } = match hash_bytes(&cmd.bytes_list[i], &config.dir, extension.to_string()).await {
+                Ok(hash_data) => hash_data,
+                Err(e) => {
+                    got_error = Some(e);
+                    break;
+                }
+            };
+
+            if fs::try_exists(&dir_path).await? {
+                got_error = Some(MediaError::Duplication);
+                break;
+            }
+
+            fs::create_dir_all(&dir_path).await?;
+            fs::write(&file_path, &cmd.bytes_list[i]).await?;
+
+            file_paths.push(file_path.clone());
+
+            let file_path_str = match file_path.to_str() {
+                Some(file_path_str) => file_path_str.to_string(),
+                None => {
+                    got_error = Some(MediaError::InternalError(
+                        "Failed to get file path".to_string(),
+                    ));
+                    break;
+                }
+            };
+
+            if let Err(e) = sqlx::query(
+                r#"
+                INSERT INTO media
+                (hash, short_name, file_name, file_type, url, size, uploader_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                "#,
+            )
+            .bind(&hash)
+            .bind(&cmd.short_names[i])
+            .bind(&cmd.file_names[i])
+            .bind(&cmd.content_types[i])
+            .bind(&file_path_str)
+            .bind(size)
+            .bind(cmd.uploader_id)
+            .execute(&mut *tx)
+            .await
+            {
+                got_error = Some(MediaError::InternalError(e.to_string()));
+                break;
+            }
+        }
+
+        if let Some(error) = got_error {
+            if let Err(e) = clean_up_files(&file_paths).await {
+                return Err(e);
+            }
+
+            return Err(error);
+        }
+
+        match tx.commit().await {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                if let Err(e) = clean_up_files(&file_paths).await {
+                    return Err(e);
+                }
+                return Err(MediaError::from(e));
+            }
+        }
+    }
     async fn get_link(&self, cmd: GetLinkCommand) -> Result<LinkResult, MediaError> {
         match sqlx::query_as::<_, (String,)>(
             r#"
@@ -130,7 +272,7 @@ impl MediaService for MediaServiceImpl {
                 short_name: None,
                 url: row.0,
             }),
-            Err(e) => Err(MediaError::InternalError(e.to_string())),
+            Err(_) => Err(MediaError::FileNotFound),
         }
     }
     async fn get_details(

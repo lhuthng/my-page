@@ -2,6 +2,7 @@
     import { mediaWithShortcutPlugin } from "$lib/custom-rules";
     import { useDebounce } from "$lib/effects/debounce";
     import MarkdownIt from "markdown-it";
+    import Post from "./Post.svelte";
 
     let { text, mediaDictionary } = $props();
 
@@ -12,18 +13,4 @@
     let renderedText = $derived(md.render(text));
 </script>
 
-<div class="rendered-markdown">
-    {@html renderedText}
-</div>
-
-<style lang="postcss">
-    @reference "tailwindcss";
-
-    :global(.rendered-markdown) {
-        & h1 {
-        }
-        & img {
-            @apply rounded-lg mx-auto;
-        }
-    }
-</style>
+<Post content={renderedText} />

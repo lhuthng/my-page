@@ -1,4 +1,6 @@
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header};
+use serde::Deserialize;
+use validator::Validate;
 
 #[derive(Debug, Clone)]
 pub struct AuthTokens {
@@ -14,6 +16,18 @@ pub struct AuthConfig {
     pub decoding_key: DecodingKey,
     pub access_expire_hours: i64,
     pub refresh_expire_hours: i64,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct RegisterCredentials {
+    #[validate(length(min = 3, message = "Username must have at least 3 characters"))]
+    pub username: String,
+
+    #[validate(email(message = "Invalid email address"))]
+    pub email: String,
+
+    #[validate(length(min = 6, message = "Password must be at least 6 characters"))]
+    pub password: String,
 }
 
 impl AuthConfig {

@@ -30,8 +30,9 @@ CREATE TABLE IF NOT EXISTS posts (
     title TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
     content TEXT,
+    draft TEXT,
     excerpt TEXT,
-    cover_image_url TEXT,
+    cover_image_id INTEGER,
 
     meta_title TEXT,
     meta_description TEXT,
@@ -45,7 +46,8 @@ CREATE TABLE IF NOT EXISTS posts (
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (series_id) REFERENCES series(id) ON DELETE SET NULL
+    FOREIGN KEY (series_id) REFERENCES series(id) ON DELETE SET NULL,
+    FOREIGN KEY (cover_image_id) REFERENCES media(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS post_categories (
@@ -62,6 +64,15 @@ CREATE TABLE IF NOT EXISTS post_tags (
     PRIMARY KEY (post_id, tag_id),
     FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
     FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS post_media_usages (
+    post_id INTEGER,
+    medium_id INTEGER,
+    code INTEGER,
+    PRIMARY KEY (post_id, code),
+    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+    FOREIGN KEY (medium_id) REFERENCES media(id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_slug ON posts(slug);

@@ -1,21 +1,32 @@
 <script>
     import CommentButton from "../buttons/CommentButton.svelte";
 
-    let { src, title, slug, series, excerpt, author, tags } = $props();
+    let { src, id, title, slug, series, excerpt, author, tags } = $props();
 
     let toggled = $state(false);
 
-    let link = $derived(`/posts/${slug}`);
+    let dashboardMode = $derived(id !== undefined);
+
+    let link = $derived(
+        dashboardMode ? `/dashboard/posts/${id}` : `/posts/${slug}`,
+    );
+
+    let postLink = $derived(`/posts/${slug}`);
 </script>
 
 <div
-    class="relative flex gap-4 bg-background/40 hover:bg-background/60 transition-colors duration-50 rounded-lg overflow-hidden"
+    class="relative flex gap-4 bg-background/40 hover:bg-background/60 transition-colors duration-50 rounded-lg hover:[&>a>img]:scale-105"
 >
-    <img
-        class="relative z-10 w-34 h-34 object-cover rounded-lg"
-        {src}
-        alt="thumbnail"
-    />
+    <a
+        class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34"
+        href={link}
+    >
+        <img
+            class="absolute left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer"
+            src={src ?? "/missing.png"}
+            alt="thumbnail"
+        />
+    </a>
     <div class="relative z-10 w-full pointer-events-none overflow-hidden">
         <div
             class="card absolute w-[200%] h-full flex transition-transform duration-200 left-0"
@@ -24,13 +35,19 @@
             <div class="h-full w-1/2 min-w-0">
                 <div class="flex flex-col full py-2 min-w-0">
                     <a class="w-fit" href={link}
-                        ><h1 class="text-lg">{title}</h1></a
-                    >
+                        ><h1 class="text-md md:text-lg line-clamp-2">
+                            {title}
+                            {#if dashboardMode}
+                                (dashboard)
+                            {/if}
+                        </h1>
+                    </a>
                     <div class="flex text-sm pr-4">
-                        <span class=" pointer-events-auto"
+                        <span class="select-none pointer-events-auto"
                             >by <a
-                                class="text-dark!"
-                                href={`/users/${author.slug}`}>{author.name}</a
+                                class="select-text text-dark!"
+                                href={`/profiles/${author.slug}`}
+                                >{author.name}</a
                             ></span
                         >
                         {#if series !== undefined}
@@ -58,7 +75,7 @@
                             {#each tags as tag}
                                 <li>
                                     <a href={`/tags/${tag.replace(" ", "-")}`}
-                                        >{tag}</a
+                                        >#{tag}</a
                                     >
                                 </li>
                             {/each}
@@ -74,7 +91,6 @@
                             />
                             <span class="pointer-events-auto">6</span> -->
                         </div>
-                        <a class="text-right" href={link}>read</a>
                     </div>
                 </div>
             </div>
@@ -82,7 +98,8 @@
                 <div
                     class="full p-2 pointer-events-auto overscroll-contain custom-scrollbar overflow-y-scroll"
                 >
-                    {excerpt}
+                    <p>{excerpt}</p>
+                    <a class="block text-right" href={postLink}>> to post</a>
                 </div>
             </div>
             <svg
@@ -121,14 +138,10 @@
         @apply text-dark/50;
     }
 
-    a {
-        @apply pointer-events-auto hover:underline;
-    }
-
     .tag-container {
         @apply pointer-events-none;
         li > a {
-            @apply px-1.5 border rounded-full hover:bg-white/40;
+            @apply px-1.5 border-2 rounded-full hover:bg-white/40;
         }
     }
 

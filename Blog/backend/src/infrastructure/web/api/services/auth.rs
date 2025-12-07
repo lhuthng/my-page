@@ -7,12 +7,12 @@ use tokio::join;
 
 use crate::{
     application::{
-        commands::auth::{LoginCommand, RefreshAccessTokenCommand, RegisterCommand},
+        commands::auth::{LoginCommand, RefreshAccessTokenCommand},
         services::auth::AuthService,
     },
     domain::{
         entities::{
-            auth::{AuthConfig, AuthTokens},
+            auth::{AuthConfig, AuthTokens, RegisterCredentials},
             secret::Claims,
         },
         errors::auth::AuthError,
@@ -124,7 +124,7 @@ impl AuthService for AuthServiceImpl {
         })
     }
 
-    async fn register(&self, cmd: RegisterCommand) -> Result<(), AuthError> {
+    async fn register(&self, reg_creds: RegisterCredentials) -> Result<(), AuthError> {
         let existing_row = sqlx::query(
             r#"
             SELECT username, email
@@ -132,8 +132,8 @@ impl AuthService for AuthServiceImpl {
             WHERE username = ? OR email = ?
             "#,
         )
-        .bind(&cmd.username)
-        .bind(&cmd.email)
+        .bind(&reg_creds.username)
+        .bind(&reg_creds.email)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -142,7 +142,7 @@ impl AuthService for AuthServiceImpl {
             None => {
                 let mut tx = self.pool.begin().await?;
 
-                let password_hash = hash(&cmd.password, DEFAULT_COST)?;
+                let password_hash = hash(&reg_creds.password, DEFAULT_COST)?;
 
                 let user = sqlx::query_as::<_, UserRow>(
                     r#"
@@ -151,9 +151,9 @@ impl AuthService for AuthServiceImpl {
                     RETURNING *
                     "#,
                 )
-                .bind(&cmd.username)
+                .bind(&reg_creds.username)
                 .bind(&password_hash)
-                .bind(&cmd.email)
+                .bind(&reg_creds.email)
                 .fetch_one(&mut *tx)
                 .await?;
 

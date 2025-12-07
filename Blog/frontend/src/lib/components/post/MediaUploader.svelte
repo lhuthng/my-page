@@ -42,10 +42,10 @@
                 <span class="block m-auto">Drop media here</span>
             </div>
         {:else}
-            <div class="full">
+            <ul class="full space-y-2">
                 {#each Object.keys(offlineMedia)
                     .sort()
-                    .map( (key) => ({ shortName: key, url: offlineMedia[key] }), ) as { shortName, url }}
+                    .map( (key) => ({ shortName: key, url: offlineMedia[key] }), ) as { shortName, url }, index (shortName)}
                     <MediumEntity
                         {shortName}
                         {url}
@@ -54,7 +54,7 @@
                             onlineMedia[shortName]}
                     />
                 {/each}
-            </div>
+            </ul>
         {/if}
     </div>
 </div>

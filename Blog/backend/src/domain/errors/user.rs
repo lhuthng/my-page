@@ -24,14 +24,23 @@ impl IntoResponse for UserError {
             UserError::InvalidData(msg) => (StatusCode::BAD_REQUEST, msg),
             UserError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized role".to_string()),
             UserError::InternalError(msg) => {
-                error!("Internal error: {}", msg);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Internal Server Error".to_string(),
-                )
+                if cfg!(debug_assertions) {
+                    (StatusCode::INTERNAL_SERVER_ERROR, msg)
+                } else {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Internal Server Error".to_string(),
+                    )
+                }
             }
         };
 
         (status, body).into_response()
+    }
+}
+
+impl From<sqlx::Error> for UserError {
+    fn from(err: sqlx::Error) -> Self {
+        UserError::InternalError(err.to_string())
     }
 }

@@ -7,6 +7,7 @@ pub enum AuthError {
     InvalidCredentials,
     InvalidToken,
     ExpiredToken,
+    Validation(String),
     InternalError(String),
 }
 
@@ -27,6 +28,7 @@ impl IntoResponse for AuthError {
             }
             AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid tokens".to_string()),
             AuthError::ExpiredToken => (StatusCode::UNAUTHORIZED, "Expired tokens".to_string()),
+            AuthError::Validation(msg) => (StatusCode::BAD_REQUEST, msg.to_string()),
             AuthError::InternalError(msg) => {
                 error!("Internal error: {}", msg);
                 (
