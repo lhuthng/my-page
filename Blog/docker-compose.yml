@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    container_name: rust-backend
+    networks:
+      - appnet
+    env_file:
+      - .env
+
+  frontend:
+    build: ./frontend
+    container_name: svelte-frontend
+    depends_on:
+      - backend
+    networks:
+      - appnet
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      - API_URL=http://backend:3000
+networks:
+  appnet:
+    driver: bridge
