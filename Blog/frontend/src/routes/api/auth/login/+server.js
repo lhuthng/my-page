@@ -1,0 +1,51 @@
+import { user } from "$lib/client/user.js";
+import { fixClientRoute, proxyFallback, route } from "$lib/server/proxy.js";
+
+export async function POST({ request, fetch }) {
+    let res = await proxyFallback({
+        request,
+        params: {
+            path: "auth/login",
+        },
+    });
+
+    if (!res.ok) {
+        const text = await res.text();
+        return new Response(text, { status: res.status });
+    }
+    const setCookieHeader = res.headers.get("Set-Cookie");
+
+    const { token, token_type } = await res.json();
+
+    res = await fetch(route("users/me"), {
+        method: "GET",
+        headers: {
+            Authorization: `${token_type} ${token}`,
+            "Content-Type": "application/json",
+        },
+    });
+
+    if (!res.ok) {
+        const text = await res.text();
+        return new Response(text, { status: res.status });
+    }
+
+    const { username, display_name, role, avatar_url } = await res.json();
+
+    const headers = new Headers({
+        "Content-Type": "application/json",
+    });
+    headers.set("Set-Cookie", setCookieHeader);
+
+    return new Response(
+        JSON.stringify({
+            username,
+            display_name,
+            role,
+            token,
+            token_type,
+            avatar_url: fixClientRoute(avatar_url),
+        }),
+        { status: 200, headers },
+    );
+}
