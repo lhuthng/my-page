@@ -1,0 +1,9 @@
+{
+    "svgoConfig": {
+        "plugins": [
+            {
+                "name": "preset-default"
+            }
+        ]
+    }
+}

@@ -1,0 +1,25 @@
+@reference "../index.css";
+
+.colorful-frame {
+    @apply transition-all duration-200;
+
+    background: 
+        linear-gradient(white, white) padding-box padding-box, 
+        linear-gradient(
+            45deg, 
+            var(--color-yellow-chalk),
+            var(--color-green-chalk)
+        ) border-box border-box;
+
+    box-shadow:
+        rgba(var(--yellow-chalk), 0.6) 0px 0px 0.5rem, 
+        rgba(var(--green-chalk), 0.4) 0px 0px 1rem, 
+        rgba(var(--blue-chalk), 0.2) 0px 1px 1px inset;
+
+    &:hover {
+        box-shadow:
+            rgba(var(--yellow-chalk), 0.6) 0px 0px 1rem, 
+            rgba(var(--green-chalk), 0.4) 0px 0px 0.5rem, 
+            rgba(var(--blue-chalk), 0.2) 0px 1px 1px inset;
+    }
+}
