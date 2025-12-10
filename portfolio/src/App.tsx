@@ -1,4 +1,7 @@
-import { APITester } from "./APITester";
+import About from "./Components/About";
+import Contact from "./Components/Contact";
+import Header from "./Components/Header";
+import Landing from "./Components/Landing";
 import "./index.css";
 
 import logo from "./logo.svg";
@@ -6,18 +9,14 @@ import reactLogo from "./react.svg";
 
 export function App() {
   return (
-    <div className="app">
-      <div className="logo-container">
-        <img src={logo} alt="Bun Logo" className="logo bun-logo" />
-        <img src={reactLogo} alt="React Logo" className="logo react-logo" />
+    <>
+      <Header sections={["Home", "About", "Skills", "Projects", "Contact"]}/>
+      <div className="bg-blackboard text-white w-full divide-y divide-gray-300 z-10">
+        <Landing/>
+        <About/>
+        <Contact/>
       </div>
-
-      <h1>Bun + React</h1>
-      <p>
-        Edit <code>src/App.tsx</code> and save to test HMR Yeah
-      </p>
-      <APITester />
-    </div>
+    </>
   );
 }
 
