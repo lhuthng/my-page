@@ -1,10 +1,7 @@
 use std::{path::PathBuf, str::FromStr};
 
 use axum::body::Bytes;
-use futures::{
-    TryFutureExt,
-    future::{join_all, try_join_all},
-};
+use futures::future::join_all;
 use sha2::{Digest, Sha256};
 use sqlx::{SqlitePool, prelude::FromRow};
 use tokio::fs;
@@ -12,9 +9,9 @@ use tokio::fs;
 use crate::{
     application::{
         commands::media::{
-            AddAliasCommand, ChangeAliasCommand, ChangeMediaDetailsCommand, DeleteAliasCommand,
-            GetAliasesCommand, GetLinkCommand, GetMediaDetailsCommand, SearchMediaCommand,
-            UploadMediaWithoutDescriptionCommand, UploadMediumCommand,
+            AddAliasCommand, ChangeAliasCommand, ChangeAvatarCommand, ChangeMediaDetailsCommand,
+            DeleteAliasCommand, GetAliasesCommand, GetLinkCommand, GetMediaDetailsCommand,
+            SearchMediaCommand, UploadMediaWithoutDescriptionCommand, UploadMediumCommand,
         },
         services::media::MediaService,
     },
@@ -48,21 +45,39 @@ struct HashData {
     pub file_path: PathBuf,
 }
 
+fn generate_dir_and_name(
+    root: &PathBuf,
+    hash: &String,
+    extension: String,
+    split: bool,
+) -> (PathBuf, String) {
+    let dir_path = match split {
+        true => {
+            let dir1 = &hash[0..2];
+            let dir2 = &hash[2..4];
+            &root.join(dir1).join(dir2)
+        }
+        false => root,
+    };
+
+    let filename = format!("{}{}", hash, extension);
+
+    (dir_path.to_path_buf(), filename)
+}
+
 async fn hash_bytes(
     bytes: &Bytes,
     root: &PathBuf,
     extension: String,
+    split: bool,
 ) -> Result<HashData, MediaError> {
     let hash = format!("{:x}", Sha256::digest(&bytes));
     if hash.len() < 4 {
         return Err(MediaError::InternalError("Hash too short.".to_string()));
     }
 
-    let dir1 = &hash[0..2];
-    let dir2 = &hash[2..4];
+    let (dir_path, file_name) = generate_dir_and_name(root, &hash, extension, split);
 
-    let dir_path = root.join(dir1).join(dir2);
-    let file_name = format!("{}{}", hash, extension);
     let file_path = dir_path.join(file_name);
     let size = bytes.len() as i64;
 
@@ -74,7 +89,7 @@ async fn hash_bytes(
     })
 }
 
-async fn clean_up_files(file_paths: &Vec<PathBuf>) -> Result<(), MediaError> {
+pub async fn clean_up_files(file_paths: &Vec<PathBuf>) -> Result<(), MediaError> {
     let futures = file_paths.iter().map(|p| fs::remove_file(p));
     let mut errors: Vec<String> = Vec::new();
     let results = join_all(futures).await;
@@ -90,8 +105,7 @@ async fn clean_up_files(file_paths: &Vec<PathBuf>) -> Result<(), MediaError> {
     Ok(())
 }
 
-#[async_trait::async_trait]
-impl MediaService for MediaServiceImpl {
+impl MediaServiceImpl {
     async fn is_supported(
         &self,
         file_type: &str,
@@ -101,6 +115,19 @@ impl MediaService for MediaServiceImpl {
 
         Ok(config.allowed_file_types.contains(&media_type))
     }
+    async fn is_avatar_supported(
+        &self,
+        file_type: &str,
+        config: &MediaConfig,
+    ) -> Result<bool, MediaError> {
+        let media_type = MediaType::from_str(file_type)?;
+
+        Ok(config.allowed_avatar_types.contains(&media_type))
+    }
+}
+
+#[async_trait::async_trait]
+impl MediaService for MediaServiceImpl {
     async fn upload(
         &self,
         cmd: UploadMediumCommand,
@@ -116,9 +143,9 @@ impl MediaService for MediaServiceImpl {
             size,
             dir_path,
             file_path,
-        } = hash_bytes(&cmd.bytes, &config.dir, extension.to_string()).await?;
+        } = hash_bytes(&cmd.bytes, &config.dir, extension.to_string(), true).await?;
 
-        if fs::try_exists(&dir_path).await? {
+        if fs::try_exists(&file_path).await? {
             return Err(MediaError::Duplication);
         }
 
@@ -149,15 +176,153 @@ impl MediaService for MediaServiceImpl {
 
         if let Err(e) = result {
             if let Err(remove_err) = fs::remove_file(&file_path).await {
-                return Err(MediaError::ExposedInternalError(format!(
+                return Err(MediaError::InternalError(format!(
                     "Failed to remove file after DB error {}",
                     remove_err
                 )));
             }
-            return Err(MediaError::ExposedInternalError(e.to_string()));
+            return Err(MediaError::InternalError(e.to_string()));
         }
 
         tx.commit().await?;
+
+        Ok(())
+    }
+    async fn change_avatar(
+        &self,
+        cmd: ChangeAvatarCommand,
+        config: &MediaConfig,
+    ) -> Result<(), MediaError> {
+        if !self.is_avatar_supported(&cmd.content_type, config).await? {
+            return Err(MediaError::InvalidFileType);
+        }
+
+        let mut tx = self.pool.begin().await?;
+
+        let hash_row = sqlx::query_as::<_, (Option<i64>, Option<String>, Option<String>)>(
+            r#"
+            SELECT media.id, media.hash, media.file_type
+            FROM users
+            JOIN user_meta ON users.id = user_meta.user_id
+            LEFT JOIN media on media.id = user_meta.avatar_image_id
+            WHERE users.id = ?
+            "#,
+        )
+        .bind(&cmd.user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        if let (Some(id), _, _) = hash_row {
+            sqlx::query(
+                r#"
+                DELETE FROM media
+                WHERE id = ?
+                "#,
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        let extension = MediaType::from_str(&cmd.content_type)?.get_extension();
+
+        let root = config.dir.join("avt").join(&cmd.user_id.to_string());
+
+        let HashData {
+            mut hash,
+            size,
+            dir_path,
+            file_path,
+        } = hash_bytes(&cmd.bytes, &root, extension.to_string(), false).await?;
+
+        if fs::try_exists(&file_path).await? {
+            return Ok(());
+        }
+
+        fs::create_dir_all(&dir_path).await?;
+        fs::write(&file_path, &cmd.bytes).await?;
+
+        let short_name = format!(".avt.{}", cmd.user_id);
+
+        hash = format!(".avt.{}.{}", &cmd.user_id, hash);
+
+        match sqlx::query_as::<_, (i64,)>(
+            r#"
+            INSERT INTO media
+            (hash, short_name, file_name, file_type, url, size, uploader_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+            "#,
+        )
+        .bind(&hash)
+        .bind(short_name)
+        .bind(&cmd.filename)
+        .bind(&cmd.content_type)
+        .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
+            "Failed to get file path".to_string(),
+        ))?)
+        .bind(size)
+        .bind(&cmd.user_id)
+        .fetch_one(&mut *tx)
+        .await
+        {
+            Ok((image_id,)) => {
+                sqlx::query(
+                    r#"
+                    UPDATE user_meta
+                    SET avatar_image_id = ?
+                    WHERE user_id = ?
+                    "#,
+                )
+                .bind(image_id)
+                .bind(&cmd.user_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+            Err(e) => {
+                if let Err(remove_err) = fs::remove_file(&file_path).await {
+                    return Err(MediaError::ExposedInternalError(format!(
+                        "Failed to remove file after DB error {}",
+                        remove_err
+                    )));
+                }
+                return Err(MediaError::InternalError(e.to_string()));
+            }
+        }
+
+        tx.commit().await?;
+
+        if let (_, Some(hash), Some(file_type)) = hash_row {
+            let hash = match hash.split('.').skip(3).next() {
+                Some(hash) => hash.to_string(),
+                None => {
+                    return Err(MediaError::UploadFailed(
+                        "Invalid stored hash found".to_string(),
+                    ));
+                }
+            };
+
+            let extension = match file_type.split('/').skip(1).next() {
+                Some(extension) => format!(".{}", extension),
+                None => {
+                    return Err(MediaError::UploadFailed(
+                        "Invalid stored file type found".to_string(),
+                    ));
+                }
+            };
+
+            let (dir_path, file_name) =
+                generate_dir_and_name(&root, &hash, extension.to_string(), false);
+
+            let file_path = dir_path.join(file_name);
+
+            if let Err(remove_err) = fs::remove_file(&file_path).await {
+                return Err(MediaError::ExposedInternalError(format!(
+                    "Failed to clean up previous avatar after updated {}",
+                    remove_err
+                )));
+            }
+        }
 
         Ok(())
     }
@@ -190,7 +355,8 @@ impl MediaService for MediaServiceImpl {
                 size,
                 dir_path,
                 file_path,
-            } = match hash_bytes(&cmd.bytes_list[i], &config.dir, extension.to_string()).await {
+            } = match hash_bytes(&cmd.bytes_list[i], &config.dir, extension.to_string(), true).await
+            {
                 Ok(hash_data) => hash_data,
                 Err(e) => {
                     got_error = Some(e);
@@ -198,7 +364,7 @@ impl MediaService for MediaServiceImpl {
                 }
             };
 
-            if fs::try_exists(&dir_path).await? {
+            if fs::try_exists(&file_path).await? {
                 got_error = Some(MediaError::Duplication);
                 break;
             }

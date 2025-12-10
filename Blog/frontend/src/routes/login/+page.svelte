@@ -22,7 +22,7 @@
             message = res.message.toLowerCase();
         } else {
             status = true;
-            message = "user logged in sucessfully!";
+            message = "";
         }
     }
 
@@ -68,29 +68,33 @@
                 {/if}
             </h3>
             <div
-                class="space-y-2 *:rounded-xl *:border-2 *:border-dark/40 *:has-focus:border-dark *:bg-primary/20 text-dark"
+                class="space-y-2 *:rounded-xl *:border-2 *:border-dark/40 *:has-focus:border-dark *:bg-primary/20 *:has-disabled:opacity-40 text-dark"
             >
                 <div class="px-2">
                     <input
-                        class="py-1.5"
+                        class="py-1.5 w-full"
                         placeholder="Username"
                         autocomplete="username"
                         bind:value={username}
+                        disabled={isLogged && isLogging}
                     />
                 </div>
                 <div class="flex gap-2 px-2">
                     <input
-                        class="flex-1 py-1.5"
+                        class="grow py-1.5"
                         placeholder="Password"
                         type="password"
                         bind:value={password}
+                        disabled={isLogged && isLogging}
                     />
                     {#if isLogging}
                         <button
                             type="button"
                             class=" text-primary/80 hover:text-dark cursor-pointer"
-                            >forgot?</button
+                            disabled={isLogged}
                         >
+                            forgot?
+                        </button>
                     {/if}
                 </div>
                 {#if !isLogging}
@@ -122,7 +126,11 @@
                 </div>
             {/if}
             <div class="w-full duo-btn duo-dark">
-                <button class="w-full" type="submit" disabled={pending}>
+                <button
+                    class="w-full"
+                    type="submit"
+                    disabled={pending || (isLogging && isLogged)}
+                >
                     {#if isLogging}
                         Log In
                     {:else}
@@ -130,6 +138,13 @@
                     {/if}
                 </button>
             </div>
+            {#if isLogging && isLogged}
+                <div class="flex w-full">
+                    <span class="mx-auto text-center text-accent-green">
+                        You're are logged as {$user.username}
+                    </span>
+                </div>
+            {/if}
             <div class="separator">
                 <span>or</span>
             </div>
@@ -153,76 +168,6 @@
         </form>
     </div>
 </div>
-
-<!-- <div class="flex flex-col w-cap h-screen min-h-200">
-    <div class="flex bg-green-200 w-full h-160 my-auto">
-        <div class="grow"></div>
-        <div class="w-120 bg-green-300 h-full p-4">
-            {#if !isLogged}
-                <form
-                    class="flex flex-col bg-green-400 gap-2 [&>input]:bg-green-500"
-                    onsubmit={handleSubmit}
-                >
-                    <input
-                        id="f_username"
-                        type="text"
-                        placeholder="username"
-                        bind:value={username}
-                    />
-                    <input
-                        id="f_password"
-                        type="text"
-                        placeholder="password"
-                        bind:value={password}
-                    />
-                    {#if !isLogging}
-                        <input
-                            id="f_repassword"
-                            type="text"
-                            placeholder="repassword"
-                            bind:value={repassword}
-                        />
-                        <input
-                            id="f_email"
-                            type="text"
-                            placeholder="email"
-                            bind:value={email}
-                        />
-                        <div>
-                            <label
-                                >Already have an account? <button
-                                    type="button"
-                                    onclick={() => (isLogging = true)}
-                                    >Login!</button
-                                ></label
-                            >
-                        </div>
-                    {:else}
-                        <div>
-                            <label
-                                >Don't have an account? <button
-                                    type="button"
-                                    onclick={() => (isLogging = false)}
-                                    >Signup!</button
-                                ></label
-                            >
-                        </div>
-                    {/if}
-                    <input
-                        type="submit"
-                        value={isLogging ? "Login" : "Signup"}
-                    />
-                </form>
-            {:else}
-                <div>
-                    You're already logged. <button onclick={() => logout()}
-                        >Log out?</button
-                    >
-                </div>
-            {/if}
-        </div>
-    </div>
-</div> -->
 
 <style lang="postcss">
     @reference "../../app.css";

@@ -14,6 +14,7 @@ pub struct AppConfig {
 pub struct MediaConfig {
     pub dir: PathBuf,
     pub allowed_file_types: Vec<MediaType>,
+    pub allowed_avatar_types: Vec<MediaType>,
 }
 
 pub struct AppState {
@@ -46,9 +47,17 @@ impl MediaConfig {
             MediaType::ImageJpeg,
         ];
 
+        let allowed_avatar_types = vec![
+            MediaType::ImagePng,
+            MediaType::ImageGif,
+            MediaType::ImageWebp,
+            MediaType::ImageJpeg,
+        ];
+
         return Self {
             dir,
             allowed_file_types,
+            allowed_avatar_types,
         };
     }
 }

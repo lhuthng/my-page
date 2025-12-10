@@ -1,3 +1,5 @@
+use axum::body::Bytes;
+
 #[derive(serde::Deserialize)]
 pub struct MeCommand {
     pub user_id: i64,

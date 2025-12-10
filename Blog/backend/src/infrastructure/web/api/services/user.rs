@@ -31,6 +31,7 @@ struct MeRow {
     username: String,
     display_name: String,
     role: String,
+    avatar_url: Option<String>,
 }
 
 #[derive(FromRow, Debug)]
@@ -39,6 +40,7 @@ struct UserRow {
     display_name: String,
     bio: String,
     role: String,
+    avatar_url: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
@@ -64,8 +66,9 @@ impl UserService for UserServiceImpl {
     async fn me(&self, cmd: MeCommand) -> Result<Me, UserError> {
         let me_row = sqlx::query_as::<_, MeRow>(
             r#"
-			SELECT username, display_name, role
+			SELECT username, display_name, role, media.url AS avatar_url
 			FROM user_meta JOIN users ON users.id = user_id
+			LEFT JOIN media on user_meta.avatar_image_id = media.id
 			WHERE user_id = ?
 			"#,
         )
@@ -77,6 +80,7 @@ impl UserService for UserServiceImpl {
             username: me_row.username,
             display_name: me_row.display_name,
             role: me_row.role,
+            avatar_url: me_row.avatar_url,
         })
     }
     async fn change_details(&self, cmd: ChangeDetailsCommand) -> Result<(), UserError> {
@@ -123,9 +127,10 @@ impl UserService for UserServiceImpl {
     async fn get_user(&self, cmd: GetUserCommand) -> Result<User, UserError> {
         let user_row = sqlx::query_as::<_, UserRow>(
             r#"
-            SELECT username, display_name, bio, role
+            SELECT username, display_name, bio, role, media.url AS avatar_url
             FROM users
-            JOIN user_meta ON id = user_id
+            JOIN user_meta ON users.id = user_id
+            LEFT JOIN media ON media.id = avatar_image_id
             WHERE username = ?
             "#,
         )
@@ -137,6 +142,7 @@ impl UserService for UserServiceImpl {
         Ok(User {
             username: user_row.username,
             display_name: user_row.display_name,
+            avatar_url: user_row.avatar_url,
             bio: user_row.bio,
             role: user_row.role,
         })
