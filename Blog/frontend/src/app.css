@@ -60,17 +60,13 @@ button {
     }
     a:disabled,
     button:disabled {
-        @apply border-dark/60 bg-primary/60 cursor-not-allowed;
+        @apply border-primary bg-secondary cursor-not-allowed translate-y-[0.2rem];
+    }
+    &:has(*:disabled)::before {
+        @apply bg-primary;
     }
     &::before {
         @apply absolute content-[''] left-0 top-1/2 w-full h-[calc(50%+0.2rem)]  rounded-b-2xl z-10;
-    }
-
-    &:has(*:disabled) {
-    }
-
-    &:has(*:disabled)::before {
-        @apply hidden;
     }
 }
 

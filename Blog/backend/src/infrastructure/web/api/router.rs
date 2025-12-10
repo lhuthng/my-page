@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Router, middleware,
-    routing::{delete, get, get_service, patch, post},
+    routing::{delete, get, get_service, patch, post, put},
 };
 use tower_http::services::ServeDir;
 
@@ -28,7 +28,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/me", get(handlers::user::me))
-                .route("/me", patch(handlers::user::change_details))
+                .route("/me/details", patch(handlers::user::change_details))
+                .route("/me/avatar", patch(handlers::user::change_avatar))
                 .route("/me/check-mod", get(handlers::user::check_mod))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
@@ -71,7 +72,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // optional
         .merge(
             Router::new()
-                .route("/{post_id}/comments", post(handlers::post::new_comment))
+                .route(
+                    "/id/{post_id}/comments/new",
+                    put(handlers::post::new_comment),
+                )
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::optional_user_guard,
@@ -92,6 +96,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // public
         .merge(
             Router::new()
+                .route("/id/{post_id}/comments", get(handlers::post::get_comments))
                 .route("/{post_slug}", get(handlers::post::get_post_by_slug))
                 // .route("/{post_id}/")
                 .route("/featured", get(handlers::post::get_featured_posts))

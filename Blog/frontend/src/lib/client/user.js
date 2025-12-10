@@ -10,14 +10,26 @@ export let isMod = derived(user, ($user) => {
 export function clearLogin() {
     user.set(undefined);
 }
-export function saveLogin({ username, displayName, token, tokenType, role }) {
+export function saveLogin({
+    username,
+    displayName,
+    token,
+    tokenType,
+    role,
+    avatarUrl,
+}) {
     user.set({
         username,
         displayName,
         role,
         token,
         tokenType,
+        avatarUrl,
     });
+}
+
+export function changeDisplayname(displayName) {
+    user.update(($user) => ({ ...$user, displayName }));
 }
 
 export function auth() {
@@ -50,9 +62,10 @@ export async function login(username, password) {
         token_type: tokenType,
         display_name: displayName,
         role,
+        avatar_url: avatarUrl,
     } = await res.json();
 
-    saveLogin({ username, token, tokenType, displayName, role });
+    saveLogin({ username, token, tokenType, displayName, role, avatarUrl });
 
     return {
         status: true,

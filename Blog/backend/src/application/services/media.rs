@@ -15,8 +15,11 @@ use crate::{
 
 #[async_trait::async_trait]
 pub trait MediaService {
-    async fn is_supported(&self, file_type: &str, config: &MediaConfig)
-    -> Result<bool, MediaError>;
+    async fn change_avatar(
+        &self,
+        cmd: commands::media::ChangeAvatarCommand,
+        config: &MediaConfig,
+    ) -> Result<(), errors::media::MediaError>;
     async fn upload(
         &self,
         cmd: commands::media::UploadMediumCommand,

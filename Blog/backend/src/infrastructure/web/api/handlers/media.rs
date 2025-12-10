@@ -18,7 +18,10 @@ use crate::{
         services::media::MediaService,
     },
     domain::{entities::secret::Claims, errors::media::MediaError},
-    infrastructure::web::server::AppState,
+    infrastructure::web::{
+        api::handlers::common::{MediumData, extract_medium},
+        server::AppState,
+    },
 };
 
 #[axum::debug_handler]
@@ -60,26 +63,13 @@ pub async fn upload(
                     ));
                 }
 
-                let file_name = field
-                    .file_name()
-                    .ok_or(MediaError::UploadFailed(
-                        "Cannot read file name.".to_string(),
-                    ))?
-                    .to_string();
+                let MediumData {
+                    filename,
+                    content_type,
+                    bytes,
+                } = extract_medium(field).await?;
 
-                let content_type = field
-                    .content_type()
-                    .ok_or(MediaError::UploadFailed(format!(
-                        "Cannot read content type of {}.",
-                        file_name
-                    )))?
-                    .to_string();
-
-                let bytes = field.bytes().await.map_err(|_| {
-                    MediaError::UploadFailed(format!("Cannot read bytes of {}.", file_name))
-                })?;
-
-                opt_filename = Some(file_name);
+                opt_filename = Some(filename);
                 opt_content_type = Some(content_type);
                 opt_bytes = Some(bytes);
             }

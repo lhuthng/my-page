@@ -9,6 +9,13 @@ pub struct UploadMediumCommand {
     pub bytes: Bytes,
 }
 
+pub struct ChangeAvatarCommand {
+    pub user_id: i64,
+    pub filename: String,
+    pub content_type: String,
+    pub bytes: Bytes,
+}
+
 pub struct UploadMediaWithoutDescriptionCommand {
     pub uploader_id: i64,
     pub number_of_files: usize,

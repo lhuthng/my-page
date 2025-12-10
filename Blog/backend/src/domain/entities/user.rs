@@ -40,6 +40,7 @@ pub struct Me {
     pub username: String,
     pub display_name: String,
     pub role: String,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,4 +49,5 @@ pub struct User {
     pub display_name: String,
     pub bio: String,
     pub role: String,
+    pub avatar_url: Option<String>,
 }

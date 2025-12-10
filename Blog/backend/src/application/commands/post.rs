@@ -48,3 +48,9 @@ pub struct PostNewAnynymouseCommentCommand {
     pub post_id: i64,
     pub content: String,
 }
+
+pub struct GetCommentsCommand {
+    pub post_id: i64,
+    pub limit: i64,
+    pub before: Option<i64>,
+}

@@ -1,5 +1,5 @@
 import { user } from "$lib/client/user.js";
-import { proxyFallback, route } from "$lib/server/proxy.js";
+import { fixClientRoute, proxyFallback, route } from "$lib/server/proxy.js";
 
 export async function POST({ request, fetch }) {
     let res = await proxyFallback({
@@ -30,7 +30,7 @@ export async function POST({ request, fetch }) {
         return new Response(text, { status: res.status });
     }
 
-    const { username, display_name, role } = await res.json();
+    const { username, display_name, role, avatar_url } = await res.json();
 
     const headers = new Headers({
         "Content-Type": "application/json",
@@ -44,6 +44,7 @@ export async function POST({ request, fetch }) {
             role,
             token,
             token_type,
+            avatar_url: fixClientRoute(avatar_url),
         }),
         { status: 200, headers },
     );

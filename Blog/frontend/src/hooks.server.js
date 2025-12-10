@@ -1,5 +1,5 @@
 import { API_URL } from "$env/static/private";
-import { route } from "$lib/server/proxy";
+import { fixClientRoute, route } from "$lib/server/proxy";
 
 export async function handle({ event, resolve }) {
     const accept = event.request.headers.get("accept") ?? "";
@@ -42,10 +42,20 @@ export async function handle({ event, resolve }) {
             return resolve(event);
         }
 
-        const { username, display_name: displayName, role } = await res.json();
+        const {
+            username,
+            display_name: displayName,
+            role,
+            avatar_url: avatarUrl,
+        } = await res.json();
 
         event.locals.accessToken = { type, token };
-        event.locals.user = { username, displayName, role };
+        event.locals.user = {
+            username,
+            displayName,
+            role,
+            avatarUrl: fixClientRoute(avatarUrl),
+        };
         event.locals.role = role;
     }
 

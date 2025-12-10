@@ -12,7 +12,8 @@ export async function load(event) {
     if (res.ok) {
         const data = await res.json();
 
-        let { content, medium_urls, ...rest } = data;
+        let { content, author_avatar_url, cover_url, medium_urls, ...rest } =
+            data;
 
         let edits = [...content.matchAll(mediaSyntax)].map((match) => ({
             index: match.index + match[0].lastIndexOf(match[1]),
@@ -21,6 +22,9 @@ export async function load(event) {
         }));
 
         edits.sort((a, b) => b.index - a.index);
+
+        author_avatar_url = fixClientRoute(author_avatar_url);
+        cover_url = fixClientRoute(cover_url);
 
         const mediaDictionary = {};
 
@@ -35,8 +39,8 @@ export async function load(event) {
 
         content = md.render(content);
 
-        return { content, medium_urls, ...rest };
+        return { content, author_avatar_url, cover_url, ...rest };
     }
 
-    throw error("Error", 404);
+    throw error(404, "Error");
 }

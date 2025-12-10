@@ -1,5 +1,9 @@
 <script>
-    import { auth, user } from "$lib/client/user.js";
+    import {
+        auth,
+        changeDisplayname as changeDisplayName,
+        user,
+    } from "$lib/client/user.js";
     import PostCard from "$lib/components/home/PostCard.svelte";
     import Club from "$lib/components/svgs/Club.svelte";
     import Diamond from "$lib/components/svgs/Diamond.svelte";
@@ -9,6 +13,8 @@
     import { flip } from "svelte/animate";
     import { fade, fly } from "svelte/transition";
     import { autoHResize } from "$lib/client/auto-resize.js";
+    import PBody from "$lib/components/PBody.svelte";
+    import { preventDefault } from "$lib/common.js";
 
     const { data } = $props();
 
@@ -18,12 +24,25 @@
     let displayName = $state(data.response.display_name);
     let bio = $state(data.response.bio);
     let postContainer = $state();
+    let avatar_url = $state(data.response.avatar_url ?? "/missing.png");
 
     let editor = $state({
         isEditing: false,
         isFetching: false,
+        isChangingAvatar: false,
+        isUploading: false,
+        isUploaded: false,
+        newAvatar: undefined,
+        avatarFile: undefined,
+        avatarError: "",
         displayName: "",
         bio: "",
+    });
+
+    $effect(() => {
+        if (editor.isEditing && $user?.username !== username) {
+            editor.isEditing = false;
+        }
     });
 
     const hasPosts = $derived(role === "moderator" || role === "admin");
@@ -38,29 +57,9 @@
 
     const limit = 3;
 
-    $effect(async () => {
-        if (!hasPosts) {
-            return;
-        }
+    const maxFileSize = 5 * 1024 * 1024;
 
-        posts.status = "fetching";
-
-        const res = await fetch(
-            `/api/users/${username}/posts?limit=${limit}&offset=0`,
-        );
-
-        if (!res.ok) {
-            posts.status = "failed";
-            posts.message = await res.text();
-        } else {
-            posts.status = "fetched";
-            const data = (await res.json()).posts;
-            if (data.length < limit) {
-                posts.fetchedAll = true;
-            }
-            posts.data = data;
-        }
-    });
+    const appendMedia = (files) => {};
 
     const fetchMore = async () => {
         if (posts.fetchedAll || posts.data.fetchingMore) return;
@@ -86,7 +85,142 @@
             posts.fetchingMore = false;
         }
     };
+
+    $effect(async () => {
+        if (!hasPosts) {
+            return;
+        }
+
+        posts.status = "fetching";
+
+        const res = await fetch(
+            `/api/users/${username}/posts?limit=${limit}&offset=0`,
+        );
+
+        if (!res.ok) {
+            posts.status = "failed";
+            posts.message = await res.text();
+        } else {
+            posts.status = "fetched";
+            const data = (await res.json()).posts;
+            if (data.length < limit) {
+                posts.fetchedAll = true;
+            }
+            posts.data = data;
+        }
+    });
 </script>
+
+{#if editor.isChangingAvatar}
+    <PBody>
+        <div
+            class="sticky top-0 flex justify-center items-center w-full h-screen pointer-events-auto"
+        >
+            <div
+                class="absolute cursor-not-allowed inset-0 z-10"
+                onclick={() => {
+                    editor.isChangingAvatar = false;
+                    editor.avatarFile = undefined;
+                    editor.newAvatar = undefined;
+                    editor.isUploading = false;
+                    editor.isUploaded = false;
+                    editor.avatarError = "";
+                }}
+                role="none"
+            ></div>
+            <div
+                class="w-fit h-fit space-y-4 bg-white rounded-3xl p-4 text-xl z-11"
+                role="none"
+            >
+                <div
+                    class="flex justify-center items-center w-60 h-60 bg-background/60 outline-4 outline-dark outline-dashed rounded-xl overflow-hidden"
+                    ondrop={(e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files[0];
+                        if (!file) {
+                            editor.avatarError = "File not found!";
+                            return;
+                        }
+
+                        if (!file.type.startsWith("image/")) {
+                            editor.avatarError =
+                                "File type not supported, image only.";
+                            return;
+                        }
+
+                        if (file.size > maxFileSize) {
+                            editor.avatarError = `File size exceeds 5MB (${file.size} bytes)`;
+                            return;
+                        }
+
+                        editor.avatarFile = file;
+                        editor.newAvatar = URL.createObjectURL(file);
+
+                        editor.isUploading = false;
+                        editor.isUploaded = false;
+                    }}
+                    ondragover={preventDefault}
+                    role="none"
+                >
+                    {#if editor.newAvatar}
+                        <img
+                            class="full object-cover"
+                            src={editor.newAvatar}
+                            alt="temporal-avatar"
+                        />
+                    {:else}
+                        <span class="w-40 text-center select-none text-dark"
+                            >Upload your image here</span
+                        >
+                    {/if}
+                </div>
+                {#if editor.avatarError}
+                    <span class="inline-block w-60 text-accent-red">
+                        *{editor.avatarError}
+                    </span>
+                {/if}
+                <div class="duo-btn duo-green">
+                    <button
+                        disabled={!editor.newAvatar ||
+                            editor.isUploaded ||
+                            editor.isUploading}
+                        onclick={async () => {
+                            const formData = new FormData();
+
+                            formData.append(
+                                "file",
+                                editor.avatarFile,
+                                editor.avatarFile.name,
+                            );
+
+                            const res = await fetch("/api/users/me/avatar", {
+                                method: "PATCH",
+                                headers: {
+                                    Authorization: auth(),
+                                },
+                                body: formData,
+                            });
+
+                            if (res.ok) {
+                                avatar_url = editor.newAvatar;
+                                editor.isUploaded = true;
+                                editor.isUploading = false;
+                                editor.avatarError = "";
+                            } else {
+                                editor.avatarError = await res.text();
+                            }
+                        }}>Apply</button
+                    >
+                </div>
+                {#if editor.isUploaded}
+                    <span class="inline-block w-60 text-accent-green">
+                        *New avatar uploaded succesfully!
+                    </span>
+                {/if}
+            </div>
+        </div>
+    </PBody>
+{/if}
 
 <section
     class="flex flex-col gap-4 *:bg-white/90 *:rounded-xl *:p-4 pb-8"
@@ -94,11 +228,30 @@
 >
     <div class="flex gap-4">
         <div class="space-y-4 min-w-60">
-            <img
-                class="w-60 h-60 rounded-bl-xl rounded-tr-xl"
-                src="/missing.png"
-                alt="avatar"
-            />
+            <div class="relative rounded-bl-xl rounded-tr-xl overflow-hidden">
+                {#if $user?.username === username}
+                    <div
+                        class="absolute left-0 bottom-0 w-full h-full opacity-0 hover:opacity-100 bg-background/30 transition-opacity duration-200"
+                    >
+                        <div
+                            class="absolute bottom-0 left-0 flex items-center justify-center w-full py-2 bg-dark/30"
+                        >
+                            <div class="duo-btn duo-green">
+                                <button
+                                    onclick={() =>
+                                        (editor.isChangingAvatar = true)}
+                                    >Change Avatar</button
+                                >
+                            </div>
+                        </div>
+                    </div>
+                {/if}
+                <img
+                    class="w-60 h-60 object-cover"
+                    src={avatar_url}
+                    alt="avatar"
+                />
+            </div>
             <div class="grid grid-cols-2 gap-2">
                 <div class="duo-btn duo-blue">
                     <button disabled>Message</button>
@@ -173,17 +326,22 @@
                             <button
                                 onclick={async () => {
                                     editor.isFetching = true;
-                                    const res = await fetch("/api/users/me", {
-                                        method: "PATCH",
-                                        headers: {
-                                            Authorization: auth(),
-                                            "Content-Type": "application/json",
+                                    const res = await fetch(
+                                        "/api/users/me/details",
+                                        {
+                                            method: "PATCH",
+                                            headers: {
+                                                Authorization: auth(),
+                                                "Content-Type":
+                                                    "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                                display_name:
+                                                    editor.displayName,
+                                                bio: editor.bio,
+                                            }),
                                         },
-                                        body: JSON.stringify({
-                                            display_name: editor.displayName,
-                                            bio: editor.bio,
-                                        }),
-                                    });
+                                    );
                                     editor.isFetching = false;
                                     editor.isEditing = false;
                                     if (res.ok) {
@@ -196,6 +354,7 @@
                                                     displayName),
                                         );
                                         posts.data = [...data];
+                                        changeDisplayName(displayName);
                                     }
                                 }}
                                 disabled={editor.isFetching}>Submit</button

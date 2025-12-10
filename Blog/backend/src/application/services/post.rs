@@ -37,12 +37,16 @@ pub trait PostService {
         &self,
         cmd: commands::post::GetDetailedPostsCommand,
     ) -> Result<entities::post::PostDetails, errors::post::PostError>;
+    async fn get_comments(
+        &self,
+        cmd: commands::post::GetCommentsCommand,
+    ) -> Result<Vec<entities::post::Comment>, errors::post::PostError>;
     async fn post_new_comment(
         &self,
         cmd: commands::post::PostNewCommentCommand,
-    ) -> Result<(), errors::post::PostError>;
+    ) -> Result<i64, errors::post::PostError>;
     async fn post_new_anonymous_comment(
         &self,
         cmd: commands::post::PostNewAnynymouseCommentCommand,
-    ) -> Result<(), errors::post::PostError>;
+    ) -> Result<i64, errors::post::PostError>;
 }
