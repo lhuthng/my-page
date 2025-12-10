@@ -6,14 +6,14 @@ use sqlx::{SqlitePool, prelude::FromRow};
 use crate::{
     application::{
         commands::post::{
-            CheckSlugCommand, GetCategoriesCommand, GetDetailedPostsCommand,
+            CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand, GetDetailedPostsCommand,
             GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand, PostCommand,
             PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
         },
         services::post::PostService,
     },
     domain::{
-        entities::post::{CategoryResult, Post, PostDetails, PostSnapshot},
+        entities::post::{CategoryResult, Comment, Post, PostDetails, PostSnapshot},
         errors::post::PostError,
     },
 };
@@ -44,6 +44,7 @@ pub struct PostContentRow {
     pub post_id: i64,
     pub author_name: String,
     pub author_slug: String,
+    pub author_avatar_url: Option<String>,
     pub title: String,
     pub content: String,
     pub published_at: Option<String>,
@@ -300,17 +301,19 @@ impl PostService for PostServiceImpl {
             post_id,
             author_name,
             author_slug,
+            author_avatar_url,
             title,
             content,
             published_at,
             url,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, content, published_at, url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, content, published_at, m1.url AS url, m2.url AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
-            LEFT JOIN media ON media.id = posts.cover_image_id
+            LEFT JOIN media m1 ON m1.id = posts.cover_image_id
+            LEFT JOIN media m2 ON m2.id = user_meta.avatar_image_id
             WHERE posts.slug = ? AND status = 'published'
             "#,
         )
@@ -363,9 +366,11 @@ impl PostService for PostServiceImpl {
         .await?;
 
         Ok(Post {
+            id: post_id,
             title,
             author_name,
             author_slug,
+            author_avatar_url,
             tags,
             content,
             published_at,
@@ -485,13 +490,91 @@ impl PostService for PostServiceImpl {
             cover_url,
         })
     }
-    async fn post_new_comment(&self, cmd: PostNewCommentCommand) -> Result<(), PostError> {
-        Ok(())
+    async fn post_new_comment(&self, cmd: PostNewCommentCommand) -> Result<i64, PostError> {
+        let id = sqlx::query_scalar(
+            r#"
+            INSERT INTO comments (post_id, user_id, content)
+            VALUES (?, ?, ?)
+            RETURNING id
+            "#,
+        )
+        .bind(&cmd.post_id)
+        .bind(&cmd.user_id)
+        .bind(&cmd.content)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(id)
     }
     async fn post_new_anonymous_comment(
         &self,
         cmd: PostNewAnynymouseCommentCommand,
-    ) -> Result<(), PostError> {
-        Ok(())
+    ) -> Result<i64, PostError> {
+        let id = sqlx::query_scalar(
+            r#"
+            INSERT INTO comments (post_id, content)
+            VALUES (?, ?)
+            RETURNING id
+            "#,
+        )
+        .bind(&cmd.post_id)
+        .bind(&cmd.content)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(id)
+    }
+    async fn get_comments(&self, cmd: GetCommentsCommand) -> Result<Vec<Comment>, PostError> {
+        let sequel = format!(
+            r#"
+            SELECT comments.id, content, comments.created_at, users.username, user_meta.display_name, media.url, users.role
+            FROM comments
+            LEFT JOIN users ON users.id = comments.user_id
+            LEFT JOIN user_meta ON user_meta.user_id = comments.user_id
+            LEFT JOIN media ON media.id = user_meta.avatar_image_id
+            WHERE post_id = ? {}
+            ORDER BY comments.id DESC
+            LIMIT ?
+            "#,
+            cmd.before.map(|_| "AND comments.id < ?").unwrap_or("")
+        );
+        let mut query = sqlx::query_as::<
+            _,
+            (
+                i64,
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+            ),
+        >(&sequel)
+        .bind(&cmd.post_id);
+
+        if let Some(before) = &cmd.before {
+            query = query.bind(before)
+        }
+
+        query = query.bind(&cmd.limit);
+
+        let comment_rows = query.fetch_all(&self.pool).await?;
+
+        let comments = comment_rows
+            .into_iter()
+            .map(
+                |(id, content, created_at, username, display_name, avatar_url, user_role)| {
+                    Comment {
+                        id,
+                        content,
+                        created_at,
+                        username,
+                        display_name,
+                        avatar_url,
+                        user_role,
+                    }
+                },
+            )
+            .collect();
+
+        Ok(comments)
     }
 }

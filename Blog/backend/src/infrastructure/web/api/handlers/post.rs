@@ -14,9 +14,10 @@ use crate::{
         commands::{
             media::UploadMediaWithoutDescriptionCommand,
             post::{
-                CheckSlugCommand, GetCategoriesCommand, GetDetailedPostsCommand,
-                GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand, PostCommand,
-                PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
+                CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand,
+                GetDetailedPostsCommand, GetFeaturedPostsCommand, GetLatestPostsCommand,
+                GetPostCommand, PostCommand, PostNewAnynymouseCommentCommand,
+                PostNewCommentCommand, PublishCommand,
             },
         },
         services::{media::MediaService, post::PostService},
@@ -135,6 +136,7 @@ pub async fn get_post_details(
 
 #[derive(Serialize, Deserialize)]
 pub struct PostResponse {
+    pub id: i64,
     pub title: String,
     pub tags: Vec<String>,
     pub author_name: String,
@@ -145,6 +147,8 @@ pub struct PostResponse {
     pub published_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_avatar_url: Option<String>,
 }
 
 pub async fn get_post_by_slug(
@@ -156,9 +160,11 @@ pub async fn get_post_by_slug(
         .get_post(GetPostCommand { slug: post_slug })
         .await?;
     Ok(Json(PostResponse {
+        id: post.id,
         title: post.title,
         author_name: post.author_name,
         author_slug: post.author_slug,
+        author_avatar_url: post.author_avatar_url,
         tags: post.tags,
         content: post.content,
         medium_urls: post.medium_urls,
@@ -485,6 +491,11 @@ pub struct NewCommentBody {
     pub content: String,
 }
 
+#[derive(Serialize)]
+pub struct NewCommentResponse {
+    pub comment_id: i64,
+}
+
 pub async fn new_comment(
     State(state): State<Arc<AppState>>,
     Extension(opt_claims): Extension<Option<Claims>>,
@@ -492,28 +503,94 @@ pub async fn new_comment(
     Json(body): Json<NewCommentBody>,
 ) -> Result<impl IntoResponse, PostError> {
     let post_id: i64 = post_id_str.parse().map_err(|_| PostError::PostNotFound)?;
-    if let Some(claims) = opt_claims {
-        let user_id = claims
-            .user_id
-            .parse::<i64>()
-            .map_err(|e| PostError::InternalError(e.to_string()))?;
+    let comment_id = match opt_claims {
+        Some(claims) => {
+            let user_id = claims
+                .user_id
+                .parse::<i64>()
+                .map_err(|e| PostError::InternalError(e.to_string()))?;
 
-        state
-            .post_service
-            .post_new_comment(PostNewCommentCommand {
-                post_id,
-                user_id,
-                content: body.content,
-            })
-            .await?;
-    } else {
-        state
-            .post_service
-            .post_new_anonymous_comment(PostNewAnynymouseCommentCommand {
-                post_id,
-                content: body.content,
-            })
-            .await?;
-    }
-    Ok(())
+            state
+                .post_service
+                .post_new_comment(PostNewCommentCommand {
+                    post_id,
+                    user_id,
+                    content: body.content,
+                })
+                .await?
+        }
+        None => {
+            state
+                .post_service
+                .post_new_anonymous_comment(PostNewAnynymouseCommentCommand {
+                    post_id,
+                    content: body.content,
+                })
+                .await?
+        }
+    };
+
+    Ok(Json(NewCommentResponse { comment_id }))
+}
+
+#[derive(Deserialize)]
+pub struct CommentsQuery {
+    pub before: Option<i64>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Comment {
+    pub id: i64,
+    pub content: String,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_role: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct CommentsResponse {
+    comments: Vec<Comment>,
+}
+
+pub async fn get_comments(
+    State(state): State<Arc<AppState>>,
+    Path(post_id_str): Path<String>,
+    Query(query): Query<CommentsQuery>,
+) -> Result<impl IntoResponse, PostError> {
+    let before = query.before;
+    let limit = query.limit.unwrap_or(1);
+    let post_id = post_id_str.parse::<i64>().unwrap();
+
+    let comments = state
+        .post_service
+        .get_comments(GetCommentsCommand {
+            post_id,
+            limit,
+            before,
+        })
+        .await?;
+
+    let comments: Vec<Comment> = comments
+        .into_iter()
+        .map(|comment| Comment {
+            id: comment.id,
+            content: comment.content,
+            created_at: comment.created_at,
+            username: comment.username,
+            display_name: comment.display_name,
+            avatar_url: comment.avatar_url,
+            user_role: comment.user_role,
+        })
+        .collect();
+
+    let wrapped_comments = CommentsResponse { comments };
+
+    Ok(Json(wrapped_comments))
 }

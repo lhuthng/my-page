@@ -22,7 +22,7 @@
 
 <div>
     <div
-        class="sticky not-lg:top-26.5 top-32 lg:w-46 space-y-4 lg:space-y-8 transition-transform duration-200"
+        class="sticky not-lg:top-16 top-32 lg:w-46 space-y-4 lg:space-y-8 transition-transform duration-200"
     >
         <ul class="space-y-2 bg-white/90 p-2 rounded-xl" id="side-bar">
             {#each routes as [Icon, text, path, routeName, secret], index}

@@ -7,6 +7,7 @@
     let displayName = $derived($user?.displayName);
     let username = $derived($user?.username);
     let role = $derived($user?.role);
+    let avatarUrl = $derived($user?.avatarUrl ?? "/missing.png");
 
     const handleLogout = async () => {
         if ($page.url.pathname.startsWith("/dashboard")) {
@@ -17,14 +18,14 @@
 </script>
 
 <header class="fixed w-full bg-white text-dark shadow-lg z-100">
-    <div class="flex not-lg:justify-center w-cap-2 p-4 gap-4">
+    <div class="flex not-lg:justify-center w-cap-2 p-2 lg:p-4 gap-4">
         <div class="flex items-center gap-4">
             <div
                 class="rounded-full bg-background transition-all duration-200 shadow-lg hover:brightness-102 hover:scale-102"
             >
                 <a href="/"
                     ><img
-                        class="not-lg:h-14"
+                        class="not-lg:h-10"
                         src={"/logo.png"}
                         alt="logo icon"
                     /></a
@@ -80,10 +81,15 @@
             </div>
             {#if displayName && username}
                 <div>
-                    Welcome back, <a
-                        class="font-bold"
-                        href="/profiles/{username}">{displayName}</a
-                    >
+                    Welcome back,
+                    <a class="font-bold" href="/profiles/{username}">
+                        {displayName}
+                        <img
+                            class="w-6 h-6 ml-1 rounded-full border-2 inline object-cover"
+                            src={avatarUrl}
+                            alt="small-avatar"
+                        />
+                    </a>
                 </div>
             {/if}
         </div>

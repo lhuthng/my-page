@@ -2,21 +2,28 @@ use std::sync::Arc;
 
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
+    body::Bytes,
+    extract::{Multipart, Path, Query, State},
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     application::{
-        commands::user::{ChangeDetailsCommand, GetPostsCommand, GetUserCommand, MeCommand},
-        services::user::UserService,
+        commands::{
+            media::ChangeAvatarCommand,
+            user::{ChangeDetailsCommand, GetPostsCommand, GetUserCommand, MeCommand},
+        },
+        services::{media::MediaService, user::UserService},
     },
     domain::{
         entities::{secret::Claims, user::UserRole},
-        errors::user::UserError,
+        errors::{media::MediaError, user::UserError},
     },
-    infrastructure::web::server::AppState,
+    infrastructure::web::{
+        api::handlers::common::{MediumData, extract_medium},
+        server::AppState,
+    },
 };
 
 #[derive(Debug, Serialize)]
@@ -24,6 +31,8 @@ pub struct MeResponse {
     username: String,
     display_name: String,
     role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    avatar_url: Option<String>,
 }
 
 #[axum::debug_handler]
@@ -43,9 +52,76 @@ pub async fn me(
             username: me.username,
             display_name: me.display_name,
             role: me.role,
+            avatar_url: me.avatar_url,
         })),
         Err(e) => Err(e),
     }
+}
+
+#[axum::debug_handler]
+pub async fn change_avatar(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    mut multipart: Multipart,
+) -> Result<impl IntoResponse, MediaError> {
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|_| MediaError::InternalError("Cannot parse id.".to_string()))?;
+
+    let mut opt_filename: Option<String> = None;
+    let mut opt_content_type: Option<String> = None;
+    let mut opt_bytes: Option<Bytes> = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| MediaError::InternalError(e.to_string()))?
+    {
+        let field_name = field.name().ok_or(MediaError::UploadFailed(
+            "Empty field detected.".to_string(),
+        ))?;
+
+        if field_name == "file" {
+            if opt_filename.is_some() {
+                return Err(MediaError::UploadFailed(
+                    "Only one media is allowed at a time.".to_string(),
+                ));
+            }
+
+            let MediumData {
+                filename,
+                content_type,
+                bytes,
+            } = extract_medium(field).await?;
+
+            opt_filename = Some(filename);
+            opt_content_type = Some(content_type);
+            opt_bytes = Some(bytes);
+        }
+    }
+
+    let filename =
+        opt_filename.ok_or_else(|| MediaError::UploadFailed("Missing file".to_string()))?;
+    let content_type = opt_content_type
+        .ok_or_else(|| MediaError::UploadFailed("Missing content type".to_string()))?;
+    let bytes =
+        opt_bytes.ok_or_else(|| MediaError::UploadFailed("Missing file bytes".to_string()))?;
+
+    state
+        .media_service
+        .change_avatar(
+            ChangeAvatarCommand {
+                user_id,
+                filename,
+                content_type,
+                bytes,
+            },
+            &state.media_config,
+        )
+        .await?;
+
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,6 +155,8 @@ pub async fn change_details(
 pub struct GetUserResponse {
     username: String,
     display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    avatar_url: Option<String>,
     bio: String,
     role: String,
 }
@@ -93,6 +171,7 @@ pub async fn get_user(
         Ok(user) => Ok(Json(GetUserResponse {
             username: user.username,
             display_name: user.display_name,
+            avatar_url: user.avatar_url,
             bio: user.bio,
             role: user.role,
         })),
