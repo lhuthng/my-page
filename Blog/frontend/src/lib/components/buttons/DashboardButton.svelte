@@ -1,0 +1,27 @@
+<script>
+    let { fill, ...rest } = $props();
+</script>
+
+<button {...rest}>
+    <svg
+        viewBox="0 0 16 16"
+        xmlns="http://www.w3.org/2000/svg"
+        x="0px"
+        y="0px"
+        {fill}
+    >
+        <g>
+            <path
+                d="M11.5,1.78h-7L1,8l3.5,6.22h7L15,8ZM8,10.7A2.7,2.7,0,1,1,10.7,8,2.7,2.7,0,0,1,8,10.7Z"
+            />
+        </g>
+    </svg>
+</button>
+
+<style lang="postcss">
+    @reference "../../../app.css";
+
+    button {
+        @apply not-disabled:hover:cursor-pointer;
+    }
+</style>

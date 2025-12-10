@@ -1,0 +1,161 @@
+@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@400..800&family=Noto+Serif:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap");
+
+@import "tailwindcss";
+
+html {
+    font-family: "Roboto", sans-serif;
+    font-optical-sizing: auto;
+    font-weight: 400;
+    font-style: normal;
+    font-variation-settings: "wdth" 100;
+    overflow-y: scroll;
+}
+
+@theme {
+    --color-dark: rgb(73, 92, 131);
+    --color-primary: rgb(122, 134, 182);
+    --color-secondary: rgb(168, 164, 206);
+    --color-background: rgb(200, 182, 226);
+
+    --color-accent-red: rgb(184, 104, 114);
+    --color-accent-red-light-1: rgb(204, 144, 152);
+    --color-accent-red-light-2: rgb(224, 184, 190);
+    --color-accent-green: rgb(104, 184, 126);
+    --color-accent-green-light-1: rgb(144, 204, 162);
+    --color-accent-green-light-2: rgb(184, 224, 194);
+    --color-accent-blue: rgb(120, 150, 200);
+    --color-accent-blue-light-1: rgb(150, 170, 215);
+    --color-accent-blue-light-2: rgb(180, 195, 225);
+}
+
+a {
+    @apply pointer-events-auto hover:underline;
+}
+
+input {
+    @apply focus:outline-none;
+}
+
+button {
+    @apply not-disabled:cursor-pointer;
+}
+
+.full {
+    @apply w-full h-full;
+}
+
+.w-cap {
+    @apply w-full lg:w-7/8 max-w-360 not-lg:px-2 mx-auto;
+}
+
+.w-cap-2 {
+    @apply w-full lg:w-8/9 max-w-360 not-lg:px-2 mx-auto;
+}
+
+.duo-btn {
+    @apply relative;
+    a,
+    button {
+        @apply relative block w-full text-nowrap z-11 border-2 rounded-2xl px-2 py-1 cursor-pointer transition-all duration-50 not-disabled:hover:brightness-105 not-disabled:active:brightness-105 not-disabled:active:translate-y-[0.2rem] text-white font-semibold;
+    }
+    a:disabled,
+    button:disabled {
+        @apply border-primary bg-secondary cursor-not-allowed translate-y-[0.2rem];
+    }
+    &:has(*:disabled)::before {
+        @apply bg-primary;
+    }
+    &::before {
+        @apply absolute content-[''] left-0 top-1/2 w-full h-[calc(50%+0.2rem)]  rounded-b-2xl z-10;
+    }
+}
+
+.duo-primary {
+    a,
+    button {
+        @apply border-primary bg-secondary;
+    }
+
+    &::before {
+        @apply bg-primary;
+    }
+}
+
+.duo-dark {
+    a,
+    button {
+        @apply border-dark bg-primary;
+    }
+    &::before {
+        @apply bg-dark;
+    }
+}
+
+.duo-red {
+    a,
+    button {
+        @apply border-accent-red bg-accent-red-light-1;
+    }
+    &::before {
+        @apply bg-accent-red;
+    }
+}
+
+.duo-green {
+    a,
+    button {
+        @apply border-accent-green bg-accent-green-light-1;
+    }
+    &::before {
+        @apply bg-accent-green;
+    }
+}
+
+.duo-blue {
+    a,
+    button {
+        @apply border-accent-blue bg-accent-blue-light-1;
+    }
+    &::before {
+        @apply bg-accent-blue;
+    }
+}
+
+.custom-scrollbar {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(73, 92, 131, 0.4) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(73, 92, 131, 0.4);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(73, 92, 131, 0.6);
+}
+
+.tooltip-container {
+    @apply relative cursor-help;
+
+    &::after {
+        content: attr(data-tooltip);
+
+        @apply absolute top-1/2 left-full -translate-y-1/2 bg-dark text-white rounded-xl whitespace-nowrap z-10 p-2 invisible opacity-0 transition-all duration-400;
+    }
+
+    &:hover::after {
+        @apply visible opacity-100 delay-100 translate-x-1;
+    }
+}
