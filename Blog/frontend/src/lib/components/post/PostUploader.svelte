@@ -73,10 +73,7 @@
     }, 300);
 
     const placeholder = pick([
-        [
-            "The Mysterious Art of Doing Stuff™",
-            "mysterious-art-of-doing-stuff",
-        ],
+        ["The Mysterious Art of Doing Stuff™", "mysterious-art-of-doing-stuff"],
         [
             "Why This Topic Is Definitely Important (Probably)",
             "topic-is-important-probably",
@@ -124,18 +121,17 @@
     });
 
     onMount(async () => {
-        const res = await fetch("/api/posts/categories", {
-            method: "GET",
-        });
-
-        if (res.ok) {
-            draft.categories.all = (await res.json()).categories.map(
-                (category) => ({ ...category, selected: false }),
-            );
-            draft.categories.status = "successful";
-        } else {
-            draft.categories.status = "failed";
-        }
+        // const res = await fetch("/api/posts/categories", {
+        //     method: "GET",
+        // });
+        // if (res.ok) {
+        //     draft.categories.all = (await res.json()).categories.map(
+        //         (category) => ({ ...category, selected: false }),
+        //     );
+        //     draft.categories.status = "successful";
+        // } else {
+        //     draft.categories.status = "failed";
+        // }
     });
 
     async function findMedia(keys) {
