@@ -1,7 +1,18 @@
 <script>
     import CommentButton from "../buttons/CommentButton.svelte";
 
-    let { src, id, title, slug, series, excerpt, author, tags } = $props();
+    let {
+        src,
+        id,
+        title,
+        slug,
+        series,
+        excerpt,
+        author,
+        tags,
+        previewMode,
+        children,
+    } = $props();
 
     let toggled = $state(false);
 
@@ -15,17 +26,20 @@
 </script>
 
 <div
-    class="relative flex gap-4 bg-background/40 hover:bg-background/60 transition-colors duration-50 rounded-lg hover:[&>a>img]:scale-105"
+    class="relative flex gap-4 bg-background/40 hover:bg-background/60 transition-colors duration-50 rounded-lg"
 >
     <a
-        class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34"
+        class="relative block z-10 min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34"
         href={link}
     >
         <img
-            class="absolute left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer"
+            class="absolute z-10 left-0 top-0 w-22 sm:w-26 h-22 sm:h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105"
             src={src ?? "/missing.png"}
             alt="thumbnail"
         />
+        {#if children !== undefined}
+            {@render children()}
+        {/if}
     </a>
     <div class="relative z-10 w-full pointer-events-none overflow-hidden">
         <div
@@ -35,14 +49,14 @@
             <div class="h-full w-1/2 min-w-0">
                 <div class="flex flex-col full py-2 min-w-0">
                     <a class="w-fit" href={link}
-                        ><h1 class="text-md md:text-lg line-clamp-2">
+                        ><h1 class="text-sm sm:text-md md:text-lg line-clamp-2">
                             {title}
                             {#if dashboardMode}
                                 (dashboard)
                             {/if}
                         </h1>
                     </a>
-                    <div class="flex text-sm pr-4">
+                    <div class="flex text-xs sm:text-sm pr-4">
                         <span class="select-none pointer-events-auto"
                             >by <a
                                 class="select-text text-dark!"
@@ -65,13 +79,15 @@
                             </div>
                         {/if}
                     </div>
-                    <div class="grow shrink">
+                    <div
+                        class="flex gap-1 grow shrink text-xs sm:text-sm line-clamp-2"
+                    >
+                        {#if tags?.length > 0}
+                            <span>tags: </span>
+                        {/if}
                         <ul
-                            class="tag-container flex flex-wrap text-sm gap-x-1 gap-y-0.5 py-0.5 pr-2 [&>li>a]:hover:no-underline!"
+                            class="tag-container flex flex-wrap h-fit gap-y-1 gap-x-1 pr-2"
                         >
-                            {#if tags?.length > 0}
-                                <span>tags: </span>
-                            {/if}
                             {#each tags as tag}
                                 <li>
                                     <a href={`/tags/${tag.replace(" ", "-")}`}
@@ -96,7 +112,7 @@
             </div>
             <div class="absolute left-1/2 h-full w-1/2" class:toggled>
                 <div
-                    class="full p-2 pointer-events-auto overscroll-contain custom-scrollbar overflow-y-scroll"
+                    class="full p-2 pointer-events-auto text-xs sm:text-base overscroll-contain custom-scrollbar overflow-y-scroll"
                 >
                     <p>{excerpt}</p>
                     <a class="block text-right" href={postLink}>> to post</a>
@@ -140,8 +156,8 @@
 
     .tag-container {
         @apply pointer-events-none;
-        li > a {
-            @apply px-1.5 border-2 rounded-full hover:bg-white/40;
+        & > li {
+            @apply h-4;
         }
     }
 

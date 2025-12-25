@@ -1,18 +1,36 @@
 <script>
-    import { mediaWithShortcutPlugin } from "$lib/custom-rules";
+    import {
+        mediaWithShortcutPlugin,
+        youtubeBlockPlugin,
+    } from "$lib/custom-rules";
     import { useDebounce } from "$lib/effects/debounce";
     import MarkdownIt from "markdown-it";
     import { tick } from "svelte";
 
-    const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
-
-    let { delay, onupdate, mediaDictionary, searchMedia, ...rest } = $props();
+    let {
+        delay,
+        onUpdateRendered,
+        onUpdateDraft,
+        mediaDictionary,
+        searchMedia,
+        mediaSyntax,
+        registerForceContent,
+        forDraft,
+        disabled,
+        ...rest
+    } = $props();
 
     let content = $state("");
     let _content = $state("");
 
+    registerForceContent((content) => {
+        _content = content;
+    });
+
     const md = $derived(
-        new MarkdownIt().use(mediaWithShortcutPlugin, { mediaDictionary }),
+        new MarkdownIt()
+            .use(mediaWithShortcutPlugin, { mediaDictionary })
+            .use(youtubeBlockPlugin),
     );
 
     let debounce = useDebounce(async (_content) => {
@@ -25,25 +43,22 @@
 
     $effect(() => {
         debounce.update(_content);
+        if (forDraft) onUpdateDraft(_content);
     });
 
     $effect(() => {
-        $inspect(md);
-    });
-
-    $effect(() => {
-        $inspect(mediaDictionary);
-    });
-    $effect(() => {
-        onupdate(md.render(content));
+        onUpdateRendered(md.render(content));
     });
 </script>
 
 <div {...rest}>
     <textarea
         id="content-editor"
-        class="w-full h-full p-2 focus:outline-0 resize-none"
-        placeholder="Type here..."
+        class="w-full h-full p-2 rounded-sm bg-white/60 focus:outline-0 resize-none custom-scrollbar"
+        class:bg-transparent!={disabled}
+        placeholder={disabled ? "" : "Type here..."}
+        autocorrect="off"
+        {disabled}
         bind:value={_content}
     ></textarea>
 </div>

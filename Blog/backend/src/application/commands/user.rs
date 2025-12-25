@@ -1,5 +1,3 @@
-use axum::body::Bytes;
-
 #[derive(serde::Deserialize)]
 pub struct MeCommand {
     pub user_id: i64,
@@ -24,5 +22,12 @@ pub struct GetRoleCommand {}
 pub struct GetPostsCommand {
     pub username: String,
     pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(serde::Deserialize)]
+pub struct SearchUserCommand {
+    pub term: String,
+    pub size: i64,
     pub offset: i64,
 }

@@ -53,7 +53,14 @@
         <div
             class="flex items-center rounded-full w-full h-8 px-2 border border-gray-400"
         >
-            <input class="outline-none grow" bind:value={keyword} />
+            <input
+                class="outline-none grow"
+                bind:value={keyword}
+                autocomplete="off"
+                autocorrect="off"
+                writingsuggestions="false"
+                min="3"
+            />
             <SearchButton
                 class="w-6 h-6 not-disabled:hover:scale-110 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 fill="gray"

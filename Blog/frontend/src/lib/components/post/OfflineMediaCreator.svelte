@@ -50,7 +50,7 @@
                     <MediumEntity
                         {shortName}
                         {url}
-                        changeName
+                        {changeName}
                         warning={shortName in onlineMedia &&
                             onlineMedia[shortName]}
                     />

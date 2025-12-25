@@ -1,6 +1,7 @@
 <script>
     import {
         auth,
+        changeAvatarUrl,
         changeDisplayname as changeDisplayName,
         user,
     } from "$lib/client/user.js";
@@ -21,10 +22,16 @@
     let response = $derived(data.response);
     let username = $derived(response.username);
     let role = $derived(response.role);
-    let displayName = $state(data.response.display_name);
-    let bio = $state(data.response.bio);
+    let displayName = $state("");
+    let bio = $state("");
     let postContainer = $state();
-    let avatar_url = $state(data.response.avatar_url ?? "/missing.png");
+    let avatarUrl = $state("/missing.png");
+
+    $effect(() => {
+        avatarUrl = data.response.avatar_url ?? "/missing.png";
+        displayName = data.response.display_name;
+        bio = data.response.bio;
+    });
 
     let editor = $state({
         isEditing: false,
@@ -202,7 +209,8 @@
                             });
 
                             if (res.ok) {
-                                avatar_url = editor.newAvatar;
+                                avatarUrl = editor.newAvatar;
+                                changeAvatarUrl(avatarUrl);
                                 editor.isUploaded = true;
                                 editor.isUploading = false;
                                 editor.avatarError = "";
@@ -248,7 +256,7 @@
                 {/if}
                 <img
                     class="w-60 h-60 object-cover"
-                    src={avatar_url}
+                    src={avatarUrl}
                     alt="avatar"
                 />
             </div>
@@ -363,7 +371,7 @@
                     </div>
                 </div>
             {:else}
-                <p class="py-4 text-lg">{bio}</p>
+                <p class="py-4 text-lg whitespace-pre-wrap">{bio}</p>
             {/if}
         </div>
     </div>

@@ -1,4 +1,8 @@
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    io::{Error, ErrorKind},
+    path::PathBuf,
+};
 
 use jsonwebtoken::Algorithm;
 
@@ -26,9 +30,10 @@ pub struct AppState {
     pub post_service: services::post::PostServiceImpl,
 }
 
-pub struct HTTPServer {
-    addr: String,
-    db_url: String,
+pub struct HTTPServer<'a> {
+    addr: Option<&'a str>,
+    port: Option<&'a str>,
+    db_url: Option<&'a str>,
 }
 
 impl MediaConfig {
@@ -89,15 +94,38 @@ impl AppConfig {
     }
 }
 
-impl HTTPServer {
-    pub fn new(s_addr: &str, s_db_url: &str) -> HTTPServer {
-        let addr = s_addr.to_string();
-        let db_url = s_db_url.to_string();
-        Self { addr, db_url }
+impl<'a> HTTPServer<'a> {
+    pub fn new() -> Self {
+        Self {
+            addr: None,
+            port: None,
+            db_url: None,
+        }
+    }
+
+    pub fn set_addr(&mut self, addr: &'a str) -> &mut Self {
+        self.addr = Some(addr);
+        self
+    }
+
+    pub fn set_port(&mut self, port: &'a str) -> &mut Self {
+        self.port = Some(port);
+        self
+    }
+
+    pub fn set_db(&mut self, db_url: &'a str) -> &mut Self {
+        self.db_url = Some(db_url);
+        self
     }
 
     pub async fn start(self) -> Result<(), Box<dyn std::error::Error>> {
-        let pool = sqlx::SqlitePool::connect(&self.db_url).await?;
+        let db_url = self
+            .db_url
+            .ok_or_else(|| Error::new(ErrorKind::InvalidData, "missing database url"))?;
+
+        println!("Connecting to {}", db_url);
+
+        let pool = sqlx::SqlitePool::connect(&db_url).await?;
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
             media_config: MediaConfig::from_env(),
@@ -108,7 +136,12 @@ impl HTTPServer {
         });
         let router = api::router::build_router(state);
 
-        let listener = tokio::net::TcpListener::bind(self.addr).await?;
+        let addr = self.addr.unwrap_or("127.0.0.1");
+        let port = self.port.unwrap_or("3000");
+
+        let addr = format!("{}:{}", addr, port);
+        println!("Starting {}", &addr);
+        let listener = tokio::net::TcpListener::bind(addr).await?;
         axum::serve(listener, router).await.unwrap();
 
         Ok(())
