@@ -2,7 +2,12 @@
     import OfflineMediaCreator from "./OfflineMediaCreator.svelte";
     import OnlineMediaSearcher from "./OnlineMediaSearcher.svelte";
 
-    let { updateMediaDictionary, registerSearch } = $props();
+    let {
+        updateMediaDictionary,
+        registerSearch,
+        registerMediaCheck,
+        registerGetMedia,
+    } = $props();
 
     let newMedia = $state({});
 
@@ -41,6 +46,13 @@
     };
 
     registerSearch(searchOnlineMedia);
+    registerMediaCheck({
+        isOnline: (keyword) =>
+            keyword in onlineMedia && onlineMedia[keyword] != null,
+        isOffline: (keyword) =>
+            keyword in offlineMedia && offlineMedia[keyword] != null,
+    });
+    registerGetMedia((keyword) => newMedia[keyword]);
 
     const updateNewMedia = (media) => {
         const temp = { ...newMedia };
@@ -65,6 +77,7 @@
         if (!(newName in onlineMedia)) {
             searchOnlineMedia([newName]);
         }
+        console.log({ ...onlineMedia }, { ...newMedia });
         return true;
     };
 </script>

@@ -21,6 +21,7 @@
 
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
     <PostSection
+        {id}
         {title}
         {tags}
         {date}

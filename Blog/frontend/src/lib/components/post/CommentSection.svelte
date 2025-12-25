@@ -120,7 +120,8 @@
                                     >{displayName}
                                 </a>
                             {:else}
-                                <span class="font-normal italic">Anonymous</span
+                                <span class="font-normal select-none italic"
+                                    >Anonymous</span
                                 >
                             {/if}
                             <span

@@ -3,7 +3,12 @@
 </script>
 
 <svelte:element this={as} {...rest}>
-    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px">
+    <svg
+        viewBox="0 0 15.4 15.4"
+        xmlns="http://www.w3.org/2000/svg"
+        x="0px"
+        y="0px"
+    >
         <defs>
             <mask fill="black" id="github-mask">
                 <path fill="white" d="M0 0h16v16H0z" />

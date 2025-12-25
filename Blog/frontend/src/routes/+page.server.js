@@ -14,6 +14,8 @@ export async function load({ fetch }) {
             if (post.url) post.url = fixClientRoute(post.url);
         });
         return data;
+    } else {
+        console.log(await res.text());
     }
     return {};
 }
