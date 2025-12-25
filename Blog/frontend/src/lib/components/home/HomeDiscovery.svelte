@@ -59,13 +59,11 @@
         if (status === "fetched" || status === "pending") return;
         fresh.status = "pending";
 
-        const delay = new Promise((_) => setTimeout(_, 700));
         const res = await fetch("api/posts/latest?limit=5&offset=0", {
             method: "GET",
         });
 
         if (res.ok) {
-            await delay;
             const state = Flip.getState(tab.container);
             fresh.cache = (await res.json()).featured_posts;
             fresh.status = "fetched";
@@ -82,7 +80,7 @@
 
 {#snippet exploreMore(link)}
     <li
-        class="flex justify-center items-center full min-h-22 md:min-h-30 rounded-lg border-2 border-dashed"
+        class="flex justify-center items-center full min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34 rounded-lg border-2 border-dashed"
     >
         <div class="duo-btn duo-blue">
             <a class="no-underline!" href={link}>explore more</a>
@@ -104,7 +102,7 @@
     <div bind:this={tab.container} class="pb-2">
         <ul
             bind:this={tab.discover}
-            class="grid grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+            class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
         >
             {#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
                 <li

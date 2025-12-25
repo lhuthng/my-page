@@ -1,15 +1,25 @@
 <script>
+    import { user } from "$lib/client/user";
     import Post from "./Post.svelte";
 
-    let { title, tags, date, content, author } = $props();
+    let { id, title, tags, date, content, author } = $props();
 </script>
 
-<section class="flex not-xl:flex-col">
+<section class="flex not-xl:flex-col max-w-full">
     <div
         class="flex grow flex-col bg-white/90 p-4 gap-4 rounded-xl not-xl:rounded-b-none xl:rounded-tr-none"
     >
         <div class="space-y-2 text-base">
-            <h1 class="text-2xl lg:text-4xl">{title}</h1>
+            <div class="flex gap-4">
+                <h1 class="text-2xl lg:text-4xl">
+                    {title}
+                </h1>
+                {#if id && $user?.username === author.username}
+                    <div class="h-fit duo-btn duo-green">
+                        <a href={`/dashboard/posts/id/${id}`}>Edit</a>
+                    </div>
+                {/if}
+            </div>
             <div class="inline gap-2 text-dark/60">
                 {#if tags?.length > 0}
                     <ul class="inline text-dark *:inline space-x-1">

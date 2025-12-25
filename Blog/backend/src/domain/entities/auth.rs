@@ -2,6 +2,9 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header};
 use serde::Deserialize;
 use validator::Validate;
 
+use regex::Regex;
+use std::sync::LazyLock;
+
 #[derive(Debug, Clone)]
 pub struct AuthTokens {
     pub access_token: String,
@@ -18,15 +21,22 @@ pub struct AuthConfig {
     pub refresh_expire_hours: i64,
 }
 
+static RE_USERNAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9._-]{3,16}$").unwrap());
+
+static RE_PASSWORD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"^[a-zA-Z0-9 !@#$%^&*()_+-=\[\]{};':"\\|,.<>/?]{8,30}$"#).unwrap()
+});
+
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterCredentials {
-    #[validate(length(min = 3, message = "Username must have at least 3 characters"))]
+    #[validate(length(min = 3, message = "Username must have at least 3 characters"),regex(path = *RE_USERNAME, message = "Username can only contain letters, numbers, underscores."))]
     pub username: String,
 
     #[validate(email(message = "Invalid email address"))]
     pub email: String,
 
-    #[validate(length(min = 6, message = "Password must be at least 6 characters"))]
+    #[validate(length(min = 6, message = "Password must be at least 6 characters"),regex(path = *RE_PASSWORD,message = "Password must be 8-30 characters long and can only contain letters, numbers, and common symbols (no spaces)."))]
     pub password: String,
 }
 

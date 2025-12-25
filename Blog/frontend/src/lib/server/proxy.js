@@ -1,8 +1,8 @@
-import { API_URL } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 import { error } from "@sveltejs/kit";
 
 export function route(path) {
-    return `${API_URL}/${path}`;
+    return `${env.API_URL}/${path}`;
 }
 
 export function fixClientRoute(path) {
@@ -11,7 +11,7 @@ export function fixClientRoute(path) {
 }
 
 export async function proxyFallback({ request, params, search }) {
-    const url = `${API_URL}/${params.path}${search ?? ""}`;
+    const url = `${env.API_URL}/${params.path}${search ?? ""}`;
 
     const proxyRequest = new Request(url, {
         headers: request.headers,

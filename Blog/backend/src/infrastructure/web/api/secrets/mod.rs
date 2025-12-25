@@ -1,4 +1,3 @@
-use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 
 use crate::domain::{entities::secret::Claims, errors::auth::AuthError};

@@ -1,7 +1,7 @@
 FROM rust:latest AS builder
 WORKDIR /app
 COPY . .
-RUN cargo build --release
+RUN cargo build --release --bin backend
 
 FROM debian:bookworm-slim
 WORKDIR /app
