@@ -39,7 +39,6 @@ export async function handle({ event, resolve }) {
             },
         });
 
-        console.log("C");
         if (!res.ok) {
             console.log(await res.text());
             event.locals.user = null;
