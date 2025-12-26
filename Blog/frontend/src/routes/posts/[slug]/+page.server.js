@@ -6,6 +6,7 @@ import {
 import { fixClientRoute, route } from "$lib/server/proxy.js";
 import { error } from "@sveltejs/kit";
 import MarkdownIt from "markdown-it";
+import mkKatex from "markdown-it-katex";
 
 export async function load(event) {
     const res = await fetch(route(`posts/s/${event.params.slug}`), {
@@ -37,6 +38,7 @@ export async function load(event) {
         );
 
         const md = new MarkdownIt()
+            .use(mkKatex)
             .use(mediaWithShortcutPlugin, {
                 mediaDictionary,
             })

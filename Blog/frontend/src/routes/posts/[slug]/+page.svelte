@@ -14,7 +14,7 @@
         content,
         published_at,
         tags,
-    } = data;
+    } = $derived(data);
 
     let date = $derived(textToDate(published_at));
 </script>

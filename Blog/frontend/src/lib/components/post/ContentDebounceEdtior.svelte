@@ -5,6 +5,7 @@
     } from "$lib/custom-rules";
     import { useDebounce } from "$lib/effects/debounce";
     import MarkdownIt from "markdown-it";
+    import mkKatex from "markdown-it-katex";
     import { tick } from "svelte";
 
     let {
@@ -29,6 +30,7 @@
 
     const md = $derived(
         new MarkdownIt()
+            .use(mkKatex)
             .use(mediaWithShortcutPlugin, { mediaDictionary })
             .use(youtubeBlockPlugin),
     );
