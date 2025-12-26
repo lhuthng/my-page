@@ -12,7 +12,7 @@
             @apply space-y-1;
         }
         & a {
-            @apply text-accent-blue mr-4;
+            @apply text-accent-blue mr-2;
         }
         & a::after {
             content: "↝";
@@ -67,7 +67,8 @@
         & pre > code {
             @apply text-white;
         }
-        & p > code {
+        & p > code,
+        & li > code {
             @apply bg-gray-200 p-1 rounded-md hover:brightness-95;
         }
         & blockquote {
