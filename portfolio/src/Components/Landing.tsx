@@ -127,7 +127,7 @@ export default function Landing() {
                 <div className="flex flex-col gap-5 mx-auto lg:mx-0 w-[min(37.5rem,calc(100%-1rem))] opacity-0 animate-[fadeIn_0.5s_ease-in_forwards]">
                     <div>
                         <span>
-                            <button className="animate-[shiftDown_0.5s_ease_forwards] px-4 h-10 rounded-3xl transition-opacity duration-200 bg-yellow-chalk text-darkboard shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)] cursor-pointer hover:brightness-110 active:translate-y-[0.2rem] active:shadow-none">
+                            <button className="animate-[shiftDown_0.5s_ease_forwards] px-4 h-10 rounded-3xl transition-opacity duration-200 text-darkboard duolingo-button yellow-button">
                                 <span>Let's connect!</span>
                             </button>
                         </span>
@@ -135,17 +135,17 @@ export default function Landing() {
                     </div>
                     <div className='space-x-4'>
                         <span className='opacity-0 animate-[fadeIn_0.5s_ease-in_0.1s_forwards]'>
-                            <button className='animate-[shiftDown_0.5s_ease_0.1s_forwards] w-12 h-12 rounded-full bg-yellow-chalk text-darkboard shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)] cursor-pointer hover:brightness-110 active:translate-y-[0.2rem] active:shadow-none'>
+                            <button className='animate-[shiftDown_0.5s_ease_0.1s_forwards] w-12 h-12 duolingo-button yellow-button'>
                                 <img className='w-[60%] mx-auto translate-x-[0.5px] filter-blackboard' src={linkedin}></img>
                             </button>
                         </span>
                         <span className='opacity-0 animate-[fadeIn_0.5s_ease-in_0.2s_forwards]'>
-                            <button className='animate-[shiftDown_0.5s_ease_0.2s_forwards] w-12 h-12 rounded-full bg-yellow-chalk text-darkboard shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)] cursor-pointer hover:brightness-110 active:translate-y-[0.2rem] active:shadow-none'>
+                            <button className='animate-[shiftDown_0.5s_ease_0.2s_forwards] w-12 h-12 duolingo-button yellow-button'>
                                 <img className='w-[80%] mx-auto translate-x-[0.5px] filter-blackboard' src={github}></img>
                             </button>
                         </span>
                         <span className='opacity-0 animate-[fadeIn_0.5s_ease-in_0.3s_forwards]'>
-                            <button className='animate-[shiftDown_0.5s_ease_0.3s_forwards] w-12 h-12 rounded-full bg-yellow-chalk text-darkboard shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)] cursor-pointer hover:brightness-110 active:translate-y-[0.2rem] active:shadow-none'>
+                            <button className='animate-[shiftDown_0.5s_ease_0.3s_forwards] w-12 h-12 duolingo-button yellow-button'>
                                 <img className='w-[60%] mx-auto filter-blackboard' src={at}></img>
                             </button>
                         </span>
