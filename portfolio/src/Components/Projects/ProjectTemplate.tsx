@@ -71,6 +71,16 @@ export default function ProjectTemplate({
   const overlayTimelineRef = useRef<GSAPTimeline>(null);
 
   useEffect(() => {
+    if (active) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [active]);
+
+  useEffect(() => {
     if (!overlayRef.current) {
       return;
     }
