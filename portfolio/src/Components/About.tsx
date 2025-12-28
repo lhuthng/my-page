@@ -7,6 +7,7 @@ import BSJourney from "./Phases/BSJourney";
 import Work from "./Phases/Work";
 import MSAdventure from "./Phases/MSAdventure";
 import Now from "./Phases/Now";
+import CoolHeader from "./CoolHeader";
 
 interface PhaseDetail {
     id?: number;
@@ -46,7 +47,7 @@ export default function About() {
     const introPhase: PhaseDetail = {
         id: -1,
         title: "Intro",
-        Component: <Intro setSpecialDiv={setSpecialDiv}/>
+        Component: <Intro setSpecialDiv={setSpecialDiv} onClick={() => handleChange(0)}/>
     };
     const [phaseList, setPhaseList] = useState<PhaseDetail[]>([
         introPhase
@@ -89,9 +90,7 @@ export default function About() {
 
     return (
         <div className="flex flex-col w-[calc(100%-1rem)] sm:w-[calc(100%-5rem)] mx-auto">
-            <div className="flex h-20 justify-center items-center">
-                <p className="text-4xl after-about-title w-full text-center font-bold text-white-chalk">About me</p>
-            </div>
+            <CoolHeader title="About me"/>
             <div className="relative flex h-[min(max(calc(100dvh-8rem),46.5rem),65rem)] w-full flex-row-reverse sm:flex-col justify-end sm:justify-start">
                 <div className="relative w-full sm:w-[min(100%,75rem)] h-full ml-4 sm:mx-auto mr-2 overflow-y-auto scrollbar-custom bg-darkboard/70 rounded-2xl drop-shadow-darkboard shadow-xl text-justify text-lg xs:text-xl sm:text-2xl">
                     {phaseList.map(({id, fading, Component}) => <div 
@@ -111,7 +110,7 @@ export default function About() {
                         >
                             <img className="filter-blackboard translate-x-[0.5px] translate-y-[-0.5px] hover:-rotate-180 hover:translate-y-[1px] transition-all duration-200" src={restart}></img>
                         </span>
-                        <div className="flex flex-col sm:flex-row w-auto sm:w-full h-full sm:h-auto [&>span]:transition-all [&>span]:duration-200 [&>span]:bg-yellow-chalk [&>span]:hover:bg-orange-chalk">
+                        <div className={`flex flex-col sm:flex-row w-auto sm:w-full h-full sm:h-auto [&>span]:transition-all [&>span]:duration-200`}>
                             {phaseDetails.map((detail, index) => (
                                 <React.Fragment key={index}>
                                     <div className="relative flex flex-col items-center">
@@ -126,19 +125,29 @@ export default function About() {
                                             {detail.title}
                                         </div>
                                     </div>
-                                    <span className={`${(phase === null || phase === index) ? "flex-1" : "flex-[0.1]"} m-1 rounded-full cursor-pointer hover:scale-x-125 sm:hover:scale-x-100 hover:scale-y-100 sm:hover:scale-y-125 hover:brightness-110`}
-                                        onClick={() => handleChange(index)}
-                                    />
+                                    <span className={`milestone-bar relative ${(phase === null || phase === index) ? "flex-1" : "flex-[0.08]"} ${phase !== index ? "expandable" : ""} m-1 rounded-sm cursor-pointer ${phase !== null && index < phase ? "bg-yellow-chalk hover:bg-orange-chalk" : "bg-yellow-chalk hover:bg-orange-chalk"} sm:hover:scale-x-100 sm:hover:scale-y-125 hover:brightness-110`}
+                                    >
+                                        <div className="absolute h-full w-auto sm:w-full rounded-md overflow-hidden not-sm:pointer-events-none"
+                                        >
+                                            <div className="absolute left-2 sm:left-0 h-full w-full bg-transparent z-2"
+                                                onClick={() => handleChange(index)}
+                                            />
+                                            <span className={`h-full block sm:hidden opacity-0 bg-yellow-chalk rounded-sm -translate-x-full transition-all duration-400`}
+                                            >
+                                                <span className="h-full flex mx-2 justify-start items-center whitespace-nowrap text-darkboard font-bold">{detail.title}</span>
+                                            </span>
+                                        </div>
+                                    </span>
                                 </React.Fragment>
                             ))}
                         </div>
                     </div>            
                     <div className="relative flex flex-col justify-end items-center w-14 sm:w-full h-10 p-auto sm:p-10">
-                        <button className={`${phase !== null ? "opacity-100" : "opacity-0"} left-0 right-auto sm:left-auto sm:right-0 absolute w-full sm:w-auto  px-auto sm:px-4 h-8 font-semibold rounded-xl transition-opacity duration-200 ${phase !== phaseDetails.length - 1 ? "bg-yellow-chalk text-darkboard shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)] cursor-pointer hover:brightness-110 active:translate-y-[0.2rem] active:shadow-none" : "bg-gray-300 text-gray-600 shadow-[0_0.2rem_0_var(--color-gray-400)]"}`}
+                        <button className={`left-0 right-auto sm:left-auto sm:right-0 absolute w-full sm:w-auto  px-auto sm:px-4 h-8 font-semibold rounded-xl transition-opacity duration-200 ${phase !== phaseDetails.length - 1 ? "bg-yellow-chalk text-darkboard shadow-[0_0.2rem_0_var(--color-yellow-chalk-dark)] cursor-pointer hover:brightness-110 active:translate-y-[0.2rem] active:shadow-none" : "bg-gray-300 text-gray-600 shadow-[0_0.2rem_0_var(--color-gray-400)]"}`}
                             onClick={() => handleChange(phase !== null ? phase + 1 : 0)}
                             disabled={phase === phaseDetails.length - 1}
                         >
-                            <span>Next</span>
+                            <span>{phase === null ? "Start" : "Next"}</span>
                         </button>
                     </div>
                 </div>

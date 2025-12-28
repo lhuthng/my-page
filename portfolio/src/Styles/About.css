@@ -6,7 +6,7 @@
     accent-color: var(--color-yellow-chalk);
 
     &::after {
-        @apply absolute left-0 right-0 w-full h-full bg-yellow-chalk rounded-full opacity-0;
+        @apply absolute left-0 right-0 w-full h-full bg-orange-chalk rounded-full opacity-0;
         content: "";
     }
 }
@@ -15,23 +15,8 @@
     @apply opacity-75 animate-ping;
 }
 
-.after-about-title {
-    @apply relative;
-    &::before {
-        @apply absolute text-7xl text-transparent tracking-widest opacity-10 text-nowrap left-[50%] top-[35%] translate-x-[-50%] translate-y-[-50%];
-        content: 'About me';
-        -webkit-text-stroke: 2px var(--color-white-chalk);
-        filter: drop-shadow(-1rem 0 0.4rem var(--color-white-chalk)) drop-shadow(1rem 0 0.4rem var(--color-white-chalk));
-    }
-}
-
-@keyframes expandWidth {
-    0% {
-        opacity: 0;
-        width: min(75rem, calc(100% - 10rem));
-    }
-    100% {
-        opacity: 1;
-        width: 100%;
+.milestone-bar.expandable {
+    &:hover, &:focus, &:active {
+        @apply not-sm:[&>div>span]:translate-x-0 not-sm:[&>div]:pointer-events-auto not-sm:[&>div>span]:opacity-100 not-sm:[&>div>span]:bg-orange-chalk bg-orange-chalk;
     }
 }
