@@ -1,0 +1,31 @@
+@reference "../index.css";
+
+.grid-container {
+    @apply grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] sm:grid-cols-[repeat(auto-fit,minmax(19rem,1fr))] sm:gap-y-6 sm:py-20;
+}
+
+.skill-quote {
+    &:after {
+        content: "";
+        @apply absolute left-0 top-1/2 -translate-y-1/2 w-2 h-full border-l-1;
+    }
+}
+
+blockquote > p {
+    font-family: "Cormorant Garamond", serif;
+    &::first-letter {
+        color: var(--color-red-700);
+        font-size: 4.5rem;
+        float: left;
+        padding-right: 0.6rem;
+        padding-top: 0.6rem;
+        line-height: 0.4;
+        font-family: "Uncial Antiqua", system-ui;
+    }
+}
+
+.skills-section-remark {
+    p {
+        font-family: "Cormorant Garamond", serif;
+    }
+}
