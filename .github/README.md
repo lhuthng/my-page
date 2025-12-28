@@ -26,6 +26,11 @@
     sudo apt install certbot python3-certbot-nginx -y
     ```
 
+    To renew
+    ```bash
+    sudo certbot renew
+    ```
+
     Sometime `apache` or something else might use the port 80, you can check the port and get rid of them if exist
     ```bash
     sudo lsof -i :80
@@ -94,6 +99,29 @@
     ```bash
     sudo apt remove --purge dotnet-sdk-9.0 aspnetcore-runtime-9.0 -y
     sudo apt autoremove -y
+    ```
+
+    Install docker
+
+    ```bash
+    sudo apt install -y ca-certificates curl gnupg lsb-release
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Add the repository to Apt sources:
+    sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+    Types: deb
+    URIs: https://download.docker.com/linux/ubuntu
+    Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+    Components: stable
+    Signed-By: /etc/apt/keyrings/docker.asc
+    EOF
+    
+    sudo apt update
+
+    sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
     ```
     
     ### *ADD A RATE LIMITER*
