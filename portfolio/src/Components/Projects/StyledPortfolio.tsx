@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ProjectProps } from "./ProjectTemplate";
 import ProjectTemplate from "./ProjectTemplate";
 import avatar from "@/Assets/Images/avatar.webp";
+import skills from "@/Assets/Images/skills-demo.webp";
 
 export default function StyledPortfolio({ active, onClick }: ProjectProps) {
   const [filterId, setFilterId] = useState(0);
@@ -49,7 +50,7 @@ export default function StyledPortfolio({ active, onClick }: ProjectProps) {
               className="bg-contain bg-no-repeat  "
               src={avatar}
               style={{
-                filter: `url(#squiggly-${filterId})`,
+                filter: `url(#squiggly-${filterId}) drop-shadow(0px 10px 2px rgba(0, 0, 0, 0.6))`,
               }}
             />
           </div>
@@ -68,7 +69,47 @@ export default function StyledPortfolio({ active, onClick }: ProjectProps) {
           </p>
         </div>
       }
-      details={<div className="bg-white w-full h-full"></div>}
+      details={
+        <div className="bg-purple-300 w-full h-full not-md:border-t-2 md:border-l-2 border-black text-black font-omori-2 text-2xl p-4">
+          <p>
+            This is a personal portfolio built with React to display my creative
+            work: digital arts, 3D modeling, and music production.
+          </p>
+
+          <div>
+            Key Features and Style
+            <ul className="[&>li>strong]:font-extrabold">
+              <li className="flex flex-col">
+                <figure className="py-4">
+                  <img
+                    className="mx-auto rounded-xl overflow-hidden"
+                    src={skills}
+                    style={{
+                      height: "auto",
+                      width: "min(80%, 40rem)",
+                    }}
+                  />
+                  <figcaption className="text-center">A snippet</figcaption>
+                </figure>
+                <strong>Custom Design:</strong> The entire UI is styled with a
+                custom, hand-drawn, notebook aesthetic, directly inspired by the
+                game Omori. I used custom CSS3 and unique assets to create this
+                look.
+              </li>
+              <li>
+                <strong>Art Gallery:</strong> The site uses React to manage the
+                art gallery, ensuring a responsive and smooth experience for
+                viewing all media types, including high-resolution images and
+                embedded music.
+              </li>
+              <li>
+                <strong>Technology:</strong> Built as a single-page application
+                using React, HTML5, CSS3, and JavaScript.
+              </li>
+            </ul>
+          </div>
+        </div>
+      }
     />
   );
 }
