@@ -81,4 +81,29 @@
     ```bash
     sudo systemctl status blog.service
     ```
-   
+6. **(new) Blog: Svelte+Rust server app**
+    Fuck Blazor, please remove the service
+    ```bash
+    sudo systemctl stop blog.service
+    sudo systemctl disable blog.service
+    sudo rm /etc/systemd/system/blog.service
+    sudo systemctl daemon-reload
+    sudo systemctl reset-failed
+    ```
+    Remove the .NET runtime
+    ```bash
+    sudo apt remove --purge dotnet-sdk-9.0 aspnetcore-runtime-9.0 -y
+    sudo apt autoremove -y
+    ```
+    
+    ### *ADD A RATE LIMITER*
+    inside `/etc/nginx/nginx.conf`
+    ```bash
+    http {
+        # Add this line here:
+        limit_req_zone $binary_remote_addr zone=blog:10m rate=5r/s;
+    
+        # ... leave everything else as it is ...
+    }
+    ```
+    Dont forget to update your blog config
