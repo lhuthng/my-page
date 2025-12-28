@@ -3,9 +3,14 @@
 </script>
 
 <svelte:element this={as} {...rest}>
-    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px"
-        ><defs
-            ><mask fill="black" id="fb-mask">
+    <svg
+        viewBox="0 0 15.4 15.4"
+        xmlns="http://www.w3.org/2000/svg"
+        x="0px"
+        y="0px"
+    >
+        <defs>
+            <mask fill="black" id="fb-mask">
                 <path fill="white" d="M0 0h16v16H0z" />
                 <path
                     d="M8.789 4.723c.387 0 1.041.006 1.041.006V3.415s-.455-.011-1.052 0-2.064.057-2.064 1.786v1.115H5.577v1.365h1.137v4.265H8.34V7.681h1.331l.159-1.365H8.34V5.201s.063-.478.449-.478"

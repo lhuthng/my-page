@@ -7,16 +7,35 @@ use crate::{
     application::{
         commands::post::{
             CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand, GetDetailedPostsCommand,
-            GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand, PostCommand,
+            GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand, NewPostCommand,
             PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
+            SearchPostCommand, UpdatePostCommand,
         },
         services::post::PostService,
     },
     domain::{
-        entities::post::{CategoryResult, Comment, Post, PostDetails, PostSnapshot},
+        entities::post::{CategoryResult, Comment, Post, PostDetails, PostSnapshot, PostSummary},
         errors::post::PostError,
     },
 };
+
+macro_rules! set_opt {
+    ($fields:expr, $( ($str: expr, $opt:expr) ),* ) => {
+        $(
+            $opt.is_some().then(|| $fields.push(format!("{} = ?", $str)));
+        )*
+    };
+}
+
+macro_rules! bind_opt {
+    ($query:expr, $( $opt:expr ),* ) => {
+        $(
+            if let Some(val) = $opt {
+                $query = $query.bind(val);
+            }
+        )*
+    };
+}
 
 pub struct PostServiceImpl {
     pub pool: SqlitePool,
@@ -47,8 +66,17 @@ pub struct PostContentRow {
     pub author_avatar_url: Option<String>,
     pub title: String,
     pub content: String,
+    pub draft: String,
     pub published_at: Option<String>,
     pub url: Option<String>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct PostSearchRow {
+    pub title: String,
+    pub slug: String,
+    pub cover_image_url: Option<String>,
+    pub score: i32,
 }
 
 #[derive(Debug, FromRow)]
@@ -62,6 +90,13 @@ pub struct TagRow {
 pub struct MediumUsageRow {
     pub code: i64,
     pub url: String,
+}
+
+#[derive(Debug, FromRow)]
+pub struct MediumUsageWithNameRow {
+    pub code: i64,
+    pub url: String,
+    pub short_name: String,
 }
 
 #[derive(Debug, FromRow)]
@@ -192,18 +227,19 @@ impl PostService for PostServiceImpl {
 
         Ok(results)
     }
-    async fn post(&self, cmd: PostCommand) -> Result<(), PostError> {
+    async fn new_post(&self, cmd: NewPostCommand) -> Result<(), PostError> {
         let mut tx = self.pool.begin().await?;
         let post_id: i64 = sqlx::query_scalar(
             r#"
-            INSERT INTO posts (user_id, title, slug, draft, status)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO posts (user_id, title, slug, excerpt, draft, status)
+            VALUES (?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
         .bind(&cmd.user_id)
         .bind(&cmd.title)
         .bind(&cmd.slug)
+        .bind(&cmd.excerpt)
         .bind(&cmd.content)
         .bind("draft".to_string())
         .fetch_one(&mut *tx)
@@ -254,40 +290,40 @@ impl PostService for PostServiceImpl {
             query.execute(&mut *tx).await?;
         }
 
-        if !cmd.categories.is_empty() {
+        if !cmd.tags.is_empty() {
             let placeholder = cmd
-                .categories
+                .tags
                 .iter()
                 .map(|_| "?".to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            let sequel = format!("SELECT id FROM categories WHERE slug IN ({})", placeholder);
+            let sequel = format!("SELECT id FROM tags WHERE slug IN ({})", placeholder);
 
             let mut query = sqlx::query_as::<_, (i64,)>(&sequel);
-            for slug in &cmd.categories {
+            for slug in &cmd.tags {
                 query = query.bind(slug);
             }
 
-            let category_ids = query.fetch_all(&mut *tx).await?;
+            let tag_ids = query.fetch_all(&mut *tx).await?;
 
-            let category_ids = category_ids.iter().map(|(id,)| id).collect::<Vec<_>>();
+            let tag_ids = tag_ids.iter().map(|(id,)| id).collect::<Vec<_>>();
 
             let placeholder = cmd
-                .categories
+                .tags
                 .iter()
                 .map(|_| "(?, ?)".to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
 
             let sequel = format!(
-                "INSERT INTO post_categories (post_id, category_id) VALUES {}",
+                "INSERT INTO post_tags (post_id, tag_id) VALUES {}",
                 placeholder
             );
 
             let mut query = sqlx::query(&sequel);
-            for category_id in category_ids {
-                query = query.bind(post_id).bind(category_id);
+            for tag_id in tag_ids {
+                query = query.bind(post_id).bind(tag_id);
             }
 
             query.execute(&mut *tx).await?;
@@ -296,7 +332,255 @@ impl PostService for PostServiceImpl {
         tx.commit().await?;
         Ok(())
     }
+    async fn search(&self, cmd: SearchPostCommand) -> Result<Vec<PostSummary>, PostError> {
+        let rows = sqlx::query_as::<_, PostSearchRow>(
+            r#"
+            SELECT
+                p.title,
+                p.slug,
+                m.url AS cover_image_url,
+                CASE
+                    WHEN LOWER(p.title) = LOWER(?1) THEN 3
+                    WHEN LOWER(p.title) LIKE LOWER(?1) || '%' THEN 2
+                    WHEN LOWER(p.title) LIKE '%' || LOWER(?1) || '%' THEN 1
+                    ELSE 0
+                END AS score
+            FROM posts AS p
+            LEFT JOIN media AS m ON m.id = p.cover_image_id
+            WHERE
+                LOWER(p.title) LIKE '%' || LOWER(?1) || '%'
+                OR LOWER(p.slug) LIKE '%' || LOWER(?1) || '%'
+            ORDER BY score DESC, p.created_at DESC
+            LIMIT ?2 OFFSET ?3;
+            "#,
+        )
+        .bind(&cmd.term)
+        .bind(cmd.size)
+        .bind(cmd.offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let summaries = rows
+            .into_iter()
+            .map(
+                |PostSearchRow {
+                     title,
+                     slug,
+                     cover_image_url,
+                     score: _,
+                 }| PostSummary {
+                    title,
+                    slug,
+                    cover_url: cover_image_url,
+                },
+            )
+            .collect::<Vec<_>>();
+
+        Ok(summaries)
+    }
+    async fn update_post(&self, cmd: UpdatePostCommand) -> Result<(), PostError> {
+        let mut tx = self.pool.begin().await?;
+
+        let mut set_fields: Vec<String> = vec![];
+        set_opt!(
+            set_fields,
+            ("title", cmd.title),
+            ("slug", cmd.slug),
+            ("excerpt", cmd.excerpt),
+            ("content", cmd.content),
+            ("draft", cmd.draft)
+        );
+
+        if !set_fields.is_empty() {
+            let set_stn = set_fields.join(", ");
+
+            let sql = format!(
+                r#"
+                UPDATE posts
+                SET {}
+                WHERE id = ?
+                "#,
+                set_stn
+            );
+            let mut query = sqlx::query(&sql);
+
+            bind_opt!(
+                query,
+                cmd.title,
+                cmd.slug,
+                cmd.excerpt,
+                cmd.content,
+                cmd.draft
+            );
+
+            query = query.bind(&cmd.post_id);
+
+            query.execute(&mut *tx).await?;
+        }
+        if let Some(media_usage) = &cmd.media_usage {
+            sqlx::query(
+                r#"
+                DELETE FROM post_media_usages
+                WHERE post_id = ?
+                "#,
+            )
+            .bind(&cmd.post_id)
+            .execute(&mut *tx)
+            .await?;
+
+            if !media_usage.is_empty() {
+                let placeholder = &media_usage
+                    .iter()
+                    .map(|_| "?".to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let sequel = format!(
+                    r#"
+                    SELECT id, short_name
+                    FROM media
+                    WHERE short_name IN ({})
+                    "#,
+                    placeholder
+                );
+
+                let mut query = sqlx::query_as::<_, (i64, String)>(&sequel);
+                for (short_name, _) in media_usage {
+                    query = query.bind(short_name);
+                }
+
+                let media: Vec<(i64, String)> = query.fetch_all(&mut *tx).await?;
+
+                let placeholder = media_usage
+                    .iter()
+                    .map(|_| "(?, ?, ?)".to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let sequel = format!(
+                    "INSERT INTO post_media_usages (post_id, medium_id, code) VALUES {}",
+                    placeholder
+                );
+
+                let mut query = sqlx::query(&sequel);
+                for (medium_id, short_name) in media {
+                    let code = media_usage.get(&short_name).ok_or_else(|| {
+                        PostError::UploadFailed(format!("Failed to map {}", short_name))
+                    })?;
+                    query = query.bind(&cmd.post_id).bind(medium_id).bind(code);
+                }
+
+                query.execute(&mut *tx).await?;
+            }
+        }
+        if let Some(tags) = cmd.tags {
+            sqlx::query(
+                r#"
+                DELETE FROM post_tags
+                WHERE post_id = ?
+                "#,
+            )
+            .bind(&cmd.post_id)
+            .execute(&mut *tx)
+            .await?;
+
+            if !tags.is_empty() {
+                let placeholder = tags
+                    .iter()
+                    .map(|_| "(?, ?)".to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let sql = format!(
+                    r#"
+                    INSERT OR IGNORE INTO tags (slug, name)
+                    VALUES {}
+                    "#,
+                    placeholder
+                );
+                let mut query = sqlx::query(&sql);
+
+                for tag in &tags {
+                    query = query.bind(tag).bind(tag)
+                }
+
+                query.execute(&mut *tx).await?;
+
+                let placeholder = tags
+                    .iter()
+                    .map(|_| "?".to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let sql = format!(
+                    r#"
+                    SELECT id FROM tags WHERE slug IN ({})
+                    "#,
+                    placeholder
+                );
+
+                let mut query = sqlx::query_scalar(&sql);
+
+                for tag in &tags {
+                    query = query.bind(tag);
+                }
+
+                let tag_ids: Vec<i64> = query.fetch_all(&mut *tx).await?;
+
+                sqlx::query(
+                    r#"
+                    DELETE FROM post_tags
+                    WHERE post_id = ?
+                    "#,
+                )
+                .bind(&cmd.post_id)
+                .execute(&mut *tx)
+                .await?;
+
+                let placeholder = tags
+                    .iter()
+                    .map(|_| "(?, ?)".to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let sql = format!(
+                    r#"
+                    INSERT INTO post_tags (post_id, tag_id)
+                    VALUES {}
+                    "#,
+                    placeholder
+                );
+
+                let mut query = sqlx::query(&sql);
+                for tag_id in tag_ids {
+                    query = query.bind(&cmd.post_id).bind(tag_id);
+                }
+
+                query.execute(&mut *tx).await?;
+            }
+        }
+        tx.commit().await?;
+        Ok(())
+    }
     async fn get_post(&self, cmd: GetPostCommand) -> Result<Post, PostError> {
+        if let Some(id) = cmd.as_id {
+            let res = sqlx::query(
+                r#"
+                SELECT 1
+                FROM posts
+                WHERE user_id = ? AND slug = ?
+                "#,
+            )
+            .bind(&id)
+            .bind(&cmd.slug)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if res.is_none() {
+                return Err(PostError::Forbidden);
+            }
+        }
+
         let PostContentRow {
             post_id,
             author_name,
@@ -304,11 +588,12 @@ impl PostService for PostServiceImpl {
             author_avatar_url,
             title,
             content,
+            draft,
             published_at,
             url,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, content, published_at, m1.url AS url, m2.url AS author_avatar_url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, content, draft, published_at, m1.url AS url, m2.url AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
@@ -337,18 +622,24 @@ impl PostService for PostServiceImpl {
 
         let mut medium_urls = vec![String::new(); len];
 
+        let len = len as i64;
+
         for MediumUsageRow { code, url } in medium_usage_rows {
-            if code < 0 || code > len as i64 {
-                return Err(PostError::InternalError("Negative index found".to_string()));
+            if code < 0 || code > len {
+                return Err(PostError::InternalError(
+                    "Out of range index found".to_string(),
+                ));
             }
 
-            let index = code as usize;
+            let index = code;
 
             if index >= len {
                 return Err(PostError::InternalError(
                     "Oversized insertion found".to_string(),
                 ));
             }
+
+            let index = index as usize;
 
             medium_urls[index] = url;
         }
@@ -373,6 +664,7 @@ impl PostService for PostServiceImpl {
             author_avatar_url,
             tags,
             content,
+            draft,
             published_at,
             medium_urls,
             cover_url: url,
@@ -475,6 +767,51 @@ impl PostService for PostServiceImpl {
             .await?;
         }
 
+        let medium_usage_rows = sqlx::query_as::<_, MediumUsageWithNameRow>(
+            r#"
+            SELECT code, url, short_name
+            FROM post_media_usages
+            JOIN media ON media.id = medium_id
+            WHERE post_media_usages.post_id = ?
+            "#,
+        )
+        .bind(&post_row.post_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let len = medium_usage_rows.len();
+
+        let mut medium_urls = vec![String::new(); len];
+        let mut medium_short_names = vec![String::new(); len];
+
+        let len = len as i64;
+
+        for MediumUsageWithNameRow {
+            code,
+            url,
+            short_name,
+        } in medium_usage_rows
+        {
+            if code < 0 || code > len {
+                return Err(PostError::InternalError(
+                    "Out of range index found".to_string(),
+                ));
+            }
+
+            let index = code;
+
+            if index >= len {
+                return Err(PostError::InternalError(
+                    "Oversized insertion found".to_string(),
+                ));
+            }
+
+            let index = index as usize;
+
+            medium_urls[index] = url;
+            medium_short_names[index] = short_name;
+        }
+
         Ok(PostDetails {
             id: post_row.post_id,
             title: post_row.title,
@@ -487,6 +824,8 @@ impl PostService for PostServiceImpl {
             content: post_row.content,
             draft: post_row.draft,
             is_featured: post_row.is_featured,
+            medium_urls,
+            medium_short_names,
             cover_url,
         })
     }

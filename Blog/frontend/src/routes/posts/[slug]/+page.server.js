@@ -1,11 +1,15 @@
 import { mediaSyntax } from "$lib/common.js";
-import { mediaWithShortcutPlugin } from "$lib/custom-rules/index.js";
+import {
+    mediaWithShortcutPlugin,
+    youtubeBlockPlugin,
+} from "$lib/custom-rules/index.js";
 import { fixClientRoute, route } from "$lib/server/proxy.js";
 import { error } from "@sveltejs/kit";
 import MarkdownIt from "markdown-it";
+import mkKatex from "markdown-it-katex";
 
 export async function load(event) {
-    const res = await fetch(route(`posts/${event.params.slug}`), {
+    const res = await fetch(route(`posts/s/${event.params.slug}`), {
         method: "GET",
     });
 
@@ -33,13 +37,18 @@ export async function load(event) {
                 (mediaDictionary[index.toString()] = fixClientRoute(url)),
         );
 
-        const md = new MarkdownIt().use(mediaWithShortcutPlugin, {
-            mediaDictionary,
-        });
+        const md = new MarkdownIt()
+            .use(mkKatex)
+            .use(mediaWithShortcutPlugin, {
+                mediaDictionary,
+            })
+            .use(youtubeBlockPlugin);
 
         content = md.render(content);
 
         return { content, author_avatar_url, cover_url, ...rest };
+    } else {
+        console.log(await res.text());
     }
 
     throw error(404, "Error");

@@ -255,3 +255,49 @@ body {
 .scroll-thumb-black.scrollbar-custom {
     scrollbar-color: var(--color-blackboard) transparent;
 }
+
+.animate-blink {
+  animation: blink 1s step-start infinite;
+}
+
+
+.submit-button {
+
+    &::before {
+        @apply absolute w-full h-full bg-transparent left-0 top-0 transition-all duration-100 -z-1;
+        content: '';
+    }
+    &:hover {
+        &::before {
+            @apply bg-orange-chalk/35 translate-x-2 translate-y-2;
+        }
+    }
+    &:active {
+        &::before {
+            @apply bg-orange-chalk/35 translate-x-0 translate-y-0;
+        }
+    }
+}
+
+.scrollbar-custom {
+  overflow-y: auto;
+}
+
+.scrollbar-custom::-webkit-scrollbar {
+  width: 4rem;
+}
+
+.scrollbar-custom::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb {
+  background-color: var(--color-orange-chalk);
+  border-radius: 9999px; /* fully rounded */
+}
+
+/* Firefox */
+.scrollbar-custom {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-orange-chalk) transparent;
+}

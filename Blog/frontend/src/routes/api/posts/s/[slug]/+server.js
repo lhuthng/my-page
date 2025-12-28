@@ -3,7 +3,7 @@ import { fixClientRoute, proxyFallback } from "$lib/server/proxy.js";
 export async function GET({ request, params, fetch, url }) {
     const res = await proxyFallback({
         request,
-        params: { path: `posts/${params.slug}` },
+        params: { path: `posts/s/${params.slug}` },
         search: url.search,
     });
 

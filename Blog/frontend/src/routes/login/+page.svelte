@@ -1,9 +1,13 @@
 <script>
     import { login, logout, register, user } from "$lib/client/user";
 
+    import { fly } from "svelte/transition";
+
+    let { data } = $props();
+
     let isLogged = $derived($user !== undefined);
 
-    let isLogging = $state(true);
+    let isLogging = $state(!data.register);
     let username = $state("");
     let password = $state("");
     let repassword = $state("");
@@ -12,7 +16,12 @@
     let status = $state(true);
     let message = $state("");
 
-    async function handleLogin() {
+    $effect(() => {
+        isLogging = !data.register;
+    });
+
+    async function handleLogin(e) {
+        e.preventDefault();
         message = "";
         pending = true;
         const res = await login(username, password);
@@ -26,7 +35,8 @@
         }
     }
 
-    async function handleRegister() {
+    async function handleRegister(e) {
+        e.preventDefault();
         if (password !== repassword) {
             status = false;
             message = "repassword does not match.";
@@ -53,7 +63,7 @@
     });
 </script>
 
-<div class="flex w-full items-center min-h-[calc(100dvh-8rem)]">
+<div class="flex w-full items-center min-h-[calc(100dvh-8rem)] py-4">
     <div class="mx-auto p-8 rounded-3xl bg-white/80">
         <form
             class="flex flex-col gap-4 w-80 *:items-center text-xl"
@@ -125,7 +135,7 @@
                     >
                 </div>
             {/if}
-            <div class="w-full duo-btn duo-dark">
+            <div class="w-full duo-btn duo-primary">
                 <button
                     class="w-full"
                     type="submit"
@@ -148,7 +158,7 @@
             <div class="separator">
                 <span>or</span>
             </div>
-            <div class="w-full duo-btn duo-dark">
+            <div class="w-full duo-btn duo-primary">
                 <button
                     type="button"
                     class="w-full"
@@ -163,8 +173,20 @@
             </div>
             <p class="text-lg text-dark/80 text-justify">
                 You don't need to log in to read posts! Create a profile for a
-                cool avatar when you comment. 𐔌՞ ܸ.ˬ.ܸ՞𐦯
+                cool avatar when you comment. <span class="text-nowrap"
+                    >𐔌՞ ܸ.ˬ.ܸ՞𐦯</span
+                >
             </p>
+            {#if !isLogging}
+                <p in:fly class="text-lg text-dark/80 text-justify">
+                    Passwords are hashed using a one-way function and never
+                    stored in plain text. When you log in, the password you
+                    enter is hashed and compared to the stored hash - the
+                    original password is never stored or recoverable <span
+                        class="text-nowrap">ヾ(•̀ ヮ &lt;)و</span
+                    >.
+                </p>
+            {/if}
         </form>
     </div>
 </div>
