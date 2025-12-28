@@ -4,13 +4,15 @@ use sqlx::{SqlitePool, prelude::FromRow};
 
 use crate::{
     application::{
-        commands::user::{ChangeDetailsCommand, GetPostsCommand, GetUserCommand, MeCommand},
+        commands::user::{
+            ChangeDetailsCommand, GetPostsCommand, GetUserCommand, MeCommand, SearchUserCommand,
+        },
         services::user::UserService,
     },
     domain::{
         entities::{
             post::PostSnapshot,
-            user::{Me, User},
+            user::{Me, User, UserSummary},
         },
         errors::user::UserError,
     },
@@ -41,6 +43,15 @@ struct UserRow {
     bio: String,
     role: String,
     avatar_url: Option<String>,
+}
+
+#[derive(FromRow, Debug)]
+struct UserSearchRow {
+    username: String,
+    display_name: String,
+    role: String,
+    avatar_url: Option<String>,
+    score: i32,
 }
 
 #[derive(Debug, FromRow)]
@@ -124,6 +135,56 @@ impl UserService for UserServiceImpl {
 
         Ok(())
     }
+    async fn search(&self, cmd: SearchUserCommand) -> Result<Vec<UserSummary>, UserError> {
+        let rows = sqlx::query_as::<_, UserSearchRow>(
+            r#"
+            SELECT DISTINCT
+                u.username,
+                u.role,
+                um.display_name,
+                m.url AS avatar_url,
+                CASE
+                    WHEN LOWER(um.display_name) = LOWER(?1) THEN 3
+                    WHEN LOWER(um.display_name) LIKE LOWER(?1) || '%' THEN 2
+                    WHEN LOWER(um.display_name) LIKE '%' || LOWER(?1) || '%' THEN 1
+                    WHEN LOWER(u.username) LIKE '%' || LOWER(?1) || '%' THEN 1
+                    ELSE 0
+                END AS score
+            FROM users AS u
+            JOIN user_meta AS um ON um.user_id = u.id
+            LEFT JOIN media AS m ON m.id = um.avatar_image_id
+            WHERE
+                LOWER(um.display_name) LIKE '%' || LOWER(?1) || '%'
+                OR LOWER(u.username) LIKE '%' || LOWER(?1) || '%'
+            ORDER BY score DESC, u.created_at DESC
+            LIMIT ?2 OFFSET ?3;
+            "#,
+        )
+        .bind(&cmd.term)
+        .bind(cmd.size)
+        .bind(cmd.offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let summaries = rows
+            .into_iter()
+            .map(
+                |UserSearchRow {
+                     username,
+                     display_name,
+                     role,
+                     avatar_url,
+                     score: _,
+                 }| UserSummary {
+                    username,
+                    display_name,
+                    role,
+                    avatar_url,
+                },
+            )
+            .collect::<Vec<_>>();
+        Ok(summaries)
+    }
     async fn get_user(&self, cmd: GetUserCommand) -> Result<User, UserError> {
         let user_row = sqlx::query_as::<_, UserRow>(
             r#"
@@ -166,7 +227,7 @@ impl UserService for UserServiceImpl {
         .await
         .map_err(|e| UserError::InternalError(e.to_string()))?;
 
-        if (post_rows.len() == 0) {
+        if post_rows.len() == 0 {
             return Ok(vec![]);
         }
 

@@ -32,6 +32,10 @@ export function changeDisplayname(displayName) {
     user.update(($user) => ({ ...$user, displayName }));
 }
 
+export function changeAvatarUrl(avatarUrl) {
+    user.update(($user) => ({ ...$user, avatarUrl }));
+}
+
 export function auth() {
     let { token, tokenType } = get(user);
     return `${tokenType} ${token}`;

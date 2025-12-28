@@ -1,3 +1,6 @@
+export const prerender = false;
+export const ssr = true;
+
 import { clearLogin, saveLogin } from "$lib/client/user.js";
 
 import { gsap } from "gsap";

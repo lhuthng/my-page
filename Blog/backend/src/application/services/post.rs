@@ -16,7 +16,14 @@ pub trait PostService {
         &self,
         cmd: commands::post::GetCategoriesCommand,
     ) -> Result<Vec<entities::post::CategoryResult>, errors::post::PostError>;
-    async fn post(&self, cmd: commands::post::PostCommand) -> Result<(), errors::post::PostError>;
+    async fn new_post(
+        &self,
+        cmd: commands::post::NewPostCommand,
+    ) -> Result<(), errors::post::PostError>;
+    async fn update_post(
+        &self,
+        cmd: commands::post::UpdatePostCommand,
+    ) -> Result<(), errors::post::PostError>;
     async fn get_post(
         &self,
         cmd: commands::post::GetPostCommand,
@@ -37,6 +44,10 @@ pub trait PostService {
         &self,
         cmd: commands::post::GetDetailedPostsCommand,
     ) -> Result<entities::post::PostDetails, errors::post::PostError>;
+    async fn search(
+        &self,
+        cmd: commands::post::SearchPostCommand,
+    ) -> Result<Vec<entities::post::PostSummary>, errors::post::PostError>;
     async fn get_comments(
         &self,
         cmd: commands::post::GetCommentsCommand,

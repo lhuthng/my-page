@@ -9,3 +9,16 @@ export function textToDate(text) {
     const options = { year: "numeric", month: "short", day: "numeric" };
     return dt.toLocaleDateString("en-US", options);
 }
+
+export function nowToDate() {
+    const dt = new Date();
+    const options = { year: "numeric", month: "short", day: "numeric" };
+    return dt.toLocaleDateString("en-US", options);
+}
+
+export function arraysEqualIgnoreOrder(a, b) {
+    return (
+        a.length === b.length &&
+        [...a].sort().every((val, i) => val === [...b].sort()[i])
+    );
+}

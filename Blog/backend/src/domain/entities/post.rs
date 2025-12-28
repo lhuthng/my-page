@@ -28,6 +28,15 @@ pub struct PostDetails {
     pub draft: String,
     pub is_featured: i64,
     pub cover_url: Option<String>,
+    pub medium_urls: Vec<String>,
+    pub medium_short_names: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PostSummary {
+    pub title: String,
+    pub slug: String,
+    pub cover_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +48,7 @@ pub struct Post {
     pub author_avatar_url: Option<String>,
     pub tags: Vec<String>,
     pub content: String,
+    pub draft: String,
     pub published_at: Option<String>,
     pub medium_urls: Vec<String>,
     pub cover_url: Option<String>,

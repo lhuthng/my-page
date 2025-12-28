@@ -1,20 +1,21 @@
 <script>
-    let { shortName, url, warning, handlers } = $props();
+    let { shortName, url, warning, changeName } = $props();
     let draft = $state(shortName);
     let skip = false;
 </script>
 
 <li
-    class={`flex items-center gap-2 p-2 rounded-lg ${warning ? "bg-yellow-200" : "bg-gray-300"} hover:brightness-105`}
+    class="flex items-center gap-2 p-2 rounded-lg bg-primary/20 hover:brightness-105"
+    class:bg-yellow-200={warning}
 >
-    <div class="flex w-10 h-10">
+    <div class="flex w-8 lg:w-10 h-8 lg:h-10">
         <img
-            class="m-auto max-w-10 max-h-10 object-contain rounded-sm overflow-hidden"
+            class="m-auto max-w-8 lg:max-w-10 max-h-8 lg:max-h-10 object-contain rounded-sm overflow-hidden"
             src={url}
             alt={shortName}
         />
     </div>
-    {#if handlers?.changeName}
+    {#if changeName}
         <input
             class="focus:outline-none focus:border-b"
             type="text"
@@ -27,7 +28,7 @@
             }}
             onkeydown={(e) => {
                 if (e.key === "Enter") {
-                    if (handlers.changeName(shortName, draft)) {
+                    if (changeName(shortName, draft)) {
                         skip = true;
                     }
                     e.target.blur();

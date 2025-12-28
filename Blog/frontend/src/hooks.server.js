@@ -1,7 +1,8 @@
-import { API_URL } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 import { fixClientRoute, route } from "$lib/server/proxy";
 
 export async function handle({ event, resolve }) {
+    const { API_URL } = env;
     const accept = event.request.headers.get("accept") ?? "";
     if (accept.includes("text/html")) {
         const refreshToken = event.cookies.get("refresh-token");
@@ -18,6 +19,7 @@ export async function handle({ event, resolve }) {
         });
 
         if (!res.ok) {
+            console.log(await res.text());
             event.cookies.delete("refresh-token", {
                 path: "/",
                 httpOnly: true,
@@ -38,6 +40,7 @@ export async function handle({ event, resolve }) {
         });
 
         if (!res.ok) {
+            console.log(await res.text());
             event.locals.user = null;
             return resolve(event);
         }
