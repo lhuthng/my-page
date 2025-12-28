@@ -18,7 +18,7 @@ export default function DXC({ active, onClick }: ProjectProps) {
       }
       description={
         <div className="flex flex-col w-full h-full space-y-4 p-4 bg-deep-violet text-white-chalk">
-          <h1>Enterprise Application Maintenance & Migration</h1>
+          <h1>Enterprise Application Maintenance &amp; Migration</h1>
           <p>
             Support for a large-scale, legacy e-commerce system, including
             critical transaction bug resolution and the creation of internal API
@@ -46,7 +46,8 @@ export default function DXC({ active, onClick }: ProjectProps) {
             <div>
               <h1>
                 <strong>
-                  Project 1: E-Commerce Stability & Tooling (Baker & Taylor)
+                  Project 1: E-Commerce Stability &amp; Tooling (Baker &amp;
+                  Taylor)
                 </strong>
               </h1>
               <p>
