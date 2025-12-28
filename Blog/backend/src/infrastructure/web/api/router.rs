@@ -22,7 +22,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/{username}", get(handlers::user::get_user))
-                .route("/{username}/posts", get(handlers::user::get_posts)),
+                .route("/{username}/posts", get(handlers::user::get_posts))
+                .route("/", get(handlers::user::search)),
         )
         // protected route
         .merge(
@@ -76,6 +77,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     "/id/{post_id}/comments/new",
                     put(handlers::post::new_comment),
                 )
+                .route("/s/{post_slug}", get(handlers::post::get_post_by_slug))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::optional_user_guard,
@@ -85,8 +87,9 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/new", post(handlers::post::new_post))
-                .route("/id/{post_id}", patch(handlers::post::publish))
+                .route("/id/{post_id}", post(handlers::post::publish))
                 .route("/id/{post_id}", get(handlers::post::get_post_details))
+                .route("/id/{post_id}", patch(handlers::post::update_post))
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
@@ -97,12 +100,12 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/id/{post_id}/comments", get(handlers::post::get_comments))
-                .route("/{post_slug}", get(handlers::post::get_post_by_slug))
                 // .route("/{post_id}/")
                 .route("/featured", get(handlers::post::get_featured_posts))
                 .route("/latest", get(handlers::post::get_latest_posts))
                 .route("/check", get(handlers::post::check_post))
-                .route("/categories", get(handlers::post::get_categories)),
+                .route("/categories", get(handlers::post::get_categories))
+                .route("/", get(handlers::post::search)),
         );
 
     Router::new()

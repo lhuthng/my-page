@@ -12,8 +12,10 @@ mod infrastructure;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
-    println!("Server starting on http://127.0.0.1:3000");
-    let server = HTTPServer::new("127.0.0.1:3000", "sqlite:data/blog.db");
+    let mut server = HTTPServer::new();
+    server.set_addr("0.0.0.0");
+    server.set_port("3000");
+    server.set_db("sqlite:data/blog.db");
     server.start().await?;
     Ok(())
 }

@@ -12,12 +12,17 @@ use crate::{
     application::{
         commands::{
             media::ChangeAvatarCommand,
-            user::{ChangeDetailsCommand, GetPostsCommand, GetUserCommand, MeCommand},
+            user::{
+                ChangeDetailsCommand, GetPostsCommand, GetUserCommand, MeCommand, SearchUserCommand,
+            },
         },
         services::{media::MediaService, user::UserService},
     },
     domain::{
-        entities::{secret::Claims, user::UserRole},
+        entities::{
+            secret::Claims,
+            user::{UserRole, UserSummary},
+        },
         errors::{media::MediaError, user::UserError},
     },
     infrastructure::web::{
@@ -256,4 +261,59 @@ pub async fn check_mod(
         .is_ok_and(|role| UserRole::Moderator.include(&role));
 
     Ok(Json(CheckModResponse { is_authorized }))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SearchUserQuery {
+    pub term: String,
+    pub size: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct SearchUserResult {
+    pub username: String,
+    pub display_name: String,
+    pub role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SearchUserResponse {
+    pub users: Vec<SearchUserResult>,
+}
+
+#[axum::debug_handler]
+pub async fn search(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<SearchUserQuery>,
+) -> Result<impl IntoResponse, UserError> {
+    let term = query.term;
+    let size = query.size.unwrap_or(1);
+    let offset = query.offset.unwrap_or(0);
+
+    let user_snapshots = state
+        .user_service
+        .search(SearchUserCommand { term, size, offset })
+        .await?;
+
+    let users: Vec<SearchUserResult> = user_snapshots
+        .into_iter()
+        .map(
+            |UserSummary {
+                 username,
+                 display_name,
+                 role,
+                 avatar_url,
+             }| SearchUserResult {
+                username,
+                display_name,
+                role,
+                avatar_url,
+            },
+        )
+        .collect();
+
+    Ok(Json(SearchUserResponse { users }))
 }

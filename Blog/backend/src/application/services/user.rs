@@ -18,6 +18,10 @@ pub trait UserService {
         &self,
         cmd: commands::user::GetUserCommand,
     ) -> Result<entities::user::User, errors::user::UserError>;
+    async fn search(
+        &self,
+        cmd: commands::user::SearchUserCommand,
+    ) -> Result<Vec<entities::user::UserSummary>, errors::user::UserError>;
     async fn get_posts(
         &self,
         cmd: commands::user::GetPostsCommand,

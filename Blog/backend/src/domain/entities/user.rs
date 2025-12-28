@@ -51,3 +51,11 @@ pub struct User {
     pub role: String,
     pub avatar_url: Option<String>,
 }
+
+#[derive(Debug, Clone)]
+pub struct UserSummary {
+    pub username: String,
+    pub display_name: String,
+    pub role: String,
+    pub avatar_url: Option<String>,
+}

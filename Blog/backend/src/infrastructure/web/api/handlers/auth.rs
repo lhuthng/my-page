@@ -11,10 +11,7 @@ use crate::{
         commands::auth::{LoginCommand, RefreshAccessTokenCommand, RegisterCommand},
         services::auth::AuthService,
     },
-    domain::{
-        entities::auth::RegisterCredentials,
-        errors::{auth::AuthError, user::UserError},
-    },
+    domain::{entities::auth::RegisterCredentials, errors::auth::AuthError},
     infrastructure::web::server::AppState,
 };
 

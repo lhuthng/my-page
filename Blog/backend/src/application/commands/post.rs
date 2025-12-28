@@ -4,18 +4,32 @@ pub struct CheckSlugCommand {
     pub post_slug: String,
 }
 
-pub struct PostCommand {
+pub struct NewPostCommand {
     pub user_id: i64,
     pub title: String,
     pub slug: String,
+    pub excerpt: String,
     pub content: String,
-    pub categories: Vec<String>,
+    pub tags: Vec<String>,
     pub cover_image: Option<String>,
     pub media_usage: HashMap<String, i64>,
 }
 
+pub struct UpdatePostCommand {
+    pub user_id: i64,
+    pub post_id: i64,
+    pub title: Option<String>,
+    pub slug: Option<String>,
+    pub excerpt: Option<String>,
+    pub content: Option<String>,
+    pub draft: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub media_usage: Option<HashMap<String, i64>>,
+}
+
 pub struct GetPostCommand {
     pub slug: String,
+    pub as_id: Option<i64>,
 }
 
 pub struct PublishCommand {
@@ -37,6 +51,12 @@ pub struct GetLatestPostsCommand {
 pub struct GetDetailedPostsCommand {
     pub required_author_id: Option<i64>,
     pub post_id: i64,
+}
+
+pub struct SearchPostCommand {
+    pub term: String,
+    pub size: i64,
+    pub offset: i64,
 }
 
 pub struct PostNewCommentCommand {
