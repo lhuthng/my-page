@@ -29,11 +29,11 @@
     class="relative flex gap-4 bg-background/40 hover:bg-background/60 transition-colors duration-50 rounded-lg"
 >
     <a
-        class="relative block z-10 min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34"
+        class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34"
         href={link}
     >
         <img
-            class="absolute z-10 left-0 top-0 w-22 sm:w-26 h-22 sm:h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105"
+            class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105"
             src={src ?? "/missing.png"}
             alt="thumbnail"
         />
@@ -49,14 +49,14 @@
             <div class="h-full w-1/2 min-w-0">
                 <div class="flex flex-col full py-2 min-w-0">
                     <a class="w-fit" href={link}
-                        ><h1 class="text-sm sm:text-md md:text-lg line-clamp-2">
+                        ><h1 class="text-md md:text-lg line-clamp-2">
                             {title}
                             {#if dashboardMode}
                                 (dashboard)
                             {/if}
                         </h1>
                     </a>
-                    <div class="flex text-xs sm:text-sm pr-4">
+                    <div class="flex text-sm sm:text-md pr-4">
                         <span class="select-none pointer-events-auto"
                             >by <a
                                 class="select-text text-dark!"
@@ -80,7 +80,7 @@
                         {/if}
                     </div>
                     <div
-                        class="flex gap-1 grow shrink text-xs sm:text-sm line-clamp-2"
+                        class="flex gap-1 grow shrink text-sm sm:text-md line-clamp-2"
                     >
                         {#if tags?.length > 0}
                             <span>tags: </span>
@@ -100,7 +100,7 @@
                     <div
                         class="flex justify-between items-center text-base pr-4"
                     >
-                        <div class="flex gap-1 items-center text-sm">
+                        <div class="flex gap-1 items-center text-md">
                             <!-- <CommentButton
                                 as="span"
                                 class="block w-6 h-6 fill-dark"
