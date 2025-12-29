@@ -52,7 +52,7 @@
     sudo ln -s /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/
     sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
     ```
-    *(the reference files can be found here: [portfolio](./nginx/portfolio) and [blog](./nginx/blog))*
+    *(the reference files can be found here: [portfolio](./nginx/portfolio.conf) and [blog](./nginx/blog.conf))*
 
     Test and reload
     ```bash
