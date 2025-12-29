@@ -1,0 +1,1 @@
+import"./DsnmJJEf.js";import"./69_IOA4Y.js";import{f as t,a as n}from"./keZNrdrU.js";var a=t('<div class="my-2 lg:my-4 p-4 bg-white rounded-xl"><img class="mx-auto rounded-lg" src="/underconstruction.jpg" alt="underconstruction"/></div>');function c(o){var r=a();n(o,r)}export{c as U};
