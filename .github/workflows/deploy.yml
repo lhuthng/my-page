@@ -38,6 +38,9 @@ jobs:
           script: |
             set -e
 
+            echo "https://github.com/${{ github.repository }}.git"
+            echo "${{ secrets.GH_PAT }}"
+
             REPO_DIR="/var/dev/my-page"
             LIVE_DIR="/var/www/portfolio"
             BRANCH="master"
@@ -65,7 +68,6 @@ jobs:
             sudo systemctl reload nginx
 
             echo "Portfolio deployed successfully!"
-
   deploy-blog:
     needs: filter
     if: needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')
