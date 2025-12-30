@@ -1,464 +1,426 @@
 <script>
-    import { auth, user } from "$lib/client/user";
-    import { arraysEqualIgnoreOrder, nowToDate } from "$lib/common";
-    import { useDebounce } from "$lib/effects/debounce";
-    import { fly } from "svelte/transition";
-    import PostCard from "../home/PostCard.svelte";
-    import ContentDebounceEdtior from "./ContentDebounceEdtior.svelte";
-    import MediaDictionaryController from "./MediaDictionaryController.svelte";
-    import PostSection from "./PostSection.svelte";
+  import { auth, user } from "$lib/client/user";
+  import { arraysEqualIgnoreOrder, nowToDate } from "$lib/common";
+  import { useDebounce } from "$lib/effects/debounce";
+  import { fly } from "svelte/transition";
+  import PostCard from "../home/PostCard.svelte";
+  import ContentDebounceEdtior from "./ContentDebounceEdtior.svelte";
+  import MediaDictionaryController from "./MediaDictionaryController.svelte";
+  import PostSection from "./PostSection.svelte";
 
-    const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
+  const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 
-    let { mode = "create", data } = $props();
+  let { mode = "create", data } = $props();
 
-    let mediaDictionary = $state({});
-    let searchMedia = $state(async (keyword) => {});
-    let forceContent = $state((content) => {});
-    let isOnline = $state((keyword) => false);
-    let isOffline = $state((keyword) => false);
-    let getNewMedia = $state((keyword) => {});
+  let mediaDictionary = $state({});
+  let searchMedia = $state(async (keyword) => {});
+  let forceContent = $state((content) => {});
+  let isOnline = $state((keyword) => false);
+  let isOffline = $state((keyword) => false);
+  let getNewMedia = $state((keyword) => {});
 
-    const updateMediaDictionary = (newDictionary) => {
-        mediaDictionary = { ...newDictionary };
-    };
+  const updateMediaDictionary = (newDictionary) => {
+    mediaDictionary = { ...newDictionary };
+  };
 
-    let editingData = $state({
-        id: "",
-        title: "",
-        _slugStatus: {},
-        slug: "",
-        tags: "",
-        categories: [],
-        excerpt: "",
-        date: nowToDate(),
-        content: "",
-        draft: "",
-        author: {
-            username: $user?.username,
-            displayName: $user?.displayName,
-            avatarUrl: $user?.avatarUrl,
-        },
-    });
+  let editingData = $state({
+    id: "",
+    title: "",
+    _slugStatus: {},
+    slug: "",
+    tags: "",
+    categories: [],
+    excerpt: "",
+    date: nowToDate(),
+    content: "",
+    draft: "",
+    author: {
+      username: $user?.username,
+      displayName: $user?.displayName,
+      avatarUrl: $user?.avatarUrl,
+    },
+  });
 
-    let editor = $state({
-        toggled: false,
-        view: "private",
-    });
+  let editor = $state({
+    toggled: false,
+    view: "private",
+  });
 
-    let renderedText = $state("");
+  let renderedText = $state("");
 
-    let forDraft = $derived(
-        mode === "create" || (mode === "edit" && editor.view === "private"),
-    );
+  let forDraft = $derived(
+    mode === "create" || (mode === "edit" && editor.view === "private"),
+  );
 
-    if (mode === "edit" && data !== undefined) {
-        let {
-            id,
-            title,
-            slug,
-            content,
-            draft,
-            excerpt,
-            tags,
-            mediumShortNames,
-            mediumUrls,
-        } = data;
-        editingData.id = id;
-        editingData.title = title;
-        editingData.slug = slug;
-        editingData.excerpt = excerpt;
-        editingData.tags = tags.join(" ");
-        editingData.content = content;
-        editingData.draft = draft;
+  if (mode === "edit" && data !== undefined) {
+    let {
+      id,
+      title,
+      slug,
+      content,
+      draft,
+      excerpt,
+      tags,
+      mediumShortNames,
+      mediumUrls,
+    } = data;
+    editingData.id = id;
+    editingData.title = title;
+    editingData.slug = slug;
+    editingData.excerpt = excerpt;
+    editingData.tags = tags.join(" ");
+    editingData.content = content;
+    editingData.draft = draft;
 
-        editor.view = "public";
-    }
+    editor.view = "public";
+  }
 
-    let slugDebounce = useDebounce(async (slug) => {
-        if (slug.length < 5) return;
+  let slugDebounce = useDebounce(async (slug) => {
+    if (slug.length < 5) return;
 
-        if (!(slug in editingData._slugStatus)) {
-            if (slug === data?.slug) {
-                editingData._slugStatus[slug] = "ready";
-            } else {
-                editingData._slugStatus[slug] = "pending";
-                const res = await fetch("/api/posts/check?slug=" + slug, {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                });
-
-                if (res.ok) {
-                    const { exists } = await res.json();
-                    editingData._slugStatus[slug] = !exists ? "ready" : "used";
-                } else {
-                    delete editingData._slugStatus[slug];
-                }
-            }
-        }
-    }, 300);
-
-    $effect(() => {
-        forceContent(forDraft ? editingData.draft : editingData.content);
-    });
-
-    $effect(() => {
-        slugDebounce.update(editingData.slug);
-    });
-
-    const newPost = async () => {
-        const {
-            title,
-            slug,
-            excerpt,
-            draft = content,
-            categories,
-        } = editingData;
-
-        const keys = [...editingData.content.matchAll(mediaSyntax)]
-            .map((match) => match[1])
-            .filter((key) => !isOnline(key));
-
-        const missing = keys.filter((key) => !isOffline(key));
-
-        if (missing.length > 0) {
-            console.error("Missing keys detected: ", missing);
-            return missing;
-        }
-
-        const formData = new FormData();
-        formData.append(
-            "post_data",
-            new Blob(
-                [
-                    JSON.stringify({
-                        title,
-                        slug,
-                        excerpt,
-                        content,
-                        categories: [],
-                        number_of_files: keys.length,
-                    }),
-                ],
-                { type: "application/json" },
-            ),
-        );
-
-        for (let index = 0; index < keys.length; index++) {
-            const data = getNewMedia(keys[index]);
-            formData.append(`file_${index + 1}`, data.file, data.name);
-            formData.append(`short_name_${index + 1}`, keys[index]);
-        }
-
-        const res = await fetch("/api/posts/new", {
-            method: "POST",
-            headers: { Authorization: auth() },
-            body: formData,
+    if (!(slug in editingData._slugStatus)) {
+      if (slug === data?.slug) {
+        editingData._slugStatus[slug] = "ready";
+      } else {
+        editingData._slugStatus[slug] = "pending";
+        const res = await fetch("/api/posts/check?slug=" + slug, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
         });
 
         if (res.ok) {
+          const { exists } = await res.json();
+          editingData._slugStatus[slug] = !exists ? "ready" : "used";
+        } else {
+          delete editingData._slugStatus[slug];
         }
+      }
+    }
+  }, 300);
+
+  $effect(() => {
+    forceContent(forDraft ? editingData.draft : editingData.content);
+  });
+
+  $effect(() => {
+    slugDebounce.update(editingData.slug);
+  });
+
+  const newPost = async () => {
+    const { title, slug, excerpt, draft = content, categories } = editingData;
+
+    const keys = [...editingData.content.matchAll(mediaSyntax)]
+      .map((match) => match[1])
+      .filter((key) => !isOnline(key));
+
+    const missing = keys.filter((key) => !isOffline(key));
+
+    if (missing.length > 0) {
+      console.error("Missing keys detected: ", missing);
+      return missing;
+    }
+
+    const formData = new FormData();
+    formData.append(
+      "post_data",
+      new Blob(
+        [
+          JSON.stringify({
+            title,
+            slug,
+            excerpt,
+            content,
+            categories: [],
+            number_of_files: keys.length,
+          }),
+        ],
+        { type: "application/json" },
+      ),
+    );
+
+    for (let index = 0; index < keys.length; index++) {
+      const data = getNewMedia(keys[index]);
+      formData.append(`file_${index + 1}`, data.file, data.name);
+      formData.append(`short_name_${index + 1}`, keys[index]);
+    }
+
+    const res = await fetch("/api/posts/new", {
+      method: "POST",
+      headers: { Authorization: auth() },
+      body: formData,
+    });
+
+    if (res.ok) {
+    }
+  };
+
+  const updatePost = async () => {
+    const formData = new FormData();
+    const postData = {
+      number_of_files: 0,
     };
 
-    const updatePost = async () => {
-        const formData = new FormData();
-        const postData = {
-            number_of_files: 0,
-        };
+    if (editingData.draft !== data.draft) {
+      let keys = [
+        ...[
+          ...editingData.content.matchAll(mediaSyntax).map((match) => match[1]),
+        ],
+        ...[
+          ...editingData.draft.matchAll(mediaSyntax).map((match) => match[1]),
+        ],
+      ];
 
-        if (editingData.draft !== data.draft) {
-            let keys = [
-                ...[
-                    ...editingData.content
-                        .matchAll(mediaSyntax)
-                        .map((match) => match[1]),
-                ],
-                ...[
-                    ...editingData.draft
-                        .matchAll(mediaSyntax)
-                        .map((match) => match[1]),
-                ],
-            ];
+      keys = keys.filter((key) => !isOnline(key));
 
-            keys = keys.filter((key) => !isOnline(key));
+      const missing = keys.filter((key) => !isOffline(key));
 
-            const missing = keys.filter((key) => !isOffline(key));
+      if (missing.length > 0) {
+        console.error("Missing keys detected: ", missing);
+        return missing;
+      }
 
-            if (missing.length > 0) {
-                console.error("Missing keys detected: ", missing);
-                return missing;
-            }
+      postData.number_of_files = keys.length;
 
-            postData.number_of_files = keys.length;
+      for (let index = 0; index < keys.length; index++) {
+        const data = getNewMedia(keys[index]);
+        formData.append(`file_${index + 1}`, data.file, data.name);
+        formData.append(`short_name_${index + 1}`, keys[index]);
+      }
+    }
 
-            for (let index = 0; index < keys.length; index++) {
-                const data = getNewMedia(keys[index]);
-                formData.append(`file_${index + 1}`, data.file, data.name);
-                formData.append(`short_name_${index + 1}`, keys[index]);
-            }
-        }
+    if (editingData.title !== data.title) {
+      postData.title = editingData.title;
+    }
 
-        if (editingData.title !== data.title) {
-            postData.title = editingData.title;
-        }
+    if (editingData.slug !== data.slug) {
+      postData.slug = editingData.slug;
+    }
 
-        if (editingData.slug !== data.slug) {
-            postData.slug = editingData.slug;
-        }
+    const tags = editingData.tags
+      .trim()
+      .split(" ")
+      .filter((tag) => tag !== "");
+    if (!arraysEqualIgnoreOrder(editingData.tags, data.tags)) {
+      postData.tags = tags;
+    }
 
-        const tags = editingData.tags
-            .trim()
-            .split(" ")
-            .filter((tag) => tag !== "");
-        if (!arraysEqualIgnoreOrder(editingData.tags, data.tags)) {
-            postData.tags = tags;
-        }
+    if (editingData.excerpt !== data.excerpt) {
+      postData.excerpt = editingData.excerpt;
+    }
 
-        if (editingData.excerpt !== data.excerpt) {
-            postData.excerpt = editingData.excerpt;
-        }
+    if (editingData.draft !== data.draft) {
+      postData.draft = editingData.draft;
+      postData.content = editingData.content;
+    }
 
-        if (editingData.draft !== data.draft) {
-            postData.draft = editingData.draft;
-            postData.content = editingData.content;
-        }
+    formData.append("post_data", new Blob([JSON.stringify(postData)]), {
+      type: "application/json",
+    });
 
-        formData.append("post_data", new Blob([JSON.stringify(postData)]), {
-            type: "application/json",
-        });
+    const res = await fetch("/api/posts/id/" + data.id, {
+      method: "PATCH",
+      headers: { Authorization: auth() },
+      body: formData,
+    });
 
-        const res = await fetch("/api/posts/id/" + data.id, {
-            method: "PATCH",
-            headers: { Authorization: auth() },
-            body: formData,
-        });
+    console.log(res.ok);
+  };
 
-        console.log(res.ok);
-    };
+  const publishPost = async () => {
+    const res = await fetch("/api/posts/id/" + data.id, {
+      method: "POST",
+      headers: { Authorization: auth() },
+    });
 
-    const publishPost = async () => {
-        const res = await fetch("/api/posts/id/" + data.id, {
-            method: "POST",
-            headers: { Authorization: auth() },
-        });
-
-        console.log(res.ok);
-    };
+    console.log(res.ok);
+  };
 </script>
 
 <article class="relative flex flex-col gap-4 pb-4 *:drop-shadow-xl">
-    <div class="flex w-full">
-        <div class="p-2 rounded-xl bg-white mx-auto w-120">
-            <PostCard
-                title={editingData.title === "" ? "<Empty>" : editingData.title}
-                slug={editingData.slug}
-                excerpt={editingData.excerpt === ""
-                    ? "<Empty>"
-                    : editingData.excerpt}
-                author={{
-                    name: $user.displayName,
-                    slug: $user.username,
-                }}
-                tags={editingData.tags.split(" ").filter((tag) => tag !== "")}
-                src={"/missing.png"}
-            >
-                <div
-                    class="absolute full z-20 grid place-items-center border-4 border-dashed border-accent-green rounded-lg opacity-0 hover:opacity-100 hover:scale-105 transition-all duration-100"
-                >
-                    <span
-                        class="stroke-text text-dark bg-text-dark font-bold text-xl drop-shadow-2xl"
-                        >Change</span
-                    >
-                </div>
-            </PostCard>
-        </div>
-    </div>
-    <PostSection
-        title={editingData.title}
+  <div class="flex w-full">
+    <div class="p-2 rounded-xl bg-white mx-auto w-120">
+      <PostCard
+        title={editingData.title === "" ? "<Empty>" : editingData.title}
+        slug={editingData.slug}
+        excerpt={editingData.excerpt === "" ? "<Empty>" : editingData.excerpt}
+        author={{
+          name: $user.displayName,
+          slug: $user.username,
+        }}
         tags={editingData.tags.split(" ").filter((tag) => tag !== "")}
-        date={editingData.date}
-        content={renderedText}
-        author={editingData.author}
-    />
-    <div id="padding"></div>
-    <div
-        class="fixed top-full left-1/2 -translate-x-1/2 w-full max-w-400 transition-transform duration-100 -translate-y-14"
-        class:-translate-y-full={editor.toggled}
-    >
+        src={"/missing.png"}
+      >
         <div
-            class="absolute z-9 left-1/2 top-1/2 -translate-1/2 w-[calc(100%+6px)] h-[calc(100%+6px)] bg-dark/20 rounded-t-xl"
-        ></div>
-        <div
-            class="relative z-10 flex flex-col items-center bg-white border-2 border-dark not-sm:text-sm rounded-t-xl"
+          class="absolute full z-20 grid place-items-center border-4 border-dashed border-accent-green rounded-lg opacity-0 hover:opacity-100 hover:scale-105 transition-all duration-100"
         >
-            <div class="flex justify-between p-2 w-full">
-                <div class="flex gap-2">
-                    <div
-                        class="w-25 duo-btn"
-                        class:duo-green={!editor.toggled}
-                        class:duo-red={editor.toggled}
-                    >
-                        <button
-                            onclick={() => (editor.toggled = !editor.toggled)}
-                            >{editor.toggled ? "Collapse" : "Expand"}</button
-                        >
-                    </div>
-                    {#if mode === "edit"}
-                        <div
-                            in:fly={{ duration: 200 }}
-                            class="duo-btn duo-blue"
-                        >
-                            <button
-                                onclick={() => {
-                                    switch (editor.view) {
-                                        case "public": {
-                                            forceContent(editingData.draft);
-                                            editor.view = "private";
-                                            return;
-                                        }
-                                        case "private": {
-                                            forceContent(editingData.content);
-                                            editor.view = "public";
-                                            return;
-                                        }
-                                    }
-                                }}
-                                >Ver. {editor.view === "public"
-                                    ? "Published"
-                                    : "Draft"}</button
-                            >
-                        </div>
-                    {/if}
-                </div>
-                <div class="flex gap-2">
-                    {#if editor.toggled}
-                        {#if mode === "create"}
-                            <div
-                                in:fly={{ duration: 200 }}
-                                class="duo-btn duo-green"
-                            >
-                                <button onclick={newPost}>Submit</button>
-                            </div>
-                        {:else if mode === "edit"}
-                            <div
-                                in:fly={{ duration: 200 }}
-                                class="duo-btn duo-green"
-                            >
-                                <button onclick={updatePost}>Change</button>
-                            </div>
-                            <div
-                                in:fly={{ duration: 200 }}
-                                class="duo-btn duo-green"
-                            >
-                                <button onclick={publishPost}>Publish</button>
-                            </div>
-                        {/if}
-                    {/if}
-                </div>
-            </div>
-            <div class="flex not-lg:flex-col gap-2 w-full h-full p-2 pt-1">
-                <div class="flex grow gap-2">
-                    <div class="p-2 space-y-2 w-1/3 bg-primary/40 rounded-lg">
-                        <div class="flex not-sm:flex-col">
-                            <label class="inline-block min-w-11" for="title"
-                                >Title:
-                            </label>
-                            <input
-                                id="title"
-                                class="grow px-1 min-w-0 bg-white rounded-sm"
-                                bind:value={editingData.title}
-                                autocomplete="off"
-                                required
-                            />
-                        </div>
-                        <div class="flex not-sm:flex-col">
-                            <label class="inline-block min-w-11" for="slug"
-                                >Slug:
-                            </label>
-                            <input
-                                id="slug"
-                                class="grow px-1 min-w-0 bg-white rounded-sm"
-                                class:bg-red-200!={editingData._slugStatus[
-                                    editingData.slug
-                                ] === "used"}
-                                class:bg-yellow-200!={editingData._slugStatus[
-                                    editingData.slug
-                                ] === "pending"}
-                                class:bg-green-200!={editingData._slugStatus[
-                                    editingData.slug
-                                ] === "ready"}
-                                bind:value={editingData.slug}
-                                autocomplete="off"
-                                required
-                            />
-                        </div>
-                        <div class="flex flex-col">
-                            <label class="inline-block" for="slug"
-                                >Tags:
-                            </label>
-                            <textarea
-                                class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
-                                autocorrect="off"
-                                autocomplete="off"
-                                rows="2"
-                                bind:value={editingData.tags}
-                            ></textarea>
-                        </div>
-                        <div class="flex flex-col">
-                            <label class="inline-block" for="slug"
-                                >Excerpt:
-                            </label>
-                            <textarea
-                                class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
-                                autocorrect="off"
-                                autocomplete="off"
-                                rows="5"
-                                bind:value={editingData.excerpt}
-                            ></textarea>
-                        </div>
-                    </div>
-                    <ContentDebounceEdtior
-                        class="grow bg-primary/40 p-2 rounded-lg"
-                        delay="500"
-                        onUpdateRendered={(_renderedText) =>
-                            (renderedText = _renderedText)}
-                        onUpdateDraft={(content) =>
-                            (editingData.draft = content)}
-                        disabled={editor.view === "public"}
-                        {mediaSyntax}
-                        {mediaDictionary}
-                        {searchMedia}
-                        {forDraft}
-                        registerForceContent={(fn) => {
-                            forceContent = fn;
-                        }}
-                    />
-                </div>
-                <div class="flex gap-2 not-lg:h-40 overflow-hidden">
-                    <MediaDictionaryController
-                        registerMediaCheck={({
-                            isOnline: _isOnline,
-                            isOffline: _isOffline,
-                        }) => {
-                            isOnline = _isOnline;
-                            isOffline = _isOffline;
-                        }}
-                        registerGetMedia={(fn) => (getNewMedia = fn)}
-                        {updateMediaDictionary}
-                        registerSearch={(fn) => (searchMedia = fn)}
-                    />
-                </div>
-            </div>
+          <span
+            class="stroke-text text-dark bg-text-dark font-bold text-xl drop-shadow-2xl"
+            >Change</span
+          >
         </div>
+      </PostCard>
     </div>
+  </div>
+  <PostSection
+    title={editingData.title}
+    tags={editingData.tags.split(" ").filter((tag) => tag !== "")}
+    date={editingData.date}
+    content={renderedText}
+    author={editingData.author}
+  />
+  <div id="padding"></div>
+  <div
+    class="fixed top-full left-1/2 -translate-x-1/2 w-full max-w-400 transition-transform duration-100 -translate-y-14"
+    class:-translate-y-full={editor.toggled}
+  >
+    <div
+      class="absolute z-9 left-1/2 top-1/2 -translate-1/2 w-[calc(100%+6px)] h-[calc(100%+6px)] bg-dark/20 rounded-t-xl"
+    ></div>
+    <div
+      class="relative z-10 flex flex-col items-center bg-white border-2 border-dark not-sm:text-sm rounded-t-xl"
+    >
+      <div class="flex justify-between p-2 w-full">
+        <div class="flex gap-2">
+          <div
+            class="w-25 duo-btn"
+            class:duo-green={!editor.toggled}
+            class:duo-red={editor.toggled}
+          >
+            <button onclick={() => (editor.toggled = !editor.toggled)}
+              >{editor.toggled ? "Collapse" : "Expand"}</button
+            >
+          </div>
+          {#if mode === "edit"}
+            <div in:fly={{ duration: 200 }} class="duo-btn duo-blue">
+              <button
+                onclick={() => {
+                  switch (editor.view) {
+                    case "public": {
+                      forceContent(editingData.draft);
+                      editor.view = "private";
+                      return;
+                    }
+                    case "private": {
+                      forceContent(editingData.content);
+                      editor.view = "public";
+                      return;
+                    }
+                  }
+                }}
+                >Ver. {editor.view === "public" ? "Published" : "Draft"}</button
+              >
+            </div>
+          {/if}
+        </div>
+        <div class="flex gap-2">
+          {#if editor.toggled}
+            {#if mode === "create"}
+              <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+                <button onclick={newPost}>Submit</button>
+              </div>
+            {:else if mode === "edit"}
+              <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+                <button onclick={updatePost}>Change</button>
+              </div>
+              <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+                <button onclick={publishPost}>Publish</button>
+              </div>
+            {/if}
+          {/if}
+        </div>
+      </div>
+      <div class="flex not-lg:flex-col gap-2 w-full h-full p-2 pt-1">
+        <div class="flex grow gap-2">
+          <div class="p-2 space-y-2 w-1/3 bg-primary/40 rounded-lg">
+            <div class="flex not-sm:flex-col">
+              <label class="inline-block min-w-11" for="title">Title: </label>
+              <input
+                id="title"
+                class="grow px-1 min-w-0 bg-white rounded-sm"
+                bind:value={editingData.title}
+                autocomplete="off"
+                required
+              />
+            </div>
+            <div class="flex not-sm:flex-col">
+              <label class="inline-block min-w-11" for="slug">Slug: </label>
+              <input
+                id="slug"
+                class="grow px-1 min-w-0 bg-white rounded-sm"
+                class:bg-red-200!={editingData._slugStatus[editingData.slug] ===
+                  "used"}
+                class:bg-yellow-200!={editingData._slugStatus[
+                  editingData.slug
+                ] === "pending"}
+                class:bg-green-200!={editingData._slugStatus[
+                  editingData.slug
+                ] === "ready"}
+                bind:value={editingData.slug}
+                autocomplete="off"
+                required
+              />
+            </div>
+            <div class="flex flex-col">
+              <label class="inline-block" for="slug">Tags: </label>
+              <textarea
+                class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
+                autocorrect="off"
+                autocomplete="off"
+                rows="2"
+                bind:value={editingData.tags}
+              ></textarea>
+            </div>
+            <div class="flex flex-col">
+              <label class="inline-block" for="slug">Excerpt: </label>
+              <textarea
+                class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
+                autocorrect="off"
+                autocomplete="off"
+                rows="5"
+                bind:value={editingData.excerpt}
+              ></textarea>
+            </div>
+          </div>
+          <ContentDebounceEdtior
+            class="grow bg-primary/40 p-2 rounded-lg"
+            delay="500"
+            onUpdateRendered={(_renderedText) => (renderedText = _renderedText)}
+            onUpdateDraft={(content) => (editingData.draft = content)}
+            disabled={editor.view === "public"}
+            {mediaSyntax}
+            {mediaDictionary}
+            {searchMedia}
+            {forDraft}
+            registerForceContent={(fn) => {
+              forceContent = fn;
+            }}
+          />
+        </div>
+        <div class="flex gap-2 not-lg:h-40 overflow-hidden">
+          <MediaDictionaryController
+            registerMediaCheck={({
+              isOnline: _isOnline,
+              isOffline: _isOffline,
+            }) => {
+              isOnline = _isOnline;
+              isOffline = _isOffline;
+            }}
+            registerGetMedia={(fn) => (getNewMedia = fn)}
+            {updateMediaDictionary}
+            registerSearch={(fn) => (searchMedia = fn)}
+          />
+        </div>
+      </div>
+    </div>
+  </div>
 </article>
 
 <style lang="postcss">
-    @reference "../../../app.css";
+  @reference "../../../app.css";
 
-    #padding {
-        @apply h-80;
-    }
+  #padding {
+    @apply h-80;
+  }
 </style>
