@@ -30,7 +30,7 @@ static RE_PASSWORD: LazyLock<Regex> = LazyLock::new(|| {
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterCredentials {
-    #[validate(length(min = 3, message = "Username must have at least 3 characters"),regex(path = *RE_USERNAME, message = "Username can only contain letters, numbers, underscores."))]
+    #[validate(length(min = 3, max=16, message = "Username must have at least 3 characters and at most 16 characters"),regex(path = *RE_USERNAME, message = "Username can only contain letters, numbers, and underscores."))]
     pub username: String,
 
     #[validate(email(message = "Invalid email address"))]

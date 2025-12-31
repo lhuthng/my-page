@@ -1,8 +1,8 @@
 <script>
-    let { code, status } = $props();
+  let { code, status } = $props();
 </script>
 
 <div>
-    {code}
-    {status}
+  {code}
+  {status}
 </div>
