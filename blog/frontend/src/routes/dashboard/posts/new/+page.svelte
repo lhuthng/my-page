@@ -1,7 +1,7 @@
 <script>
-    import PostEditor from "$lib/components/post/PostEditor.svelte";
+  import PostEditor from "$lib/components/post/PostEditor.svelte";
 </script>
 
 <div class="w-full">
-    <PostEditor />
+  <PostEditor />
 </div>
