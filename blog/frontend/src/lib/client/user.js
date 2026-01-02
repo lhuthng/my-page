@@ -18,7 +18,6 @@ export function saveLogin({
   role,
   avatarUrl,
 }) {
-  console.log(token);
   user.set({
     username,
     displayName,
