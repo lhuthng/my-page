@@ -517,6 +517,19 @@ export default function Card({
                 </div>
               </div>
             </div>
+            <div
+              className="foil-overlay absolute inset-0 z-10 pointer-events-none opacity-0 transition-opacity rounded-2xl duration-300"
+              style={{
+                mixBlendMode: "color-dodge",
+                display: "block",
+                background: `linear-gradient(125deg,transparent 0%,rgba(255, 0, 0, 0.2) 15%,rgba(255, 255, 0, 0.2) 30%,rgba(0, 255, 255, 0.2) 60%,rgba(0, 0, 255, 0.2) 75%,rgba(255, 0, 255, 0.2) 90%, transparent 100%)`,
+                backgroundSize: "100% 100%",
+                backgroundPosition: hoverDir
+                  ? `${hoverDir[0] / 40}% ${hoverDir[1] / 80}%`
+                  : "50% 50%",
+                opacity: hoverDir ? 1 : 0,
+              }}
+            />
           </div>
         </div>
         <div className="absolute top-1/2" ref={detailContainerRef}>
