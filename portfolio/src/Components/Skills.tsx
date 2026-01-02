@@ -34,8 +34,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        Raising sleek, interactive UIs from tiny ideas. Bringing up every pixel
-        with care.
+        Raising interfaces from infancy. Nurturing tiny ideas into sleek,
+        responsive, and pixel-perfect realities.
       </p>,
     ],
     details: [
@@ -103,8 +103,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        Just another Tuesday. Building robust services and APIs that fight off
-        the hordes.
+        Tackling the chaos. Building the heavy-duty logic and APIs required to
+        fight off the production hordes.
       </p>,
     ],
     details: [
@@ -170,8 +170,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        Hold my coffee. Taming the systems that are built to withstand the
-        blaze.
+        The calm in the inferno. Keeping the servers running cool even when the
+        infrastructure is on fire.
       </p>,
     ],
     details: [
@@ -257,8 +257,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        Automating workflows with CI/CD, ensuring smooth builds, tests, and
-        deployments.
+        Closing the loop. Orchestrating the infinite cycle of builds and
+        deployments for a seamless flow.
       </p>,
     ],
     details: [
@@ -328,8 +328,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        The keeper of secrets. Mastering data integrity to ensure your
-        information is always ready, fast, and sound.
+        The high-security archive. Mastering complex queries and data integrity
+        to keep secrets locked tight.
       </p>,
     ],
     details: [
@@ -418,7 +418,8 @@ const cards: CardProps[] = [
           color: "rgba(255, 255, 255, 0.75)",
         }}
       >
-        The wildcard. A unique blend of skills that powers the entire deck.
+        The multi-threaded wildcard. Orchestrating a symphony of tools to power
+        the entire stack at once.
       </p>,
     ],
     details: [
