@@ -220,9 +220,9 @@ export default function Balatro({ active, onClick }: ProjectProps) {
             For an in-depth write-up on the technical challenges, you can read
             more on my blog{" "}
             <a
-              className="font-bold text-purple-500 hover:brightness-110"
+              className="font-bold text-blue-400 hover:brightness-110"
               target="_blank"
-              href="/"
+              href="https://blog.huuthang.site/posts/i-added-vietnamese-localization-to-balatro"
             >
               here
             </a>

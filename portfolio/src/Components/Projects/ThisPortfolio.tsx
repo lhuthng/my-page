@@ -36,10 +36,8 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
       details={
         <div className="bg-orange-chalk w-full h-full not-md:border-t-2 md:border-l-2 border-black text-black space-y-4 p-4">
           <p>
-            A robust, VPS-based, full-stack environment that serves as the core
-            hosting infrastructure for this entire digital platform, including
-            the portfolio, a personal blog, various backend services, and live
-            development demonstrations for clients.
+            A playground without constraints. Building the engine from scratch
+            to own the foundation, the wiring, and the blueprint.
           </p>
           <p>
             This project showcases advanced DevOps and server management
@@ -49,41 +47,29 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
             <h1>Key Features &amp; Technical Depth: </h1>
             <ul className="list-disc list-inside ml-2 space-y-2">
               <li>
-                <strong>VPS-Based Core Infrastructure:</strong> The server
-                operates as a robust, full-stack environment hosted on a{" "}
-                <strong>Virtual Private Server (VPS) via Contabo</strong>. This
-                demonstrates practical expertise in managing dedicated cloud
-                infrastructure and resource allocation.
+                <strong>Infrastructure:</strong> Full-stack environment hosted
+                on a Linux VPS (Contabo) serving as the core hosting
+                infrastructure for the portfolio, blog, and backend services.
               </li>
               <li>
-                <strong>Advanced Server Management:</strong> Implemented a
-                high-performance, multi-layered proxy system featuring{" "}
-                <strong>Nginx as the primary reverse proxy</strong> for
-                efficient traffic, caching, and SSL termination, working in
-                tandem with <strong>Apache2</strong> for specialized application
-                hosting.
+                <strong>Custom Engine:</strong> Modular architecture using a{" "}
+                <strong>Rust</strong> and <strong>Node.Js</strong> backend with
+                a <strong>Svelte 5</strong>to remove middleman limitations.
               </li>
               <li>
-                <strong>Continuous Deployment (CI/CD):</strong> Features a fully
-                automated deployment pipeline utilizing{" "}
-                <strong>GitHub Actions</strong>. This ensures rapid, reliable,
-                and zero-downtime Continuous Integration and Continuous
-                Deployment for all hosted applications.
+                <strong>Traffic Orchestration: </strong> Multi-layered proxy
+                system using <strong>Nginx</strong> for SSL termination and
+                caching, with <strong>Apache2</strong>
+                for specialized application hosting.
               </li>
               <li>
-                <strong>Full-Stack Technology Stack:</strong> Engineered to
-                support modern development using{" "}
-                <strong>Node.js, Go, and Rust</strong> for backend services,
-                with frontends built using cutting-edge frameworks like{" "}
-                <strong>React</strong> (for complex applications) and{" "}
-                <strong>Svelte 5</strong> (for optimized interfaces).
+                <strong>Automation:</strong> Fully automated CI/CD pipeline
+                utilizing GitHub Actions for zero-downtime deployment.
               </li>
               <li>
-                <strong>Comprehensive Domain &amp; Network Services:</strong>{" "}
-                Manages domain configurations via <strong>joker.com</strong>,
-                including the complex setup of subdomains for service
-                segmentation and the deployment and maintenance of a dedicated{" "}
-                <strong>mail server</strong>.
+                <strong>Network Services:</strong> Domain configuration via
+                joker.com, including subdomain segmentation and maintenance of a
+                dedicated mail server.
               </li>
               <li>
                 <strong>Diverse Content Hosting:</strong> The single platform
@@ -96,6 +82,17 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
               </li>
             </ul>
           </div>
+          <p>
+            If you are interested in the "How" and "Why" behind this
+            architecture, you can read this kick-off on my blog:{" "}
+            <a
+              className="text-cyan-600 hover:font-semibold"
+              href="https://blog.huuthang.site/posts/i-made-a-blog"
+            >
+              [So..., I Made a Blog]
+            </a>
+            .
+          </p>
         </div>
       }
     />
