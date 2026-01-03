@@ -1,8 +1,28 @@
 <script>
+  import { mount } from "svelte";
+  import App from "../App.svelte";
+
   let { content } = $props();
+  function pluginExtend(element) {
+    const appContainers = element.querySelectorAll(".app-container");
+    appContainers.forEach((container) => {
+      if (container.__mounted) return;
+
+      const { name, type, width, height } = container.dataset;
+
+      mount(App, {
+        target: container,
+        props: { name, type, width, height },
+      });
+
+      container.__mounted = true;
+    });
+  }
 </script>
 
-<div class="rendered-markdown">{@html content}</div>
+<div class="rendered-markdown" {@attach (el) => pluginExtend(el, content)}>
+  {@html content}
+</div>
 
 <style lang="postcss">
   @reference "../../../app.css";
