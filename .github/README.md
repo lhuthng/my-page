@@ -39,7 +39,7 @@
 
     Sign the sub domains, be sure they are correctly assigned on your dns manager.
     ```bash
-    sudo certbot --nginx -d portfolio.huuthang.site -d blog.huuthang.site
+    sudo certbot --nginx -d portfolio.huuthang.site -d blog.huuthang.site -d ws.huuthang.site
     ```
 
     Create the configs for the portfolio and blog
@@ -53,7 +53,7 @@
     ```bash
     sudo ln -s /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/
     sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
-    sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
+    sudo ln -s /etc/nginx/sites-available/ /etc/nginx/sites-enabled/
     ```
     *(the reference files can be found here: [portfolio](./nginx/portfolio.conf), [blog](./nginx/blog.conf), and, [ws](./nginx/ws.conf))*
 
