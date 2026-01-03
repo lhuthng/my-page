@@ -15,6 +15,7 @@
     |----------------------|----------------------|
     | `/var/dev/portfolio` | `/var/www/portfolio` |
     | `/var/dev/blog`      | `/var/www/blog`      |
+    | `/var/dev/ws`        | `/var/www/ws`        |
 
     Generate a github-actions key-pair
     ```bash
@@ -45,14 +46,16 @@
     ```bash
     sudo nano /etc/nginx/sites-available/portfolio
     sudo nano /etc/nginx/sites-available/blog
+    sudo nano /etc/nginx/sites-available/ws
     ```
 
     Link them to the sites-enabled to make it enabled
     ```bash
     sudo ln -s /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/
     sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
+    sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
     ```
-    *(the reference files can be found here: [portfolio](./nginx/portfolio.conf) and [blog](./nginx/blog.conf))*
+    *(the reference files can be found here: [portfolio](./nginx/portfolio.conf), [blog](./nginx/blog.conf), and, [ws](./nginx/ws.conf))*
 
     Test and reload
     ```bash
