@@ -1,5 +1,6 @@
 import { mediaSyntax } from "$lib/common.js";
 import {
+  appBlockPlugin,
   mediaWithShortcutPlugin,
   youtubeBlockPlugin,
 } from "$lib/custom-rules/index.js";
@@ -37,10 +38,9 @@ export async function load(event) {
 
     const md = new MarkdownIt()
       .use(mkKatex)
-      .use(mediaWithShortcutPlugin, {
-        mediaDictionary,
-      })
-      .use(youtubeBlockPlugin);
+      .use(mediaWithShortcutPlugin, { mediaDictionary })
+      .use(youtubeBlockPlugin)
+      .use(appBlockPlugin);
 
     content = md.render(content);
 

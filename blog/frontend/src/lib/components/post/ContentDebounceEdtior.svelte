@@ -1,5 +1,6 @@
 <script>
   import {
+    appBlockPlugin,
     mediaWithShortcutPlugin,
     youtubeBlockPlugin,
   } from "$lib/custom-rules";
@@ -32,7 +33,8 @@
     new MarkdownIt()
       .use(mkKatex)
       .use(mediaWithShortcutPlugin, { mediaDictionary })
-      .use(youtubeBlockPlugin),
+      .use(youtubeBlockPlugin)
+      .use(appBlockPlugin),
   );
 
   let debounce = useDebounce(async (_content) => {
