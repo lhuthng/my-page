@@ -1,16 +1,16 @@
+<script>
+  import App from "$lib/components/App.svelte";
+</script>
+
 <div class="w-full pb-4">
   <div class="w-full flex flex-col gap-2 bg-white rounded-xl p-4">
     <h1 class="text-center">L-Game</h1>
     <h3 class="text-center">
       made by <a href="/profiles/lhuthng">@Thắng</a>
     </h3>
-    <iframe
-      class="mx-auto rounded-md"
-      src="/games/l-game/index.html"
-      title="L-Game"
-      frameborder="0"
-    >
-    </iframe>
+    <div class="mx-auto">
+      <App name="l-game" type="html" width="396px" height="396px" />
+    </div>
     <h3 class="font-semibold">L-Game: Rules & Details</h3>
     <p>The Goal: Trap your opponent so they cannot make a legal move.</p>
     <div>
@@ -46,10 +46,5 @@
   }
   h3 {
     @apply text-xl;
-  }
-  iframe {
-    max-width: 396px;
-    max-height: 396px;
-    aspect-ratio: 1 / 1;
   }
 </style>
