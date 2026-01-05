@@ -22,8 +22,12 @@ jobs:
           filters: |
             portfolio:
               - 'portfolio/**'
-            blog:
-              - 'blog/**'
+            blog_frontend:
+              - 'blog/frontend/**'
+            blog_backend:
+              - 'blog/backend/**'
+            blog_other:
+              - 'blog/docker-compose.yml'
 
   deploy-portfolio:
     needs: filter
@@ -71,7 +75,11 @@ jobs:
             echo "Portfolio deployed successfully!"
   deploy-blog:
     needs: filter
-    if: needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')
+    if: |
+      needs.filter.outputs.blog_frontend == 'true' ||
+      needs.filter.outputs.blog_backend == 'true' ||
+      needs.filter.outputs.blog_other == 'true' ||
+      contains(github.event.head_commit.message, '[deploy blog]')
     runs-on: ubuntu-latest
     steps:
       - name: Run blog deploy script on VPS
@@ -101,7 +109,16 @@ jobs:
             cd "$BLOG_DIR"
 
             # Make sure Docker Compose is installed on VPS
-            docker-compose down
-            docker-compose up -d --build
+            if [[ "${{ needs.filter.outputs.blog_backend }}" == "true" ]]; then
+              echo "Backend changes detected. Full rebuild starting..."
+              docker-compose up -d --build
+            elif [[ "${{ needs.filter.outputs.blog_frontend }}" == "true" ]]; then
+              echo "Only frontend changes detected. Updating frontend only..."
+              # Build only the frontend service (replace 'frontend' with your service name in docker-compose)
+              docker-compose up -d --build frontend
+            else
+              echo "Config changes detected. Refreshing containers..."
+              docker-compose up -d
+            fi
 
             echo "Blog deployed successfully!"
