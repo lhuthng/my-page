@@ -13,7 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       portfolio: ${{ steps.filter.outputs.portfolio }}
-      blog: ${{ steps.filter.outputs.blog }}
+      blog_frontend: ${{ steps.filter.outputs.blog_frontend }}
+      blog_backend: ${{ steps.filter.outputs.blog_backend }}
+      blog_other: ${{ steps.filter.outputs.blog_other }}
     steps:
       - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
