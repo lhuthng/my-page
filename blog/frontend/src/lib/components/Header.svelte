@@ -408,7 +408,7 @@
                   class="fill-dark"
                   href="https://www.linkedin.com/in/huuthangle/"
                 />
-                <span>Facebook</span>
+                <span>Linkedin</span>
               </li>
             </ul>
           </div>
