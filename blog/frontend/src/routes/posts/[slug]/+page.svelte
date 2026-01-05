@@ -12,12 +12,20 @@
     author_avatar_url,
     title,
     content,
+    excerpt,
     published_at,
     tags,
   } = $derived(data);
 
   let date = $derived(textToDate(published_at));
 </script>
+
+<svelte:head>
+  <title>{title}</title>
+  <!-- <meta name="description" content={excerpt} /> -->
+  <meta property="og:title" content={title} />
+  <!-- <meta property="og:description" content={excerpt} /> -->
+</svelte:head>
 
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
   <PostSection
