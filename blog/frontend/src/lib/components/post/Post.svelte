@@ -113,7 +113,7 @@
       @apply whitespace-pre-wrap wrap-break-word break-after-all inline not-sm:text-sm;
     }
     & .reveal {
-      @apply flex flex-col mt-4 p-2 text-white bg-dark max-h-11 overflow-y-hidden rounded-xl border-2;
+      @apply flex flex-col mt-4 p-2 text-white bg-dark max-h-11 overflow-y-hidden rounded-xl border-2 overflow-x-hidden;
     }
     & .reveal > .reveal-content {
       @apply opacity-0 -translate-y-4 pointer-events-none transition-all duration-200;
@@ -127,6 +127,40 @@
 
     & .reveal.toggled > .reveal-content {
       @apply opacity-100 translate-y-0 pointer-events-auto;
+    }
+
+    & .katex-display {
+      @apply overflow-x-auto overflow-y-hidden;
+      scrollbar-gutter: stable;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(73, 92, 131, 0.8) transparent;
+    }
+    & .katex-display::-webkit-scrollbar-thumb {
+      background-color: rgba(73, 92, 131, 0.8);
+      border-radius: 10px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+    & .katex-display::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(73, 92, 131, 0.9);
+    }
+    & .katex-display::-webkit-scrollbar {
+      width: 10px;
+    }
+    & .katex-display::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    & .reveal .katex-display {
+      scrollbar-color: rgba(255 255, 255, 0.8) transparent;
+    }
+    & .reveal .katex-display::-webkit-scrollbar-thumb {
+      background-color: rgba(255, 255, 255, 0.8);
+    }
+    & .reveal .katex-display::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(255, 255, 255, 0.9);
+    }
+    & .katex-display > .katex {
+      @apply whitespace-nowrap;
     }
   }
 </style>
