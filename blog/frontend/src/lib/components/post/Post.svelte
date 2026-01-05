@@ -17,6 +17,17 @@
 
       container.__mounted = true;
     });
+
+    const revealContainers = element.querySelectorAll(".reveal");
+    revealContainers.forEach((container) => {
+      if (container.__mounted) return;
+
+      const button = container.querySelector(".reveal-tooltip");
+
+      button.addEventListener("click", () => {
+        container.classList.toggle("toggled");
+      });
+    });
   }
 </script>
 
@@ -100,6 +111,22 @@
     }
     & code {
       @apply whitespace-pre-wrap wrap-break-word break-after-all inline not-sm:text-sm;
+    }
+    & .reveal {
+      @apply flex flex-col mt-4 p-2 text-white bg-dark max-h-11 overflow-y-hidden rounded-xl border-2;
+    }
+    & .reveal > .reveal-content {
+      @apply opacity-0 -translate-y-4 pointer-events-none transition-all duration-200;
+    }
+    & .reveal > .reveal-tooltip {
+      @apply mx-auto;
+    }
+    & .reveal.toggled {
+      @apply max-h-full;
+    }
+
+    & .reveal.toggled > .reveal-content {
+      @apply opacity-100 translate-y-0 pointer-events-auto;
     }
   }
 </style>
