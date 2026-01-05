@@ -13,9 +13,9 @@
     </div>
     <div class="flex grow justify-evenly gap-12 px-0 lg:px-4 py-2 lg:py-4">
       <div class="space-y-2 text-left sm:text-right">
-        <h3 class="text-xl">Explore</h3>
+        <h3 class="text-xl">EXPLORE</h3>
         <ul
-          class="space-y-1 list-inside list-['-'] pt-1 border-t-2 pl-2 sm:pl-0 border-l-2 sm:border-l-0 sm:pr-2 sm:border-r-2"
+          class="space-y-1 list-inside list-['-'] pt-1 border-t-2 pl-2 sm:pl-0 border-l-2 sm:border-l-0 sm:pr-2 sm:border-r-2 rounded-xl"
         >
           <li><a href="/posts">Posts</a></li>
           <li><a href="/projects">Projects</a></li>
@@ -23,9 +23,9 @@
         </ul>
       </div>
       <div class="space-y-2 text-right">
-        <h3 class="text-xl">Connect</h3>
+        <h3 class="text-xl">CONNECT</h3>
         <ul
-          class="space-y-1 list-inside list-['-'] pt-1 border-t-2 pr-2 border-r-2"
+          class="space-y-1 list-inside list-['-'] pt-1 border-t-2 pr-2 border-r-2 rounded-xl"
         >
           <li><a href="https://github.com/lhuthng">Github</a></li>
           <li>
