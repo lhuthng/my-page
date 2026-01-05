@@ -9,6 +9,11 @@
   let offset = $state(data.firstOffset && 0);
 </script>
 
+<svelte:head>
+  <title>Posts</title>
+  <meta property="og:title" content="Posts" />
+</svelte:head>
+
 <div class="bg-white/90 space-y-4 rounded-xl p-4 mb-2 lg:mb-4">
   <ul
     class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
