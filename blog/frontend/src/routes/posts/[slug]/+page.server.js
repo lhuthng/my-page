@@ -2,6 +2,7 @@ import { mediaSyntax } from "$lib/common.js";
 import {
   appBlockPlugin,
   mediaWithShortcutPlugin,
+  revealPlugin,
   youtubeBlockPlugin,
 } from "$lib/custom-rules/index.js";
 import { fixClientRoute, route } from "$lib/server/proxy.js";
@@ -40,8 +41,8 @@ export async function load(event) {
       .use(mkKatex)
       .use(mediaWithShortcutPlugin, { mediaDictionary })
       .use(youtubeBlockPlugin)
-      .use(appBlockPlugin);
-
+      .use(appBlockPlugin)
+      .use(revealPlugin);
     content = md.render(content);
 
     return { content, author_avatar_url, cover_url, ...rest };
