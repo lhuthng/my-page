@@ -2,6 +2,7 @@
   import {
     appBlockPlugin,
     mediaWithShortcutPlugin,
+    revealPlugin,
     youtubeBlockPlugin,
   } from "$lib/custom-rules";
   import { useDebounce } from "$lib/effects/debounce";
@@ -34,7 +35,8 @@
       .use(mkKatex)
       .use(mediaWithShortcutPlugin, { mediaDictionary })
       .use(youtubeBlockPlugin)
-      .use(appBlockPlugin),
+      .use(appBlockPlugin)
+      .use(revealPlugin),
   );
 
   let debounce = useDebounce(async (_content) => {
