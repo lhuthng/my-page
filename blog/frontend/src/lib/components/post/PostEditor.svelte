@@ -225,7 +225,11 @@
       body: formData,
     });
 
-    console.log(res.ok);
+    if (res.ok) {
+    }
+    else {
+      console.log(await res.text());
+    }
   };
 
   const publishPost = async () => {
