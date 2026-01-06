@@ -7,6 +7,7 @@ use axum::{
     routing::{delete, get, get_service, patch, post, put},
 };
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 
 use crate::infrastructure::web::{
     api::{handlers, middlewares},
@@ -37,7 +38,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::user_guard,
-                )),
+                ))
+                .layer(DefaultBodyLimit::max(20 * 1024 * 1024)),
         );
 
     let media_routes = Router::new()
@@ -61,7 +63,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::user_guard,
-                )),
+                ))
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
         )
         // public route
         .merge(
@@ -83,7 +86,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::optional_user_guard,
-                )),
+                ))
+                .layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
         )
         // user protected
         .merge(
@@ -92,12 +96,13 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/id/{post_id}", post(handlers::post::publish))
                 .route("/id/{post_id}", get(handlers::post::get_post_details))
                 .route("/id/{post_id}", patch(handlers::post::update_post))
-                .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::user_guard,
-                )),
+                ))
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
+                ,
         )
         // public
         .merge(
@@ -116,5 +121,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/auth", auth_routes)
         .nest("/users", user_routes)
         .nest("/posts", post_routes)
+        .layer(TraceLayer::new_for_http())
         .with_state(state)
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
 }
