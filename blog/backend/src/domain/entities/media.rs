@@ -1,7 +1,5 @@
 use std::str::FromStr;
 
-use serde::Serialize;
-
 use crate::domain::errors::media::MediaError;
 
 #[derive(Debug, PartialEq)]
@@ -12,19 +10,22 @@ pub enum MediaType {
     ImageWebp,
     VideoMp4,
     VideoWebm,
+    AudioMp3,
+    AudioOgg,
+    AudioWav,
 }
 
 impl MediaType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            MediaType::ImagePng => "image/png",
-            MediaType::ImageJpeg => "image/jpeg",
-            MediaType::ImageGif => "image/gif",
-            MediaType::ImageWebp => "image/webp",
-            MediaType::VideoMp4 => "video/mp4",
-            MediaType::VideoWebm => "video/webm",
-        }
-    }
+    // pub fn as_str(&self) -> &'static str {
+    //     match self {
+    //         MediaType::ImagePng => "image/png",
+    //         MediaType::ImageJpeg => "image/jpeg",
+    //         MediaType::ImageGif => "image/gif",
+    //         MediaType::ImageWebp => "image/webp",
+    //         MediaType::VideoMp4 => "video/mp4",
+    //         MediaType::VideoWebm => "video/webm",
+    //     }
+    // }
     pub fn get_extension(&self) -> &'static str {
         match self {
             MediaType::ImagePng => ".png",
@@ -33,6 +34,9 @@ impl MediaType {
             MediaType::ImageWebp => ".webp",
             MediaType::VideoMp4 => ".mp4",
             MediaType::VideoWebm => ".webm",
+            MediaType::AudioMp3 => ".mp3",
+            MediaType::AudioOgg => ".ogg",
+            MediaType::AudioWav => ".wav",
         }
     }
 }
@@ -47,6 +51,9 @@ impl FromStr for MediaType {
             "image/webp" => Ok(Self::ImageWebp),
             "video/mp4" => Ok(Self::VideoMp4),
             "video/webm" => Ok(Self::VideoWebm),
+            "audio/mpeg" => Ok(Self::AudioMp3),
+            "audio/ogg" => Ok(Self::AudioOgg),
+            "audio/wav" => Ok(Self::AudioWav),
             _ => Err(MediaError::InvalidFileType),
         }
     }

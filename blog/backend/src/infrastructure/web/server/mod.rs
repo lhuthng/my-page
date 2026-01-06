@@ -50,6 +50,11 @@ impl MediaConfig {
             MediaType::ImageGif,
             MediaType::ImageWebp,
             MediaType::ImageJpeg,
+            MediaType::VideoMp4,
+            MediaType::VideoWebm,
+            MediaType::AudioMp3,
+            MediaType::AudioOgg,
+            MediaType::AudioMp3,
         ];
 
         let allowed_avatar_types = vec![

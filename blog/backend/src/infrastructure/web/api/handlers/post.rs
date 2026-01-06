@@ -380,6 +380,7 @@ pub struct PostResponse {
     pub tags: Vec<String>,
     pub author_name: String,
     pub author_slug: String,
+    pub excerpt: String,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub draft: Option<String>,
@@ -419,6 +420,7 @@ pub async fn get_post_by_slug(
         author_slug: post.author_slug,
         author_avatar_url: post.author_avatar_url,
         tags: post.tags,
+        excerpt: post.excerpt,
         content: post.content,
         draft: query
             .with_draft
