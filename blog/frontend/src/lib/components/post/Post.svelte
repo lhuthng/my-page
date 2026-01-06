@@ -7,6 +7,7 @@
     const appContainers = element.querySelectorAll(".app-container");
     appContainers.forEach((container) => {
       if (container.__mounted) return;
+      container.__mounted = true;
 
       const { name, type, width, height } = container.dataset;
 
@@ -14,18 +15,64 @@
         target: container,
         props: { name, type, width, height },
       });
-
-      container.__mounted = true;
     });
 
     const revealContainers = element.querySelectorAll(".reveal");
     revealContainers.forEach((container) => {
       if (container.__mounted) return;
+      container.__mounted = true;
 
       const button = container.querySelector(".reveal-tooltip");
 
       button.addEventListener("click", () => {
         container.classList.toggle("toggled");
+      });
+    });
+
+    const audioSyncContainers = element.querySelectorAll(
+      ".audio-sync-container",
+    );
+    audioSyncContainers.forEach((container) => {
+      if (container.__mounted) return;
+      container.__mounted = true;
+
+      const audios = container.querySelectorAll(".audio-container audio");
+      let isSyncing = false;
+
+      const syncPlay = () => {
+        audios.forEach((audio) => {
+          audio.play();
+        });
+      };
+
+      const syncPause = () => {
+        if (isSyncing) return;
+        audios.forEach((audio) => {
+          audio.pause();
+        });
+      };
+
+      const syncTime = (time) => {
+        audios.forEach((audio) => {
+          audio.currentTime = time;
+        });
+      };
+
+      audios.forEach((audio) => {
+        audio.addEventListener("play", syncPlay);
+        audio.addEventListener("pause", syncPause);
+      });
+
+      const duoBtn = document.createElement("div");
+      duoBtn.className = "mx-auto w-fit duo-btn duo-dark";
+      const btn = document.createElement("button");
+      btn.textContent = "Sync Time";
+      duoBtn.append(btn);
+      container.appendChild(duoBtn);
+      btn.addEventListener("click", () => {
+        let avg = 0;
+        audios.forEach((audio) => (avg += audio.currentTime / audios.length));
+        syncTime(avg);
       });
     });
   }
@@ -163,7 +210,7 @@
       @apply whitespace-nowrap;
     }
     & .audio-container {
-      @apply w-full;
+      @apply py-2 w-full;
     }
     & .audio-container > audio {
       @apply mx-auto rounded-full border-secondary border-2;
@@ -173,6 +220,9 @@
     }
     & .video-container > video {
       @apply mx-auto overflow-hidden rounded-lg;
+    }
+    & .audio-sync-container {
+      @apply mx-auto w-fit border-2 border-secondary bg-secondary px-5 pb-4 rounded-[2.8rem];
     }
   }
 </style>
