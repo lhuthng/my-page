@@ -14,13 +14,18 @@
   let onlineMedia = $state({});
   let offlineMedia = $derived(
     Object.fromEntries(
-      Object.entries(newMedia).map(([key, value]) => [key, value.url]),
+      Object.entries(newMedia).map(([key, value]) => [
+        key,
+        { url: value.url, type: value.type },
+      ]),
     ),
   );
 
   $effect(() => {
     updateMediaDictionary({
-      ...offlineMedia,
+      ...Object.fromEntries(
+        Object.entries(offlineMedia).map(([key, value]) => [key, value.url]),
+      ),
       ...Object.fromEntries(
         Object.entries(onlineMedia).filter(([_, v]) => v !== undefined),
       ),

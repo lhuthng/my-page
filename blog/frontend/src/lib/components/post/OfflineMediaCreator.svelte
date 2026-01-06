@@ -5,11 +5,25 @@
   let { offlineMedia, onlineMedia, updateNewMedia, changeName, ...rest } =
     $props();
 
+  const allowedTypes = [
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+
+    "video/mp4",
+    "video/webm",
+
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
+  ];
   function addMedia(files) {
     const media = [];
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
-      if (file && file.type.startsWith("image/")) {
+      console.log(file.type);
+      if (file && allowedTypes.includes(file.type)) {
         let { name, type } = file;
         let medium = {
           name,
@@ -29,11 +43,13 @@
   }
 </script>
 
-<div {...rest}>
+<div {...rest} ondragover={preventDefault}>
   <div
-    class="full"
+    class="full pointer-events-auto"
     ondrop={handleDrop}
-    ondragover={preventDefault}
+    ondragover={(e) => {
+      e.preventDefault();
+    }}
     role="listitem"
   >
     {#if Object.keys(offlineMedia).length === 0}
@@ -41,13 +57,14 @@
         <span class="block m-auto">Drop media here</span>
       </div>
     {:else}
-      <ul class="full space-y-2">
+      <ul class="full p-2 space-y-2">
         {#each Object.keys(offlineMedia)
           .sort()
-          .map( (key) => ({ shortName: key, url: offlineMedia[key] }), ) as { shortName, url }, index (shortName)}
+          .map( (key) => ({ shortName: key, url: offlineMedia[key].url, type: offlineMedia[key].type }), ) as { shortName, url, type }, index (shortName)}
           <MediumEntity
             {shortName}
             {url}
+            {type}
             {changeName}
             warning={shortName in onlineMedia && onlineMedia[shortName]}
           />
