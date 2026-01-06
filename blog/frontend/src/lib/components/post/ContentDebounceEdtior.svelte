@@ -2,6 +2,7 @@
   import {
     appBlockPlugin,
     mediaWithShortcutPlugin,
+    namedContainerPlugin,
     revealPlugin,
     youtubeBlockPlugin,
   } from "$lib/custom-rules";
@@ -36,7 +37,8 @@
       .use(mediaWithShortcutPlugin, { mediaDictionary })
       .use(youtubeBlockPlugin)
       .use(appBlockPlugin)
-      .use(revealPlugin),
+      .use(revealPlugin)
+      .use(namedContainerPlugin),
   );
 
   let debounce = useDebounce(async (_content) => {
