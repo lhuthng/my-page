@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use axum::{
-    Router, middleware,
+    Router,
+    extract::DefaultBodyLimit,
+    middleware,
     routing::{delete, get, get_service, patch, post, put},
 };
 use tower_http::services::ServeDir;
@@ -90,6 +92,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/id/{post_id}", post(handlers::post::publish))
                 .route("/id/{post_id}", get(handlers::post::get_post_details))
                 .route("/id/{post_id}", patch(handlers::post::update_post))
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),

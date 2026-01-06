@@ -47,6 +47,7 @@ pub struct Post {
     pub author_slug: String,
     pub author_avatar_url: Option<String>,
     pub tags: Vec<String>,
+    pub excerpt: String,
     pub content: String,
     pub draft: String,
     pub published_at: Option<String>,
