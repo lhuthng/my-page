@@ -65,6 +65,7 @@ pub struct PostContentRow {
     pub author_slug: String,
     pub author_avatar_url: Option<String>,
     pub title: String,
+    pub excerpt: String,
     pub content: String,
     pub draft: String,
     pub published_at: Option<String>,
@@ -587,13 +588,14 @@ impl PostService for PostServiceImpl {
             author_slug,
             author_avatar_url,
             title,
+            excerpt,
             content,
             draft,
             published_at,
             url,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, content, draft, published_at, m1.url AS url, m2.url AS author_avatar_url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, m1.url AS url, m2.url AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
@@ -663,6 +665,7 @@ impl PostService for PostServiceImpl {
             author_slug,
             author_avatar_url,
             tags,
+            excerpt,
             content,
             draft,
             published_at,
