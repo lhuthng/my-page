@@ -162,5 +162,17 @@
     & .katex-display > .katex {
       @apply whitespace-nowrap;
     }
+    & .audio-container {
+      @apply w-full;
+    }
+    & .audio-container > audio {
+      @apply mx-auto rounded-full border-secondary border-2;
+    }
+    & .video-container {
+      @apply w-full py-4;
+    }
+    & .video-container > video {
+      @apply mx-auto overflow-hidden rounded-lg;
+    }
   }
 </style>
