@@ -2,6 +2,7 @@ import { mediaSyntax } from "$lib/common.js";
 import {
   appBlockPlugin,
   mediaWithShortcutPlugin,
+  namedContainerPlugin,
   revealPlugin,
   youtubeBlockPlugin,
 } from "$lib/custom-rules/index.js";
@@ -42,7 +43,8 @@ export async function load(event) {
       .use(mediaWithShortcutPlugin, { mediaDictionary })
       .use(youtubeBlockPlugin)
       .use(appBlockPlugin)
-      .use(revealPlugin);
+      .use(revealPlugin)
+      .use(namedContainerPlugin);
     content = md.render(content);
 
     return { content, author_avatar_url, cover_url, ...rest };
