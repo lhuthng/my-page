@@ -1,29 +1,30 @@
 services:
-    backend:
-        build: ./backend
-        volumes:
-            - ./backend/data:/app/data
-            - ./backend/media:/app/media
-        container_name: rust-backend
-        networks:
-            - appnet
-        env_file:
-            - ./backend/.env
+  backend:
+    build: ./backend
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/media:/app/media
+    container_name: rust-backend
+    networks:
+      - appnet
+    env_file:
+      - ./backend/.env
 
-    frontend:
-        build: ./frontend
-        container_name: svelte-frontend
-        depends_on:
-            - backend
-        networks:
-            - appnet
-        ports:
-            - "127.0.0.1:5000:8080"
-        env_file:
-            - ./frontend/.env
-        environment:
-            - PORT=8080
-            - API_URL=http://backend:3000
+  frontend:
+    build: ./frontend
+    container_name: svelte-frontend
+    depends_on:
+      - backend
+    networks:
+      - appnet
+    ports:
+      - "127.0.0.1:5000:8080"
+    env_file:
+      - ./frontend/.env
+    environment:
+      - PORT=8080
+      - API_URL=http://backend:3000
+      - BODY_SIZE_LIMIT=100M
 networks:
-    appnet:
-        driver: bridge
+  appnet:
+    driver: bridge
