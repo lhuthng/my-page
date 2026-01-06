@@ -13,9 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       portfolio: ${{ steps.filter.outputs.portfolio }}
-      blog_frontend: ${{ steps.filter.outputs.blog_frontend }}
-      blog_backend: ${{ steps.filter.outputs.blog_backend }}
-      blog_other: ${{ steps.filter.outputs.blog_other }}
+      blog: ${{ steps.filter.outputs.blog }}
     steps:
       - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
@@ -24,12 +22,8 @@ jobs:
           filters: |
             portfolio:
               - 'portfolio/**'
-            blog_frontend:
-              - 'blog/frontend/**'
-            blog_backend:
-              - 'blog/backend/**'
-            blog_other:
-              - 'blog/docker-compose.yml'
+            blog:
+              - 'blog/**'
 
   deploy-portfolio:
     needs: filter
@@ -78,9 +72,7 @@ jobs:
   deploy-blog:
     needs: filter
     if: |
-      needs.filter.outputs.blog_frontend == 'true' ||
-      needs.filter.outputs.blog_backend == 'true' ||
-      needs.filter.outputs.blog_other == 'true' ||
+      needs.filter.outputs.blog ||
       contains(github.event.head_commit.message, '[deploy blog]')
     runs-on: ubuntu-latest
     steps:
@@ -110,17 +102,6 @@ jobs:
 
             cd "$BLOG_DIR"
 
-            # Make sure Docker Compose is installed on VPS
-            if [[ "${{ needs.filter.outputs.blog_backend }}" == "true" ]]; then
-              echo "Backend changes detected. Full rebuild starting..."
-              docker-compose up -d --build
-            elif [[ "${{ needs.filter.outputs.blog_frontend }}" == "true" ]]; then
-              echo "Only frontend changes detected. Updating frontend only..."
-              # Build only the frontend service (replace 'frontend' with your service name in docker-compose)
-              docker-compose up -d --build frontend
-            else
-              echo "Config changes detected. Refreshing containers..."
-              docker-compose up -d
-            fi
+            docker-compose up -d --build
 
             echo "Blog deployed successfully!"
