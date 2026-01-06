@@ -333,6 +333,7 @@ impl MediaService for MediaServiceImpl {
     ) -> Result<(), MediaError> {
         for content_type in &cmd.content_types {
             if !self.is_supported(&content_type, config).await? {
+                println!("InvalidFileType?");
                 return Err(MediaError::InvalidFileType);
             }
         }
