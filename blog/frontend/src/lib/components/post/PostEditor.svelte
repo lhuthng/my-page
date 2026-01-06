@@ -226,8 +226,7 @@
     });
 
     if (res.ok) {
-    }
-    else {
+    } else {
       console.log(await res.text());
     }
   };
