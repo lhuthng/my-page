@@ -6,7 +6,7 @@
 </script>
 
 <Portal
-  class={`full bg-dark/50 ${!children ? "hidden" : "block"}`}
+  class={`full bg-dark/50 block overflow-hidden ${!children ? "opacity-0 pointer-events-none" : "opacity-100 pointer-events-auto"}`}
   target={$pbody}
 >
   {@render children?.()}
