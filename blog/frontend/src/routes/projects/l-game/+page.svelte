@@ -1,6 +1,30 @@
 <script>
+  import { page } from "$app/state";
   import App from "$lib/components/App.svelte";
+
+  let imageUrl = $derived(
+    page.url.origin + "/html/l-game/l-game-thumbnail.png",
+  );
+  let description =
+    "Trap your opponent so they cannot make a legal move. Play the classic L-Game strategy board game online.";
 </script>
+
+<svelte:head>
+  <title>L-Game | Huu Thang's Projects</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={page.url.href} />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={page.url.href} />
+  <meta property="og:title" content="Play L-Game Online" />
+  <meta property="og:description" content={description} />
+  <meta property="og:image" content={imageUrl} />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Play L-Game Online" />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image" content={imageUrl} />
+</svelte:head>
 
 <div class="w-full pb-4">
   <div class="w-full flex flex-col gap-2 bg-white rounded-xl p-4">
