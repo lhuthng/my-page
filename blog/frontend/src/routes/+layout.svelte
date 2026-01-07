@@ -22,7 +22,7 @@
 <div class="relative flex flex-col min-h-screen">
   <div
     class="absolute pointer-events-none inset-0 z-50"
-    transition:fade={{ duration: 100 }}
+    transition:fade={{ duration: 0 }}
     bind:this={specialDiv}
   ></div>
   <Header />

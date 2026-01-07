@@ -14,6 +14,7 @@
   import HomeButton from "./buttons/HomeButton.svelte";
   import LinkedinButton from "./buttons/LinkedinButton.svelte";
   import ProjectButton from "./buttons/ProjectButton.svelte";
+  import PBody from "./PBody.svelte";
 
   let displayName = $derived($user?.displayName);
   let username = $derived($user?.username);
@@ -257,6 +258,13 @@
     </button>
   </div>
   {#if menuToggled}
+    <PBody
+      ><button
+        class="full cursor-default!"
+        onclick={() => (menuToggled = false)}
+        title="close-menu-overlay"
+      ></button></PBody
+    >
     <div
       in:fly={{ y: -10, duration: 200 }}
       out:fly={{ y: -10, duration: 200 }}
@@ -392,7 +400,7 @@
                   class="fill-dark"
                   href="https://www.facebook.com/lhuthng/"
                 />
-                <span>Facebook</span>
+                <a href="https://www.facebook.com/lhuthng/">Facebook</a>
               </li>
               <li>
                 <GithubButton
@@ -400,7 +408,7 @@
                   class="fill-dark"
                   href="https://github.com/lhuthng"
                 />
-                <span>Github</span>
+                <a href="https://github.com/lhuthng">Github</a>
               </li>
               <li>
                 <LinkedinButton
@@ -408,7 +416,7 @@
                   class="fill-dark"
                   href="https://www.linkedin.com/in/huuthangle/"
                 />
-                <span>Linkedin</span>
+                <a href="https://www.linkedin.com/in/huuthangle/">Linkedin</a>
               </li>
             </ul>
           </div>
