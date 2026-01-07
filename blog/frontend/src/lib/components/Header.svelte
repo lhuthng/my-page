@@ -3,7 +3,7 @@
   import { page } from "$app/stores";
   import { logout, user, isMod } from "$lib/client/user";
   import { useDebounce } from "$lib/effects/debounce";
-  import { fly } from "svelte/transition";
+  import { draw, fly } from "svelte/transition";
   import Portal from "$lib/components/Portal.svelte";
   import SearchButton from "./buttons/SearchButton.svelte";
   import AboutButton from "./buttons/AboutButton.svelte";
@@ -15,6 +15,8 @@
   import LinkedinButton from "./buttons/LinkedinButton.svelte";
   import ProjectButton from "./buttons/ProjectButton.svelte";
   import PBody from "./PBody.svelte";
+  import { quadInOut } from "svelte/easing";
+  import { onMount } from "svelte";
 
   let displayName = $derived($user?.displayName);
   let username = $derived($user?.username);
@@ -112,6 +114,11 @@
     [AboutButton, "About", "/about", "about"],
     [DashboardButton, "Dashboard", "/dashboard", "dashboard", true],
   ];
+
+  let mounted = $state();
+  onMount(() => {
+    mounted = true;
+  });
 </script>
 
 <svelte:window bind:innerWidth={windowWidth} />
@@ -124,9 +131,43 @@
       <div
         class="rounded-full bg-background transition-all duration-200 shadow-lg hover:brightness-102 hover:scale-102"
       >
-        <a href="/"
-          ><img class="not-lg:h-10 h-20" src={"/logo.svg"} alt="logo icon" /></a
-        >
+        <a href="/" title="logo">
+          <svg class="not-lg:h-10 h-20" viewBox="0 0 92.09 61.75">
+            <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <g stroke="#fff" stroke-width="9px">
+                <path
+                  d="M27.7,24.17c-.56-.68-3.14-3.77-6.92-3.49-7.25.55-9.22,6.21-9.17,10.75.07,5.26,5.65,9.58,11.08,9.61,24.87.15,31.49-26.63,31.49-26.63l.45,26.29c2.71.86,16.46-26.49,16.46-26.49l.2,26.48"
+                /><path
+                  d="M87.59,7.61c-.51-.77-2.06-3.08-4.81-3.11-2.58-.03-5.27,2.82-5.27,4.81l-.12,47.94"
+                /><path d="M4.5,47.39h83.05" />
+              </g>
+              <g stroke="#495d83" stroke-width="4px">
+                {#if mounted}
+                  <path
+                    in:draw={{
+                      duration: 700,
+                      easing: (t) => {
+                        const mid = 0.48;
+                        if (t < mid) {
+                          return t;
+                        } else {
+                          const nT = (t - mid) / (1 - mid);
+                          const qP = nT * nT * nT;
+                          return mid + qP * (1 - mid);
+                        }
+                      },
+                    }}
+                    d="M27.67,23.97c-.56-.68-3.14-3.77-6.92-3.49-7.25.55-9.22,6.21-9.17,10.75.07,5.26,5.65,9.58,11.08,9.61,24.87.15,31.49-26.63,31.49-26.63l.45,26.29c2.71.86,16.46-26.49,16.46-26.49l.2,26.48"
+                  />
+                {/if}
+                <path
+                  d="M87.57,7.41c-.51-.77-2.06-3.08-4.81-3.11-2.58-.03-5.27,2.82-5.27,4.81l-.12,47.94"
+                />
+                <path d="M4.48,47.19h83.05" />
+              </g>
+            </g>
+          </svg>
+        </a>
       </div>
     </div>
     <div class="relative grow not-lg:hidden">
@@ -485,7 +526,3 @@
     </div>
   </Portal>
 {/if}
-
-<style lang="postcss">
-  @reference "../../app.css";
-</style>
