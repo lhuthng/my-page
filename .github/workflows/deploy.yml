@@ -102,6 +102,6 @@ jobs:
 
             cd "$BLOG_DIR"
 
-            docker-compose up -d --build
+            docker compose up -d --build
 
             echo "Blog deployed successfully!"
