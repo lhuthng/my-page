@@ -21,6 +21,8 @@
 
 <svelte:head>
   <meta property="og:site_name" content="Huu Thang's Blog" />
+
+  <link rel="icon" href="/favicon.ico" />
 </svelte:head>
 
 <div class="relative flex flex-col min-h-screen">
