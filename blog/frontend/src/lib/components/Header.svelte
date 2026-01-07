@@ -392,7 +392,7 @@
                   class="fill-dark"
                   href="https://www.facebook.com/lhuthng/"
                 />
-                <span>Facebook</span>
+                <a href="https://www.facebook.com/lhuthng/">Facebook</a>
               </li>
               <li>
                 <GithubButton
@@ -400,7 +400,7 @@
                   class="fill-dark"
                   href="https://github.com/lhuthng"
                 />
-                <span>Github</span>
+                <a href="https://github.com/lhuthng">Github</a>
               </li>
               <li>
                 <LinkedinButton
@@ -408,7 +408,7 @@
                   class="fill-dark"
                   href="https://www.linkedin.com/in/huuthangle/"
                 />
-                <span>Linkedin</span>
+                <a href="https://www.linkedin.com/in/huuthangle/">Linkedin</a>
               </li>
             </ul>
           </div>

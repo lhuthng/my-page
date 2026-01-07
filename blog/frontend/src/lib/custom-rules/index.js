@@ -77,7 +77,7 @@ export function mediaWithShortcutPlugin(md, options) {
           case "audio":
             return `<div class="audio-container"><audio src="${src}" alt="${value}" controls></audio></div>`;
           case "vid":
-            return `<div class="video-container"><video ${styleAttr} alt="${value}" controls><source src="${src}"/></video></div>`;
+            return `<div class="video-container"><video ${styleAttr} alt="${value}" src="${src}" controls></video></div>`;
           default:
             return `<span class="invalid-tag">${tag}-${value}</span>`;
         }
