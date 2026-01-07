@@ -19,6 +19,10 @@
   });
 </script>
 
+<svelte:head>
+  <meta property="og:site_name" content="Huu Thang's Blog" />
+</svelte:head>
+
 <div class="relative flex flex-col min-h-screen">
   <div
     class="absolute pointer-events-none inset-0 z-50"
