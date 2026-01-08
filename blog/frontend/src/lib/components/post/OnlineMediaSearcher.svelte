@@ -49,7 +49,7 @@
 
 {#snippet printResults(cache, keyword)}
   {@const results = cache[keyword]?.results}
-  <div class="p-2 grow min-h-0 custom-scrollbar">
+  <div class="p-2 grow min-h-0 max-h-full custom-scrollbar">
     {#if results !== undefined}
       {#if results.length === 0}
         <span class="block text-center"
@@ -57,8 +57,8 @@
         >
       {:else}
         <ul class="space-y-2">
-          {#each results as { short_name: shortName, url }}
-            <MediumEntity {shortName} {url} />
+          {#each results as { short_name: shortName, url, file_type: type }}
+            <MediumEntity {shortName} {url} {type} />
           {/each}
         </ul>
       {/if}
