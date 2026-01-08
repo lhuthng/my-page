@@ -18,6 +18,7 @@
   let isOnline = $state((keyword) => false);
   let isOffline = $state((keyword) => false);
   let getNewMedia = $state((keyword) => {});
+  let clearNewMedia = $state((keywords) => {});
 
   const updateMediaDictionary = (newDictionary) => {
     mediaDictionary = { ...newDictionary };
@@ -44,6 +45,8 @@
   let editor = $state({
     toggled: false,
     view: "private",
+    status: "",
+    isCritical: false,
   });
 
   let renderedText = $state("");
@@ -108,6 +111,17 @@
     slugDebounce.update(editingData.slug);
   });
 
+  let timeout;
+  $effect(() => {
+    if (editor.status === "") return;
+
+    editor.status;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      editor.status = "";
+    }, 2000);
+  });
+
   const newPost = async () => {
     const { title, slug, excerpt, draft = content, categories } = editingData;
 
@@ -161,9 +175,9 @@
     const postData = {
       number_of_files: 0,
     };
-
+    let offlineKeys = [];
     if (editingData.draft !== data.draft) {
-      let keys = [
+      const keys = [
         ...[
           ...editingData.content.matchAll(mediaSyntax).map((match) => match[1]),
         ],
@@ -172,21 +186,23 @@
         ],
       ];
 
-      keys = keys.filter((key) => !isOnline(key));
+      offlineKeys = keys.filter((key) => !isOnline(key));
 
-      const missing = keys.filter((key) => !isOffline(key));
+      const missing = offlineKeys.filter((key) => !isOffline(key));
 
       if (missing.length > 0) {
+        editor.isCritical = true;
+        editor.status = `[${missing}] is/are missing`;
         console.error("Missing keys detected: ", missing);
         return missing;
       }
 
-      postData.number_of_files = keys.length;
+      postData.number_of_files = offlineKeys.length;
 
-      for (let index = 0; index < keys.length; index++) {
-        const data = getNewMedia(keys[index]);
+      for (let index = 0; index < offlineKeys.length; index++) {
+        const data = getNewMedia(offlineKeys[index]);
         formData.append(`file_${index + 1}`, data.file, data.name);
-        formData.append(`short_name_${index + 1}`, keys[index]);
+        formData.append(`short_name_${index + 1}`, offlineKeys[index]);
       }
     }
 
@@ -226,8 +242,12 @@
     });
 
     if (res.ok) {
+      editor.isCritical = false;
+      editor.status = "OK!";
+      clearNewMedia(offlineKeys);
     } else {
-      console.log(await res.text());
+      editor.isCritical = true;
+      editor.status = await res.text();
     }
   };
 
@@ -237,7 +257,13 @@
       headers: { Authorization: auth() },
     });
 
-    console.log(res.ok);
+    if (res.ok) {
+      editor.isCritical = false;
+      editor.status = "OK!";
+    } else {
+      editor.isCritical = true;
+      editor.status = await res.text();
+    }
   };
 </script>
 
@@ -303,6 +329,7 @@
                     case "public": {
                       forceContent(editingData.draft);
                       editor.view = "private";
+                      editor.toggled = true;
                       return;
                     }
                     case "private": {
@@ -324,6 +351,13 @@
                 <button onclick={newPost}>Submit</button>
               </div>
             {:else if mode === "edit"}
+              <div
+                class="my-auto"
+                class:text-accent-green={!editor.isCritical}
+                class:text-accent-red={editor.isCritical}
+              >
+                <span>{editor.status}</span>
+              </div>
               <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
                 <button onclick={updatePost}>Change</button>
               </div>
@@ -413,6 +447,7 @@
             registerGetMedia={(fn) => (getNewMedia = fn)}
             {updateMediaDictionary}
             registerSearch={(fn) => (searchMedia = fn)}
+            registerClearNewMedia={(fn) => (clearNewMedia = fn)}
           />
         </div>
       </div>

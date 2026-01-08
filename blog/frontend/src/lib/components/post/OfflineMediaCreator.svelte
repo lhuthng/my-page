@@ -2,7 +2,7 @@
   import { preventDefault } from "$lib/common";
   import MediumEntity from "./MediumEntity.svelte";
 
-  let { offlineMedia, onlineMedia, updateNewMedia, changeName, ...rest } =
+  let { offlineMedia, onlineMedia, uploadNewMedia, changeName, ...rest } =
     $props();
 
   const allowedTypes = [
@@ -34,7 +34,7 @@
         media.push(medium);
       }
     }
-    updateNewMedia(media);
+    uploadNewMedia(media);
   }
 
   function handleDrop(e) {
