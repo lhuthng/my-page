@@ -269,13 +269,12 @@ pub async fn update_post(
         bytes_list,
     };
 
-    if let Err(_) = state
+    if let Err(media_err) = state
         .media_service
         .bulk_upload(cmd, &state.media_config)
         .await
     {
-        // TODO: map MediaError-PostError
-        return Err(PostError::UploadFailed("Failed to add files".to_string()));
+        return Err(PostError::Media(media_err));
     }
 
     if post_data
@@ -613,13 +612,12 @@ pub async fn new_post(
         bytes_list,
     };
 
-    if let Err(_) = state
+    if let Err(media_err) = state
         .media_service
         .bulk_upload(cmd, &state.media_config)
         .await
     {
-        // TODO: map MediaError-PostError
-        return Err(PostError::UploadFailed("Failed to add files".to_string()));
+        return Err(PostError::Media(media_err));
     }
 
     let mut content = post_data.content;
