@@ -63,6 +63,7 @@ impl FromStr for MediaType {
 pub struct LinkResult {
     pub short_name: Option<String>,
     pub url: String,
+    pub file_type: String,
 }
 
 #[derive(Debug, Clone)]
