@@ -96,7 +96,7 @@
 </script>
 
 <OnlineMediaSearcher
-  class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-primary/40 rounded-xl"
+  class="flex flex-col w-1/2 lg:w-60 h-full max-h-80 text-dark bg-primary/40 rounded-xl"
 />
 
 <OfflineMediaCreator

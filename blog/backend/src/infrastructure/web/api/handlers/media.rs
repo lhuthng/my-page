@@ -124,6 +124,7 @@ pub struct GetLinkResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     short_name: Option<String>,
     url: String,
+    file_type: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -152,10 +153,11 @@ pub async fn search(
     match state.media_service.search(cmd).await {
         Ok(link_results) => Ok(Json(SearchResponse {
             results: link_results
-                .iter()
+                .into_iter()
                 .map(|r| GetLinkResponse {
-                    short_name: r.short_name.clone(),
-                    url: r.url.clone(),
+                    short_name: r.short_name,
+                    url: r.url,
+                    file_type: r.file_type,
                 })
                 .collect(),
         })),
@@ -176,6 +178,7 @@ pub async fn get_link(
     Ok(Json(GetLinkResponse {
         short_name: link.short_name,
         url: link.url,
+        file_type: link.file_type,
     }))
 }
 

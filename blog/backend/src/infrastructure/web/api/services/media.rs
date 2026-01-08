@@ -26,6 +26,7 @@ use crate::{
 struct MediaSearchRow {
     pub short_name: String,
     pub url: String,
+    pub file_type: String,
 }
 
 pub struct MediaServiceImpl {
@@ -426,9 +427,9 @@ impl MediaService for MediaServiceImpl {
         }
     }
     async fn get_link(&self, cmd: GetLinkCommand) -> Result<LinkResult, MediaError> {
-        match sqlx::query_as::<_, (String,)>(
+        match sqlx::query_as::<_, (String, String)>(
             r#"
-                SELECT url FROM media WHERE short_name = ?;
+                SELECT url, file_type FROM media WHERE short_name = ?;
             "#,
         )
         .bind(&cmd.short_name)
@@ -438,6 +439,7 @@ impl MediaService for MediaServiceImpl {
             Ok(row) => Ok(LinkResult {
                 short_name: None,
                 url: row.0,
+                file_type: row.1,
             }),
             Err(_) => Err(MediaError::FileNotFound),
         }
@@ -488,6 +490,7 @@ impl MediaService for MediaServiceImpl {
             SELECT DISTINCT
                 m.short_name,
                 m.url,
+                m.file_type,
                 CASE
                     WHEN LOWER(m.short_name) = LOWER(?1) THEN 3
                     WHEN LOWER(m.short_name) LIKE LOWER(?1) || '%' THEN 2
@@ -515,6 +518,7 @@ impl MediaService for MediaServiceImpl {
             .map(|r| LinkResult {
                 short_name: Some(r.short_name),
                 url: r.url,
+                file_type: r.file_type,
             })
             .collect())
     }
