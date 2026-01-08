@@ -7,6 +7,7 @@
     registerSearch,
     registerMediaCheck,
     registerGetMedia,
+    registerClearNewMedia,
   } = $props();
 
   let newMedia = $state({});
@@ -58,8 +59,16 @@
       keyword in offlineMedia && offlineMedia[keyword] != null,
   });
   registerGetMedia((keyword) => newMedia[keyword]);
+  registerClearNewMedia((names) => {
+    const temp = { ...newMedia };
+    names.forEach((name) => {
+      delete temp[name];
+    });
+    searchOnlineMedia(names);
+    newMedia = { ...temp };
+  });
 
-  const updateNewMedia = (media) => {
+  const uploadNewMedia = (media) => {
     const temp = { ...newMedia };
     const names = [];
     media.forEach((medium) => {
@@ -82,7 +91,6 @@
     if (!(newName in onlineMedia)) {
       searchOnlineMedia([newName]);
     }
-    console.log({ ...onlineMedia }, { ...newMedia });
     return true;
   };
 </script>
@@ -94,7 +102,7 @@
 <OfflineMediaCreator
   {onlineMedia}
   {offlineMedia}
-  {updateNewMedia}
+  {uploadNewMedia}
   {changeName}
   class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-primary/40 rounded-xl"
 />
