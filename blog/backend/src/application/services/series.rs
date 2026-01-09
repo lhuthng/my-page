@@ -20,4 +20,8 @@ pub trait SeriesService {
         &self,
         cmd: commands::series::AddPostToSeriesCommand,
     ) -> Result<bool, errors::series::SeriesError>;
+    async fn remove_post_from_series(
+        &self,
+        cmd: commands::series::RemovePostFromSeriesCommand,
+    ) -> Result<bool, errors::series::SeriesError>;
 }

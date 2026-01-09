@@ -5,7 +5,9 @@ use tokio::fs;
 
 use crate::{
     application::{
-        commands::series::{AddPostToSeriesCommand, GetSeriesCommand, NewSeriesCommand},
+        commands::series::{
+            AddPostToSeriesCommand, GetSeriesCommand, NewSeriesCommand, RemovePostFromSeriesCommand,
+        },
         services::series::SeriesService,
     },
     domain::{
@@ -43,10 +45,11 @@ impl SeriesServiceImpl {
 #[async_trait::async_trait]
 impl SeriesService for SeriesServiceImpl {
     async fn get_series(&self, cmd: GetSeriesCommand) -> Result<Vec<Series>, SeriesError> {
-        let series = sqlx::query_as::<_, (String, String)>(
+        let series = sqlx::query_as::<_, (i64, String, String, String, Option<String>)>(
             r#"
-            SELECT title, slug
+            SELECT series.id, series.title, series.slug, series.description, media.url
             FROM series
+            LEFT JOIN media ON series.cover_image_id = media.id
             WHERE user_id = ?
             "#,
         )
@@ -56,7 +59,13 @@ impl SeriesService for SeriesServiceImpl {
 
         let result = series
             .into_iter()
-            .map(|(title, slug)| Series { title, slug })
+            .map(|(id, title, slug, description, url)| Series {
+                id,
+                title,
+                slug,
+                description,
+                url,
+            })
             .collect();
 
         Ok(result)
@@ -165,78 +174,130 @@ impl SeriesService for SeriesServiceImpl {
     }
     async fn add_post_to_series(&self, cmd: AddPostToSeriesCommand) -> Result<bool, SeriesError> {
         let mut tx = self.pool.begin().await?;
-
-        let exists: Option<i64> = sqlx::query_scalar(
+        // 2. PERMISSION CHECK
+        let exists: bool = sqlx::query_scalar(
             r#"
-            SELECT post_id
-            FROM series_posts
-            LEFT JOIN series ON series_id = series.id
-            LEFT JOIN posts ON post_id = posts.id
-            WHERE
-                series.user_id = posts.user_id
-                AND series_id = ?
-                AND post_id = ?
-            "#,
+            SELECT EXISTS (
+                SELECT 1 FROM posts p, series s
+                WHERE p.id = ? AND s.id = ? AND p.user_id = s.user_id AND p.user_id = ?
+            )"#,
         )
-        .bind(&cmd.series_id)
         .bind(&cmd.post_id)
-        .fetch_optional(&mut *tx)
+        .bind(&cmd.series_id)
+        .bind(&cmd.user_id)
+        .fetch_one(&mut *tx)
         .await?;
 
-        if exists.is_none() {
+        if !exists {
             return Err(SeriesError::PermissionDenied);
         }
 
+        let exists: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS (
+                SELECT 1 FROM series_post
+                WHERE post_id = ?
+            )
+            "#,
+        )
+        .bind(&cmd.post_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        if exists {
+            return Err(SeriesError::Duplication);
+        }
+
+        // 4. CALCULATE TARGET
         let target = match cmd.number {
             Some(n) => n,
             None => {
-                let max: Option<i64> =
-                    sqlx::query_scalar("SELECT MAX(number) FROM series_posts WHERE series_id = ?")
-                        .bind(&cmd.series_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-                max.map_or(1, |v| v + 1)
+                let max: i64 = sqlx::query_scalar(
+                    r#"
+                    SELECT IFNULL(MAX(number), 0)
+                    FROM series_post
+                    WHERE series_id = ?"#,
+                )
+                .bind(&cmd.series_id)
+                .fetch_one(&mut *tx)
+                .await?;
+                max + 1
             }
         };
 
+        // 5. SHIFT EXISTING POSTS
         sqlx::query(
             r#"
-            UPDATE series_posts
+            UPDATE series_post
             SET number = number + 1
-            WHERE series_id = ?
-            AND number >= ?
-            AND number < (
-                SELECT MIN(t2.number)
-                FROM series_posts t2
-                WHERE
-                    t2.series_id = ?
-                    AND t2.number >= ?
-                    AND t2.number + 1
-                    NOT IN (
-                        SELECT number
-                        FROM series_posts
-                        WHERE series_id = ?
-                    )
-            ) + 1
-            "#,
+            WHERE series_id = ? AND number >= ?"#,
         )
         .bind(&cmd.series_id)
         .bind(target)
-        .bind(&cmd.series_id)
-        .bind(target)
-        .bind(&cmd.series_id)
         .execute(&mut *tx)
         .await?;
 
+        // 6. INSERT NEW POST
         sqlx::query(
             r#"
-            INSERT INTO series_posts (series_id, post_id, number)
+            INSERT INTO series_post (series_id, post_id, number)
             VALUES (?, ?, ?)
             "#,
         )
         .bind(cmd.series_id)
         .bind(cmd.post_id)
         .bind(target)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    async fn remove_post_from_series(
+        &self,
+        cmd: RemovePostFromSeriesCommand,
+    ) -> Result<bool, SeriesError> {
+        // 1. START A TRANSACTION
+        let mut tx = self.pool.begin().await?;
+
+        // 2. PERMISSION CHECK & GET CURRENT POSITION
+        let current_position: Option<i64> = sqlx::query_scalar(
+            r#"
+            SELECT sp.number
+            FROM series_posts sp
+            JOIN series s ON sp.series_id = s.id
+            WHERE sp.series_id = ? AND sp.post_id = ? AND s.user_id = ?
+            "#,
+        )
+        .bind(&cmd.series_id)
+        .bind(&cmd.post_id)
+        .bind(&cmd.user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let position = match current_position {
+            Some(pos) => pos,
+            None => return Err(SeriesError::PermissionDenied), // Or NotFound
+        };
+
+        // 3. DELETE THE POST FROM THE SERIES
+        sqlx::query("DELETE FROM series_post WHERE series_id = ? AND post_id = ?")
+            .bind(&cmd.series_id)
+            .bind(&cmd.post_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // 4. CLOSE THE GAP
+        sqlx::query(
+            r#"
+            UPDATE series_post
+            SET number = number - 1
+            WHERE series_id = ? AND number > ?
+            "#,
+        )
+        .bind(&cmd.series_id)
+        .bind(position)
         .execute(&mut *tx)
         .await?;
 

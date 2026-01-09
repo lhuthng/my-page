@@ -431,6 +431,7 @@
                 ></textarea>
               </div>
               <SeriesController
+                postId={editingData.id}
                 series={editingData.series}
                 seriesSlug={editingData.seriesSlug}
               />
