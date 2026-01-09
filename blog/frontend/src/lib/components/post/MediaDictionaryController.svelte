@@ -8,6 +8,7 @@
     registerMediaCheck,
     registerGetMedia,
     registerClearNewMedia,
+    ...rest
   } = $props();
 
   let newMedia = $state({});
@@ -95,14 +96,16 @@
   };
 </script>
 
-<OnlineMediaSearcher
-  class="flex flex-col w-1/2 lg:w-60 h-full max-h-80 text-dark bg-primary/40 rounded-xl"
-/>
+<div {...rest}>
+  <OnlineMediaSearcher
+    class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-primary/40 rounded-xl"
+  />
 
-<OfflineMediaCreator
-  {onlineMedia}
-  {offlineMedia}
-  {uploadNewMedia}
-  {changeName}
-  class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-primary/40 rounded-xl"
-/>
+  <OfflineMediaCreator
+    {onlineMedia}
+    {offlineMedia}
+    {uploadNewMedia}
+    {changeName}
+    class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-primary/40 rounded-xl"
+  />
+</div>

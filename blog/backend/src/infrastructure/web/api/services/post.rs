@@ -106,6 +106,7 @@ pub struct PostDetailsRow {
     pub title: String,
     pub slug: String,
     pub excerpt: String,
+    pub series_id: Option<i64>,
     pub draft: String,
     pub content: String,
     pub user_id: i64,
@@ -731,11 +732,25 @@ impl PostService for PostServiceImpl {
     ) -> Result<PostDetails, PostError> {
         let post_row = sqlx::query_as::<_, PostDetailsRow>(
             r#"
-            SELECT id AS post_id, title, slug, excerpt, content, draft, is_featured, cover_image_id, user_id
+            SELECT
+                posts.id AS post_id,
+                title,
+                posts.slug AS slug,
+                excerpt,
+                series_post.series_id AS series_id,
+                content,
+                draft,
+                is_featured,
+                cover_image_id,
+                user_id
             FROM posts
+            LEFT JOIN series_post ON series_post.post_id = posts.id
             WHERE id = ?;
-            "#
-        ).bind(&cmd.post_id).fetch_one(&self.pool).await?;
+            "#,
+        )
+        .bind(&cmd.post_id)
+        .fetch_one(&self.pool)
+        .await?;
 
         if let Some(user_id) = cmd.required_author_id {
             if user_id != post_row.user_id {
@@ -756,7 +771,6 @@ impl PostService for PostServiceImpl {
         .await?;
 
         let mut cover_url: Option<String> = None;
-
         if let Some(cover_id) = post_row.cover_image_id {
             cover_url = sqlx::query_scalar(
                 r#"
@@ -768,6 +782,24 @@ impl PostService for PostServiceImpl {
             .bind(&cover_id)
             .fetch_optional(&self.pool)
             .await?;
+        }
+
+        let mut series_slug: Option<String> = None;
+        let mut series_cover_url: Option<String> = None;
+        if let Some(cover_id) = post_row.series_id {
+            let series = sqlx::query_as::<_, (String, Option<String>)>(
+                r#"
+                SELECT slug, cover_image_url,
+                FROM series
+                WHERE id = cover_id
+                "#,
+            )
+            .bind(&cover_id)
+            .fetch_one(&self.pool)
+            .await?;
+
+            series_slug = Some(series.0);
+            series_cover_url = series_cover_url;
         }
 
         let medium_usage_rows = sqlx::query_as::<_, MediumUsageWithNameRow>(
@@ -824,6 +856,8 @@ impl PostService for PostServiceImpl {
                 .map(|tag_row| tag_row.tag_slug)
                 .collect(),
             excerpt: post_row.excerpt,
+            series_slug,
+            series_cover_url,
             content: post_row.content,
             draft: post_row.draft,
             is_featured: post_row.is_featured,
