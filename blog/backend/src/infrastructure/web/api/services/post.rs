@@ -219,13 +219,17 @@ impl PostService for PostServiceImpl {
         &self,
         cmd: GetCategoriesCommand,
     ) -> Result<Vec<CategoryResult>, PostError> {
-        let results: Vec<CategoryResult> =
-            sqlx::query_as::<_, (String, String)>("SELECT name, slug FROM categories")
-                .fetch_all(&self.pool)
-                .await?
-                .into_iter()
-                .map(|(name, slug)| CategoryResult { name, slug })
-                .collect();
+        let results: Vec<CategoryResult> = sqlx::query_as::<_, (String, String)>(
+            r#"
+            SELECT name, slug
+            FROM categories
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|(name, slug)| CategoryResult { name, slug })
+        .collect();
 
         Ok(results)
     }
@@ -786,20 +790,21 @@ impl PostService for PostServiceImpl {
 
         let mut series_slug: Option<String> = None;
         let mut series_cover_url: Option<String> = None;
-        if let Some(cover_id) = post_row.series_id {
+        if let Some(series_id) = post_row.series_id {
             let series = sqlx::query_as::<_, (String, Option<String>)>(
                 r#"
-                SELECT slug, cover_image_url,
+                SELECT series.slug, url
                 FROM series
-                WHERE id = cover_id
+                LEFT JOIN media ON media.id = cover_image_id
+                WHERE series.id = ?
                 "#,
             )
-            .bind(&cover_id)
+            .bind(&series_id)
             .fetch_one(&self.pool)
             .await?;
 
             series_slug = Some(series.0);
-            series_cover_url = series_cover_url;
+            series_cover_url = series.1;
         }
 
         let medium_usage_rows = sqlx::query_as::<_, MediumUsageWithNameRow>(

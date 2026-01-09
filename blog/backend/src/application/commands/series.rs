@@ -15,5 +15,12 @@ pub struct NewSeriesCommand {
 pub struct AddPostToSeriesCommand {
     pub post_id: i64,
     pub series_id: i64,
+    pub user_id: i64,
     pub number: Option<i64>,
+}
+
+pub struct RemovePostFromSeriesCommand {
+    pub post_id: i64,
+    pub series_id: i64,
+    pub user_id: i64,
 }
