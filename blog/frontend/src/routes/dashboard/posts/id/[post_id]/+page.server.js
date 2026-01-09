@@ -64,6 +64,10 @@ export async function load(event) {
   seriesRes = await seriesRes;
   if (seriesRes.ok) {
     data.series = (await seriesRes.json()).series;
+
+    data.series.forEach((series) => {
+      series.url = fixClientRoute(series.url);
+    });
   }
 
   return data;

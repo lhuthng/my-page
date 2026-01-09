@@ -6,7 +6,7 @@ export function route(path) {
 }
 
 export function fixClientRoute(path) {
-  if (path === undefined) return undefined;
+  if (path == undefined) return undefined;
   return `/api/${path}`.replace("/./", "/");
 }
 

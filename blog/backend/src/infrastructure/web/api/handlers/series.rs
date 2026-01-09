@@ -3,14 +3,14 @@ use std::sync::Arc;
 use axum::{
     Extension, Json,
     body::Bytes,
-    extract::{Multipart, Query, State},
+    extract::{Multipart, Path, Query, State},
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     application::{
-        commands::series::{GetSeriesCommand, NewSeriesCommand},
+        commands::series::{AddPostToSeriesCommand, GetSeriesCommand, NewSeriesCommand},
         services::series::SeriesService,
     },
     domain::{
@@ -25,8 +25,11 @@ use crate::{
 
 #[derive(Serialize, Deserialize)]
 pub struct SeriesResponse {
+    pub id: i64,
     pub title: String,
     pub slug: String,
+    pub description: String,
+    pub url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -51,20 +54,15 @@ pub async fn get_series(
     let series = series
         .into_iter()
         .map(|series| SeriesResponse {
+            id: series.id,
             title: series.title,
             slug: series.slug,
+            description: series.description,
+            url: series.url,
         })
         .collect();
 
     Ok(Json(GetSeriesResponse { series }))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct NewSeriesBody {
-    pub title: String,
-    pub slug: String,
-    pub description: String,
-    pub cover_image_slug: Option<String>,
 }
 
 #[axum::debug_handler]
@@ -159,6 +157,38 @@ pub async fn new_series(
             },
             &state.media_config,
         )
+        .await?;
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct AddPostToSeriesQuery {
+    pub post_id: i64,
+    pub index: Option<i64>,
+}
+
+#[axum::debug_handler]
+pub async fn add_post_to_series(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Path(series_id): Path<i64>,
+    Query(query): Query<AddPostToSeriesQuery>,
+) -> Result<impl IntoResponse, SeriesError> {
+    let post_id = query.post_id;
+    let number = query.index;
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|_| SeriesError::InternalError("Cannot parse id".to_string()))?;
+
+    state
+        .series_service
+        .add_post_to_series(AddPostToSeriesCommand {
+            post_id,
+            series_id,
+            user_id,
+            number,
+        })
         .await?;
     Ok(())
 }
