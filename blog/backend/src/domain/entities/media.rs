@@ -1,5 +1,7 @@
 use std::str::FromStr;
 
+use axum::body::Bytes;
+
 use crate::domain::errors::media::MediaError;
 
 #[derive(Debug, PartialEq)]
@@ -72,4 +74,11 @@ pub struct MediaDetailResult {
     pub file_type: String,
     pub description: String,
     pub aliases: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MediumDetails {
+    pub filename: String,
+    pub content_type: String,
+    pub bytes: Bytes,
 }
