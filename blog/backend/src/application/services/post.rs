@@ -1,9 +1,6 @@
 use crate::{
     application::commands,
-    domain::{
-        entities::{self, post::Post},
-        errors,
-    },
+    domain::{entities, errors},
 };
 
 #[async_trait::async_trait]
@@ -27,7 +24,7 @@ pub trait PostService {
     async fn get_post(
         &self,
         cmd: commands::post::GetPostCommand,
-    ) -> Result<Post, errors::post::PostError>;
+    ) -> Result<entities::post::Post, errors::post::PostError>;
     async fn publish(
         &self,
         cmd: commands::post::PublishCommand,

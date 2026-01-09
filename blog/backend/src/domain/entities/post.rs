@@ -24,6 +24,8 @@ pub struct PostDetails {
     pub slug: String,
     pub tags: Vec<String>,
     pub excerpt: String,
+    pub series_slug: Option<String>,
+    pub series_cover_url: Option<String>,
     pub content: String,
     pub draft: String,
     pub is_featured: i64,

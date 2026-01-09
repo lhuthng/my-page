@@ -7,6 +7,7 @@
   import ContentDebounceEdtior from "./ContentDebounceEdtior.svelte";
   import MediaDictionaryController from "./MediaDictionaryController.svelte";
   import PostSection from "./PostSection.svelte";
+  import SeriesController from "./SeriesController.svelte";
 
   const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 
@@ -31,6 +32,8 @@
     slug: "",
     tags: "",
     categories: [],
+    series: [],
+    seriesSlug: "",
     excerpt: "",
     date: nowToDate(),
     content: "",
@@ -43,7 +46,7 @@
   });
 
   let editor = $state({
-    toggled: false,
+    toggled: true,
     view: "private",
     status: "",
     isCritical: false,
@@ -60,6 +63,8 @@
       id,
       title,
       slug,
+      series,
+      seriesSlug,
       content,
       draft,
       excerpt,
@@ -74,6 +79,8 @@
     editingData.tags = tags.join(" ");
     editingData.content = content;
     editingData.draft = draft;
+    editingData.series = series;
+    editingData.seriesSlug = seriesSlug;
 
     editor.view = "public";
   }
@@ -370,58 +377,67 @@
       </div>
       <div class="flex not-lg:flex-col gap-2 w-full h-full p-2 pt-1">
         <div class="flex grow gap-2">
-          <div class="p-2 space-y-2 w-1/3 bg-primary/40 rounded-lg">
-            <div class="flex not-sm:flex-col">
-              <label class="inline-block min-w-11" for="title">Title: </label>
-              <input
-                id="title"
-                class="grow px-1 min-w-0 bg-white rounded-sm"
-                bind:value={editingData.title}
-                autocomplete="off"
-                required
+          <div class="max-h-80 p-2 pr-1 w-1/3 bg-primary/40 rounded-lg">
+            <div
+              class="full space-y-2 pr-[3px] custom-scrollbar overflow-y-scroll"
+            >
+              <div class="flex not-sm:flex-col">
+                <label class="inline-block min-w-11" for="title">Title: </label>
+                <input
+                  id="title"
+                  class="grow px-1 min-w-0 bg-white rounded-sm"
+                  bind:value={editingData.title}
+                  autocomplete="off"
+                  required
+                />
+              </div>
+              <div class="flex not-sm:flex-col">
+                <label class="inline-block min-w-11" for="slug">Slug: </label>
+                <input
+                  id="slug"
+                  class="grow px-1 min-w-0 bg-white rounded-sm"
+                  class:bg-red-200!={editingData._slugStatus[
+                    editingData.slug
+                  ] === "used"}
+                  class:bg-yellow-200!={editingData._slugStatus[
+                    editingData.slug
+                  ] === "pending"}
+                  class:bg-green-200!={editingData._slugStatus[
+                    editingData.slug
+                  ] === "ready"}
+                  bind:value={editingData.slug}
+                  autocomplete="off"
+                  required
+                />
+              </div>
+              <div class="flex flex-col">
+                <label class="inline-block" for="slug">Tags: </label>
+                <textarea
+                  class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
+                  autocorrect="off"
+                  autocomplete="off"
+                  rows="2"
+                  bind:value={editingData.tags}
+                ></textarea>
+              </div>
+              <div class="flex flex-col">
+                <label class="inline-block" for="slug">Excerpt: </label>
+                <textarea
+                  class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
+                  autocorrect="off"
+                  autocomplete="off"
+                  rows="5"
+                  bind:value={editingData.excerpt}
+                ></textarea>
+              </div>
+              <SeriesController
+                series={editingData.series}
+                seriesSlug={editingData.seriesSlug}
               />
-            </div>
-            <div class="flex not-sm:flex-col">
-              <label class="inline-block min-w-11" for="slug">Slug: </label>
-              <input
-                id="slug"
-                class="grow px-1 min-w-0 bg-white rounded-sm"
-                class:bg-red-200!={editingData._slugStatus[editingData.slug] ===
-                  "used"}
-                class:bg-yellow-200!={editingData._slugStatus[
-                  editingData.slug
-                ] === "pending"}
-                class:bg-green-200!={editingData._slugStatus[
-                  editingData.slug
-                ] === "ready"}
-                bind:value={editingData.slug}
-                autocomplete="off"
-                required
-              />
-            </div>
-            <div class="flex flex-col">
-              <label class="inline-block" for="slug">Tags: </label>
-              <textarea
-                class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
-                autocorrect="off"
-                autocomplete="off"
-                rows="2"
-                bind:value={editingData.tags}
-              ></textarea>
-            </div>
-            <div class="flex flex-col">
-              <label class="inline-block" for="slug">Excerpt: </label>
-              <textarea
-                class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
-                autocorrect="off"
-                autocomplete="off"
-                rows="5"
-                bind:value={editingData.excerpt}
-              ></textarea>
             </div>
           </div>
           <ContentDebounceEdtior
-            class="grow bg-primary/40 p-2 rounded-lg"
+            class="max-h-80 grow bg-primary/40 p-2 rounded-lg"
             delay="500"
             onUpdateRendered={(_renderedText) => (renderedText = _renderedText)}
             onUpdateDraft={(content) => (editingData.draft = content)}
@@ -435,21 +451,20 @@
             }}
           />
         </div>
-        <div class="flex gap-2 not-lg:h-40 overflow-hidden">
-          <MediaDictionaryController
-            registerMediaCheck={({
-              isOnline: _isOnline,
-              isOffline: _isOffline,
-            }) => {
-              isOnline = _isOnline;
-              isOffline = _isOffline;
-            }}
-            registerGetMedia={(fn) => (getNewMedia = fn)}
-            {updateMediaDictionary}
-            registerSearch={(fn) => (searchMedia = fn)}
-            registerClearNewMedia={(fn) => (clearNewMedia = fn)}
-          />
-        </div>
+        <MediaDictionaryController
+          class="flex max-h-80 gap-2 not-lg:h-40 overflow-hidden"
+          registerMediaCheck={({
+            isOnline: _isOnline,
+            isOffline: _isOffline,
+          }) => {
+            isOnline = _isOnline;
+            isOffline = _isOffline;
+          }}
+          registerGetMedia={(fn) => (getNewMedia = fn)}
+          {updateMediaDictionary}
+          registerSearch={(fn) => (searchMedia = fn)}
+          registerClearNewMedia={(fn) => (clearNewMedia = fn)}
+        />
       </div>
     </div>
   </div>

@@ -70,7 +70,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/s/{short_name}", get(handlers::media::get_link))
-                .route("/", get(handlers::media::search)),
+                .route("/all", get(handlers::media::search)),
         )
         .fallback_service(get_service(ServeDir::new(&state.media_config.dir)));
 
@@ -101,8 +101,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     state.clone(),
                     middlewares::auth::user_guard,
                 ))
-                .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
-                ,
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
         )
         // public
         .merge(
@@ -116,11 +115,25 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/", get(handlers::post::search)),
         );
 
+    let series_routes = Router::new()
+        // user protected
+        .merge(
+            Router::new()
+                .route("/all", get(handlers::series::get_series))
+                .route("/new", post(handlers::series::new_series))
+                .layer(middleware::from_fn(middlewares::auth::mod_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        );
+
     Router::new()
         .nest("/media", media_routes)
         .nest("/auth", auth_routes)
         .nest("/users", user_routes)
         .nest("/posts", post_routes)
+        .nest("/series", series_routes)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
