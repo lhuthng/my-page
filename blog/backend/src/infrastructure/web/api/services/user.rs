@@ -62,6 +62,7 @@ pub struct PostRow {
     pub excerpt: String,
     pub author_name: String,
     pub author_slug: String,
+    pub status: String,
     pub url: Option<String>,
 }
 
@@ -209,23 +210,56 @@ impl UserService for UserServiceImpl {
         })
     }
     async fn get_posts(&self, cmd: GetPostsCommand) -> Result<Vec<PostSnapshot>, UserError> {
-        let post_rows = sqlx::query_as::<_, PostRow>(
+        let filtered = match cmd.user_id {
+            None => true,
+            Some(user_id) => {
+                let exist: bool = sqlx::query_scalar(
+                    r#"
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM users
+                    WHERE id = ? AND username = ?
+                )
+                "#,
+                )
+                .bind(user_id)
+                .bind(&cmd.username)
+                .fetch_one(&self.pool)
+                .await?;
+
+                if !exist {
+                    return Err(UserError::Unauthorized);
+                }
+
+                false
+            }
+        };
+
+        let sql = format!(
             r#"
-            SELECT posts.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, url
+            SELECT posts.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, status, url
             FROM posts
                 JOIN users ON posts.user_id = users.id
                 JOIN user_meta ON user_meta.user_id = users.id
                 LEFT JOIN media ON posts.cover_image_id = media.id
-            WHERE username = ? AND status = 'published'
+            WHERE username = ? {}
             ORDER BY posts.updated_at DESC
             LIMIT ? OFFSET ?
-            "#
-        ).bind(&cmd.username)
-        .bind(&cmd.limit)
-        .bind(&cmd.offset)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| UserError::InternalError(e.to_string()))?;
+            "#,
+            if filtered {
+                "AND status = 'published' "
+            } else {
+                ""
+            }
+        );
+
+        let post_rows = sqlx::query_as::<_, PostRow>(&sql)
+            .bind(&cmd.username)
+            .bind(&cmd.limit)
+            .bind(&cmd.offset)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| UserError::InternalError(e.to_string()))?;
 
         if post_rows.len() == 0 {
             return Ok(vec![]);
@@ -264,6 +298,7 @@ impl UserService for UserServiceImpl {
                 author_slug: post_row.author_slug,
                 tag_names: vec![],
                 tag_slugs: vec![],
+                status: post_row.status,
                 url: post_row.url,
             });
             query = query.bind(post_row.post_id);

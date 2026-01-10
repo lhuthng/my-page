@@ -2,7 +2,7 @@
   import { user } from "$lib/client/user";
   import Post from "./Post.svelte";
 
-  let { id, title, tags, date, content, author } = $props();
+  let { id, title, tags, date, updateTime, content, author } = $props();
 </script>
 
 <section class="flex not-xl:flex-col max-w-full">
@@ -28,7 +28,7 @@
                 class="rounded-full px-1 border-2 border-primary *:no-underline! has-hover:bg-primary duration-100 transition-colors"
               >
                 <a
-                  class="text-primary hover:text-white/90 hover:*:text-white/90 duration-100 transition-colors"
+                  class="inline-block text-primary hover:text-white/90 hover:*:text-white/90 duration-100 transition-colors"
                   href={`/tags/${tag}`}
                 >
                   <span class="text-gray-300">#</span>
@@ -41,7 +41,7 @@
       </div>
       <div class="flex items-center gap-2 py-4">
         <hr class="xl:hidden grow border" />
-        <span class="text-nowrap">{date}</span>
+        <span class="text-nowrap">{date} (updated: {updateTime})</span>
         <hr class="grow border" />
       </div>
     </div>
