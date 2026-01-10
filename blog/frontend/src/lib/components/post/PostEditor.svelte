@@ -427,6 +427,7 @@
     <div class="p-2 rounded-xl bg-white mx-auto w-120">
       <PostCard
         id={editingData.id}
+        dashboardMode={true}
         title={editingData.title === "" ? "<Empty>" : editingData.title}
         slug={editingData.slug}
         excerpt={editingData.excerpt === "" ? "<Empty>" : editingData.excerpt}

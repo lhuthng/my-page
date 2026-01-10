@@ -102,8 +102,15 @@
 
     posts.status = "fetching";
 
+    const init = {
+      method: "GET",
+      headers:
+        $user?.username === username ? { Authorization: auth() } : undefined,
+    };
+
     const res = await fetch(
       `/api/users/${username}/posts?limit=${limit}&offset=0`,
+      init,
     );
 
     if (!res.ok) {
@@ -380,9 +387,11 @@
           bind:this={postContainer}
           class="grid grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
         >
-          {#each posts.data as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
+          {#each posts.data as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, status, url }, index (slug)}
             <li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
               <PostCard
+                id={status === "draft" ? id : undefined}
+                {status}
                 {title}
                 {slug}
                 {excerpt}

@@ -196,6 +196,7 @@ impl PostServiceImpl {
                 author_slug: post_row.author_slug,
                 tag_names: vec![],
                 tag_slugs: vec![],
+                status: post_row.status,
                 url: post_row.url,
             });
             query = query.bind(post_row.post_id);

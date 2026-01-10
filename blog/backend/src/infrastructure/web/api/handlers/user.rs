@@ -203,6 +203,7 @@ pub struct Post {
     pub excerpt: String,
     pub author_name: String,
     pub author_slug: String,
+    pub status: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
@@ -216,15 +217,26 @@ pub struct GetPostsResponse {
 #[axum::debug_handler]
 pub async fn get_posts(
     State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
     Path(username): Path<String>,
     Query(query): Query<GetPostsQuery>,
 ) -> Result<impl IntoResponse, UserError> {
     let limit = query.limit.unwrap_or(5);
     let offset = query.offset.unwrap_or(0);
+    let user_id = match opt_claims {
+        None => None,
+        Some(claims) => Some(
+            claims
+                .user_id
+                .parse::<i64>()
+                .map_err(|e| UserError::InternalError(e.to_string()))?,
+        ),
+    };
 
     let posts = state
         .user_service
         .get_posts(GetPostsCommand {
+            user_id,
             username,
             limit,
             offset,
@@ -243,6 +255,7 @@ pub async fn get_posts(
                 excerpt: post.excerpt,
                 author_name: post.author_name,
                 author_slug: post.author_slug,
+                status: post.status,
                 url: post.url,
             })
             .collect(),
