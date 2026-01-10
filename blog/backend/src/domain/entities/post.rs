@@ -54,6 +54,7 @@ pub struct Post {
     pub content: String,
     pub draft: String,
     pub published_at: Option<String>,
+    pub updated_at: Option<String>,
     pub medium_urls: Vec<String>,
     pub cover_url: Option<String>,
 }
