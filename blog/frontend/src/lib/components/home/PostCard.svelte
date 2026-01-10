@@ -4,6 +4,8 @@
   let {
     src,
     id,
+    status,
+    dashboardMode,
     onclick,
     title,
     slug,
@@ -16,8 +18,6 @@
   } = $props();
 
   let toggled = $state(false);
-
-  let dashboardMode = $derived(id !== undefined);
 
   let link = $derived(
     dashboardMode ? `/dashboard/posts/${id}` : `/posts/${slug}`,
@@ -32,7 +32,7 @@
   {#if !dashboardMode}
     <a
       class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34"
-      href={link}
+      href={status === "draft" ? `/dashboard/posts/id/${id}` : link}
     >
       <img
         class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105"
@@ -62,10 +62,18 @@
     >
       <div class="h-full w-1/2 min-w-0">
         <div class="flex flex-col full py-2 min-w-0">
-          <a class="w-fit" href={!dashboardMode ? link : undefined}
+          <a
+            class="w-fit"
+            href={status === "draft"
+              ? `/dashboard/posts/id/${id}`
+              : !dashboardMode
+                ? link
+                : undefined}
             ><h1 class="text-md md:text-lg line-clamp-2">
               {title}
-              {#if dashboardMode}
+              {#if status === "draft"}
+                <i class="text-accent-red">(draft)</i>
+              {:else if dashboardMode}
                 <i class="text-accent-red">(dashboard)</i>
               {/if}
             </h1>
@@ -121,7 +129,11 @@
           <p>{excerpt}</p>
           <a
             class="block text-right"
-            href={!dashboardMode ? postLink : undefined}>> to post</a
+            href={status === "draft"
+              ? `/dashboard/posts/id/${id}`
+              : !dashboardMode
+                ? link
+                : undefined}>> to post</a
           >
         </div>
       </div>

@@ -14,6 +14,7 @@ pub struct PostSnapshot {
     pub excerpt: String,
     pub author_name: String,
     pub author_slug: String,
+    pub status: String,
     pub url: Option<String>,
 }
 
