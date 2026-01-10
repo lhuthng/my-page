@@ -70,6 +70,7 @@ pub struct PostContentRow {
     pub content: String,
     pub draft: String,
     pub published_at: Option<String>,
+    pub updated_at: Option<String>,
     pub url: Option<String>,
 }
 
@@ -196,6 +197,7 @@ impl PostServiceImpl {
                 author_slug: post_row.author_slug,
                 tag_names: vec![],
                 tag_slugs: vec![],
+                status: post_row.status,
                 url: post_row.url,
             });
             query = query.bind(post_row.post_id);
@@ -614,10 +616,11 @@ impl PostService for PostServiceImpl {
             content,
             draft,
             published_at,
+            updated_at,
             url,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, m1.url AS url, m2.url AS author_avatar_url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, m1.url AS url, m2.url AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
@@ -691,6 +694,7 @@ impl PostService for PostServiceImpl {
             content,
             draft,
             published_at,
+            updated_at,
             medium_urls,
             cover_url: url,
         })
@@ -715,7 +719,14 @@ impl PostService for PostServiceImpl {
         sqlx::query(
             r#"
             UPDATE posts
-            SET content = ?, status = 'published'
+            SET
+                content = ?,
+                published_at = CASE
+                    WHEN status = 'draft' THEN CURRENT_TIMESTAMP
+                    ELSE published_at
+                END,
+                updated_at = CURRENT_TIMESTAMP,
+                status = 'published'
             WHERE id = ?
             "#,
         )

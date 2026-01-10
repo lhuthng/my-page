@@ -20,6 +20,7 @@ pub struct GetRoleCommand {}
 
 #[derive(serde::Deserialize)]
 pub struct GetPostsCommand {
+    pub user_id: Option<i64>,
     pub username: String,
     pub limit: i64,
     pub offset: i64,
