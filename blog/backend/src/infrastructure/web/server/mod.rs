@@ -19,6 +19,7 @@ pub struct MediaConfig {
     pub dir: PathBuf,
     pub allowed_file_types: Vec<MediaType>,
     pub allowed_avatar_types: Vec<MediaType>,
+    pub allowed_cover_types: Vec<MediaType>,
 }
 
 pub struct AppState {
@@ -28,6 +29,7 @@ pub struct AppState {
     pub user_service: services::user::UserServiceImpl,
     pub media_service: services::media::MediaServiceImpl,
     pub post_service: services::post::PostServiceImpl,
+    pub series_service: services::series::SeriesServiceImpl,
 }
 
 pub struct HTTPServer<'a> {
@@ -64,10 +66,18 @@ impl MediaConfig {
             MediaType::ImageJpeg,
         ];
 
+        let allowed_cover_types = vec![
+            MediaType::ImagePng,
+            MediaType::ImageGif,
+            MediaType::ImageWebp,
+            MediaType::ImageJpeg,
+        ];
+
         return Self {
             dir,
             allowed_file_types,
             allowed_avatar_types,
+            allowed_cover_types,
         };
     }
 }
@@ -138,6 +148,7 @@ impl<'a> HTTPServer<'a> {
             user_service: services::user::UserServiceImpl::new(pool.clone()),
             media_service: services::media::MediaServiceImpl::new(pool.clone()),
             post_service: services::post::PostServiceImpl::new(pool.clone()),
+            series_service: services::series::SeriesServiceImpl::new(pool.clone()),
         });
         let router = api::router::build_router(state);
 

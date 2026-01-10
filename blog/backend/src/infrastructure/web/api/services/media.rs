@@ -39,7 +39,7 @@ impl MediaServiceImpl {
     }
 }
 
-struct HashData {
+pub struct HashData {
     pub hash: String,
     pub size: i64,
     pub dir_path: PathBuf,
@@ -66,7 +66,7 @@ fn generate_dir_and_name(
     (dir_path.to_path_buf(), filename)
 }
 
-async fn hash_bytes(
+pub async fn hash_bytes(
     bytes: &Bytes,
     root: &PathBuf,
     extension: String,
