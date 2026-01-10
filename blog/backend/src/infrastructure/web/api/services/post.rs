@@ -56,6 +56,7 @@ pub struct PostRow {
     pub author_name: String,
     pub author_slug: String,
     pub url: Option<String>,
+    pub status: String,
 }
 
 #[derive(Debug, FromRow)]
@@ -117,25 +118,41 @@ pub struct PostDetailsRow {
 impl PostServiceImpl {
     async fn get_posts(
         &self,
+        is_public: bool,
         featured: Option<i64>,
         limit: i64,
         offset: i64,
     ) -> Result<Vec<PostSnapshot>, PostError> {
+        let mut placeholder: Vec<String> = vec![];
+
+        if is_public {
+            placeholder.push("status = 'published'".to_string());
+        }
+
+        if let Some(feature) = featured {
+            placeholder.push(format!("is_featured = {}", feature));
+        }
+
+        let mut placeholder = placeholder.join(" AND ");
+        if !placeholder.is_empty() {
+            placeholder.insert_str(0, "WHERE ");
+        }
+
         let sequel = format!(
             r#"
-            SELECT posts.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, url
+            SELECT posts.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, url, status
             FROM posts
                 JOIN users ON posts.user_id = users.id
                 JOIN user_meta ON user_meta.user_id = posts.user_id
                 LEFT JOIN media ON posts.cover_image_id = media.id
             {}
             ORDER BY posts.updated_at DESC
-            LIMIT ? OFFSET ?
+            LIMIT ?
+            OFFSET ?
             "#,
-            featured
-                .map(|v| format!("WHERE is_featured = {}", v))
-                .unwrap_or_default()
+            placeholder
         );
+
         let post_rows = sqlx::query_as::<_, PostRow>(&sequel)
             .bind(limit)
             .bind(offset)
@@ -718,7 +735,7 @@ impl PostService for PostServiceImpl {
         &self,
         cmd: GetFeaturedPostsCommand,
     ) -> Result<Vec<PostSnapshot>, PostError> {
-        let featured_posts = self.get_posts(Some(1), cmd.limit, 0).await?;
+        let featured_posts = self.get_posts(true, Some(1), cmd.limit, 0).await?;
 
         Ok(featured_posts)
     }
@@ -727,7 +744,7 @@ impl PostService for PostServiceImpl {
         &self,
         cmd: GetLatestPostsCommand,
     ) -> Result<Vec<PostSnapshot>, PostError> {
-        let latest_posts = self.get_posts(None, cmd.limit, cmd.offset).await?;
+        let latest_posts = self.get_posts(true, None, cmd.limit, cmd.offset).await?;
         Ok(latest_posts)
     }
     async fn get_post_details(
@@ -778,7 +795,7 @@ impl PostService for PostServiceImpl {
         if let Some(cover_id) = post_row.cover_image_id {
             cover_url = sqlx::query_scalar(
                 r#"
-                SELECT short_name
+                SELECT url
                 FROM media
                 WHERE id = ?
                 "#,
