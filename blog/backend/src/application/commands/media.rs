@@ -1,5 +1,7 @@
 use axum::body::Bytes;
 
+use crate::domain::entities::media::MediumDetails;
+
 pub struct UploadMediumCommand {
     pub uploader_id: i64,
     pub short_name: String,
@@ -11,9 +13,19 @@ pub struct UploadMediumCommand {
 
 pub struct ChangeAvatarCommand {
     pub user_id: i64,
-    pub filename: String,
-    pub content_type: String,
-    pub bytes: Bytes,
+    pub medium_details: MediumDetails,
+}
+
+pub struct ChangePostCoverCommand {
+    pub user_id: i64,
+    pub post_id: i64,
+    pub medium_details: MediumDetails,
+}
+
+pub struct ChangeSeriesCoverCommand {
+    pub user_id: i64,
+    pub series_id: i64,
+    pub medium_details: MediumDetails,
 }
 
 pub struct UploadMediaWithoutDescriptionCommand {

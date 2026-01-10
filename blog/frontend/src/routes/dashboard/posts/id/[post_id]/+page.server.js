@@ -70,5 +70,7 @@ export async function load(event) {
     });
   }
 
+  data.cover_url = fixClientRoute(data.cover_url);
+
   return data;
 }
