@@ -20,6 +20,7 @@ use crate::{
     },
     domain::{
         entities::{
+            media::MediumDetails,
             secret::Claims,
             user::{UserRole, UserSummary},
         },
@@ -118,9 +119,11 @@ pub async fn change_avatar(
         .change_avatar(
             ChangeAvatarCommand {
                 user_id,
-                filename,
-                content_type,
-                bytes,
+                medium_details: MediumDetails {
+                    filename,
+                    content_type,
+                    bytes,
+                },
             },
             &state.media_config,
         )
