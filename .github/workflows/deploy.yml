@@ -100,9 +100,11 @@ jobs:
               git clean -fd
             fi
 
-            cd "$BLOG_DIR"
+            cd "$BLOG_DIR/backend"
 
             /root/.cargo/bin/sqlx migrate run --database-url sqlite://data/blog.db
+
+            cd ..
 
             docker compose build backend
             docker compose build frontend
