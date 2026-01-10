@@ -102,7 +102,7 @@ jobs:
 
             cd "$BLOG_DIR"
 
-            sqlx migrate run --database-url sqlite://data/blog.db
+            /root/.cargo/bin/sqlx migrate run --database-url sqlite://data/blog.db
 
             docker compose build backend
             docker compose build frontend
