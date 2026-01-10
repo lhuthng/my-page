@@ -50,7 +50,6 @@ pub async fn optional_user_guard(
     next: Next,
 ) -> Result<impl IntoResponse, AuthError> {
     let mut opt_claims: Option<Claims> = None;
-
     if let Some(header_value) = request.headers().get("Authorization") {
         if let Some(token) = header_value
             .to_str()

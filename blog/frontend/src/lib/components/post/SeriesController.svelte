@@ -200,7 +200,7 @@
             <div>
               <span><i>Do you want to add this post to this series?</i></span>
             </div>
-            <div class="flex justify-between">
+            <div class="flex justify-evenly">
               <div class="duo-btn duo-green">
                 <button
                   onclick={async () => {
