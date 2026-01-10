@@ -8,18 +8,27 @@ export async function load(event) {
   const { post_id } = event.params;
   const { type, token } = locals.accessToken;
 
-  const res = await event.fetch(route(`posts/id/${post_id}`), {
+  let res = event.fetch(route(`posts/id/${post_id}`), {
     method: "GET",
     headers: { Authorization: `${type} ${token}` },
   });
 
+  let seriesRes = event.fetch(route(`series/all`), {
+    method: "GET",
+    headers: { Authorization: `${type} ${token}` },
+  });
+
+  res = await res;
+
   if (!res.ok) {
+    console.log(await res.text());
     throw error(404, "Post Not Found");
   }
 
   const data = await res.json();
 
   data.medium_urls = data.medium_urls.map((url) => fixClientRoute(url));
+  data.slug_cover_url = fixClientRoute(data.slug_cover_url);
 
   let { content, draft, medium_short_names } = data;
 
@@ -52,5 +61,14 @@ export async function load(event) {
 
   data.draft = draft;
 
-  return { ...data };
+  seriesRes = await seriesRes;
+  if (seriesRes.ok) {
+    data.series = (await seriesRes.json()).series;
+
+    data.series.forEach((series) => {
+      series.url = fixClientRoute(series.url);
+    });
+  }
+
+  return data;
 }

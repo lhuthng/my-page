@@ -102,6 +102,10 @@ jobs:
 
             cd "$BLOG_DIR"
 
-            docker compose up -d --build
+            sqlx migrate run --database-url sqlite://data/blog.db
+
+            docker compose build backend
+            docker compose build frontend
+            docker compose up -d
 
             echo "Blog deployed successfully!"

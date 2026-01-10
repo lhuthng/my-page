@@ -86,6 +86,10 @@ pub struct GetPostDetailsResponse {
     pub slug: String,
     pub tags: Vec<String>,
     pub excerpt: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub series_slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub series_cover_url: Option<String>,
     pub content: String,
     pub draft: String,
     pub is_featured: i64,
@@ -115,6 +119,8 @@ pub async fn get_post_details(
         slug,
         tags,
         excerpt,
+        series_slug,
+        series_cover_url,
         content,
         draft,
         is_featured,
@@ -135,6 +141,8 @@ pub async fn get_post_details(
         slug,
         tags,
         excerpt,
+        series_slug,
+        series_cover_url,
         content,
         draft,
         is_featured,
