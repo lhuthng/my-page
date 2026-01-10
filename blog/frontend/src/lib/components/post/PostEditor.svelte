@@ -130,7 +130,19 @@
   });
 
   const newPost = async () => {
-    const { title, slug, excerpt, draft = content, categories } = editingData;
+    let {
+      title,
+      slug,
+      excerpt,
+      tags,
+      content = draft,
+      categories,
+    } = editingData;
+
+    tags = tags
+      .trim()
+      .split(" ")
+      .filter((tag) => tag !== "");
 
     const keys = [...editingData.content.matchAll(mediaSyntax)]
       .map((match) => match[1])
@@ -152,6 +164,7 @@
             title,
             slug,
             excerpt,
+            tags,
             content,
             categories: [],
             number_of_files: keys.length,
@@ -167,6 +180,9 @@
       formData.append(`short_name_${index + 1}`, keys[index]);
     }
 
+    editor.isCritical = false;
+    editor.status = "";
+
     const res = await fetch("/api/posts/new", {
       method: "POST",
       headers: { Authorization: auth() },
@@ -174,6 +190,12 @@
     });
 
     if (res.ok) {
+      // TODO: PREVENT RESUBMIT
+      editor.isCritical = false;
+      editor.status = "OK!";
+    } else {
+      editor.isCritical = true;
+      editor.status = await res.text();
     }
   };
 
@@ -265,6 +287,7 @@
     });
 
     if (res.ok) {
+      // TODO: PREVENT RESUBMIT
       editor.isCritical = false;
       editor.status = "OK!";
     } else {
@@ -430,11 +453,13 @@
                   bind:value={editingData.excerpt}
                 ></textarea>
               </div>
-              <SeriesController
-                postId={editingData.id}
-                series={editingData.series}
-                seriesSlug={editingData.seriesSlug}
-              />
+              {#if mode === "edit"}
+                <SeriesController
+                  postId={editingData.id}
+                  series={editingData.series}
+                  seriesSlug={editingData.seriesSlug}
+                />
+              {/if}
             </div>
           </div>
           <ContentDebounceEdtior
