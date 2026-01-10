@@ -1,6 +1,10 @@
 <script>
   import { auth, user } from "$lib/client/user";
-  import { arraysEqualIgnoreOrder, nowToDate } from "$lib/common";
+  import {
+    arraysEqualIgnoreOrder,
+    nowToDate,
+    preventDefault,
+  } from "$lib/common";
   import { useDebounce } from "$lib/effects/debounce";
   import { fly } from "svelte/transition";
   import PostCard from "../home/PostCard.svelte";
@@ -8,8 +12,11 @@
   import MediaDictionaryController from "./MediaDictionaryController.svelte";
   import PostSection from "./PostSection.svelte";
   import SeriesController from "./SeriesController.svelte";
+  import PBody from "../PBody.svelte";
 
   const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
+  const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+  const maxFileSize = 5 * 1024 * 1024;
 
   let { mode = "create", data } = $props();
 
@@ -38,6 +45,7 @@
     date: nowToDate(),
     content: "",
     draft: "",
+    coverUrl: "",
     author: {
       username: $user?.username,
       displayName: $user?.displayName,
@@ -46,10 +54,16 @@
   });
 
   let editor = $state({
-    toggled: true,
+    coverToggled: false,
+    toggled: false,
     view: "private",
     status: "",
     isCritical: false,
+    isUploading: false,
+    isUploaded: false,
+    coverFile: undefined,
+    newCover: undefined,
+    coverError: "",
   });
 
   let renderedText = $state("");
@@ -69,6 +83,7 @@
       draft,
       excerpt,
       tags,
+      coverUrl,
       mediumShortNames,
       mediumUrls,
     } = data;
@@ -81,6 +96,7 @@
     editingData.draft = draft;
     editingData.series = series;
     editingData.seriesSlug = seriesSlug;
+    editingData.coverUrl = coverUrl;
 
     editor.view = "public";
   }
@@ -297,10 +313,120 @@
   };
 </script>
 
+{#if editor.coverToggled}
+  <PBody>
+    <div
+      class="sticky top-0 flex justify-center items-center w-full h-screen pointer-events-auto"
+    >
+      <div
+        class="absolute cursor-not-allowed inset-0 z-10"
+        onclick={() => {
+          editor.coverToggled = false;
+          editor.coverFile = undefined;
+          editor.newCover = undefined;
+          editor.isUploading = false;
+          editor.isUploaded = false;
+          editor.coverError = "";
+        }}
+        role="none"
+      ></div>
+      <div
+        class="w-fit h-fit space-y-4 bg-white rounded-3xl p-4 text-xl z-11"
+        role="none"
+      >
+        <div
+          class="flex justify-center items-center w-60 h-60 bg-background/60 outline-4 outline-dark outline-dashed rounded-xl overflow-hidden"
+          ondrop={(e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (!file) {
+              editor.coverError = "File not found!";
+              return;
+            }
+
+            if (!allowedTypes.includes(file.type)) {
+              editor.coverError = "Only JPEG, PNG, GIF, or WEBP are allowed.";
+              return;
+            }
+
+            if (file.size > maxFileSize) {
+              editor.coverError = `File size exceeds 5MB (${file.size} bytes)`;
+              return;
+            }
+
+            editor.coverFile = file;
+            editor.newCover = URL.createObjectURL(file);
+
+            editor.isUploading = false;
+            editor.isUploaded = false;
+          }}
+          ondragover={preventDefault}
+          role="none"
+        >
+          {#if editor.newCover}
+            <img
+              class="full object-cover"
+              src={editor.newCover}
+              alt="temporal-avatar"
+            />
+          {:else}
+            <span class="w-40 text-center select-none text-dark"
+              >Upload your image here</span
+            >
+          {/if}
+        </div>
+        {#if editor.coverError}
+          <span class="inline-block w-60 text-accent-red">
+            *{editor.coverError}
+          </span>
+        {/if}
+        <div class="duo-btn duo-green">
+          <button
+            disabled={!editor.newCover ||
+              editor.isUploaded ||
+              editor.isUploading}
+            onclick={async () => {
+              const formData = new FormData();
+
+              formData.append("file", editor.coverFile, editor.coverFile.name);
+
+              editor.isUploaded = false;
+              editor.isUploading = true;
+              const res = await fetch(`/api/posts/id/${editingData.id}/cover`, {
+                method: "PATCH",
+                headers: {
+                  Authorization: auth(),
+                },
+                body: formData,
+              });
+
+              if (res.ok) {
+                editor.isUploaded = true;
+                editor.isUploading = false;
+                editor.coverError = "";
+                editingData.coverUrl = editor.newCover;
+              } else {
+                editor.isUploading = false;
+                editor.coverError = await res.text();
+              }
+            }}>Apply</button
+          >
+        </div>
+        {#if editor.isUploaded}
+          <span class="inline-block w-60 text-accent-green">
+            *New cover uploaded succesfully!
+          </span>
+        {/if}
+      </div>
+    </div>
+  </PBody>
+{/if}
+
 <article class="relative flex flex-col gap-4 pb-4 *:drop-shadow-xl">
   <div class="flex w-full">
     <div class="p-2 rounded-xl bg-white mx-auto w-120">
       <PostCard
+        id={editingData.id}
         title={editingData.title === "" ? "<Empty>" : editingData.title}
         slug={editingData.slug}
         excerpt={editingData.excerpt === "" ? "<Empty>" : editingData.excerpt}
@@ -309,16 +435,15 @@
           slug: $user.username,
         }}
         tags={editingData.tags.split(" ").filter((tag) => tag !== "")}
-        src={"/missing.png"}
+        src={editingData.coverUrl}
+        onclick={() => {
+          if (mode !== "edit") return;
+          editor.coverToggled = true;
+        }}
       >
         <div
-          class="absolute full z-20 grid place-items-center border-4 border-dashed border-accent-green rounded-lg opacity-0 hover:opacity-100 hover:scale-105 transition-all duration-100"
-        >
-          <span
-            class="stroke-text text-dark bg-text-dark font-bold text-xl drop-shadow-2xl"
-            >Change</span
-          >
-        </div>
+          class="absolute top-0 full z-20 grid place-items-center border-4 border-dashed border-accent-green rounded-lg opacity-0 bg-accent-green/40 hover:opacity-100 hover:scale-105 transition-all duration-100"
+        ></div>
       </PostCard>
     </div>
   </div>

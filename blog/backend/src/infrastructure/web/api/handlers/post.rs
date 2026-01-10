@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     application::{
         commands::{
-            media::UploadMediaWithoutDescriptionCommand,
+            media::{ChangePostCoverCommand, UploadMediaWithoutDescriptionCommand},
             post::{
                 CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand,
                 GetDetailedPostsCommand, GetFeaturedPostsCommand, GetLatestPostsCommand,
@@ -24,13 +24,17 @@ use crate::{
     },
     domain::{
         entities::{
+            media::MediumDetails,
             post::{PostDetails, PostSummary},
             secret::Claims,
         },
-        errors::post::PostError,
+        errors::{media::MediaError, post::PostError},
     },
     helper::string::replace_range_unicode,
-    infrastructure::web::server::AppState,
+    infrastructure::web::{
+        api::handlers::common::{MediumData, extract_medium},
+        server::AppState,
+    },
 };
 
 #[derive(Deserialize)]
@@ -923,4 +927,74 @@ pub async fn get_comments(
     let wrapped_comments = CommentsResponse { comments };
 
     Ok(Json(wrapped_comments))
+}
+
+#[axum::debug_handler]
+pub async fn change_cover(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Path(post_id): Path<i64>,
+    mut multipart: Multipart,
+) -> Result<impl IntoResponse, PostError> {
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|_| PostError::InternalError("Cannot parse id.".to_string()))?;
+
+    let mut opt_filename: Option<String> = None;
+    let mut opt_content_type: Option<String> = None;
+    let mut opt_bytes: Option<Bytes> = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| PostError::InternalError(e.to_string()))?
+    {
+        let field_name = field.name().ok_or(MediaError::UploadFailed(
+            "Empty field detected.".to_string(),
+        ))?;
+
+        if field_name == "file" {
+            if opt_filename.is_some() {
+                return Err(PostError::Media(MediaError::UploadFailed(
+                    "Only one media is allowed at a time.".to_string(),
+                )));
+            }
+
+            let MediumData {
+                filename,
+                content_type,
+                bytes,
+            } = extract_medium(field).await?;
+
+            opt_filename = Some(filename);
+            opt_content_type = Some(content_type);
+            opt_bytes = Some(bytes);
+        }
+    }
+
+    let filename =
+        opt_filename.ok_or_else(|| MediaError::UploadFailed("Missing file".to_string()))?;
+    let content_type = opt_content_type
+        .ok_or_else(|| MediaError::UploadFailed("Missing content type".to_string()))?;
+    let bytes =
+        opt_bytes.ok_or_else(|| MediaError::UploadFailed("Missing file bytes".to_string()))?;
+
+    state
+        .media_service
+        .change_post_cover(
+            ChangePostCoverCommand {
+                post_id,
+                user_id,
+                medium_details: MediumDetails {
+                    filename,
+                    content_type,
+                    bytes,
+                },
+            },
+            &state.media_config,
+        )
+        .await?;
+
+    Ok(())
 }

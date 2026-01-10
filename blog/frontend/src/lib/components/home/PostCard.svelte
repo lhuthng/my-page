@@ -4,6 +4,7 @@
   let {
     src,
     id,
+    onclick,
     title,
     slug,
     series,
@@ -28,19 +29,32 @@
 <div
   class="relative flex gap-4 bg-background/40 hover:bg-background/60 transition-colors duration-50 rounded-lg"
 >
-  <a
-    class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34"
-    href={link}
-  >
-    <img
-      class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105"
-      src={src ?? "/missing.png"}
-      alt="thumbnail"
-    />
-    {#if children !== undefined}
-      {@render children()}
-    {/if}
-  </a>
+  {#if !dashboardMode}
+    <a
+      class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34"
+      href={link}
+    >
+      <img
+        class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105"
+        src={src ?? "/missing.png"}
+        alt="post-cover"
+      />
+    </a>
+  {:else}
+    <button
+      class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34"
+      {onclick}
+    >
+      <img
+        class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105"
+        src={src ?? "/missing.png"}
+        alt="post-cover"
+      />
+      {#if children !== undefined}
+        {@render children()}
+      {/if}
+    </button>
+  {/if}
   <div class="relative z-10 w-full pointer-events-none overflow-hidden">
     <div
       class="card absolute w-[200%] h-full flex transition-transform duration-200 left-0"
@@ -48,11 +62,11 @@
     >
       <div class="h-full w-1/2 min-w-0">
         <div class="flex flex-col full py-2 min-w-0">
-          <a class="w-fit" href={link}
+          <a class="w-fit" href={!dashboardMode ? link : undefined}
             ><h1 class="text-md md:text-lg line-clamp-2">
               {title}
               {#if dashboardMode}
-                (dashboard)
+                <i class="text-accent-red">(dashboard)</i>
               {/if}
             </h1>
           </a>
@@ -60,7 +74,8 @@
             <span class="select-none pointer-events-auto"
               >by <a
                 class="select-text text-dark!"
-                href={`/profiles/${author.slug}`}>{author.name}</a
+                href={!dashboardMode ? `/profiles/${author.slug}` : undefined}
+                >{author.name}</a
               ></span
             >
             {#if series !== undefined}
@@ -104,7 +119,10 @@
           class="full p-2 pointer-events-auto text-xs sm:text-base overscroll-contain custom-scrollbar overflow-y-scroll"
         >
           <p>{excerpt}</p>
-          <a class="block text-right" href={postLink}>> to post</a>
+          <a
+            class="block text-right"
+            href={!dashboardMode ? postLink : undefined}>> to post</a
+          >
         </div>
       </div>
       <svg

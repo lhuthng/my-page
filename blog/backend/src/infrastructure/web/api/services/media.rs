@@ -10,13 +10,14 @@ use crate::{
     application::{
         commands::media::{
             AddAliasCommand, ChangeAliasCommand, ChangeAvatarCommand, ChangeMediaDetailsCommand,
-            DeleteAliasCommand, GetAliasesCommand, GetLinkCommand, GetMediaDetailsCommand,
-            SearchMediaCommand, UploadMediaWithoutDescriptionCommand, UploadMediumCommand,
+            ChangePostCoverCommand, DeleteAliasCommand, GetAliasesCommand, GetLinkCommand,
+            GetMediaDetailsCommand, SearchMediaCommand, UploadMediaWithoutDescriptionCommand,
+            UploadMediumCommand,
         },
         services::media::MediaService,
     },
     domain::{
-        entities::media::{LinkResult, MediaDetailResult, MediaType},
+        entities::media::{LinkResult, MediaDetailResult, MediaType, MediumDetails},
         errors::media::MediaError,
     },
     infrastructure::web::server::MediaConfig,
@@ -194,7 +195,13 @@ impl MediaService for MediaServiceImpl {
         cmd: ChangeAvatarCommand,
         config: &MediaConfig,
     ) -> Result<(), MediaError> {
-        if !self.is_avatar_supported(&cmd.content_type, config).await? {
+        let MediumDetails {
+            content_type,
+            filename,
+            bytes,
+        } = cmd.medium_details;
+
+        if !self.is_avatar_supported(&content_type, config).await? {
             return Err(MediaError::InvalidFileType);
         }
 
@@ -225,7 +232,7 @@ impl MediaService for MediaServiceImpl {
             .await?;
         }
 
-        let extension = MediaType::from_str(&cmd.content_type)?.get_extension();
+        let extension = MediaType::from_str(&content_type)?.get_extension();
 
         let root = config.dir.join("avt").join(&cmd.user_id.to_string());
 
@@ -234,14 +241,14 @@ impl MediaService for MediaServiceImpl {
             size,
             dir_path,
             file_path,
-        } = hash_bytes(&cmd.bytes, &root, extension.to_string(), false).await?;
+        } = hash_bytes(&bytes, &root, extension.to_string(), false).await?;
 
         if fs::try_exists(&file_path).await? {
             return Ok(());
         }
 
         fs::create_dir_all(&dir_path).await?;
-        fs::write(&file_path, &cmd.bytes).await?;
+        fs::write(&file_path, &bytes).await?;
 
         let short_name = format!(".avt.{}", cmd.user_id);
 
@@ -257,8 +264,8 @@ impl MediaService for MediaServiceImpl {
         )
         .bind(&hash)
         .bind(short_name)
-        .bind(&cmd.filename)
-        .bind(&cmd.content_type)
+        .bind(&filename)
+        .bind(&content_type)
         .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
             "Failed to get file path".to_string(),
         ))?)
@@ -277,6 +284,165 @@ impl MediaService for MediaServiceImpl {
                 )
                 .bind(image_id)
                 .bind(&cmd.user_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+            Err(e) => {
+                if let Err(remove_err) = fs::remove_file(&file_path).await {
+                    return Err(MediaError::ExposedInternalError(format!(
+                        "Failed to remove file after DB error {}",
+                        remove_err
+                    )));
+                }
+                return Err(MediaError::InternalError(e.to_string()));
+            }
+        }
+
+        tx.commit().await?;
+
+        if let (_, Some(hash), Some(file_type)) = hash_row {
+            let hash = match hash.split('.').skip(3).next() {
+                Some(hash) => hash.to_string(),
+                None => {
+                    return Err(MediaError::UploadFailed(
+                        "Invalid stored hash found".to_string(),
+                    ));
+                }
+            };
+
+            let extension = match file_type.split('/').skip(1).next() {
+                Some(extension) => format!(".{}", extension),
+                None => {
+                    return Err(MediaError::UploadFailed(
+                        "Invalid stored file type found".to_string(),
+                    ));
+                }
+            };
+
+            let (dir_path, file_name) =
+                generate_dir_and_name(&root, &hash, extension.to_string(), false);
+
+            let file_path = dir_path.join(file_name);
+
+            if let Err(remove_err) = fs::remove_file(&file_path).await {
+                return Err(MediaError::ExposedInternalError(format!(
+                    "Failed to clean up previous avatar after updated {}",
+                    remove_err
+                )));
+            }
+        }
+
+        Ok(())
+    }
+    async fn change_post_cover(
+        &self,
+        cmd: ChangePostCoverCommand,
+        config: &MediaConfig,
+    ) -> Result<(), MediaError> {
+        let MediumDetails {
+            content_type,
+            filename,
+            bytes,
+        } = cmd.medium_details;
+
+        if !self.is_avatar_supported(&content_type, config).await? {
+            return Err(MediaError::InvalidFileType);
+        }
+
+        let mut tx = self.pool.begin().await?;
+        let exist: bool = sqlx::query_scalar(
+            r#"
+            SELECT EXISTS(
+                SELECT 1
+                FROM posts
+                WHERE id = ? AND user_id = ?
+            )
+            "#,
+        )
+        .bind(&cmd.post_id)
+        .bind(&cmd.user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !exist {
+            return Err(MediaError::PermissionDenied);
+        }
+
+        let hash_row = sqlx::query_as::<_, (Option<i64>, Option<String>, Option<String>)>(
+            r#"
+            SELECT media.id, media.hash, media.file_type
+            FROM posts
+            LEFT JOIN media on media.id = posts.cover_image_id
+            WHERE posts.id = ?
+            "#,
+        )
+        .bind(&cmd.post_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        if let (Some(id), _, _) = hash_row {
+            sqlx::query(
+                r#"
+                DELETE FROM media
+                WHERE id = ?
+                "#,
+            )
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        let extension = MediaType::from_str(&content_type)?.get_extension();
+
+        let root = config.dir.join("post").join(&cmd.user_id.to_string());
+
+        let HashData {
+            mut hash,
+            size,
+            dir_path,
+            file_path,
+        } = hash_bytes(&bytes, &root, extension.to_string(), false).await?;
+
+        if fs::try_exists(&file_path).await? {
+            return Ok(());
+        }
+
+        fs::create_dir_all(&dir_path).await?;
+        fs::write(&file_path, &bytes).await?;
+
+        let short_name = format!(".post.{}", cmd.post_id);
+
+        hash = format!(".post.{}.{}", &cmd.post_id, hash);
+
+        match sqlx::query_as::<_, (i64,)>(
+            r#"
+            INSERT INTO media
+            (hash, short_name, file_name, file_type, url, size, uploader_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            RETURNING id
+            "#,
+        )
+        .bind(&hash)
+        .bind(short_name)
+        .bind(&filename)
+        .bind(&content_type)
+        .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
+            "Failed to get file path".to_string(),
+        ))?)
+        .bind(size)
+        .bind(&cmd.user_id)
+        .fetch_one(&mut *tx)
+        .await
+        {
+            Ok((image_id,)) => {
+                sqlx::query(
+                    r#"
+                    UPDATE posts
+                    SET cover_image_id = ?
+                    WHERE id = ?
+                    "#,
+                )
+                .bind(image_id)
+                .bind(&cmd.post_id)
                 .execute(&mut *tx)
                 .await?;
             }

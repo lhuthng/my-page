@@ -96,6 +96,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/id/{post_id}", post(handlers::post::publish))
                 .route("/id/{post_id}", get(handlers::post::get_post_details))
                 .route("/id/{post_id}", patch(handlers::post::update_post))
+                .route("/id/{post_id}/cover", patch(handlers::post::change_cover))
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
