@@ -19,6 +19,8 @@
 
   const { data } = $props();
 
+  const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
   let response = $derived(data.response);
   let username = $derived(response.username);
   let role = $derived(response.role);
@@ -149,8 +151,8 @@
               return;
             }
 
-            if (!file.type.startsWith("image/")) {
-              editor.avatarError = "File type not supported, image only.";
+            if (!allowedTypes.includes(file.type)) {
+              editor.avatarError = "Only JPEG, PNG, GIF, or WEBP are allowed.";
               return;
             }
 
@@ -199,6 +201,8 @@
                 editor.avatarFile.name,
               );
 
+              editor.isUploaded = false;
+              editor.isUploading = true;
               const res = await fetch("/api/users/me/avatar", {
                 method: "PATCH",
                 headers: {
@@ -214,6 +218,7 @@
                 editor.isUploading = false;
                 editor.avatarError = "";
               } else {
+                editor.isUploading = false;
                 editor.avatarError = await res.text();
               }
             }}>Apply</button
