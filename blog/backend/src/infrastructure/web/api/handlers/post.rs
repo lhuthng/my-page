@@ -399,6 +399,8 @@ pub struct PostResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub published_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_avatar_url: Option<String>,
@@ -438,6 +440,7 @@ pub async fn get_post_by_slug(
             .and_then(|with_draft| if with_draft { Some(post.draft) } else { None }),
         medium_urls: post.medium_urls,
         published_at: post.published_at,
+        updated_at: post.updated_at,
         cover_url: post.cover_url,
     }))
 }

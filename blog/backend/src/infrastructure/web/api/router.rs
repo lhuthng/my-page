@@ -22,11 +22,20 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/refresh", post(handlers::auth::refresh_token));
 
     let user_routes = Router::new()
+        // public route
         .merge(
             Router::new()
                 .route("/{username}", get(handlers::user::get_user))
-                .route("/{username}/posts", get(handlers::user::get_posts))
                 .route("/", get(handlers::user::search)),
+        )
+        // optional-public route
+        .merge(
+            Router::new()
+                .route("/{username}/posts", get(handlers::user::get_posts))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::optional_user_guard,
+                )),
         )
         // protected route
         .merge(

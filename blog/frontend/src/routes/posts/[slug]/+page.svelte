@@ -1,5 +1,5 @@
 <script>
-  import { textToDate } from "$lib/common";
+  import { dateTillNow, textToDate } from "$lib/common";
   import PostSection from "$lib/components/post/PostSection.svelte";
   import CommentSection from "$lib/components/post/CommentSection.svelte";
   import { page } from "$app/state";
@@ -15,10 +15,12 @@
     content,
     excerpt,
     published_at,
+    updated_at,
     tags,
     cover_url,
   } = $derived(data);
   let date = $derived(textToDate(published_at));
+  let updateTime = $derived(dateTillNow(updated_at, "round"));
 
   let imageUrl = $derived(page.url.origin + cover_url);
 </script>
@@ -48,6 +50,7 @@
     {title}
     {tags}
     {date}
+    {updateTime}
     {content}
     author={{
       username: author_slug,
