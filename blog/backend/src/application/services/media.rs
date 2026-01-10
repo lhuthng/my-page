@@ -20,6 +20,11 @@ pub trait MediaService {
         cmd: commands::media::ChangeAvatarCommand,
         config: &MediaConfig,
     ) -> Result<(), errors::media::MediaError>;
+    async fn change_post_cover(
+        &self,
+        cmd: commands::media::ChangePostCoverCommand,
+        config: &MediaConfig,
+    ) -> Result<(), errors::media::MediaError>;
     async fn upload(
         &self,
         cmd: commands::media::UploadMediumCommand,

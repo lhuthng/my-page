@@ -216,7 +216,7 @@ impl UserService for UserServiceImpl {
                 JOIN users ON posts.user_id = users.id
                 JOIN user_meta ON user_meta.user_id = users.id
                 LEFT JOIN media ON posts.cover_image_id = media.id
-            WHERE username = ?
+            WHERE username = ? AND status = 'published'
             ORDER BY posts.updated_at DESC
             LIMIT ? OFFSET ?
             "#
