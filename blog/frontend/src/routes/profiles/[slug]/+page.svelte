@@ -245,9 +245,9 @@
   class="flex flex-col gap-4 *:bg-white/90 *:rounded-xl *:p-4 pb-8"
   key={username}
 >
-  <div class="flex gap-4">
-    <div class="space-y-4 min-w-60">
-      <div class="relative rounded-bl-xl rounded-tr-xl overflow-hidden">
+  <div class="flex not-lg:flex-col gap-4">
+    <div class="space-y-4 lg:min-w-60">
+      <div class="relative overflow-hidden">
         {#if $user?.username === username}
           <div
             class="absolute left-0 bottom-0 w-full h-full opacity-0 hover:opacity-100 bg-background/30 transition-opacity duration-200"
@@ -263,9 +263,13 @@
             </div>
           </div>
         {/if}
-        <img class="w-60 h-60 object-cover" src={avatarUrl} alt="avatar" />
+        <img
+          class="mx-auto w-full max-w-60 max-h-60 rounded-bl-xl rounded-tr-xl object-cover"
+          src={avatarUrl}
+          alt="avatar"
+        />
       </div>
-      <div class="grid grid-cols-2 gap-2">
+      <div class="flex justify-evenly gap-2 lg:*:grow not-lg:*:max-w-40">
         <div class="duo-btn duo-blue">
           <button disabled>Message</button>
         </div>
