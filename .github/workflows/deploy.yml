@@ -83,6 +83,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          ssh_option: "-o StrictHostKeyChecking=no"
           script: |
             set -e
 
