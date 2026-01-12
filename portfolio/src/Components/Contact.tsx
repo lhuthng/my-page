@@ -283,14 +283,20 @@ export default function Contact() {
                 ></textarea>
                 <br />
               </div>
-              <div className="flex justify-end">
-                {getStatus !== null && <span>{getStatus}</span>}
+              <div className="flex flex-col items-end">
                 <button
                   className="relative submit-button border-2 px-2 py-1 border-white-chalk-dark hover:border-orange-chalk hover:font-bold hover:-translate-x-1 hover:-translate-y-1 active:border-orange-chalk active:font-bold active:translate-0 transition-all duration-100 cursor-pointer whitespace-nowrap"
                   type="submit"
                 >
                   Send Message
                 </button>
+                {getStatus !== null && (
+                  <span
+                    className={`text-right ${getOk ? "text-green-600" : "text-red-600"} `}
+                  >
+                    {getStatus}
+                  </span>
+                )}
               </div>
             </form>
           </div>
