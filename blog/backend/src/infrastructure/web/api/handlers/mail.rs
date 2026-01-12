@@ -58,10 +58,13 @@ pub async fn receive_contact_form(
             name
         ))
         .unwrap();
+
+    let message_id = format!("<{}@huuthang.site>", uuid::Uuid::new_v4());
     let notification_email = Message::builder()
         .from("System <contact@huuthang.site>".parse().unwrap())
         .to("huuthang.l@outlook.com".parse().unwrap())
         .subject("New Contact Form Submission")
+        .message_id(Some(message_id))
         .body(format!(
             "Name: {}\nEmail: {}\nContent:\n{}",
             name, email, content
