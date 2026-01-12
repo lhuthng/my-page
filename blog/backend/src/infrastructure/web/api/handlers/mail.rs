@@ -3,6 +3,7 @@ use std::sync::Arc;
 use axum::{Json, extract::State, response::IntoResponse};
 use lettre::{
     Message, SmtpTransport, Transport,
+    message::header::MessageId,
     transport::smtp::{authentication::Credentials, client::Tls},
 };
 use serde::Deserialize;
