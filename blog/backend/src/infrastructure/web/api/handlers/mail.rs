@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use axum::{Json, extract::State, response::IntoResponse};
-use lettre::{Message, SmtpTransport, Transport, transport::smtp::authentication::Credentials};
+use lettre::{
+    Message, SmtpTransport, Transport,
+    transport::smtp::{authentication::Credentials, client::Tls},
+};
 use serde::Deserialize;
 use validator::Validate;
 
@@ -65,6 +68,7 @@ pub async fn receive_contact_form(
         .unwrap()
         .port(25) // Standard Postfix port
         .timeout(Some(std::time::Duration::from_secs(5)))
+        .tls(Tls::None)
         .build();
     // 4. Send emails
     mailer
