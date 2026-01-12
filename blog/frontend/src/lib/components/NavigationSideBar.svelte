@@ -8,6 +8,7 @@
   import HomeButton from "./buttons/HomeButton.svelte";
   import LinkedinButton from "./buttons/LinkedinButton.svelte";
   import ProjectButton from "./buttons/ProjectButton.svelte";
+  import SeriesButton from "./buttons/SeriesButton.svelte";
 
   let { route } = $props();
 
@@ -15,6 +16,7 @@
     [HomeButton, "Home", "/", ""],
     [BlogButton, "Posts", "/posts", "posts"],
     [ProjectButton, "Projects", "/projects", "projects"],
+    [SeriesButton, "Series", "/series", "series"],
     [AboutButton, "About", "/about", "about"],
     [DashboardButton, "Dashboard", "/dashboard", "dashboard", true],
   ];
