@@ -242,7 +242,7 @@
 {/if}
 
 <section
-  class="flex flex-col gap-4 *:bg-white/90 *:rounded-xl *:p-4 pb-8"
+  class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8"
   key={username}
 >
   <div class="flex not-lg:flex-col gap-4">
@@ -389,7 +389,7 @@
       {:else if posts.status === "fetched"}
         <ul
           bind:this={postContainer}
-          class="grid grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+          class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
         >
           {#each posts.data as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, status, url }, index (slug)}
             <li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>

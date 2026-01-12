@@ -10,11 +10,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     application::{
-        commands::series::{AddPostToSeriesCommand, GetSeriesCommand, NewSeriesCommand},
+        commands::series::{
+            AddPostToSeriesCommand, GetAllSeriesCommand, GetSeriesCommand, NewSeriesCommand,
+        },
         services::series::SeriesService,
     },
     domain::{
-        entities::{media::MediumDetails, secret::Claims},
+        entities::{media::MediumDetails, secret::Claims, series::SeriesWithPosts},
         errors::{media::MediaError, series::SeriesError},
     },
     infrastructure::web::{
@@ -63,6 +65,27 @@ pub async fn get_series(
         .collect();
 
     Ok(Json(GetSeriesResponse { series }))
+}
+
+#[derive(Deserialize)]
+pub struct GetAllSeriesQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+pub async fn get_all_series(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<GetAllSeriesQuery>,
+) -> Result<impl IntoResponse, SeriesError> {
+    let limit = query.limit.unwrap_or(1);
+    let offset = query.offset.unwrap_or(0);
+
+    let results = state
+        .series_service
+        .get_all_series(GetAllSeriesCommand { limit, offset })
+        .await?;
+
+    Ok(Json(results))
 }
 
 #[axum::debug_handler]
