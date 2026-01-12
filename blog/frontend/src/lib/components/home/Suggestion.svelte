@@ -9,8 +9,9 @@
     <li class="line-through">Add series feature</li>
     <li>Add post filters</li>
     <li>
-      <span class="line-through">Set up email service</span> for user registration
-      and contact form
+      <span class="line-through"
+        >Set up email service for user registration and contact form</span
+      >
     </li>
     <li>Redesign the footer</li>
     <li>Add a Projects page</li>

@@ -5,6 +5,8 @@ services:
       - ./backend/data:/app/data
       - ./backend/media:/app/media
     container_name: rust-backend
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - appnet
     env_file:

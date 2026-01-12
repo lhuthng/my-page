@@ -102,7 +102,7 @@ jobs:
 
             cd "$BLOG_DIR/backend"
 
-            /root/.cargo/bin/sqlx migrate run --database-url sqlite://data/blog.db
+            sqlx migrate run --database-url sqlite://data/blog.db
 
             cd ..
 

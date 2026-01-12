@@ -1,6 +1,6 @@
 import Me from "@/Components/SVGR/Me";
 import gsap from "gsap";
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { useBoundedEase } from "@/Utils/Hooks/ease";
 import Vect from "@/Utils/vector";
 import "@/Styles/Contact.css";
@@ -105,6 +105,10 @@ export default function Contact() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const lookAtMouse = useRef<(event: MouseEvent) => void>(null);
   const stopLookingAtMouse = useRef<() => void>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+  const [getStatus, setStatus] = useState<String | null>(null);
+  const [getOk, setOk] = useState<boolean>(true);
 
   useEffect(() => {
     const melement = document.querySelector("#me-svg");
@@ -216,10 +220,42 @@ export default function Contact() {
               me and my work or just want to say hi, feel free to send me a
               message.
             </p>
-            <form className="bg-white-chalk-dark/35 py-3 px-4 rounded-lg">
+            <form
+              className="bg-white-chalk-dark/35 py-3 px-4 rounded-lg"
+              onSubmit={async (e) => {
+                e.preventDefault();
+
+                if (!emailRef.current || !messageRef.current) {
+                  console.log("Nah");
+                  return;
+                }
+
+                const email = emailRef.current.value,
+                  message = messageRef.current.value;
+
+                const res = await fetch(
+                  "https://blog.huuthang.site/api/mail/contact-form",
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      name: "portfolio.huuthang.site",
+                      email,
+                      content: message,
+                    }),
+                  },
+                );
+
+                setOk(res.ok);
+                setStatus(await res.text());
+              }}
+            >
               <div className="flex gap-2">
                 <label htmlFor="email">Email: </label>
                 <input
+                  ref={emailRef}
                   className="px-2 flex-1 border-b-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100"
                   type="email"
                   id="email"
@@ -232,9 +268,12 @@ export default function Contact() {
                 <label htmlFor="message">Message:</label>
                 <br />
                 <textarea
+                  ref={messageRef}
                   className="scrollbar-custom scroll-thumb-orange px-2 w-full h-22 lg:h-15 border-l-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100 resize-none"
                   id="message"
                   rows={2}
+                  minLength={5}
+                  maxLength={512}
                   placeholder="Your words, my inbox, instant magic."
                   spellCheck="false"
                   autoComplete="off"
@@ -245,6 +284,7 @@ export default function Contact() {
                 <br />
               </div>
               <div className="flex justify-end">
+                {getStatus !== null && <span>{getStatus}</span>}
                 <button
                   className="relative submit-button border-2 px-2 py-1 border-white-chalk-dark hover:border-orange-chalk hover:font-bold hover:-translate-x-1 hover:-translate-y-1 active:border-orange-chalk active:font-bold active:translate-0 transition-all duration-100 cursor-pointer whitespace-nowrap"
                   type="submit"
