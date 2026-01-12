@@ -19,7 +19,6 @@ pub struct ReceiveContactForm {
 
 #[axum::debug_handler]
 pub async fn receive_contact_form(
-    State(state): State<Arc<AppState>>,
     Json(payload): Json<ReceiveContactForm>,
 ) -> Result<impl IntoResponse, MailError> {
     let ReceiveContactForm {
@@ -37,7 +36,6 @@ pub async fn receive_contact_form(
     if let Err(err) = cred.validate() {
         return Err(MailError::UploadFailed(err.to_string()));
     }
-
     let ContactFormCredential {
         name,
         email,
@@ -54,7 +52,6 @@ pub async fn receive_contact_form(
             name
         ))
         .unwrap();
-
     let notification_email = Message::builder()
         .from("System <contact@huuthang.site>".parse().unwrap())
         .to("huuthang.l@outlook.com".parse().unwrap())
@@ -64,12 +61,10 @@ pub async fn receive_contact_form(
             name, email, content
         ))
         .unwrap();
-
     let mailer = SmtpTransport::relay("host.docker.internal")
         .unwrap()
         .port(25) // Standard Postfix port
         .build();
-
     // 4. Send emails
     mailer
         .send(&confirmation_email)
@@ -77,6 +72,5 @@ pub async fn receive_contact_form(
     mailer
         .send(&notification_email)
         .map_err(|e| e.to_string())?;
-
     Ok("Emails sent successfully")
 }
