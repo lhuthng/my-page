@@ -9,7 +9,11 @@ pub trait SeriesService {
     async fn get_series(
         &self,
         cmd: commands::series::GetSeriesCommand,
-    ) -> Result<Vec<entities::series::Series>, errors::series::SeriesError>;
+    ) -> Result<Vec<entities::series::SeriesSnapshot>, errors::series::SeriesError>;
+    async fn get_all_series(
+        &self,
+        cmd: commands::series::GetAllSeriesCommand,
+    ) -> Result<Vec<entities::series::SeriesWithPosts>, errors::series::SeriesError>;
     async fn new_series(
         &self,
         cmd: commands::series::NewSeriesCommand,

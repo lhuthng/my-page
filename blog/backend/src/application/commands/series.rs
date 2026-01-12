@@ -4,6 +4,11 @@ pub struct GetSeriesCommand {
     pub user_id: i64,
 }
 
+pub struct GetAllSeriesCommand {
+    pub limit: i64,
+    pub offset: i64,
+}
+
 pub struct NewSeriesCommand {
     pub title: String,
     pub slug: String,

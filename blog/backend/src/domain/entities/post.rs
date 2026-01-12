@@ -1,10 +1,12 @@
+use serde::Serialize;
+
 #[derive(Debug, Clone)]
 pub struct CategoryResult {
     pub name: String,
     pub slug: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PostSnapshot {
     pub id: i64,
     pub title: String,
