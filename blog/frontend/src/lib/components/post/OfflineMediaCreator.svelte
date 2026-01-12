@@ -22,7 +22,6 @@
     const media = [];
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
-      console.log(file.type);
       if (file && allowedTypes.includes(file.type)) {
         let { name, type } = file;
         let medium = {

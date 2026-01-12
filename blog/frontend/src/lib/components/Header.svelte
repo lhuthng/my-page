@@ -124,6 +124,7 @@
 
   afterNavigate(() => {
     menuToggled = false;
+    searchData._term = "";
   });
 </script>
 
