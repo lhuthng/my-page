@@ -1,5 +1,5 @@
 <script>
-  import { goto } from "$app/navigation";
+  import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/stores";
   import { logout, user, isMod } from "$lib/client/user";
   import { useDebounce } from "$lib/effects/debounce";
@@ -17,6 +17,7 @@
   import PBody from "./PBody.svelte";
   import { quadInOut } from "svelte/easing";
   import { onMount } from "svelte";
+  import SeriesButton from "./buttons/SeriesButton.svelte";
 
   let displayName = $derived($user?.displayName);
   let username = $derived($user?.username);
@@ -112,12 +113,17 @@
     [BlogButton, "Posts", "/posts", "posts"],
     [ProjectButton, "Projects", "/projects", "projects"],
     [AboutButton, "About", "/about", "about"],
+    [SeriesButton, "Series", "/series", "series"],
     [DashboardButton, "Dashboard", "/dashboard", "dashboard", true],
   ];
 
   let mounted = $state();
   onMount(() => {
     mounted = true;
+  });
+
+  afterNavigate(() => {
+    menuToggled = false;
   });
 </script>
 
