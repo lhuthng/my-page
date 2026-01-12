@@ -64,6 +64,7 @@ pub async fn receive_contact_form(
     let mailer = SmtpTransport::relay("host.docker.internal")
         .unwrap()
         .port(25) // Standard Postfix port
+        .timeout(Some(std::time::Duration::from_secs(5)))
         .build();
     // 4. Send emails
     mailer
