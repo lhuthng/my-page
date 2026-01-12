@@ -50,6 +50,7 @@ impl IntoResponse for MailError {
                 "You do not have permission to perform this action".to_string(),
             ),
             MailError::InternalError(msg) => {
+                error!("Internal Server Error: {}", msg);
                 if cfg!(debug_assertions) {
                     (StatusCode::INTERNAL_SERVER_ERROR, msg)
                 } else {
