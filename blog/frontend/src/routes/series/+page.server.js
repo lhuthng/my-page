@@ -9,7 +9,6 @@ export async function load({ fetch, params }) {
     series.forEach((series) => {
       series.url = fixClientRoute(series.url);
       series.posts.forEach((post) => {
-        console.log(post);
         post.url = fixClientRoute(post.url);
       });
     });
