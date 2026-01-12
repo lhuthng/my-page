@@ -241,7 +241,7 @@ export default function Contact() {
                       "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                      name: "portfolio.huuthang.site",
+                      name: "portfolio",
                       email,
                       content: message,
                     }),
