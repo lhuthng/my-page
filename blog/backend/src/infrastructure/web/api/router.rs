@@ -6,8 +6,12 @@ use axum::{
     middleware,
     routing::{delete, get, get_service, patch, post, put},
 };
-use tower_http::services::ServeDir;
+use http::{HeaderValue, Method, header::CONTENT_TYPE};
 use tower_http::trace::TraceLayer;
+use tower_http::{
+    cors::{Cors, CorsLayer},
+    services::ServeDir,
+};
 
 use crate::infrastructure::web::{
     api::{handlers, middlewares},
@@ -16,6 +20,18 @@ use crate::infrastructure::web::{
 
 // This MUST retuns Router<()> instead of Router<AppState>
 pub fn build_router(state: Arc<AppState>) -> Router<()> {
+    let cors = CorsLayer::new()
+        // Allow your specific subdomain
+        .allow_origin(
+            "https://portfolio.huuthang.site"
+                .parse::<HeaderValue>()
+                .unwrap(),
+        )
+        // Allow specific HTTP methods
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        // Allow the Content-Type header (required for JSON POSTs)
+        .allow_headers([CONTENT_TYPE]);
+
     let auth_routes = Router::new()
         .route("/login", post(handlers::auth::login))
         .route("/register", post(handlers::auth::register))
@@ -144,8 +160,11 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 )),
         );
 
-    let mail_routes = Router::new()
-        .merge(Router::new().route("/contact-form", post(handlers::mail::receive_contact_form)));
+    let mail_routes = Router::new().merge(
+        Router::new()
+            .route("/contact-form", post(handlers::mail::receive_contact_form))
+            .layer(cors),
+    );
 
     Router::new()
         .nest("/media", media_routes)
