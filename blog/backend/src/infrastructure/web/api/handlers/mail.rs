@@ -3,7 +3,6 @@ use std::sync::Arc;
 use axum::{Json, extract::State, response::IntoResponse};
 use lettre::{
     Message, SmtpTransport, Transport,
-    message::header::MessageId,
     transport::smtp::{authentication::Credentials, client::Tls},
 };
 use serde::Deserialize;
@@ -47,11 +46,13 @@ pub async fn receive_contact_form(
     } = cred;
 
     // 2. Prepare emails
+    //
+    let message_id = format!("<{}@huuthang.site>", uuid::Uuid::new_v4());
     let confirmation_email = Message::builder()
         .from("Thắng <contact@huuthang.site>".parse().unwrap())
         .to(email.parse().unwrap())
         .subject("Thanks for contacting !")
-        .message_id(Some(MessageId::new_uuid()))
+        .message_id(Some(message_id))
         .body(format!(
             "Hi {},\n\nThanks for your message!\n\n- huuthang.site",
             name
