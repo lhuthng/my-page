@@ -50,6 +50,7 @@ pub async fn receive_contact_form(
         .from("Thắng <contact@huuthang.site>".parse().unwrap())
         .to(email.parse().unwrap())
         .subject("Thanks for contacting !")
+        .message_id(Some(MessageId::new_uuid()))
         .body(format!(
             "Hi {},\n\nThanks for your message!\n\n- huuthang.site",
             name
