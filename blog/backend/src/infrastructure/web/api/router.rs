@@ -144,12 +144,16 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 )),
         );
 
+    let mail_routes = Router::new()
+        .merge(Router::new().route("/contact-form", post(handlers::mail::receive_contact_form)));
+
     Router::new()
         .nest("/media", media_routes)
         .nest("/auth", auth_routes)
         .nest("/users", user_routes)
         .nest("/posts", post_routes)
         .nest("/series", series_routes)
+        .nest("/mail", mail_routes)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
