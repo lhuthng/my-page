@@ -68,6 +68,11 @@
   </li>
 {/snippet}
 
+<svelte:head>
+  <title>Series</title>
+  <meta property="og:title" content="Posts" />
+</svelte:head>
+
 <section class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8">
   <div>
     <h1 class="text-2xl font-semibold">Series</h1>
