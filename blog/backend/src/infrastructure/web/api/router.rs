@@ -126,6 +126,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         );
 
     let series_routes = Router::new()
+        // optional
+        .merge(Router::new().route("/public/all", get(handlers::series::get_all_series)))
         // user protected
         .merge(
             Router::new()
