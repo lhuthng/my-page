@@ -25,7 +25,7 @@
 <div class="relative not-sm:hidden *:w-12 *:lg:w-46">
   <div></div>
   <div
-    class="fixed not-lg:top-16 top-32 space-y-4 lg:space-y-8 transition-transform duration-200"
+    class="fixed not-lg:top-16 top-32 drop-shadow-sm space-y-2 lg:space-y-4 transition-transform duration-200"
   >
     <ul class="space-y-2 bg-white/90 p-2 rounded-xl" id="side-bar">
       {#each routes as [Icon, text, path, routeName, secret], index}

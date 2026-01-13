@@ -1,4 +1,6 @@
 <script>
+  import GLBDemo from "./GLBDemo.svelte";
+
   let { name, type, width, height } = $props();
 </script>
 
@@ -11,4 +13,8 @@
     title={name}
     frameborder="0"
   ></iframe>
+{:else if type === "glb-demo"}
+  <div class="flex">
+    <GLBDemo {name} {type} {width} {height} />
+  </div>
 {/if}
