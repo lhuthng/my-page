@@ -4,7 +4,7 @@
 <div class="w-60 px-4 py-2">
   <h3 class="font-semibold">To do list (for this blog):</h3>
   <ul class="list-disc list-inside">
-    <li>Implement Threlte</li>
+    <li class="line-through">Implement Threlte</li>
     <li>Fill in post content</li>
     <li class="line-through">Add series feature</li>
     <li>Add post filters</li>
