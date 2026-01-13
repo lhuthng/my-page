@@ -28,7 +28,7 @@
                 class="rounded-full px-1 border-2 border-primary *:no-underline! has-hover:bg-primary duration-100 transition-colors"
               >
                 <a
-                  class="inline-block text-primary hover:text-white/90 hover:*:text-white/90 duration-100 transition-colors"
+                  class="inline-block text-primary hover:text-white hover:*:text-white duration-100 transition-colors"
                   href={`/tags/${tag}`}
                 >
                   <span class="text-gray-300">#</span>
