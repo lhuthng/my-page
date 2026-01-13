@@ -66,8 +66,6 @@ jobs:
             rm -rf "$LIVE_DIR"/*
             cp -r dist/* "$LIVE_DIR"
 
-            sudo systemctl reload nginx
-
             echo "Portfolio deployed successfully!"
   deploy-blog:
     needs: filter
