@@ -1,7 +1,6 @@
 <script>
   import { page } from "$app/state";
   import App from "$lib/components/App.svelte";
-  import GLBDemo from "$lib/components/GLBDemo.svelte";
   import HomeDiscovery from "$lib/components/home/HomeDiscovery.svelte";
   import Introduction from "$lib/components/home/Introduction.svelte";
   import Suggestion from "$lib/components/home/Suggestion.svelte";
