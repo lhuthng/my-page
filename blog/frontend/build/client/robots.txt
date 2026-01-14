@@ -1,6 +1,0 @@
-# allow crawling everything by default
-User-agent: *
-
-Disallow: /dashboard
-Disallow: /api/private
-Allow: /
