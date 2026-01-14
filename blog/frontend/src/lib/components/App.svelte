@@ -1,5 +1,5 @@
 <script>
-  import GLBDemo from "./GLBDemo.svelte";
+  import GLBDemo from "./apps/GLBDemo.svelte";
 
   let { name, type, width, height } = $props();
 </script>
