@@ -1,3 +1,78 @@
+import App from "$lib/components/App.svelte";
+import { mount } from "svelte";
+
+export function pluginExtend(element) {
+  const appContainers = element.querySelectorAll(".app-container");
+  appContainers.forEach((container) => {
+    if (container.__mounted) return;
+    container.__mounted = true;
+
+    const { name, type, width, height, config } = container.dataset;
+
+    mount(App, {
+      target: container,
+      props: { name, type, width, height, config },
+    });
+  });
+
+  const revealContainers = element.querySelectorAll(".reveal");
+  revealContainers.forEach((container) => {
+    if (container.__mounted) return;
+    container.__mounted = true;
+
+    const button = container.querySelector(".reveal-tooltip");
+
+    button.addEventListener("click", () => {
+      container.classList.toggle("toggled");
+    });
+  });
+
+  const audioSyncContainers = element.querySelectorAll(".audio-sync-container");
+  audioSyncContainers.forEach((container) => {
+    if (container.__mounted) return;
+    container.__mounted = true;
+
+    const audios = container.querySelectorAll(".audio-container audio");
+    let isSyncing = false;
+
+    const syncPlay = () => {
+      audios.forEach((audio) => {
+        audio.play();
+      });
+    };
+
+    const syncPause = () => {
+      if (isSyncing) return;
+      audios.forEach((audio) => {
+        audio.pause();
+      });
+    };
+
+    const syncTime = (time) => {
+      audios.forEach((audio) => {
+        audio.currentTime = time;
+      });
+    };
+
+    audios.forEach((audio) => {
+      audio.addEventListener("play", syncPlay);
+      audio.addEventListener("pause", syncPause);
+    });
+
+    const duoBtn = document.createElement("div");
+    duoBtn.className = "mx-auto w-fit duo-btn duo-dark";
+    const btn = document.createElement("button");
+    btn.textContent = "Sync Time";
+    duoBtn.append(btn);
+    container.appendChild(duoBtn);
+    btn.addEventListener("click", () => {
+      let avg = 0;
+      audios.forEach((audio) => (avg += audio.currentTime / audios.length));
+      syncTime(avg);
+    });
+  });
+}
+
 export function mediaWithShortcutPlugin(md, options) {
   const mediaDictionary = options.mediaDictionary || {};
 
@@ -152,28 +227,34 @@ export function appBlockPlugin(md) {
 
     const type = parts[1];
     const name = parts[2];
-    const width = parts[3] || "100%";
-    const height = parts[4] || "400px";
+    const width = !parts[3] || parts[3] === "_" ? "100%" : parts[3];
+    const height = !parts[4] || parts[4] === "_" ? "400px" : parts[4];
+    const rest = parts.slice(5).join("-") || "";
 
     const token = state.push("app_block", "", 0);
-    token.meta = { type, name, width, height };
+    token.meta = { type, name, width, height, rest };
 
     state.line = startLine + 1;
     return true;
   });
 
   md.renderer.rules.app_block = (tokens, idx) => {
-    const { type, name, width, height } = tokens[idx].meta;
+    const { type, name, width, height, rest } = tokens[idx].meta;
+
+    const dataBlock =
+      `
+      data-name="${name}"
+      data-type="${type}"
+      data-width="${width}px"
+      data-height="${height}px"
+    ` + (rest ? `data-config=${rest}` : "");
 
     // Return an empty div with data attributes
     return `
       <div class="w-full">
         <div
           class="app-container mx-auto"
-          data-name="${name}"
-          data-type="${type}"
-          data-width="${width}px"
-          data-height="${height}px"
+          ${dataBlock}
           style="width: ${width}px; height: ${height}px;">
         </div>\n
       </div>

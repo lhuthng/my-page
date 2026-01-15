@@ -1,81 +1,8 @@
 <script>
-  import { mount } from "svelte";
   import App from "../App.svelte";
+  import { pluginExtend } from "$lib/custom-rules";
 
   let { content } = $props();
-  function pluginExtend(element) {
-    const appContainers = element.querySelectorAll(".app-container");
-    appContainers.forEach((container) => {
-      if (container.__mounted) return;
-      container.__mounted = true;
-
-      const { name, type, width, height } = container.dataset;
-
-      mount(App, {
-        target: container,
-        props: { name, type, width, height },
-      });
-    });
-
-    const revealContainers = element.querySelectorAll(".reveal");
-    revealContainers.forEach((container) => {
-      if (container.__mounted) return;
-      container.__mounted = true;
-
-      const button = container.querySelector(".reveal-tooltip");
-
-      button.addEventListener("click", () => {
-        container.classList.toggle("toggled");
-      });
-    });
-
-    const audioSyncContainers = element.querySelectorAll(
-      ".audio-sync-container",
-    );
-    audioSyncContainers.forEach((container) => {
-      if (container.__mounted) return;
-      container.__mounted = true;
-
-      const audios = container.querySelectorAll(".audio-container audio");
-      let isSyncing = false;
-
-      const syncPlay = () => {
-        audios.forEach((audio) => {
-          audio.play();
-        });
-      };
-
-      const syncPause = () => {
-        if (isSyncing) return;
-        audios.forEach((audio) => {
-          audio.pause();
-        });
-      };
-
-      const syncTime = (time) => {
-        audios.forEach((audio) => {
-          audio.currentTime = time;
-        });
-      };
-
-      audios.forEach((audio) => {
-        audio.addEventListener("play", syncPlay);
-        audio.addEventListener("pause", syncPause);
-      });
-
-      const duoBtn = document.createElement("div");
-      duoBtn.className = "mx-auto w-fit duo-btn duo-dark";
-      const btn = document.createElement("button");
-      btn.textContent = "Sync Time";
-      duoBtn.append(btn);
-      container.appendChild(duoBtn);
-      btn.addEventListener("click", () => {
-        let avg = 0;
-        audios.forEach((audio) => (avg += audio.currentTime / audios.length));
-        syncTime(avg);
-      });
-    });
-  }
 </script>
 
 <div class="rendered-markdown" {@attach (el) => pluginExtend(el, content)}>
@@ -93,7 +20,7 @@
       @apply text-accent-blue mr-2;
     }
     & a::after {
-      content: "↝";
+      content: "^";
       @apply absolute inline-block align-middle text-sm -rotate-30;
     }
     & h1 {
@@ -166,7 +93,7 @@
       @apply opacity-0 -translate-y-4 pointer-events-none transition-all duration-200;
     }
     & .reveal > .reveal-tooltip {
-      @apply mx-auto;
+      @apply w-full;
     }
     & .reveal.toggled {
       @apply max-h-full;
