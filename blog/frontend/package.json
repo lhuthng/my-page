@@ -23,6 +23,7 @@
 		"vite-plugin-devtools-json": "^1.0.0"
 	},
 	"dependencies": {
+		"@lottiefiles/dotlottie-svelte": "^0.8.13",
 		"@threlte/core": "^8.3.1",
 		"@threlte/extras": "^9.7.1",
 		"gsap": "^3.13.0",
