@@ -10,7 +10,7 @@
 </script>
 
 <div
-  class="mx-auto bg-background rounded-lg overflow-hidden"
+  class="mx-auto bg-accent-blue rounded-lg overflow-hidden"
   style:max-width={width}
   style:height
 >
