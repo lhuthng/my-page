@@ -8,10 +8,7 @@ use axum::{
 };
 use http::{HeaderValue, Method, header::CONTENT_TYPE};
 use tower_http::trace::TraceLayer;
-use tower_http::{
-    cors::{Cors, CorsLayer},
-    services::ServeDir,
-};
+use tower_http::{cors::CorsLayer, services::ServeDir};
 
 use crate::infrastructure::web::{
     api::{handlers, middlewares},

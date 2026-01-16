@@ -47,6 +47,16 @@ export async function load(event) {
       .use(namedContainerPlugin);
     content = md.render(content);
 
+    const series = rest.series;
+    if (series) {
+      series.cover_url = fixClientRoute(series.cover_url);
+      const fixPost = (post) => {
+        if (post) post.cover_url = fixClientRoute(post.cover_url);
+      };
+      fixPost(series.previous_post);
+      fixPost(series.next_post);
+    }
+
     return { content, author_avatar_url, cover_url, ...rest };
   } else {
     console.log(await res.text());
