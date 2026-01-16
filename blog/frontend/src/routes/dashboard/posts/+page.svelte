@@ -46,7 +46,7 @@
   });
 </script>
 
-<section class="flex flex-col gap-4 *:bg-white/90 *:rounded-xl *:p-4 pb-8">
+<section class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8">
   <div class="flex flex-col gap-4">
     <ul class="grid grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4">
       {#each posts.data as { title, slug, id, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
