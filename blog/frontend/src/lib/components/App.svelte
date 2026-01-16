@@ -1,19 +1,13 @@
 <script>
   import GLBDemo from "./apps/GLBDemo.svelte";
+  import HTMLApp from "./apps/HTMLApp.svelte";
   import LottieStateSwitcher from "./apps/LottieStateSwitcher.svelte";
 
   let { name, type, width, height, config } = $props();
 </script>
 
 {#if type === "html"}
-  <iframe
-    class="rounded-md"
-    style:width
-    style:height
-    src={`/html/${name}/index.html`}
-    title={name}
-    frameborder="0"
-  ></iframe>
+  <HTMLApp {name} {width} {height} {config} />
 {:else if type === "glb-demo"}
   <div class="flex">
     <GLBDemo {name} {type} {width} {height} />
