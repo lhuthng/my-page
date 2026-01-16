@@ -22,7 +22,7 @@
       const request = { status: "fetching" };
       cache[keyword] = { ...request };
 
-      const res = await fetch(`/api/media?term=${keyword}&size=10`, {
+      const res = await fetch(`/api/media/all?term=${keyword}&size=10`, {
         method: "GET",
         headers: { Authorization: auth() },
       });
