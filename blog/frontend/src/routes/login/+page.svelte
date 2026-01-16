@@ -83,7 +83,7 @@
 </script>
 
 <div class="flex w-full items-center min-h-[calc(100dvh-8rem)] py-4">
-  <div class="mx-auto p-8 rounded-3xl bg-white/80">
+  <div class="mx-auto p-8 rounded-3xl bg-white">
     <form
       class="flex flex-col gap-4 w-80 *:items-center text-xl"
       onsubmit={handleSubmit}

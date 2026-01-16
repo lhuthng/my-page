@@ -17,6 +17,7 @@
     published_at,
     updated_at,
     tags,
+    series,
     cover_url,
   } = $derived(data);
   let date = $derived(textToDate(published_at));
@@ -52,6 +53,7 @@
     {date}
     {updateTime}
     {content}
+    {series}
     author={{
       username: author_slug,
       displayName: author_name,

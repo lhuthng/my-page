@@ -385,6 +385,17 @@ pub struct GetPostQuery {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct PostSeriesResponse {
+    pub title: String,
+    pub slug: String,
+    pub cover_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_post: Option<SearchPostResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_post: Option<SearchPostResult>,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct PostResponse {
     pub id: i64,
     pub title: String,
@@ -404,6 +415,8 @@ pub struct PostResponse {
     pub cover_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub series: Option<PostSeriesResponse>,
 }
 
 pub async fn get_post_by_slug(
@@ -441,6 +454,27 @@ pub async fn get_post_by_slug(
         medium_urls: post.medium_urls,
         published_at: post.published_at,
         updated_at: post.updated_at,
+        series: post.post_series.and_then(|series| {
+            Some(PostSeriesResponse {
+                title: series.series_title,
+                slug: series.series_slug,
+                cover_url: series.series_cover_url,
+                previous_post: series.previous_post.and_then(|post| {
+                    Some(SearchPostResult {
+                        title: post.title,
+                        slug: post.slug,
+                        cover_url: post.cover_url,
+                    })
+                }),
+                next_post: series.next_post.and_then(|post| {
+                    Some(SearchPostResult {
+                        title: post.title,
+                        slug: post.slug,
+                        cover_url: post.cover_url,
+                    })
+                }),
+            })
+        }),
         cover_url: post.cover_url,
     }))
 }
@@ -689,7 +723,7 @@ pub struct SearchPostQuery {
     pub offset: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct SearchPostResult {
     pub title: String,
     pub slug: String,
