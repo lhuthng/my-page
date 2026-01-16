@@ -1,17 +1,11 @@
 use std::sync::Arc;
 
-use axum::{Json, extract::State, response::IntoResponse};
-use lettre::{
-    Message, SmtpTransport, Transport,
-    transport::smtp::{authentication::Credentials, client::Tls},
-};
+use axum::{Json, response::IntoResponse};
+use lettre::{Message, SmtpTransport, Transport, transport::smtp::client::Tls};
 use serde::Deserialize;
 use validator::Validate;
 
-use crate::{
-    domain::{entities::mail::ContactFormCredential, errors::mail::MailError},
-    infrastructure::web::server::AppState,
-};
+use crate::domain::{entities::mail::ContactFormCredential, errors::mail::MailError};
 
 #[derive(Deserialize)]
 pub struct ReceiveContactForm {
@@ -40,10 +34,14 @@ pub async fn receive_contact_form(
         return Err(MailError::UploadFailed(err.to_string()));
     }
     let ContactFormCredential {
-        name,
+        mut name,
         email,
         content,
     } = cred;
+
+    if name == "portfolio" {
+        name = "there".to_string();
+    }
 
     // 2. Prepare emails
     //

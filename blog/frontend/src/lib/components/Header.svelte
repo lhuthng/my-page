@@ -422,7 +422,7 @@
           {/if}
         </div>
         <div class="w-1/2 flex not-md:flex-col justify-evenly">
-          <ul class="space-y-2 bg-white/90 p-2 rounded-xl" id="side-bar">
+          <ul class="space-y-2 bg-white p-2 rounded-xl" id="side-bar">
             {#each routes as [Icon, text, path, routeName, secret], index}
               {#if !secret || $isMod}
                 <li>

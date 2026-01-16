@@ -39,7 +39,7 @@
         {/if}
       {/each}
     </ul>
-    <div class="flex flex-col gap-4 bg-white/90 p-1 lg:p-2 rounded-xl">
+    <div class="flex flex-col gap-4 bg-white p-1 lg:p-2 rounded-xl">
       <div class="not-lg:w-10 flex flex-col">
         <span class="block not-lg:hidden text-center">Connect with me on:</span>
         <div
