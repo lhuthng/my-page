@@ -8,11 +8,13 @@
   import "../app.css";
   import { pbody } from "$lib/client/misc";
   import { fade } from "svelte/transition";
+  import ToTop from "$lib/components/ToTop.svelte";
 
   let { children } = $props();
 
   let route = $derived($page.url.pathname.split("/")[1]);
   let specialDiv = $state();
+  let scrollTarget = $state();
 
   onMount(() => {
     pbody.set(specialDiv);
@@ -32,7 +34,7 @@
     bind:this={specialDiv}
   ></div>
   <Header />
-  <main class="grow">
+  <main class="grow" bind:this={scrollTarget}>
     <div class="relative flex gap-2 lg:gap-4 w-cap">
       {#if route !== "login"}
         <NavigationSideBar {route} />
@@ -41,6 +43,7 @@
         {@render children?.()}
       </div>
     </div>
+    <ToTop {scrollTarget} />
   </main>
   <Footer />
 </div>

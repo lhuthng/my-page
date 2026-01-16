@@ -159,7 +159,7 @@
   </li>
 {/snippet}
 
-<section class="w-full xl:w-[calc(100%-15rem)] bg-white/90 p-4 rounded-xl">
+<section class="w-full xl:w-[calc(100%-15rem)] bg-white p-4 rounded-xl">
   <h4 class="text-lg lg:text-2xl">Join the discussion!</h4>
   <div class="flex flex-col gap-4" bind:this={start}>
     <hr class="border-t-3 border-dark mb-6" />

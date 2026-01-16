@@ -14,7 +14,9 @@ use crate::{
         services::post::PostService,
     },
     domain::{
-        entities::post::{CategoryResult, Comment, Post, PostDetails, PostSnapshot, PostSummary},
+        entities::post::{
+            CategoryResult, Comment, Post, PostDetails, PostSeries, PostSnapshot, PostSummary,
+        },
         errors::post::PostError,
     },
 };
@@ -683,6 +685,83 @@ impl PostService for PostServiceImpl {
         .fetch_all(&self.pool)
         .await?;
 
+        let series_opt = sqlx::query_as::<_, (i64, String, String, String, i64)>(
+            r#"
+            SELECT s.id, s.title, s.slug, m.url, sp.number
+            FROM series_post sp
+            JOIN series s ON s.id = sp.series_id
+            LEFT JOIN media m ON m.id = s.cover_image_id
+            WHERE sp.post_id = ?
+            LIMIT 1
+            "#,
+        )
+        .bind(&post_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let mut post_series = None;
+
+        if let Some((id, series_title, series_slug, series_cover_url, number)) = series_opt {
+            let previous_post_opt = sqlx::query_as::<_, (String, String, Option<String>)>(
+                r#"
+                SELECT p.title, p.slug, m.url
+                FROM series_post sp
+                JOIN series s ON s.id = sp.series_id
+                JOIN posts p ON p.id = sp.post_id
+                LEFT JOIN media m ON m.id = p.cover_image_id
+                WHERE s.id = ? AND sp.number < ?
+                ORDER BY sp.number DESC
+                LIMIT 1
+                "#,
+            )
+            .bind(&id)
+            .bind(&number)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            let mut previous_post: Option<PostSummary> = None;
+            if let Some((title, slug, cover_url)) = previous_post_opt {
+                previous_post = Some(PostSummary {
+                    title,
+                    slug,
+                    cover_url,
+                });
+            }
+
+            let next_post_opt = sqlx::query_as::<_, (String, String, Option<String>)>(
+                r#"
+                SELECT p.title, p.slug, m.url
+                FROM series_post sp
+                JOIN series s ON s.id = sp.series_id
+                JOIN posts p ON p.id = sp.post_id
+                LEFT JOIN media m ON m.id = p.cover_image_id
+                WHERE s.id = ? AND sp.number > ?
+                ORDER BY sp.number ASC
+                LIMIT 1
+                "#,
+            )
+            .bind(&id)
+            .bind(&number)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            let mut next_post: Option<PostSummary> = None;
+            if let Some((title, slug, cover_url)) = next_post_opt {
+                next_post = Some(PostSummary {
+                    title,
+                    slug,
+                    cover_url,
+                });
+            }
+            post_series = Some(PostSeries {
+                series_title,
+                series_slug,
+                series_cover_url,
+                previous_post,
+                next_post,
+            });
+        }
+
         Ok(Post {
             id: post_id,
             title,
@@ -696,6 +775,7 @@ impl PostService for PostServiceImpl {
             published_at,
             updated_at,
             medium_urls,
+            post_series,
             cover_url: url,
         })
     }

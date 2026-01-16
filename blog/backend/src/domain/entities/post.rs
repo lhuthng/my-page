@@ -45,6 +45,15 @@ pub struct PostSummary {
 }
 
 #[derive(Debug, Clone)]
+pub struct PostSeries {
+    pub series_title: String,
+    pub series_slug: String,
+    pub series_cover_url: String,
+    pub next_post: Option<PostSummary>,
+    pub previous_post: Option<PostSummary>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Post {
     pub id: i64,
     pub title: String,
@@ -59,6 +68,7 @@ pub struct Post {
     pub updated_at: Option<String>,
     pub medium_urls: Vec<String>,
     pub cover_url: Option<String>,
+    pub post_series: Option<PostSeries>,
 }
 
 #[derive(Debug, Clone)]
