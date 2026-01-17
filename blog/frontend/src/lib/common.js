@@ -34,3 +34,16 @@ export function arraysEqualIgnoreOrder(a, b) {
 TimeAgo.addDefaultLocale(en);
 
 export const time = new TimeAgo("en-US");
+
+function sign(px, py, x1, y1, x2, y2) {
+  return (px - x2) * (y1 - y2) - (x1 - x2) * (py - y2);
+}
+
+export function isPointInTriangle(px, py, x1, y1, x2, y2, x3, y3) {
+  const d1 = sign(px, py, x1, y1, x2, y2);
+  const d2 = sign(px, py, x2, y2, x3, y3);
+  const d3 = sign(px, py, x3, y3, x1, y1);
+  const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+  const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(hasNeg && hasPos);
+}
