@@ -164,3 +164,51 @@ button {
     @apply visible opacity-100 delay-100 translate-x-1;
   }
 }
+
+.hljs {
+  @apply relative bg-dark text-white pl-10 pr-2 py-1 rounded-sm overflow-x-hidden text-sm;
+  counter-reset: line;
+}
+
+.hljs-line {
+  @apply relative w-full hover:[&::after]:text-white;
+
+  &:first-child::after {
+    @apply rounded-tl-xs;
+  }
+  &:last-child::after {
+    @apply rounded-bl-xs;
+  }
+}
+
+.hljs-line::after {
+  @apply absolute -left-10 w-8 h-[calc(100%+4px)] text-right text-white/40 ml-1 pr-1 select-none border-r-2;
+  counter-increment: line;
+  content: counter(line);
+}
+
+.hljs-keyword {
+  @apply text-accent-blue-light-2;
+}
+.hljs-string {
+  @apply text-shadow-accent-green;
+}
+.hljs-number {
+  @apply text-accent-red-light-1;
+}
+.hljs-comment {
+  @apply text-accent-blue-light-2;
+  font-style: italic;
+}
+.hljs-function {
+  color: #fcd34d;
+}
+.hljs-title {
+  color: #c4b5fd;
+}
+.hljs-built_in {
+  @apply text-accent-red-light-2;
+}
+.hljs-attr {
+  color: #93c5fd;
+}
