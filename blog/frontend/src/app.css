@@ -31,6 +31,9 @@ body {
   --color-accent-blue: rgb(120, 150, 200);
   --color-accent-blue-light-1: rgb(150, 170, 215);
   --color-accent-blue-light-2: rgb(180, 195, 225);
+  --color-accent-yellow: rgb(225, 200, 100);
+  --color-accent-yellow-light-1: rgb(235, 215, 130);
+  --color-accent-yellow-light-2: rgb(245, 230, 160);
 }
 
 a {
@@ -166,12 +169,12 @@ button {
 }
 
 .hljs {
-  @apply relative bg-dark text-white pl-10 pr-2 py-1 rounded-sm overflow-x-hidden text-sm;
+  @apply relative bg-dark text-white pl-10 pr-2 py-1 rounded-sm overflow-hidden text-sm;
   counter-reset: line;
 }
 
 .hljs-line {
-  @apply relative w-full hover:[&::after]:text-white;
+  @apply relative inline w-full hover:[&::after]:text-white;
 
   &:first-child::after {
     @apply rounded-tl-xs;
@@ -182,16 +185,16 @@ button {
 }
 
 .hljs-line::after {
-  @apply absolute -left-10 w-8 h-[calc(100%+4px)] text-right text-white/40 ml-1 pr-1 select-none border-r-2;
+  @apply absolute -left-10 top-0 border-r-2 w-8 h-[calc(100%+4px)] text-right text-white/40 ml-1 pr-1 select-none;
   counter-increment: line;
   content: counter(line);
 }
 
 .hljs-keyword {
-  @apply text-accent-blue-light-2;
+  @apply text-accent-yellow;
 }
 .hljs-string {
-  @apply text-shadow-accent-green;
+  @apply text-accent-green-light-2;
 }
 .hljs-number {
   @apply text-accent-red-light-1;

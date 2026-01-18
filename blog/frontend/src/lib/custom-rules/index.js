@@ -378,6 +378,8 @@ export function codeHighlightPlugin(md) {
   md.options.highlight = function (code, lang) {
     let highlighted;
 
+    code = code.trimEnd();
+
     if (lang && hljs.getLanguage(lang)) {
       try {
         highlighted = hljs.highlight(code, { language: lang }).value;
@@ -388,11 +390,9 @@ export function codeHighlightPlugin(md) {
       highlighted = md.utils.escapeHtml(code);
     }
 
-    highlighted = highlighted
+    return `<pre class="hljs"><code>${highlighted
       .split(/\n/)
-      .map((line) => (line ? `<span class="hljs-line">${line}</span>` : ""))
-      .join("\n");
-
-    return `<pre class="hljs"><code>${highlighted}</code></pre>`;
+      .map((line) => `<span class="hljs-line">${line || ""}</span>`)
+      .join("\n")}</code></pre>`;
   };
 }
