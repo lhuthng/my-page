@@ -14,8 +14,8 @@
       >
     </li>
     <li>Redesign the footer</li>
-    <li>Add a Projects page</li>
-    <li class="line-through">Add an About page</li>
+    <li>Add the Projects page</li>
+    <li class="line-through">Add the About page</li>
     <li>Set up newsletter</li>
     <li>
       Add Kaomoji shortcuts? Why not? <span class="text-nowrap">(◕‿◕)♡</span>

@@ -27,7 +27,7 @@
   <div
     class="fixed not-lg:top-16 top-32 drop-shadow-sm space-y-2 lg:space-y-4 transition-transform duration-200"
   >
-    <ul class="space-y-2 bg-white/90 p-2 rounded-xl" id="side-bar">
+    <ul class="space-y-2 bg-white p-2 rounded-xl" id="side-bar">
       {#each routes as [Icon, text, path, routeName, secret], index}
         {#if !secret || $isMod}
           <li class={routeName === route ? "selected" : undefined}>
