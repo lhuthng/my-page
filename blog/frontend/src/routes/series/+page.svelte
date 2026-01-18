@@ -69,7 +69,7 @@
 {/snippet}
 
 <svelte:head>
-  <title>Series</title>
+  <title>Series | Huu Thang's Blog</title>
   <meta property="og:title" content="Posts" />
 </svelte:head>
 
