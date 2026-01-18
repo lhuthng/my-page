@@ -20,7 +20,7 @@
       <p>0</p>
     </div>
   </div>
-  <div class="w-full p-4 bg-white/80 rounded-xl">
+  <div class="w-full p-4 bg-white rounded-xl">
     <h3>Recent Activity</h3>
   </div>
 </div>
