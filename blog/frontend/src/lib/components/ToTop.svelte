@@ -1,5 +1,6 @@
 <script>
   import { fly } from "svelte/transition";
+  import { elasticInOut, elasticOut } from "svelte/easing";
   let { scrollTarget } = $props();
   let visible = $state(false);
   const threshHold = 300;
@@ -9,8 +10,8 @@
 
 {#if visible}
   <button
-    in:fly={{ y: 20, duration: 500 }}
-    out:fly={{ y: 20, duration: 500 }}
+    in:fly={{ y: 20, duration: 800, easing: elasticOut }}
+    out:fly={{ y: 20, duration: 800, easing: elasticInOut }}
     onclick={() => scrollTarget?.scrollIntoView({ behavior: "smooth" })}
     class="fixed bottom-10 right-10 w-10 h-10 rounded-full bg-white shadow-dark shadow-sm font-bold"
     title="to-top-button"
