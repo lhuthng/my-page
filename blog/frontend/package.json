@@ -27,6 +27,7 @@
 		"@threlte/core": "^8.3.1",
 		"@threlte/extras": "^9.7.1",
 		"gsap": "^3.13.0",
+		"highlight.js": "^11.11.1",
 		"javascript-time-ago": "^2.5.12",
 		"markdown-it": "^14.1.0",
 		"markdown-it-katex": "^2.0.3",
