@@ -1,4 +1,5 @@
 <script>
+  import { page } from "$app/state";
   import { isPointInTriangle, preventDefault } from "$lib/common";
   import { fly } from "svelte/transition";
 
@@ -6,6 +7,7 @@
   let locked = $state(false);
   let lockedSelection = $state(-1);
   const sqrt3o2 = 0.8660254037844386;
+  let imageUrl = $derived(page.url.origin + "/thinkcats.jpg");
 
   function handleMouseMove(e) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -48,7 +50,29 @@
 </script>
 
 <svelte:head>
-  <title>About</title>
+  <title>About | Huu Thang's Blog</title>
+  <meta
+    name="description"
+    content="A personal archive documenting software architecture, creative coding, and hands-on experiments by Thắng."
+  />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={page.url.origin} />
+  <meta property="og:title" content="About | Huu Thang's Blog" />
+  <meta
+    property="og:description"
+    content="Exploring the intersection of systems architecture, 3D motion, and experimental code."
+  />
+  <meta property="og:image" content={imageUrl} />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content={imageUrl} />
+  <meta
+    name="twitter:description"
+    content="Documenting experiments in tech and art."
+  />
+
+  <link rel="canonical" href={page.url.href} />
 </svelte:head>
 
 {#snippet personaButton(src, alt, selection)}
@@ -228,7 +252,7 @@
   </div>
   <div class="flex not-xl:flex-col">
     <div class="space-y-2 p-4">
-      <h2 class="font-semibold text-xl">Tech Stack (Infrastructure)</h2>
+      <h2 class="font-bold text-xl">Tech Stack (Infrastructure)</h2>
       <p>
         The entire ecosystem is hosted on a VPS, utilizing a decoupled
         architecture to handle different functional requirements:
@@ -302,7 +326,7 @@
       </p>
     </div>
     <div class="xl:min-w-120 space-y-2 p-4">
-      <h2 class="font-semibold text-xl">Professional Links</h2>
+      <h2 class="font-bold text-xl">Professional Links</h2>
       <ul>
         <li>
           Portfolio: <a
@@ -324,18 +348,16 @@
           >
         </li>
       </ul>
-      <h2 class="font-semibold text-xl">Tools (if anyone wonders)</h2>
+      <h2 class="font-bold text-xl">Tools (if anyone wonders)</h2>
       <ul>
         <li>
           <strong>Editors:</strong> Zed (primary), Visual Studio Code (ssh-remote),
-          Visual Studio, Unity, Godot, GameMaker Studio.
+          Visual Studio.
         </li>
         <li>
           <strong>Illustration &amp; Animation:</strong> Aseprite, Clip Studio Paint,
-          Adobe Photoshop, Adobe After Effect, Adobe Illustrator, Boxy SVG Editor,
-          Lottie Creator.
+          Adobe Illustrator, Boxy SVG Editor, Lottie Creator.
         </li>
-        <li><strong>Music &amp; Sound Effect:</strong> BeepBox, FL Studio.</li>
         <li><strong>Database Manager:</strong> Beekeeper Studio</li>
         <li><strong>Most Important:</strong> Terminal</li>
       </ul>
