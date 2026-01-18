@@ -16,6 +16,7 @@
   import { autoHResize } from "$lib/client/auto-resize.js";
   import PBody from "$lib/components/PBody.svelte";
   import { preventDefault } from "$lib/common.js";
+  import { page } from "$app/state";
 
   const { data } = $props();
 
@@ -126,6 +127,23 @@
     }
   });
 </script>
+
+<svelte:head>
+  <title>Profile of {displayName} | Huu Thang's Blog</title>
+  <meta name="description" content={bio} />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={page.url.origin} />
+  <meta
+    property="og:title"
+    content={`Profile of ${displayName} | Huu Thang's Blog`}
+  />
+  <meta property="og:description" content={bio} />
+  <meta property="og:image" content={avatarUrl} />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content={avatarUrl} />
+  <meta name="twitter:description" content={bio} />
+  <link rel="canonical" href={page.url.href} />
+</svelte:head>
 
 {#if editor.isChangingAvatar}
   <PBody>

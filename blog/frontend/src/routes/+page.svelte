@@ -30,6 +30,10 @@
 
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:image" content={imageUrl} />
+  <meta
+    name="twitter:description"
+    content="Deep dives into technical challenges and small creative sparks."
+  />
 
   <link rel="canonical" href={page.url.href} />
 </svelte:head>
