@@ -1,6 +1,7 @@
 <script>
   import {
     appBlockPlugin,
+    codeHighlightPlugin,
     mediaWithShortcutPlugin,
     namedContainerPlugin,
     revealPlugin,
@@ -38,7 +39,8 @@
       .use(youtubeBlockPlugin)
       .use(appBlockPlugin)
       .use(revealPlugin)
-      .use(namedContainerPlugin),
+      .use(namedContainerPlugin)
+      .use(codeHighlightPlugin),
   );
 
   let debounce = useDebounce(async (_content) => {

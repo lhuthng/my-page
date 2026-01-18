@@ -1,5 +1,6 @@
 import App from "$lib/components/App.svelte";
 import { mount } from "svelte";
+import hljs from "highlight.js";
 
 export function pluginExtend(element) {
   const appContainers = element.querySelectorAll(".app-container");
@@ -371,4 +372,27 @@ export function namedContainerPlugin(md) {
   };
 
   md.renderer.rules.named_container_close = () => `</div>\n`;
+}
+
+export function codeHighlightPlugin(md) {
+  md.options.highlight = function (code, lang) {
+    let highlighted;
+
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        highlighted = hljs.highlight(code, { language: lang }).value;
+      } catch {}
+    }
+
+    if (!highlighted) {
+      highlighted = md.utils.escapeHtml(code);
+    }
+
+    highlighted = highlighted
+      .split(/\n/)
+      .map((line) => (line ? `<span class="hljs-line">${line}</span>` : ""))
+      .join("\n");
+
+    return `<pre class="hljs"><code>${highlighted}</code></pre>`;
+  };
 }
