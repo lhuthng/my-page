@@ -7,3 +7,14 @@ To run migrations
 ```bash
 sqlx migrate run --database-url sqlite://data/blog.db
 ```
+
+To install rclone
+```bash
+sudo apt update && sudo apt install rclone -y
+```
+
+To create rclone config
+```bash
+mkdir -p ~/.config/rclone/
+nano ~/.config/rclone/rclone.conf
+```
