@@ -130,10 +130,8 @@
 
 <svelte:window bind:innerWidth={windowWidth} />
 
-<header class="fixed w-full bg-white text-dark z-100">
-  <div
-    class="z-10 flex not-lg:justify-center w-cap-2 p-2 lg:p-4 gap-4 shadow-lg"
-  >
+<header class="fixed w-full bg-white text-dark z-100 shadow-lg">
+  <div class="z-10 flex not-lg:justify-center w-cap-2 p-2 lg:p-4 gap-4">
     <div class="flex items-center gap-4">
       <div
         class="rounded-full bg-background transition-all duration-200 shadow-lg hover:brightness-102 hover:scale-102"

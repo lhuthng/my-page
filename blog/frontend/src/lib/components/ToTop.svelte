@@ -13,7 +13,7 @@
     in:fly={{ y: 20, duration: 800, easing: elasticOut }}
     out:fly={{ y: 20, duration: 800, easing: elasticInOut }}
     onclick={() => scrollTarget?.scrollIntoView({ behavior: "smooth" })}
-    class="fixed bottom-10 right-10 w-10 h-10 rounded-full bg-white shadow-dark shadow-sm font-bold"
+    class="fixed z-50 bottom-10 right-10 w-10 h-10 rounded-full bg-white shadow-dark shadow-sm font-bold"
     title="to-top-button"
   >
     <svg class="full fill-dark p-1" viewBox="0 0 24 24">
