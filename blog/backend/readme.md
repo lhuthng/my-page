@@ -18,3 +18,9 @@ To create rclone config
 mkdir -p ~/.config/rclone/
 nano ~/.config/rclone/rclone.conf
 ```
+
+Cronjob
+```bash
+crontab -e
+0 0 * * * cd /var/dev/my-page/blog/backend && ./backup.sh
+```
