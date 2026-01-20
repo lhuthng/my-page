@@ -12,6 +12,7 @@
   const limit = 3;
 
   let { postId } = $props();
+  let last = -1;
 
   let userAvatarUrl = $derived($user?.avatarUrl ?? "/missing.png");
 
@@ -58,22 +59,36 @@
     comments.fetching = false;
   };
 
-  onMount(() => {
-    const onScrolled = gsap.to(start, {
-      scrollTrigger: {
-        trigger: start,
-        once: true,
-        start: "bottom bottom",
-        onEnter: fetchComments,
-      },
-    });
+  $effect(() => {
+    if (last !== postId) {
+      last = postId;
 
-    const triggerInstance = onScrolled.scrollTrigger;
+      comments = {
+        current: "",
+        initialized: false,
+        fetching: false,
+        sending: false,
+        endReached: false,
+        lastId: 0,
+        data: [],
+      };
 
-    return () => {
-      triggerInstance?.kill();
-      onScrolled?.kill();
-    };
+      const onScrolled = gsap.to(start, {
+        scrollTrigger: {
+          trigger: start,
+          once: true,
+          start: "bottom bottom",
+          onEnter: fetchComments,
+        },
+      });
+
+      const triggerInstance = onScrolled.scrollTrigger;
+
+      return () => {
+        triggerInstance?.kill();
+        onScrolled?.kill();
+      };
+    }
   });
 </script>
 
