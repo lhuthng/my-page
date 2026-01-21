@@ -10,9 +10,14 @@
   } from "@threlte/extras";
   import { ACESFilmicToneMapping, SRGBColorSpace } from "three";
 
-  let { name } = $props();
+  let {
+    name,
+    toggleWireframe = $bindable(),
+    toggleOrbit = $bindable(),
+  } = $props();
 
   let gltfAsset = $state();
+  let orbitControl = $state(true);
 
   const { gltf, actions, mixer } = useGltfAnimations();
 
@@ -23,11 +28,25 @@
       });
     }
   });
+
+  toggleWireframe = (value) => {
+    if (!$gltf?.scene) return;
+
+    $gltf.scene.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.material.wireframe = value;
+      }
+    });
+  };
+
+  toggleOrbit = (value) => {
+    orbitControl = value;
+  };
 </script>
 
 <T.PerspectiveCamera makeDefault position={[0, 20, 55]} fov={30}>
   <OrbitControls
-    autoRotate
+    autoRotate={orbitControl}
     autoRotateSpeed={1}
     enableDamping
     target={[0, 8, 0]}
