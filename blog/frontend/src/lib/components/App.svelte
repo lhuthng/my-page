@@ -9,9 +9,7 @@
 {#if type === "html"}
   <HTMLApp {name} {width} {height} {config} />
 {:else if type === "glb-demo"}
-  <div class="flex">
-    <GLBDemo {name} {type} {width} {height} />
-  </div>
+  <GLBDemo {name} {type} {width} {height} />
 {:else if type === "lottie"}
   {@const states = config
     .split("-")

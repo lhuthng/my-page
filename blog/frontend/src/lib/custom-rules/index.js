@@ -256,7 +256,7 @@ export function appBlockPlugin(md) {
         <div
           class="app-container mx-auto"
           ${dataBlock}
-          style="width: ${width}px; height: ${height}px;">
+          style="width: ${width}px; min-height: ${height}px;">
         </div>\n
       </div>
     `;
