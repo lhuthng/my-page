@@ -102,6 +102,16 @@ button {
   }
 }
 
+.duo-black {
+  a,
+  button {
+    @apply border-black bg-gray-800;
+  }
+  &::before {
+    @apply bg-black;
+  }
+}
+
 .duo-red {
   a,
   button {
