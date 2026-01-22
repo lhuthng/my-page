@@ -10,9 +10,35 @@
   let toggleOrbit = $state();
 
   let wireframe = $state(false);
-  let orbit = $state(true);
   let animation = $state(false);
   let info = $state(false);
+  let orbit = $state(false);
+
+  let cameraConfig = $derived.by(() => {
+    let camera = {
+      fov: "10",
+      position: "0,0,1",
+      target: "0,0,0",
+      autoRotate: "true",
+    };
+
+    if (config) {
+      camera = {
+        ...camera,
+        ...Object.fromEntries(config?.split("-")?.map((s) => s.split(":"))),
+      };
+    }
+
+    camera.position = camera.position.split(",").map(Number);
+    camera.target = camera.target.split(",").map(Number);
+    camera.autoRotate = camera.autoRotate === "true";
+
+    return camera;
+  });
+
+  $effect(() => {
+    orbit = cameraConfig.autoRotate;
+  });
 
   $effect(() => {
     toggleOrbit?.(orbit);
@@ -30,14 +56,8 @@
   style:max-width={width}
   style:height
 >
-  <Canvas
-    gl={{
-      toneMapping: THREE.ACESFilmicToneMapping,
-      outputColorSpace: THREE.SRGBColorSpace,
-      toneMappingExposure: 1.2,
-    }}
-  >
-    <GLBLoader {name} bind:toggleWireframe bind:toggleOrbit />
+  <Canvas renderMode="on-demand" toneMapping={THREE.NoToneMapping}>
+    <GLBLoader {name} {cameraConfig} bind:toggleWireframe bind:toggleOrbit />
   </Canvas>
   <div
     class="absolute top-0 right-0 w-full pointer-events-none has-focus:*:opacity-100! *:transition-opacity *:duration-200"

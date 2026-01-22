@@ -4,6 +4,7 @@
   import { Flip } from "gsap/Flip";
   import { tick, untrack } from "svelte";
   import { fade, fly } from "svelte/transition";
+  import { flip } from "svelte/animate";
 
   const { featuredPosts } = $props();
 
@@ -27,8 +28,14 @@
   });
 
   let fresh = $state({
-    status: "unset",
-    cache: [],
+    created: {
+      status: "unset",
+      cache: [],
+    },
+    updated: {
+      status: "unset",
+      cache: [],
+    },
   });
 
   $effect(() => {
@@ -52,28 +59,47 @@
     Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
   });
 
+  let order = $state();
+  let _order = $state();
+
+  $effect(() => {
+    if (tab.index !== 2) {
+      if (order === undefined) {
+        order = "created";
+      }
+      _order = order;
+    }
+  });
+
   $effect(async () => {
     if (tab.index !== 2) return;
+    order;
+    const orderFresh = untrack(() => fresh[order]);
 
-    const { status } = untrack(() => fresh);
-    if (status === "fetched" || status === "pending") return;
-    fresh.status = "pending";
+    if (orderFresh.status === "fetched" || orderFresh.status === "pending")
+      return;
 
-    const res = await fetch("api/posts/latest?limit=5&offset=0", {
-      method: "GET",
-    });
+    orderFresh.status = "pending";
+    const res = await fetch(
+      `api/posts/latest?limit=5&offset=0&${order === "created" ? "sorted_by_created=true" : "sorted_by_updated=true"}`,
+      {
+        method: "GET",
+      },
+    );
 
     if (res.ok) {
-      const state = Flip.getState(tab.container);
-      fresh.cache = (await res.json()).featured_posts;
-      fresh.status = "fetched";
+      setTimeout(async () => {
+        const state = Flip.getState(tab.container);
+        orderFresh.cache = (await res.json()).featured_posts;
+        orderFresh.status = "fetched";
 
-      await tick();
+        await tick();
 
-      Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
+        Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
+      }, 500);
     } else {
-      fresh.cache = [];
-      fresh.status = "failed";
+      orderFresh.cache = [];
+      orderFresh.status = "failed";
     }
   });
 </script>
@@ -89,7 +115,7 @@
 {/snippet}
 
 <div class="space-y-4 pt-4">
-  <div class="flex justify-between">
+  <div class="flex not-sm:flex-col justify-between">
     <ul id="home-tab" class="text-xl font-medium h-8">
       <li class:left={true} class:selected={tab.index === 1}>
         <button onclick={() => (tab.index = 1)}>Discover</button>
@@ -98,6 +124,29 @@
         <button onclick={() => (tab.index = 2)}>Fresh</button>
       </li>
     </ul>
+    {#if tab.index === 2}
+      <select
+        class="focus:outline-none ml-auto"
+        name="post-filter"
+        bind:value={_order}
+        onchange={async (e) => {
+          const value = e.target.value;
+
+          if (fresh[value].status !== "fetched") {
+            const state = Flip.getState(tab.container);
+            order = value;
+            await tick();
+            Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
+          } else {
+            order = value;
+          }
+          _order = order;
+        }}
+      >
+        <option value="created">By Created</option>
+        <option value="updated">By Updated</option>
+      </select>
+    {/if}
   </div>
   <div bind:this={tab.container} class="pb-2">
     <ul
@@ -105,7 +154,7 @@
       class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
     >
       {#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
-        <li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
+        <li in:fly={{ y: -20, duration: 500 }}>
           <PostCard
             {title}
             {slug}
@@ -125,9 +174,12 @@
       bind:this={tab.fresh}
       class="hidden grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
     >
-      {#if fresh.status === "fetched"}
-        {#each fresh.cache as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
-          <li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
+      {#if fresh[order]?.status === "fetched"}
+        {#each fresh[order].cache as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
+          <li
+            in:fly={{ y: -20, duration: 500 }}
+            animate:flip={{ delay: index * 80, duration: 500 }}
+          >
             <PostCard
               {title}
               {slug}
@@ -161,7 +213,7 @@
       }
 
       &::before {
-        @apply absolute z-9 content-[""] -top-1 h-[calc(100%+0.25rem)] w-0 bg-linear-to-t from-background/40 via-background/30 to-primary/0 transition-all duration-200;
+        @apply absolute z-9 content-[""] -top-1 h-[calc(100%+0.25rem)] w-0 bg-linear-to-t from-background/40 via-background/20 to-primary/0 transition-all duration-200;
       }
       &::after {
         @apply absolute z-9 content-[""] bottom-0 h-1 w-0 bg-dark transition-all duration-200;
