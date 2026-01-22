@@ -8,16 +8,19 @@
     useGltf,
     useGltfAnimations,
   } from "@threlte/extras";
-  import { ACESFilmicToneMapping, SRGBColorSpace } from "three";
+  import { AgXToneMapping, LinearToneMapping, SRGBColorSpace } from "three";
 
   let {
     name,
+    cameraConfig,
     toggleWireframe = $bindable(),
     toggleOrbit = $bindable(),
   } = $props();
 
+  let { position, fov, target, autoRotate } = $state(cameraConfig);
+
   let gltfAsset = $state();
-  let orbitControl = $state(true);
+  let orbitControl = $state(autoRotate);
 
   const { gltf, actions, mixer } = useGltfAnimations();
 
@@ -44,28 +47,13 @@
   };
 </script>
 
-<T.PerspectiveCamera makeDefault position={[0, 20, 55]} fov={30}>
+<T.PerspectiveCamera makeDefault {position} {fov}>
   <OrbitControls
     autoRotate={orbitControl}
     autoRotateSpeed={1}
     enableDamping
-    target={[0, 8, 0]}
+    {target}
   />
 </T.PerspectiveCamera>
 
-<T.AmbientLight intensity={0.28} color="#ffffff" />
-<T.DirectionalLight position={[5, 10, 5]} intensity={2.6} color="#ffffff" />
-
-<T.WebGLRenderer
-  parameters={{
-    antialias: true,
-    alpha: false,
-  }}
-  toneMapping={ACESFilmicToneMapping}
-  toneMappingExposure={0.9}
-  outputColorSpace={SRGBColorSpace}
-/>
-
-<Environment background={false} preset="studio" />
-
-<GLTF {name} url="/models/demo.glb" useDraco={true} bind:gltf={$gltf} />
+<GLTF {name} url={`/models/${name}`} useDraco={true} bind:gltf={$gltf} />

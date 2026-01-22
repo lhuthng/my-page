@@ -825,6 +825,8 @@ pub async fn get_featured_posts(
 pub struct GetFeaturedPostsQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub sorted_by_updated: Option<bool>,
+    pub sorted_by_created: Option<bool>,
 }
 
 #[axum::debug_handler]
@@ -834,7 +836,20 @@ pub async fn get_latest_posts(
 ) -> Result<impl IntoResponse, PostError> {
     let limit = query.limit.unwrap_or(1);
     let offset = query.offset.unwrap_or(0);
-    let cmd = GetLatestPostsCommand { limit, offset };
+    let default = "created";
+    let sorted_by = query
+        .sorted_by_updated
+        .and_then(|v| if v { Some("updated") } else { None })
+        .or(query
+            .sorted_by_created
+            .and_then(|v| if v { Some("created") } else { None }))
+        .unwrap_or(default)
+        .to_string();
+    let cmd = GetLatestPostsCommand {
+        limit,
+        offset,
+        sorted_by,
+    };
     let featured_posts = state.post_service.get_latest_post_snapshots(cmd).await?;
 
     let wrapped_featured_posts = GetFeaturedPostsResponse {
