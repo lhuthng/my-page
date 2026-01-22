@@ -46,6 +46,7 @@ pub struct GetFeaturedPostsCommand {
 pub struct GetLatestPostsCommand {
     pub limit: i64,
     pub offset: i64,
+    pub sorted_by: String,
 }
 
 pub struct GetDetailedPostsCommand {
