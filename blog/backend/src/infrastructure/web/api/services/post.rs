@@ -125,6 +125,7 @@ impl PostServiceImpl {
         featured: Option<i64>,
         limit: i64,
         offset: i64,
+        order_by: String,
     ) -> Result<Vec<PostSnapshot>, PostError> {
         let mut placeholder: Vec<String> = vec![];
 
@@ -141,6 +142,12 @@ impl PostServiceImpl {
             placeholder.insert_str(0, "WHERE ");
         }
 
+        let order_by = match order_by.as_str() {
+            "created" => "created_at",
+            "updated" => "updated_at",
+            _ => "created_at",
+        };
+
         let sequel = format!(
             r#"
             SELECT posts.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, url, status
@@ -149,11 +156,11 @@ impl PostServiceImpl {
                 JOIN user_meta ON user_meta.user_id = posts.user_id
                 LEFT JOIN media ON posts.cover_image_id = media.id
             {}
-            ORDER BY posts.updated_at DESC
+            ORDER BY posts.{} DESC
             LIMIT ?
             OFFSET ?
             "#,
-            placeholder
+            placeholder, order_by
         );
 
         let post_rows = sqlx::query_as::<_, PostRow>(&sequel)
@@ -826,7 +833,9 @@ impl PostService for PostServiceImpl {
         &self,
         cmd: GetFeaturedPostsCommand,
     ) -> Result<Vec<PostSnapshot>, PostError> {
-        let featured_posts = self.get_posts(true, Some(1), cmd.limit, 0).await?;
+        let featured_posts = self
+            .get_posts(true, Some(1), cmd.limit, 0, "created".to_string())
+            .await?;
 
         Ok(featured_posts)
     }
@@ -835,7 +844,9 @@ impl PostService for PostServiceImpl {
         &self,
         cmd: GetLatestPostsCommand,
     ) -> Result<Vec<PostSnapshot>, PostError> {
-        let latest_posts = self.get_posts(true, None, cmd.limit, cmd.offset).await?;
+        let latest_posts = self
+            .get_posts(true, None, cmd.limit, cmd.offset, cmd.sorted_by)
+            .await?;
         Ok(latest_posts)
     }
     async fn get_post_details(
