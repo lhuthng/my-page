@@ -87,7 +87,7 @@
     <div
       class="w-fit duo-btn duration-0!"
       class:duo-blue={!wireframe}
-      class:duo-black={wireframe}
+      class:duo-white={wireframe}
     >
       <button class="duration-0!" onclick={() => (wireframe = !wireframe)}
         >Wireframe {wireframe ? "on" : "off"}</button
@@ -96,7 +96,7 @@
     <div
       class="w-fit duo-btn duration-0!"
       class:duo-blue={!wireframe}
-      class:duo-black={wireframe}
+      class:duo-white={wireframe}
     >
       <button class="duration-0!" onclick={() => (orbit = !orbit)}
         >Auto Rotate {orbit ? "on" : "off"}</button
