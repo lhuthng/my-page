@@ -75,10 +75,14 @@
         </li>
       </ul>
     </div>
-
-    <span class="inline-block ml-auto"
-      >by <a class="text-background" href="/profiles/lhuthng">@lhuthng</a></span
-    >
+    <div class="flex justify-between w-full *:inline-block">
+      <span>
+        <a class="text-accent-blue" href="/about">read more</a>
+      </span>
+      <span>
+        by <a class="text-background" href="/profiles/lhuthng">@lhuthng</a>
+      </span>
+    </div>
   </div>
 </div>
 
