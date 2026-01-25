@@ -5,11 +5,13 @@
     mediaWithShortcutPlugin,
     namedContainerPlugin,
     revealPlugin,
+    slugify,
     youtubeBlockPlugin,
   } from "$lib/custom-rules";
   import { useDebounce } from "$lib/effects/debounce";
   import MarkdownIt from "markdown-it";
   import mkKatex from "markdown-it-katex";
+  import anchor from "markdown-it-anchor";
   import { tick } from "svelte";
 
   let {
@@ -40,7 +42,8 @@
       .use(appBlockPlugin)
       .use(revealPlugin)
       .use(namedContainerPlugin)
-      .use(codeHighlightPlugin),
+      .use(codeHighlightPlugin)
+      .use(anchor, { slugify }),
   );
 
   let debounce = useDebounce(async (_content) => {

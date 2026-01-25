@@ -9,6 +9,7 @@ html {
   font-style: normal;
   font-variation-settings: "wdth" 100;
   overflow-y: scroll;
+  scroll-behavior: smooth;
 }
 
 body {

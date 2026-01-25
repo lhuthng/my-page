@@ -1,11 +1,17 @@
 <script>
   import { user } from "$lib/client/user";
+  import Portal from "../Portal.svelte";
+  import ContentTable from "./ContentTable.svelte";
   import Post from "./Post.svelte";
 
   let { id, title, tags, date, updateTime, content, author, series } = $props();
+
+  let headers = $state([]);
+
+  let rightBar = $state();
 </script>
 
-<section class="flex not-xl:flex-col max-w-full">
+<section class="flex not-xl:flex-col h-fit max-w-full">
   <div
     class="flex grow flex-col bg-white p-4 gap-4 rounded-xl not-xl:rounded-b-none xl:rounded-tr-none"
   >
@@ -45,7 +51,7 @@
         <hr class="grow border" />
       </div>
     </div>
-    <Post {content} />
+    <Post {content} bind:headers />
 
     {#if series}
       {@const {
@@ -157,7 +163,7 @@
       </div>
     {/if}
   </div>
-  <div class="min-w-60">
+  <div class="flex flex-col h-auto min-w-60">
     <div
       class="w-full *:full bg-white rounded-xl not-xl:rounded-t-none xl:rounded-l-none"
     >
@@ -210,8 +216,13 @@
         </div>
       {/if}
     </div>
-    <svg class="not-xl:hidden w-6 fill-white/90" viewBox="0 0 24 24">
+    <svg class="not-xl:hidden w-4 fill-white" viewBox="0 0 12 12">
       <path d="M 0,0 L 12,0 A 12,12 0 0 0 0,12 Z" />
     </svg>
+    <div class="grow" bind:this={rightBar}></div>
   </div>
 </section>
+
+<Portal class="ml-4" target={rightBar}>
+  <ContentTable {headers} />
+</Portal>
