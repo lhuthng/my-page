@@ -1,11 +1,16 @@
 <script>
   import App from "../App.svelte";
-  import { pluginExtend } from "$lib/custom-rules";
+  import { findHeaders, pluginExtend } from "$lib/custom-rules";
 
-  let { content } = $props();
+  let { content, headers = $bindable() } = $props();
+
+  function applyPlugins(e) {
+    pluginExtend(e);
+    headers = findHeaders(e);
+  }
 </script>
 
-<div class="rendered-markdown" {@attach (el) => pluginExtend(el, content)}>
+<div class="rendered-markdown" {@attach applyPlugins}>
   {@html content}
 </div>
 
@@ -15,6 +20,7 @@
   :global(.rendered-markdown) {
     & {
       @apply space-y-1;
+      counter-reset: h1;
     }
     & a {
       @apply text-accent-blue mr-2;
@@ -23,14 +29,37 @@
       content: "^";
       @apply absolute inline-block align-middle text-sm -rotate-30;
     }
+    & h1,
+    & h2,
+    & h3 {
+      @apply scroll-mt-16 lg:scroll-mt-30;
+    }
     & h1 {
       @apply mt-6 text-2xl font-bold;
+      counter-increment: h1;
+      counter-reset: h2;
+    }
+    & h1::before {
+      @apply font-bold;
+      content: counter(h1) ". ";
     }
     & h2 {
       @apply mt-4 text-xl font-bold;
+      counter-reset: h3;
+    }
+    & h2::before {
+      @apply font-bold;
+      counter-increment: h2;
+      content: counter(h1) "." counter(h2) ". ";
     }
     & h3 {
       @apply mt-1 text-lg font-semibold;
+      counter-reset: h4;
+    }
+    & h3::before {
+      @apply font-bold;
+      counter-increment: h3;
+      content: counter(h2) ". " counter(h3) ". ";
     }
     & img {
       @apply rounded-lg mx-auto;
