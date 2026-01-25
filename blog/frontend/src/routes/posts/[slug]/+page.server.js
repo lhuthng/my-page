@@ -5,12 +5,14 @@ import {
   mediaWithShortcutPlugin,
   namedContainerPlugin,
   revealPlugin,
+  slugify,
   youtubeBlockPlugin,
 } from "$lib/custom-rules/index.js";
 import { fixClientRoute, route } from "$lib/server/proxy.js";
 import { error } from "@sveltejs/kit";
 import MarkdownIt from "markdown-it";
 import mkKatex from "markdown-it-katex";
+import anchor from "markdown-it-anchor";
 
 export async function load(event) {
   const res = await fetch(route(`posts/s/${event.params.slug}`), {
@@ -46,7 +48,8 @@ export async function load(event) {
       .use(appBlockPlugin)
       .use(revealPlugin)
       .use(namedContainerPlugin)
-      .use(codeHighlightPlugin);
+      .use(codeHighlightPlugin)
+      .use(anchor, { slugify });
     content = md.render(content);
 
     const series = rest.series;
