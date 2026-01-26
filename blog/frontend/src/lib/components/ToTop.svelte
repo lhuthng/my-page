@@ -1,12 +1,11 @@
 <script>
   import { fly } from "svelte/transition";
   import { elasticInOut, elasticOut } from "svelte/easing";
+  import { scrollY } from "svelte/reactivity/window";
   let { scrollTarget } = $props();
-  let visible = $state(false);
-  const threshHold = 300;
+  const threshold = 300;
+  let visible = $derived(scrollY.current > threshold);
 </script>
-
-<svelte:window onscroll={() => (visible = window.scrollY > threshHold)} />
 
 {#if visible}
   <button
