@@ -1,4 +1,6 @@
 <script>
+  import PBody from "../PBody.svelte";
+
   let { headers } = $props();
 
   $effect(() => {
@@ -19,10 +21,8 @@
   </ol>
 {/snippet}
 
-<div class="bg-white text-base rounded-xl p-2">
-  <h2 class="text-center font-semibold text-lg">Table of contents</h2>
-  {@render toList(headers)}
-</div>
+<h2 class="text-center font-semibold text-lg pb-2">Table of contents</h2>
+{@render toList(headers)}
 
 <style lang="postcss">
   @reference "../../../app.css";
