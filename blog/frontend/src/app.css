@@ -63,6 +63,10 @@ button {
   @apply w-full lg:w-8/9 max-w-360 not-lg:px-2 mx-auto;
 }
 
+.max-w-cap-2 {
+  @apply max-w-[min(100%,90rem)] lg:max-w-[min(88.89%,90rem)] not-lg:px-2 mx-auto;
+}
+
 .duo-btn {
   @apply relative;
   a,

@@ -24,6 +24,10 @@
   let updateTime = $derived(dateTillNow(updated_at, "round"));
 
   let imageUrl = $derived(page.url.origin + cover_url);
+  let canonicalLink = $derived.by(() => {
+    const { origin, pathname, search } = page.url;
+    return origin + pathname + search;
+  });
 </script>
 
 <svelte:head>
@@ -32,17 +36,17 @@
 
   <meta property="og:title" content={title} />
   <meta property="og:type" content="article" />
-  <meta property="og:url" content={page.url.href} />
+  <meta property="og:url" content={canonicalLink} />
   <meta property="og:description" content={excerpt} />
   <meta property="og:image" content={imageUrl} />
 
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:url" content={page.url.href} />
+  <meta name="twitter:url" content={canonicalLink} />
   <meta name="twitter:title" content={title} />
   <meta name="twitter:description" content={excerpt} />
   <meta name="twitter:image" content={imageUrl} />
 
-  <link rel="canonical" href={page.url.href} />
+  <link rel="canonical" href={canonicalLink} />
 </svelte:head>
 
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">

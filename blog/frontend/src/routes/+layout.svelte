@@ -9,12 +9,18 @@
   import { pbody } from "$lib/client/misc";
   import { fade } from "svelte/transition";
   import ToTop from "$lib/components/ToTop.svelte";
+  import { width } from "$lib/client/windows";
+  import { innerWidth } from "svelte/reactivity/window";
 
   let { children } = $props();
 
   let route = $derived($page.url.pathname.split("/")[1]);
   let specialDiv = $state();
   let scrollTarget = $state();
+
+  $effect(() => {
+    width.set(innerWidth.current);
+  });
 
   onMount(() => {
     pbody.set(specialDiv);
@@ -39,7 +45,7 @@
       {#if route !== "login"}
         <NavigationSideBar {route} />
       {/if}
-      <div class="w-full">
+      <div class="w-full overflow-x-hidden">
         {@render children?.()}
       </div>
     </div>
