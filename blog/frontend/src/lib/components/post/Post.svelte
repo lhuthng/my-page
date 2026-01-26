@@ -59,7 +59,7 @@
     & h3::before {
       @apply font-bold;
       counter-increment: h3;
-      content: counter(h2) ". " counter(h3) ". ";
+      content: counter(h1) "." counter(h2) "." counter(h3) ". ";
     }
     & img {
       @apply rounded-lg mx-auto;
