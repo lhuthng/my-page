@@ -5,6 +5,7 @@
   let { content, headers = $bindable() } = $props();
 
   function applyPlugins(e) {
+    content; // To be reactive
     pluginExtend(e);
     headers = findHeaders(e);
   }
