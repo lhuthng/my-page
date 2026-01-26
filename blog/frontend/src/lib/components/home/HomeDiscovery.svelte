@@ -126,9 +126,11 @@
     </ul>
     {#if tab.index === 2}
       <select
-        class="focus:outline-none ml-auto"
+        class="focus:outline-none mt-2 ml-auto w-fit"
         name="post-filter"
         bind:value={_order}
+        in:fly={{ y: -10, duration: 200 }}
+        out:fly={{ y: -10, duration: 200 }}
         onchange={async (e) => {
           const value = e.target.value;
 
@@ -172,7 +174,7 @@
     </ul>
     <ul
       bind:this={tab.fresh}
-      class="hidden grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+      class="hidden grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
     >
       {#if fresh[order]?.status === "fetched"}
         {#each fresh[order].cache as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
