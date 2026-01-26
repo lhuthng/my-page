@@ -5,3 +5,4 @@ export function pick(array) {
 }
 
 export const pbody = writable(undefined);
+export const ppbody = writable(undefined);

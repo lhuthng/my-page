@@ -18,6 +18,9 @@
   import { quadInOut } from "svelte/easing";
   import { onMount } from "svelte";
   import SeriesButton from "./buttons/SeriesButton.svelte";
+  import { widthThreshold } from "$lib/common";
+  import { isLg } from "$lib/client/windows";
+  const { lg } = widthThreshold;
 
   let displayName = $derived($user?.displayName);
   let username = $derived($user?.username);
@@ -27,15 +30,14 @@
   let menuSearchContainer = $state();
   let menuToggled = $state(false);
 
-  const lg = 1024; //px
   let windowWidth = $state(0);
 
   $effect(() => {
-    if (windowWidth > lg) menuToggled = false;
+    if ($isLg) menuToggled = false;
   });
 
   $effect(() => {
-    if (menuToggled === false && windowWidth <= lg) {
+    if (menuToggled === false && !$isLg) {
       searchData._term = "";
     }
   });
@@ -127,8 +129,6 @@
     searchData._term = "";
   });
 </script>
-
-<svelte:window bind:innerWidth={windowWidth} />
 
 <header class="fixed w-full bg-white text-dark z-100 shadow-lg">
   <div class="z-10 flex not-lg:justify-center w-cap-2 p-2 lg:p-4 gap-4">
