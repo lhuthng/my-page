@@ -1,19 +1,63 @@
 <script>
   import { user } from "$lib/client/user";
+  import { isXl } from "$lib/client/windows";
+  import { onDestroy, onMount } from "svelte";
+  import PBody from "../PBody.svelte";
+  import Portal from "../Portal.svelte";
+  import ContentTable from "./ContentTable.svelte";
   import Post from "./Post.svelte";
+  import { browser } from "$app/environment";
 
   let { id, title, tags, date, updateTime, content, author, series } = $props();
+
+  let headers = $state([]);
+
+  let toggled = $state(false);
+
+  $effect(() => {
+    if ($isXl) toggled = false;
+  });
+
+  function onHashChange() {
+    toggled = false;
+  }
+
+  onMount(() => {
+    if (!browser) return;
+
+    window.addEventListener("hashchange", onHashChange);
+  });
+
+  onDestroy(() => {
+    if (!browser) return;
+
+    window.removeEventListener("hashchange", onHashChange);
+  });
 </script>
 
-<section class="flex not-xl:flex-col max-w-full">
+<section class="flex not-xl:flex-col h-fit max-w-full">
   <div
     class="flex grow flex-col bg-white p-4 gap-4 rounded-xl not-xl:rounded-b-none xl:rounded-tr-none"
   >
     <div class="space-y-2 text-base">
       <div class="flex gap-4">
-        <h1 class="text-2xl lg:text-4xl">
-          {title}
-        </h1>
+        <div class="*:inline">
+          <button
+            class="xl:hidden translate-y-1"
+            title="table-of-contents-on"
+            onclick={() => (toggled = !toggled)}
+          >
+            <svg class="w-7 lg:w-8 h-7 lg:h-8 fill-dark" viewBox="0 0 24 24"
+              ><path
+                d="M6.25 7C6.25 7.69036 5.69036 8.25 5 8.25C4.30964 8.25 3.75 7.69036 3.75 7C3.75 6.30964 4.30964 5.75 5 5.75C5.69036 5.75 6.25 6.30964 6.25 7ZM9 6C8.44771 6 8 6.44772 8 7C8 7.55228 8.44771 8 9 8H19C19.5523 8 20 7.55228 20 7C20 6.44772 19.5523 6 19 6H9ZM9 11C8.44771 11 8 11.4477 8 12C8 12.5523 8.44771 13 9 13H19C19.5523 13 20 12.5523 20 12C20 11.4477 19.5523 11 19 11H9ZM9 16C8.44771 16 8 16.4477 8 17C8 17.5523 8.44771 18 9 18H19C19.5523 18 20 17.5523 20 17C20 16.4477 19.5523 16 19 16H9ZM5 13.25C5.69036 13.25 6.25 12.6904 6.25 12C6.25 11.3096 5.69036 10.75 5 10.75C4.30964 10.75 3.75 11.3096 3.75 12C3.75 12.6904 4.30964 13.25 5 13.25ZM5 18.25C5.69036 18.25 6.25 17.6904 6.25 17C6.25 16.3096 5.69036 15.75 5 15.75C4.30964 15.75 3.75 16.3096 3.75 17C3.75 17.6904 4.30964 18.25 5 18.25Z"
+              >
+              </path>
+            </svg>
+          </button>
+          <h1 class="text-2xl lg:text-4xl">
+            {title}
+          </h1>
+        </div>
         {#if id && $user?.username === author.username}
           <div class="h-fit duo-btn duo-green">
             <a href={`/dashboard/posts/id/${id}`}>Edit</a>
@@ -45,7 +89,7 @@
         <hr class="grow border" />
       </div>
     </div>
-    <Post {content} />
+    <Post {content} bind:headers />
 
     {#if series}
       {@const {
@@ -157,7 +201,7 @@
       </div>
     {/if}
   </div>
-  <div class="min-w-60">
+  <div class="flex flex-col h-auto min-w-60">
     <div
       class="w-full *:full bg-white rounded-xl not-xl:rounded-t-none xl:rounded-l-none"
     >
@@ -210,8 +254,29 @@
         </div>
       {/if}
     </div>
-    <svg class="not-xl:hidden w-6 fill-white/90" viewBox="0 0 24 24">
+    <svg class="not-xl:hidden w-4 fill-white" viewBox="0 0 12 12">
       <path d="M 0,0 L 12,0 A 12,12 0 0 0 0,12 Z" />
     </svg>
+    <div class="grow">
+      <div class="ml-4 not-xl:hidden bg-white text-base rounded-xl p-2">
+        <ContentTable {headers} />
+      </div>
+    </div>
   </div>
 </section>
+
+{#if !$isXl && toggled}
+  <PBody>
+    <button
+      class="absolute top-0 left-0 full cursor-not-allowed!"
+      title="overlay"
+      onclick={() => (toggled = false)}
+    ></button>
+    <div
+      class="fixed max-h-160 overflow-y-scroll custom-scrollbar max-w-full w-max text-dark top-1/2 left-1/2 -translate-1/2 bg-white rounded-xl p-4"
+      title="table-of-contents"
+    >
+      <ContentTable {headers} />
+    </div>
+  </PBody>
+{/if}
