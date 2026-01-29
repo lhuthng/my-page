@@ -50,4 +50,12 @@
 
 <style lang="postcss">
   @reference "../../app.css";
+
+  ul > li {
+    @apply relative ml-auto w-fit bg-white text-dark pr-1 rounded-r-lg;
+  }
+  ul > li::before {
+    @apply absolute content-[''] bg-white right-full h-full w-3;
+    clip-path: polygon(100% 0%, 105% 0%, 105% 100%, 100% 100%, 0% 50%);
+  }
 </style>
