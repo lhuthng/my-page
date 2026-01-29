@@ -40,8 +40,9 @@
   <hr class="w-cap border-t-2 my-4" />
   <div class="w-cap not-sm:text-center">
     <span class="mx-auto">
-      &copy; 2025 Huu Thang &middot; Hand-craft with Svelte & Rust <span
-        class="text-nowrap">[Running on a VPS]</span
+      &copy; 2026 Huu Thang &middot; Hand-craft with Svelte & Rust <span
+        class="text-nowrap"
+        >[Running on a VPS] &middot; All rights reserved</span
       >.
     </span>
   </div>
