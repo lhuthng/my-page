@@ -2,10 +2,6 @@
   import PBody from "../PBody.svelte";
 
   let { headers } = $props();
-
-  $effect(() => {
-    $inspect(headers);
-  });
 </script>
 
 {#snippet toList(array)}
