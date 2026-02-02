@@ -24,7 +24,7 @@
       @apply text-xl font-semibold;
     }
     & img {
-      @apply pt-2 max-h-40 rounded-lg mr-auto;
+      @apply mt-2 max-h-40 rounded-lg mr-auto;
     }
     & ul {
       @apply list-disc pl-4;
