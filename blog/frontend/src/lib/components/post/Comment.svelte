@@ -23,6 +23,9 @@
     & h6 {
       @apply text-xl font-semibold;
     }
+    & a {
+      @apply text-accent-blue hover:text-accent-blue-light-1 underline;
+    }
     & img {
       @apply mt-2 max-h-40 rounded-lg mr-auto;
     }
