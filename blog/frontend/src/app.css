@@ -22,6 +22,8 @@ body {
   --color-secondary: rgb(168, 164, 206);
   --color-background: rgb(200, 182, 226);
 
+  --color-primary-20: rgb(228, 231, 240);
+
   --color-accent-red: rgb(184, 104, 114);
   --color-accent-red-light-1: rgb(204, 144, 152);
   --color-accent-red-light-2: rgb(224, 184, 190);
