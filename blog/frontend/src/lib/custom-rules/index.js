@@ -3,7 +3,6 @@ import { mount } from "svelte";
 import hljs from "highlight.js";
 
 export function pluginExtend(root) {
-  console.log("hello");
   const appContainers = root.querySelectorAll(".app-container");
   appContainers.forEach((container) => {
     if (container.__mounted) return;
