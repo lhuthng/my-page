@@ -18,7 +18,7 @@
   let { postId } = $props();
   let last = -1;
 
-  let userAvatarUrl = $derived($user?.avatarUrl ?? "/missing.png");
+  let userAvatarUrl = $derived($user?.avatarUrl ?? "/anonymous.webp");
 
   let start = $state();
 
@@ -108,7 +108,7 @@
     <hr class="border-t-3 border-dark mb-6" />
     <div class="flex gap-8">
       <div
-        class="w-12 lg:w-20 h-12 lg:h-20 border-dark border-2 rounded-full overflow-hidden"
+        class="w-12 lg:w-20 h-12 lg:h-20 outline-primary outline-3 rounded-full overflow-hidden"
       >
         <img
           class="full object-cover"
@@ -118,14 +118,14 @@
       </div>
       <div class="grow flex flex-col gap-4 relative">
         <svg
-          class="absolute fill-primary/60 top-6 lg:top-10 -left-4 -translate-y-1/2 w-4 h-4"
+          class="absolute fill-primary top-6 lg:top-10 -left-4 -translate-y-1/2 w-4 h-4"
           viewBox="0 0 24 24"
         >
           <polygon points="0,12 24,0 24,24" /></svg
         >
         <div class="w-full">
           <div
-            class="relative text-base w-full bg-primary-20 border-dark border-2 border-b-0 rounded-t-xl"
+            class="relative text-base w-full bg-primary-20 border-primary border-2 border-b-0 rounded-t-xl"
           >
             {#if tab === "preview"}
               <div class="w-full min-h-16 lg:min-h-20 overflow-hidden p-2">
@@ -143,11 +143,11 @@
             {/if}
           </div>
           <div
-            class="comment-editor flex xs:flex-col justify-between min-h-8 bg-dark rounded-b-xl overflow-hidden"
+            class="comment-editor flex xs:flex-col justify-between min-h-8 bg-primary rounded-b-xl"
           >
             <div class="flex">
               <button
-                class="w-fit h-8 px-2 bg-primary-20 border-2 border-dark border-t-0 rounded-b-xl"
+                class="w-fit h-8 px-2 bg-primary-20 border-2 border-primary border-t-0 rounded-b-xl"
                 class:z-11={tab === "write"}
                 class:z-9={tab !== "write"}
                 class:opacity-100={tab === "write"}
@@ -157,7 +157,7 @@
                 Write
               </button>
               <button
-                class="w-fit h-8 px-2 -translate-x-0.5 bg-primary-20 border-2 border-dark border-t-0 rounded-b-xl"
+                class="w-fit h-8 px-2 -translate-x-0.5 bg-primary-20 border-2 border-primary border-t-0 rounded-b-xl"
                 class:z-11={tab === "preview"}
                 class:z-9={tab !== "preview"}
                 class:opacity-100={tab === "preview"}
@@ -169,11 +169,11 @@
             </div>
             {#if tab === "write"}
               <div
-                class="flex ml-auto h-full my-auto *:bg-dark fill-white *:w-8 *:h-8 *:*:mx-auto *:hover:brightness-120 *:active:*:translate-y-0.5 gap-2 mr-2"
+                class="flex ml-auto h-full my-auto *:bg-primary fill-white *:w-8 *:h-8 *:*:mx-auto *:hover:brightness-120 *:active:*:translate-y-0.5 gap-2 mr-2"
                 in:fade={{ duration: 100 }}
               >
                 <button
-                  title="heading-edit"
+                  title="Header"
                   onclick={() => {
                     if (!textarea) return;
                     const start = textarea.selectionStart;
@@ -197,7 +197,7 @@
                   </svg>
                 </button>
                 <button
-                  title="bold-edit"
+                  title="Bold"
                   onclick={() => {
                     if (!textarea) return;
                     const start = textarea.selectionStart;
@@ -221,7 +221,7 @@
                   </svg>
                 </button>
                 <button
-                  title="italic-edit"
+                  title="Italic"
                   onclick={() => {
                     if (!textarea) return;
                     const start = textarea.selectionStart;
@@ -245,7 +245,7 @@
                   </svg>
                 </button>
                 <button
-                  title="code-edit"
+                  title="Code"
                   onclick={() => {
                     if (!textarea) return;
                     const start = textarea.selectionStart;
@@ -345,20 +345,20 @@
       <li in:fly={{ y: 10, duration: 500 }}>
         <div class="flex py-4">
           <div
-            class="ml-2 min-w-10 lg:min-w-12 w-10 lg:w-12 h-10 lg:h-12 rounded-full shadow-md overflow-hidden"
+            class="ml-2 min-w-10 lg:min-w-12 w-10 lg:w-12 h-10 lg:h-12 outline-primary outline-3 rounded-full shadow-md overflow-hidden"
           >
             {#if anonymous}
               <a class="full" href={"/profiles/" + username}>
                 <img
                   class="full object-cover"
-                  src={url ?? "/missing.png"}
+                  src={url ?? "/anonymous.webp"}
                   alt="comment-posting-avatar"
                 />
               </a>
             {:else}
               <img
                 class="full object-cover"
-                src={url ?? "/missing.png"}
+                src={url ?? "/anonymous.webp"}
                 alt="comment-posting-avatar"
               />
             {/if}
@@ -432,7 +432,7 @@
   .comment-editor {
     @apply relative *:relative;
     &::before {
-      @apply z-10 absolute! content-[''] w-full h-full top-0 left-0 border-2 border-dark rounded-b-xl pointer-events-none;
+      @apply z-10 absolute! content-[''] w-full h-full top-0 left-0 border-2 border-primary rounded-b-xl pointer-events-none;
     }
   }
 </style>
