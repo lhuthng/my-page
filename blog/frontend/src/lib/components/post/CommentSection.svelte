@@ -108,7 +108,7 @@
     <hr class="border-t-3 border-dark mb-6" />
     <div class="flex gap-8">
       <div
-        class="w-12 lg:w-20 h-12 lg:h-20 outline-primary outline-3 rounded-full overflow-hidden"
+        class="not-xxs:hidden w-12 lg:w-20 h-12 lg:h-20 outline-primary outline-3 rounded-full overflow-hidden"
       >
         <img
           class="full object-cover"
@@ -118,7 +118,7 @@
       </div>
       <div class="grow flex flex-col gap-4 relative">
         <svg
-          class="absolute fill-primary top-6 lg:top-10 -left-4 -translate-y-1/2 w-4 h-4"
+          class="not-xxs:hidden absolute fill-primary top-6 lg:top-10 -left-4 -translate-y-1/2 w-4 h-4"
           viewBox="0 0 24 24"
         >
           <polygon points="0,12 24,0 24,24" /></svg
@@ -143,7 +143,7 @@
             {/if}
           </div>
           <div
-            class="comment-editor flex xs:flex-col justify-between min-h-8 bg-primary rounded-b-xl"
+            class="comment-editor flex not-xxs:flex-col justify-between min-h-8 bg-primary rounded-b-xl"
           >
             <div class="flex">
               <button
