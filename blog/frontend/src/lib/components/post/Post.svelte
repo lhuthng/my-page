@@ -96,12 +96,6 @@
     & th {
       @apply p-1 not-first:border-l-2 border-dark;
     }
-    /*& pre {
-      @apply bg-dark rounded-sm px-2 py-1;
-    }
-    & pre > code {
-      @apply text-white;
-    }*/
     & p > code,
     & li > code {
       @apply bg-gray-200 p-1 rounded-md hover:brightness-95;

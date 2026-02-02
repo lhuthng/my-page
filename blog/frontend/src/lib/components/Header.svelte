@@ -303,17 +303,16 @@
       </svg>
     </button>
   </div>
+  <PBody visible={menuToggled}>
+    <button
+      class="full cursor-default!"
+      onclick={() => (menuToggled = false)}
+      title="close-menu-overlay"
+    ></button>
+  </PBody>
   {#if menuToggled}
-    <PBody
-      ><button
-        class="full cursor-default!"
-        onclick={() => (menuToggled = false)}
-        title="close-menu-overlay"
-      ></button></PBody
-    >
     <div
-      in:fly={{ y: -10, duration: 200 }}
-      out:fly={{ y: -10, duration: 200 }}
+      in:fly={{ y: -10, duration: 100 }}
       id="mobile-menu"
       class="z-9 absolute flex flex-col gap-4 items-center w-cap bg-white py-4 rounded-b-lg shadow-lg"
     >

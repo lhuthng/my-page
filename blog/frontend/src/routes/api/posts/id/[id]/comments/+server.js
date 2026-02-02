@@ -1,5 +1,7 @@
 import { dateTillNow } from "$lib/common.js";
 import { fixClientRoute, proxyFallback } from "$lib/server/proxy";
+import MarkdownIt from "markdown-it/dist/markdown-it.js";
+import mkKatex from "markdown-it-katex";
 
 export async function GET({ request, params, fetch, url }) {
   const res = await proxyFallback({
@@ -17,7 +19,6 @@ export async function GET({ request, params, fetch, url }) {
 
   data.comments.forEach((comment) => {
     comment.avatar_url = fixClientRoute(comment.avatar_url);
-
     comment.created_at = dateTillNow(comment.created_at);
   });
 

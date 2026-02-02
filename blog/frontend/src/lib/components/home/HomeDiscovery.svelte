@@ -126,7 +126,7 @@
     </ul>
     {#if tab.index === 2}
       <select
-        class="focus:outline-none mt-2 ml-auto w-fit"
+        class="focus:outline-none border-2 border-dark p-1 rounded-lg hover:bg-dark hover:text-white transition-colors duration-200 mt-2 ml-auto w-fit"
         name="post-filter"
         bind:value={_order}
         in:fly={{ y: -10, duration: 200 }}
