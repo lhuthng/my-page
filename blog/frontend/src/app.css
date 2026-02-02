@@ -39,6 +39,8 @@ body {
   --color-accent-orange: rgb(220, 145, 90);
   --color-accent-orange-light-1: rgb(235, 175, 130);
   --color-accent-orange-light-2: rgb(245, 205, 170);
+
+  --breakpoint-xxs: 500px;
 }
 
 a {
