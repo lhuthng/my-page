@@ -178,7 +178,7 @@
                     if (!textarea) return;
                     const start = textarea.selectionStart;
                     const end = textarea.selectionEnd;
-                    textarea.value =
+                    comments.current =
                       textarea.value.slice(0, start) +
                       "# " +
                       textarea.value.slice(start);
@@ -202,7 +202,7 @@
                     if (!textarea) return;
                     const start = textarea.selectionStart;
                     const end = textarea.selectionEnd;
-                    textarea.value =
+                    comments.current =
                       textarea.value.slice(0, start) +
                       "**" +
                       textarea.value.slice(start, end) +
@@ -226,7 +226,7 @@
                     if (!textarea) return;
                     const start = textarea.selectionStart;
                     const end = textarea.selectionEnd;
-                    textarea.value =
+                    comments.current =
                       textarea.value.slice(0, start) +
                       "_" +
                       textarea.value.slice(start, end) +
@@ -304,6 +304,7 @@
                     ? {
                         display_name: $user.displayName,
                         username: $user.username,
+                        user_role: $user.role,
                       }
                     : {};
                 const newComment = {
@@ -380,12 +381,12 @@
                     <span
                       class="*:w-8 hover:*:translate-x-1 *:transition-all *:duration-200 tooltip-container"
                       data-tooltip={userRole === "admin"
-                        ? "he's THE admin!"
+                        ? "Admin! ꨄ︎"
                         : userRole === "moderator"
                           ? "a mod!"
                           : userRole === "user"
                             ? "user"
-                            : "?"}
+                            : "wanderer"}
                     >
                       {#if userRole === "admin"}
                         <Heart class="fill-accent-red" />
