@@ -1,6 +1,6 @@
 <script>
   import { autoHResize } from "$lib/client/auto-resize";
-  import { user } from "$lib/client/user";
+  import { auth, user } from "$lib/client/user";
   import { onMount } from "svelte";
   import { gsap } from "gsap";
   import { fade, fly } from "svelte/transition";
