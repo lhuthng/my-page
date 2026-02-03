@@ -11,11 +11,12 @@ use crate::{
     },
     domain::{
         entities::{
-            post::PostSnapshot,
+            post::{PostSnapshot, PostStats},
             user::{Me, User, UserSummary},
         },
         errors::user::UserError,
     },
+    infrastructure::web::api::services::post::PostRow,
 };
 
 pub struct UserServiceImpl {
@@ -52,18 +53,6 @@ struct UserSearchRow {
     role: String,
     avatar_url: Option<String>,
     score: i32,
-}
-
-#[derive(Debug, FromRow)]
-pub struct PostRow {
-    pub post_id: i64,
-    pub title: String,
-    pub slug: String,
-    pub excerpt: String,
-    pub author_name: String,
-    pub author_slug: String,
-    pub status: String,
-    pub url: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
@@ -237,17 +226,18 @@ impl UserService for UserServiceImpl {
 
         let sql = format!(
             r#"
-            SELECT posts.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, status, url
-            FROM posts
-                JOIN users ON posts.user_id = users.id
-                JOIN user_meta ON user_meta.user_id = users.id
-                LEFT JOIN media ON posts.cover_image_id = media.id
-            WHERE username = ? {}
-            ORDER BY posts.updated_at DESC
+            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, status, url, views, likes, comments_count
+            FROM posts p
+                JOIN users u ON u.id = p.user_id
+                JOIN user_meta um ON u.id = um.user_id
+                JOIN post_stats ps ON p.id = ps.post_id
+                LEFT JOIN media m ON m.id = p.cover_image_id
+            WHERE u.username = ? {}
+            ORDER BY p.updated_at DESC
             LIMIT ? OFFSET ?
             "#,
             if filtered {
-                "AND status = 'published' "
+                "AND p.status = 'published' "
             } else {
                 ""
             }
@@ -289,19 +279,8 @@ impl UserService for UserServiceImpl {
 
         for post_row in post_rows {
             posts_map.insert(post_row.post_id, posts.len());
-            posts.push(PostSnapshot {
-                id: post_row.post_id,
-                title: post_row.title,
-                slug: post_row.slug,
-                excerpt: post_row.excerpt,
-                author_name: post_row.author_name,
-                author_slug: post_row.author_slug,
-                tag_names: vec![],
-                tag_slugs: vec![],
-                status: post_row.status,
-                url: post_row.url,
-            });
-            query = query.bind(post_row.post_id);
+            query = query.bind(post_row.post_id.clone());
+            posts.push(post_row.into_snapshot(vec![], vec![]));
         }
 
         let tag_rows = query.fetch_all(&self.pool).await?;
