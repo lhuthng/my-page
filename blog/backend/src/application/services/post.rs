@@ -57,4 +57,12 @@ pub trait PostService {
         &self,
         cmd: commands::post::PostNewAnynymouseCommentCommand,
     ) -> Result<i64, errors::post::PostError>;
+    async fn push_new_view(
+        &self,
+        cmd: commands::post::PushNewViewCommand,
+    ) -> Result<(), errors::post::PostError>;
+    async fn push_new_like(
+        &self,
+        cmd: commands::post::PushNewLikeCommand,
+    ) -> Result<(), errors::post::PostError>;
 }

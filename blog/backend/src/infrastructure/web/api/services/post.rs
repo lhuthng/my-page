@@ -9,13 +9,14 @@ use crate::{
             CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand, GetDetailedPostsCommand,
             GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand, NewPostCommand,
             PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
-            SearchPostCommand, UpdatePostCommand,
+            PushNewLikeCommand, PushNewViewCommand, SearchPostCommand, UpdatePostCommand,
         },
         services::post::PostService,
     },
     domain::{
         entities::post::{
-            CategoryResult, Comment, Post, PostDetails, PostSeries, PostSnapshot, PostSummary,
+            CategoryResult, Comment, Post, PostDetails, PostSeries, PostSnapshot, PostStats,
+            PostSummary,
         },
         errors::post::PostError,
     },
@@ -59,6 +60,31 @@ pub struct PostRow {
     pub author_slug: String,
     pub url: Option<String>,
     pub status: String,
+    pub views: i64,
+    pub likes: i64,
+    pub comments_count: i64,
+}
+
+impl PostRow {
+    pub fn into_snapshot(self, tag_names: Vec<String>, tag_slugs: Vec<String>) -> PostSnapshot {
+        PostSnapshot {
+            id: self.post_id,
+            title: self.title,
+            slug: self.slug,
+            tag_names,
+            tag_slugs,
+            excerpt: self.excerpt,
+            author_name: self.author_name,
+            author_slug: self.author_slug,
+            status: self.status,
+            url: self.url,
+            stats: PostStats {
+                likes: self.likes,
+                views: self.views,
+                comments: self.comments_count,
+            },
+        }
+    }
 }
 
 #[derive(Debug, FromRow)]
@@ -150,13 +176,14 @@ impl PostServiceImpl {
 
         let sequel = format!(
             r#"
-            SELECT posts.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, url, status
-            FROM posts
-                JOIN users ON posts.user_id = users.id
-                JOIN user_meta ON user_meta.user_id = posts.user_id
-                LEFT JOIN media ON posts.cover_image_id = media.id
+            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, url, status, views, likes, comments_count
+            FROM posts p
+                JOIN users u ON u.id = p.user_id
+                JOIN user_meta um ON um.user_id = p.user_id
+                JOIN post_stats ps ON ps.post_id = p.id
+                LEFT JOIN media m ON m.id = p.cover_image_id
             {}
-            ORDER BY posts.{} DESC
+            ORDER BY p.{} DESC
             LIMIT ?
             OFFSET ?
             "#,
@@ -197,19 +224,8 @@ impl PostServiceImpl {
 
         for post_row in post_rows {
             posts_map.insert(post_row.post_id, featured_posts.len());
-            featured_posts.push(PostSnapshot {
-                id: post_row.post_id,
-                title: post_row.title,
-                slug: post_row.slug,
-                excerpt: post_row.excerpt,
-                author_name: post_row.author_name,
-                author_slug: post_row.author_slug,
-                tag_names: vec![],
-                tag_slugs: vec![],
-                status: post_row.status,
-                url: post_row.url,
-            });
-            query = query.bind(post_row.post_id);
+            query = query.bind(post_row.post_id.clone());
+            featured_posts.push(post_row.into_snapshot(vec![], vec![]));
         }
 
         let tag_rows = query.fetch_all(&self.pool).await?;
@@ -1076,5 +1092,37 @@ impl PostService for PostServiceImpl {
             .collect();
 
         Ok(comments)
+    }
+
+    async fn push_new_view(&self, cmd: PushNewViewCommand) -> Result<(), PostError> {
+        sqlx::query(
+            r#"
+            INSERT INTO post_stats (post_id, views, updated_at)
+            VALUES (?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT(post_id) DO UPDATE
+              SET views = post_stats.views + 1,
+                  updated_at = CURRENT_TIMESTAMP
+        "#,
+        )
+        .bind(cmd.post_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn push_new_like(&self, cmd: PushNewLikeCommand) -> Result<(), PostError> {
+        sqlx::query(
+            r#"
+            INSERT INTO post_stats (post_id, likes, updated_at)
+            VALUES (?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT(post_id) DO UPDATE
+              SET likes = post_stats.likes + 1,
+                  updated_at = CURRENT_TIMESTAMP
+        "#,
+        )
+        .bind(cmd.post_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

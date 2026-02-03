@@ -3,6 +3,8 @@
   import PostSection from "$lib/components/post/PostSection.svelte";
   import CommentSection from "$lib/components/post/CommentSection.svelte";
   import { page } from "$app/state";
+  import { isLiked, shouldSendView, VIEW_DELAY } from "$lib/client/post.js";
+  import { browser } from "$app/environment";
 
   let { data, slug } = $props();
 
@@ -20,6 +22,10 @@
     series,
     cover_url,
   } = $derived(data);
+  let liked = $state();
+  $effect(() => {
+    liked = browser ? isLiked(id) : false;
+  });
   let date = $derived(textToDate(published_at));
   let updateTime = $derived(dateTillNow(updated_at, "round"));
 
@@ -27,6 +33,26 @@
   let canonicalLink = $derived.by(() => {
     const { origin, pathname, search } = page.url;
     return origin + pathname + search;
+  });
+
+  let viewDelayTimeout = null;
+  $effect(() => {
+    if (viewDelayTimeout) {
+      clearTimeout(viewDelayTimeout);
+    }
+
+    viewDelayTimeout = setTimeout(async () => {
+      if (shouldSendView(id)) {
+        const res = await fetch(`/api/posts/id/${id}/view`, { method: "POST" });
+      }
+    }, VIEW_DELAY);
+
+    return () => {
+      if (viewDelayTimeout) {
+        clearTimeout(viewDelayTimeout);
+        viewDelayTimeout = null;
+      }
+    };
   });
 </script>
 
@@ -58,6 +84,7 @@
     {updateTime}
     {content}
     {series}
+    {liked}
     author={{
       username: author_slug,
       displayName: author_name,

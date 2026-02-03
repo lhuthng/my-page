@@ -11,10 +11,12 @@
       </h2>
       <p>Exploring the intersection of programming and creativity (probably)</p>
     </div>
-    <div class="flex grow justify-evenly gap-12 px-0 lg:px-4 py-2 lg:py-4">
+    <div
+      class="flex grow justify-evenly h-full gap-12 px-0 lg:px-4 py-2 lg:py-4"
+    >
       <div class="space-y-2 text-left sm:text-right">
         <h3 class="text-xl">EXPLORE</h3>
-        <ul class="space-y-1 list-inside list-['-'] pt-1">
+        <ul class="space-y-1 h-full list-inside list-['-'] pt-1">
           <li><a href="/posts">Posts</a></li>
           <li><a href="/projects">Projects</a></li>
           <li><a href="/about">About</a></li>
@@ -22,7 +24,7 @@
       </div>
       <div class="space-y-2 text-right">
         <h3 class="text-xl">CONNECT</h3>
-        <ul class="space-y-1 list-inside list-['-'] pt-1">
+        <ul class="space-y-1 h-full list-inside list-['-'] pt-1">
           <li><a href="https://github.com/lhuthng">Github</a></li>
           <li>
             <a href="https://www.linkedin.com/in/huuthangle/">Linkedin</a>
@@ -51,8 +53,15 @@
 <style lang="postcss">
   @reference "../../app.css";
 
+  ul {
+    @apply relative;
+    &:after {
+      @apply absolute z-10 content-[''] right-4 top-1 bottom-3 lg:bottom-1 w-1.5 bg-white;
+    }
+  }
+
   ul > li {
-    @apply relative ml-auto w-fit bg-white text-dark pr-1 rounded-r-lg;
+    @apply relative z-11 ml-auto drop-shadow-sm drop-shadow-dark w-fit bg-white text-dark pr-1 rounded-r-lg;
   }
   ul > li::before {
     @apply absolute content-[''] bg-white right-full h-full w-3;
