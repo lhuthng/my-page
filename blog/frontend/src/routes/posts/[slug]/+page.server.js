@@ -14,12 +14,15 @@ import MarkdownIt from "markdown-it";
 import mkKatex from "markdown-it-katex";
 import anchor from "markdown-it-anchor";
 
-export async function load(event) {
-  const res = await fetch(route(`posts/s/${event.params.slug}`), {
+export async function load({ fetch, params, setHeaders }) {
+  const res = await fetch(route(`posts/s/${params.slug}`), {
     method: "GET",
   });
 
   if (res.ok) {
+    setHeaders({
+      "cache-control": "public, max-age=60, s-maxage=60",
+    });
     const data = await res.json();
 
     let { content, author_avatar_url, cover_url, medium_urls, ...rest } = data;

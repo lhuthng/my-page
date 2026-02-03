@@ -18,7 +18,7 @@ use crate::{
     domain::{
         entities::{
             media::MediaType,
-            post::PostSnapshot,
+            post::{PostSnapshot, PostStats},
             series::{SeriesSnapshot, SeriesWithPosts},
         },
         errors::{media::MediaError, series::SeriesError},
@@ -160,8 +160,9 @@ impl SeriesService for SeriesServiceImpl {
 
         let sql = format!(
             r#"
-            SELECT p.id, p.title, p.slug, p.excerpt, um.display_name, u.username, p.status, m.url
+            SELECT p.id, p.title, p.slug, p.excerpt, um.display_name, u.username, p.status, m.url, ps.views, ps.likes, ps.comments_count
             FROM posts p
+            JOIN post_stats ps ON ps.post_id = p.id
             LEFT JOIN users u ON u.id = p.user_id
             LEFT JOIN user_meta um ON um.user_id = u.id
             LEFT JOIN media m ON m.id = p.cover_image_id
@@ -180,6 +181,9 @@ impl SeriesService for SeriesServiceImpl {
                 String,
                 String,
                 Option<String>,
+                i64,
+                i64,
+                i64,
             ),
         >(&sql)
         .fetch_all(&mut *tx)
@@ -195,12 +199,39 @@ impl SeriesService for SeriesServiceImpl {
                 String,
                 String,
                 Option<String>,
+                i64,
+                i64,
+                i64,
             ),
         >::new();
-        for (id, title, slug, excerpt, display_name, username, status, url) in all_posts {
+        for (
+            id,
+            title,
+            slug,
+            excerpt,
+            display_name,
+            username,
+            status,
+            url,
+            views,
+            likes,
+            comments_count,
+        ) in all_posts
+        {
             post_hash_map.insert(
                 id,
-                (title, slug, excerpt, display_name, username, status, url),
+                (
+                    title,
+                    slug,
+                    excerpt,
+                    display_name,
+                    username,
+                    status,
+                    url,
+                    views,
+                    likes,
+                    comments_count,
+                ),
             );
         }
 
@@ -243,8 +274,18 @@ impl SeriesService for SeriesServiceImpl {
                     for &(post_id, number) in posts_with_numbers {
                         numbers.push(number);
 
-                        if let Some((title, slug, excerpt, author_name, author_slug, status, url)) =
-                            post_hash_map.get(&post_id)
+                        if let Some((
+                            title,
+                            slug,
+                            excerpt,
+                            author_name,
+                            author_slug,
+                            status,
+                            url,
+                            views,
+                            likes,
+                            comments_count,
+                        )) = post_hash_map.get(&post_id)
                         {
                             if let Some((tag_names, tag_slugs)) = tag_name_hash_map
                                 .get(&post_id)
@@ -261,6 +302,11 @@ impl SeriesService for SeriesServiceImpl {
                                     author_slug: author_slug.clone(),
                                     status: status.clone(),
                                     url: url.clone(),
+                                    stats: PostStats {
+                                        views: views.clone(),
+                                        likes: likes.clone(),
+                                        comments: comments_count.clone(),
+                                    },
                                 });
                             }
                         }
