@@ -75,3 +75,11 @@ pub struct GetCommentsCommand {
     pub limit: i64,
     pub before: Option<i64>,
 }
+
+pub struct PushNewViewCommand {
+    pub post_id: i64,
+}
+
+pub struct PushNewLikeCommand {
+    pub post_id: i64,
+}
