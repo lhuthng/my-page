@@ -40,13 +40,16 @@
     </div>
   </div>
   <hr class="w-cap border-t-2 my-4" />
-  <div class="w-cap not-sm:text-center">
-    <span class="mx-auto">
+  <div
+    class="flex not-sm:flex-col justify-between gap-2 w-cap not-sm:text-center"
+  >
+    <span>
       &copy; 2026 Huu Thang &middot; Hand-craft with Svelte & Rust <span
         class="text-nowrap"
         >[Running on a VPS] &middot; All rights reserved</span
       >.
     </span>
+    <a class="underline" href="/privacy">Privacy</a>
   </div>
 </footer>
 
