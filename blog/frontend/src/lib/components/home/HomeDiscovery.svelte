@@ -155,7 +155,7 @@
       bind:this={tab.discover}
       class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
     >
-      {#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
+      {#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
         <li in:fly={{ y: -20, duration: 500 }}>
           <PostCard
             {title}
@@ -167,6 +167,7 @@
             }}
             tags={tag_slugs}
             src={url}
+            {stats}
           />
         </li>
       {/each}
@@ -177,7 +178,7 @@
       class="hidden grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
     >
       {#if fresh[order]?.status === "fetched"}
-        {#each fresh[order].cache as { title, slug, excerpt, author_name, author_slug, tag_slugs, url }, index (slug)}
+        {#each fresh[order].cache as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
           <li
             in:fly={{ y: -20, duration: 500 }}
             animate:flip={{ delay: index * 80, duration: 500 }}
@@ -192,6 +193,7 @@
               }}
               tags={tag_slugs}
               src={url}
+              {stats}
             />
           </li>
         {/each}

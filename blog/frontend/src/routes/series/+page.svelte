@@ -3,7 +3,7 @@
 
   let { data } = $props();
 
-  let series = data.series;
+  let series = $derived(data.series);
 </script>
 
 {#snippet postItem({
@@ -14,6 +14,7 @@
   author_slug,
   tag_slugs,
   url,
+  stats,
 })}
   <li class="h-fit">
     <PostCard
@@ -23,6 +24,7 @@
       author={{ name: author_name, slug: author_slug }}
       tags={tag_slugs}
       src={url}
+      {stats}
     />
   </li>
 {/snippet}
