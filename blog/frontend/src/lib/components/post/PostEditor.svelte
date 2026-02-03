@@ -437,6 +437,11 @@
         }}
         tags={editingData.tags.split(" ").filter((tag) => tag !== "")}
         src={editingData.coverUrl}
+        stats={{
+          views: "#",
+          likes: "#",
+          comments_count: "#",
+        }}
         onclick={() => {
           if (mode !== "edit") return;
           editor.coverToggled = true;
