@@ -200,8 +200,15 @@ button {
 }
 
 .hljs {
-  @apply relative bg-dark text-white pl-10 pr-2 py-1 rounded-sm overflow-hidden text-sm;
+  @apply relative bg-dark text-white pl-8 pr-2 py-1 rounded-sm overflow-hidden text-sm;
   counter-reset: line;
+
+  & > code {
+    @apply relative;
+    &:after {
+      @apply absolute content-[''] right-[calc(100%+3px)] top-0 bottom-0 w-0.5 bg-white/40;
+    }
+  }
 }
 
 .hljs-line {
@@ -216,7 +223,7 @@ button {
 }
 
 .hljs-line::after {
-  @apply absolute -left-10 top-0 border-r-2 w-8 h-[calc(100%+4px)] text-right text-white/40 ml-1 pr-1 select-none;
+  @apply absolute -left-10 top-0 w-8 h-[calc(100%+4px)] text-right text-white/40 ml-1 pr-1 select-none;
   counter-increment: line;
   content: counter(line);
 }
