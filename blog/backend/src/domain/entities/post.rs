@@ -7,6 +7,13 @@ pub struct CategoryResult {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct PostStats {
+    pub likes: i64,
+    pub views: i64,
+    pub comments: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct PostSnapshot {
     pub id: i64,
     pub title: String,
@@ -18,6 +25,7 @@ pub struct PostSnapshot {
     pub author_slug: String,
     pub status: String,
     pub url: Option<String>,
+    pub stats: PostStats,
 }
 
 #[derive(Debug, Clone)]
