@@ -12,9 +12,10 @@
       Add Kaomoji shortcuts? Why not? <span class="text-nowrap">(◕‿◕)♡</span>
     </li>
     <li>Add a Serverless Proxy for GIF search</li>
+    <li class="line-through">Fixed sveltekit disk-cache</li>
     <li class="line-through">
-      Fix annoying 413 errors (will write post about this)
+      Fixed annoying 413 errors (will write post about this)
     </li>
-    <li class="line-through">Fix rate limit</li>
+    <li class="line-through">Fixed rate limit</li>
   </ul>
 </div>

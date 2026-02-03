@@ -7,12 +7,28 @@
   import ContentTable from "./ContentTable.svelte";
   import Post from "./Post.svelte";
   import { browser } from "$app/environment";
+  import { sendLike } from "$lib/client/post";
 
-  let { id, title, tags, date, updateTime, content, author, series } = $props();
+  let {
+    id,
+    title,
+    tags,
+    date,
+    updateTime,
+    content,
+    author,
+    series,
+    liked: initialLiked,
+  } = $props();
 
+  let liked = $state(initialLiked);
+  $effect(() => {
+    liked = initialLiked;
+  });
   let headers = $state([]);
 
   let toggled = $state(false);
+  let pushingLike = $state(false);
 
   $effect(() => {
     if ($isXl) toggled = false;
@@ -90,6 +106,27 @@
       </div>
     </div>
     <Post {content} bind:headers />
+
+    {#if liked !== undefined}
+      <div class="ml-auto w-fit duo-btn duo-blue">
+        <button
+          disabled={liked || pushingLike}
+          onclick={async () => {
+            pushingLike = true;
+            const res = await fetch(`/api/posts/id/${id}/like`, {
+              method: "POST",
+            });
+            if (res.ok) {
+              sendLike(id);
+              liked = true;
+              pushingLike = false;
+            }
+          }}
+        >
+          {pushingLike ? "Upvote?" : liked ? "Upvoted!" : "Upvote?"}
+        </button>
+      </div>
+    {/if}
 
     {#if series}
       {@const {

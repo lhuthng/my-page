@@ -1,4 +1,7 @@
-export async function load(event) {
-  const register = event.url.searchParams.get("register");
+export async function load({ url, setHeaders }) {
+  const register = url.searchParams.get("register");
+  setHeaders({
+    "cache-control": "public, max-age=60, s-maxage=60",
+  });
   return { register };
 }
