@@ -17,7 +17,8 @@ use crate::{
                 CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand,
                 GetDetailedPostsCommand, GetFeaturedPostsCommand, GetLatestPostsCommand,
                 GetPostCommand, NewPostCommand, PostNewAnynymouseCommentCommand,
-                PostNewCommentCommand, PublishCommand, SearchPostCommand, UpdatePostCommand,
+                PostNewCommentCommand, PublishCommand, PushNewLikeCommand, PushNewViewCommand,
+                SearchPostCommand, UpdatePostCommand,
             },
         },
         services::{media::MediaService, post::PostService},
@@ -25,7 +26,7 @@ use crate::{
     domain::{
         entities::{
             media::MediumDetails,
-            post::{PostDetails, PostSummary},
+            post::{PostDetails, PostSnapshot, PostSummary},
             secret::Claims,
         },
         errors::{media::MediaError, post::PostError},
@@ -774,6 +775,13 @@ pub struct GetFeaturedPostsBody {
 }
 
 #[derive(Serialize)]
+pub struct PostStats {
+    pub views: i64,
+    pub likes: i64,
+    pub comments: i64,
+}
+
+#[derive(Serialize)]
 pub struct Post {
     pub id: i64,
     pub title: String,
@@ -786,8 +794,42 @@ pub struct Post {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    pub stats: PostStats,
 }
 
+impl From<PostSnapshot> for Post {
+    fn from(value: PostSnapshot) -> Self {
+        let PostSnapshot {
+            id,
+            title,
+            slug,
+            tag_names,
+            tag_slugs,
+            excerpt,
+            author_name,
+            author_slug,
+            url,
+            stats,
+            ..
+        } = value;
+        Post {
+            id,
+            title,
+            slug,
+            tag_names,
+            tag_slugs,
+            excerpt,
+            author_name,
+            author_slug,
+            url,
+            stats: PostStats {
+                views: stats.views,
+                likes: stats.likes,
+                comments: stats.comments,
+            },
+        }
+    }
+}
 #[derive(Serialize)]
 pub struct GetFeaturedPostsResponse {
     pub featured_posts: Vec<Post>,
@@ -802,20 +844,7 @@ pub async fn get_featured_posts(
     let featured_posts = state.post_service.get_featured_post_snapshots(cmd).await?;
 
     let wrapped_featured_posts = GetFeaturedPostsResponse {
-        featured_posts: featured_posts
-            .into_iter()
-            .map(|post| Post {
-                id: post.id,
-                title: post.title,
-                slug: post.slug,
-                tag_names: post.tag_names,
-                tag_slugs: post.tag_slugs,
-                excerpt: post.excerpt,
-                author_name: post.author_name,
-                author_slug: post.author_slug,
-                url: post.url,
-            })
-            .collect(),
+        featured_posts: featured_posts.into_iter().map(|post| post.into()).collect(),
     };
 
     Ok(Json(wrapped_featured_posts))
@@ -853,20 +882,7 @@ pub async fn get_latest_posts(
     let featured_posts = state.post_service.get_latest_post_snapshots(cmd).await?;
 
     let wrapped_featured_posts = GetFeaturedPostsResponse {
-        featured_posts: featured_posts
-            .into_iter()
-            .map(|post| Post {
-                id: post.id,
-                title: post.title,
-                slug: post.slug,
-                tag_names: post.tag_names,
-                tag_slugs: post.tag_slugs,
-                excerpt: post.excerpt,
-                author_name: post.author_name,
-                author_slug: post.author_slug,
-                url: post.url,
-            })
-            .collect(),
+        featured_posts: featured_posts.into_iter().map(|post| post.into()).collect(),
     };
 
     Ok(Json(wrapped_featured_posts))
@@ -979,6 +995,32 @@ pub async fn get_comments(
     let wrapped_comments = CommentsResponse { comments };
 
     Ok(Json(wrapped_comments))
+}
+
+pub async fn push_view(
+    State(state): State<Arc<AppState>>,
+    Path(post_id_str): Path<String>,
+) -> Result<impl IntoResponse, PostError> {
+    let post_id = post_id_str.parse::<i64>().unwrap();
+
+    state
+        .post_service
+        .push_new_view(PushNewViewCommand { post_id })
+        .await?;
+    Ok(())
+}
+
+pub async fn push_like(
+    State(state): State<Arc<AppState>>,
+    Path(post_id_str): Path<String>,
+) -> Result<impl IntoResponse, PostError> {
+    let post_id = post_id_str.parse::<i64>().unwrap();
+
+    state
+        .post_service
+        .push_new_like(PushNewLikeCommand { post_id })
+        .await?;
+    Ok(())
 }
 
 #[axum::debug_handler]

@@ -130,7 +130,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/id/{post_id}/comments", get(handlers::post::get_comments))
-                // .route("/{post_id}/")
+                .route("/id/{post_id}/view", post(handlers::post::push_view))
+                .route("/id/{post_id}/like", post(handlers::post::push_like))
                 .route("/featured", get(handlers::post::get_featured_posts))
                 .route("/latest", get(handlers::post::get_latest_posts))
                 .route("/check", get(handlers::post::check_post))
