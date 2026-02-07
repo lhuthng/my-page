@@ -9,6 +9,10 @@ export function preventDefault(e) {
   e.preventDefault();
 }
 
+export function stopPropagation(e) {
+  e.stopPropagation;
+}
+
 export const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 
 export function textToDate(text) {
@@ -50,4 +54,15 @@ export function isPointInTriangle(px, py, x1, y1, x2, y2, x3, y3) {
   const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
   const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
   return !(hasNeg && hasPos);
+}
+
+export function percentToDecimal(str) {
+  if (!str || typeof str !== "string") return NaN;
+
+  const cleaned = str.replace(/[% \s]/g, "").trim();
+
+  if (!cleaned) return NaN;
+
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? NaN : num / 100;
 }

@@ -6,7 +6,7 @@
   import NavigationSideBar from "$lib/components/NavigationSideBar.svelte";
   import { onMount } from "svelte";
   import "../app.css";
-  import { pbody } from "$lib/client/misc";
+  import { mbody, pbody } from "$lib/client/misc";
   import { fade } from "svelte/transition";
   import ToTop from "$lib/components/ToTop.svelte";
   import { width } from "$lib/client/windows";
@@ -15,7 +15,8 @@
   let { children } = $props();
 
   let route = $derived($page.url.pathname.split("/")[1]);
-  let specialDiv = $state();
+  let pDiv = $state();
+  let mDiv = $state();
   let scrollTarget = $state();
 
   $effect(() => {
@@ -23,7 +24,8 @@
   });
 
   onMount(() => {
-    pbody.set(specialDiv);
+    pbody.set(pDiv);
+    mbody.set(mDiv);
   });
 </script>
 
@@ -33,12 +35,9 @@
   <link rel="icon" href="/favicon.ico" />
 </svelte:head>
 
-<div class="relative flex flex-col min-h-screen">
-  <div
-    class="absolute pointer-events-none inset-0 z-50"
-    transition:fade={{ duration: 0 }}
-    bind:this={specialDiv}
-  ></div>
+<div class="fixed w-dvw h-dvh pointer-events-none z-11" bind:this={mDiv}></div>
+<div class="relative flex flex-col min-h-screen z-10">
+  <div class="absolute pointer-events-none inset-0 z-50" bind:this={pDiv}></div>
   <Header />
   <main class="grow" bind:this={scrollTarget}>
     <div class="relative flex gap-2 lg:gap-4 w-cap">
