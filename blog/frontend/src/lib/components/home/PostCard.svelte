@@ -53,7 +53,7 @@
             </svg>
           </div>
           <div>
-            <svg class="inline-block fill-white h-6" viewBox="0 0 26 26">
+            <svg class="inline-block fill-white/80 h-6" viewBox="0 0 26 26">
               <path
                 fill-rule="evenodd"
                 clip-rule="evenodd"

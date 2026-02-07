@@ -1,6 +1,9 @@
 import App from "$lib/components/App.svelte";
-import { mount } from "svelte";
+import { mount, unmount } from "svelte";
 import hljs from "highlight.js";
+import ImagePreviewer from "$lib/components/ImagePreviewer.svelte";
+import { mbody } from "$lib/client/misc";
+import { get } from "svelte/store";
 
 export function pluginExtend(root) {
   const appContainers = root.querySelectorAll(".app-container");
@@ -70,6 +73,30 @@ export function pluginExtend(root) {
       let avg = 0;
       audios.forEach((audio) => (avg += audio.currentTime / audios.length));
       syncTime(avg);
+    });
+  });
+
+  const expandableImageContainers = root.querySelectorAll("img.expandable");
+  expandableImageContainers.forEach((container) => {
+    if (container.__mounted) return;
+    container.__mounted = true;
+
+    let opened = false;
+    container.addEventListener("click", () => {
+      if (opened) return;
+      opened = true;
+
+      let previewer = mount(ImagePreviewer, {
+        target: get(mbody),
+        props: {
+          visible: true,
+          origin: container,
+          onClose: () => {
+            unmount(previewer, { outro: true });
+            opened = false;
+          },
+        },
+      });
     });
   });
 }
@@ -192,15 +219,15 @@ export function mediaWithShortcutPlugin(md, options) {
         default: {
           switch (tag) {
             case "img":
-              return `<img src="${src}" alt="${value}" ${styleAttr}/>`;
+              return `<img class="expandable" src="${src}" alt="${value}" ${styleAttr}/>`;
             case "img-inl":
-              return `<img class="inline-block align-bottom" src="${src}" alt="${value}" ${styleAttr}/>`;
+              return `<img class="expandable inline-block align-bottom" src="${src}" alt="${value}" ${styleAttr}/>`;
             case "img-left-float":
               const floatStyle = style.length
                 ? `style="${style.join(";")}; float: left; margin-right: 5px; margin-bottom: 5px;"`
                 : 'style="float: left; margin-right: 5px; margin-bottom: 5px;"';
 
-              return `<img src="${src}" alt="${value}" ${floatStyle}/>`;
+              return `<img class="expandable" src="${src}" alt="${value}" ${floatStyle}/>`;
             case "audio":
               return `<div class="audio-container"><audio src="${src}" alt="${value}" controls></audio></div>`;
             case "vid":
