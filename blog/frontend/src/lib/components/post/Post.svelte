@@ -65,6 +65,9 @@
     & img {
       @apply rounded-lg mx-auto;
     }
+    & img.expandable {
+      @apply cursor-pointer;
+    }
     & p {
       @apply mt-4;
     }
