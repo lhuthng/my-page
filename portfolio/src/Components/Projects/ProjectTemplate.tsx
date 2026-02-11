@@ -185,16 +185,19 @@ export default function ProjectTemplate({
         <div>{description}</div>
       </div>
       <div
-        className="absolute flex flex-col rounded-3xl w-full h-full top-0 left-0 bg-none"
+        className="absolute flex flex-col rounded-3xl w-full h-full top-0 left-0 bg-none overscroll-contain"
         ref={containerRef}
       >
-        <i
-          ref={overlayRef}
-          className="fixed top-0 left-0 w-screen h-screen cursor-not-allowed pointer-events-none opacity-0 bg-black/20"
-          onClick={() => {
-            if (active) onClick(!active);
-          }}
-        />
+        {active && (
+          <i
+            ref={overlayRef}
+            className="fixed inset-0 w-screen h-screen cursor-not-allowed opacity-0 bg-black/20"
+            onClick={() => {
+              if (active) onClick(!active);
+            }}
+            onScroll={(e) => e.preventDefault()}
+          />
+        )}
         <div
           className="panel absolute flex flex-col left-0 bg-white-chalk top-0 w-full h-full rounded-2xl scrollbar-custom scroll-thumb-black overflow-hidden"
           style={{ cursor: active ? "auto" : "pointer" }}
