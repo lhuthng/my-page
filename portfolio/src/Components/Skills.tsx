@@ -34,8 +34,10 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        Raising interfaces from infancy. Nurturing tiny ideas into sleek,
-        responsive, and pixel-perfect realities.
+        Nurturing tiny ideas into pixel-perfect realities. Special Ability:
+        Svelte 5 &amp; React mastery.
+        <br />
+        Can manipulate the DOM with 100% precision
       </p>,
     ],
     details: [
@@ -103,8 +105,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        Tackling the chaos. Building the heavy-duty logic and APIs required to
-        fight off the production hordes.
+        One bite and it's over. Transforming chaotic requirements into secure
+        logic so we can survive another day in the production wasteland.
       </p>,
     ],
     details: [
@@ -130,7 +132,7 @@ const cards: CardProps[] = [
         dy: 0,
         detail: (
           <div className="w-41 text-right">
-            <b>Frameworks:</b> Node.js, ASP.NET
+            <b>Frameworks:</b> Node.js, ASP.NET, Axum
           </div>
         ),
         paths: [[180, 280]],
@@ -170,8 +172,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        The calm in the inferno. Keeping the servers running cool even when the
-        infrastructure is on fire.
+        Infrastructure Firefighter. Maintaining total zen while the servers
+        literally burn, ensuring the architecture stays cool under pressure.
       </p>,
     ],
     details: [
@@ -225,8 +227,8 @@ const cards: CardProps[] = [
         dy: 0,
         detail: (
           <div className="w-60 text-left">
-            <b>Networking & Infra:</b> Apache2, nginx, Alfahosting, Domain
-            Management, TLS/SSL, VPS, SSH
+            <b>Networking &amp; Infra:</b> Apache2, nginx, Alfahosting, Domain
+            Management, TLS/SSL, VPS, SSH, Cloudflare
           </div>
         ),
         paths: [
@@ -239,7 +241,7 @@ const cards: CardProps[] = [
   },
   {
     title: "DevOps",
-    level: 0.5,
+    level: 1,
     colorPresetName: "Agility",
     difficulty: 2,
     attack: 500,
@@ -257,8 +259,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        Closing the loop. Orchestrating the infinite cycle of builds and
-        deployments for a seamless flow.
+        Escaping the loop. Orchestrating an infinite cycle of builds and
+        deployments to ensure a seamless, automated flow that never sleeps.
       </p>,
     ],
     details: [
@@ -328,8 +330,8 @@ const cards: CardProps[] = [
         }}
       />,
       <p>
-        The high-security archive. Mastering complex queries and data integrity
-        to keep secrets locked tight.
+        Sentinel of Secrets. Protecting the integrity of the data realm through
+        complex modeling and unshakeable security wards.
       </p>,
     ],
     details: [
@@ -761,10 +763,10 @@ export default function Skills() {
             vision of your own, I invite you to begin the conversation.
           </p>
         </div>
-        <div className="relative flex justify-center items-center gap-10 bg-amber-100 w-full h-20 border-t-2 border-b-2 border-gray-chalk-dark text-xl [&>p]:bg-red-600 [&>p]:p-[2px_12px] [&>p]:rounded-md [&>p]:cursor-pointer [&>p]:hover:brightness-110 [&>p]:hover:scale-105 [&>p]:transition-all [&>p]:duration-100 text-white z-0">
+        <div className="relative flex justify-center items-center gap-10 bg-amber-100 w-full h-20 border-t-2 border-b-2 border-gray-chalk-dark text-base [&>a]:bg-red-600 [&>a]:p-[2px_12px] [&>a]:rounded-md [&>a]:cursor-pointer [&>a]:hover:brightness-110 [&>a]:hover:scale-105 [&>a]:transition-all [&>a]:duration-100 text-white z-0">
           <span className="absolute left-1/2 top-1/2 -translate-1/2 h-1 w-20 bg-red-600 -z-1" />
-          <p>View the Campaign Log</p>
-          <p>Propose a New Quest</p>
+          <a href="https://blog.huuthang.site/posts">View the Campaign Log</a>
+          <a href="#contact-form">Propose a New Quest</a>
         </div>
         <span className="absolute right-4 bottom-4">4</span>
       </div>

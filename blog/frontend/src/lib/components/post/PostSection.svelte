@@ -294,8 +294,10 @@
     <svg class="not-xl:hidden w-4 fill-white" viewBox="0 0 12 12">
       <path d="M 0,0 L 12,0 A 12,12 0 0 0 0,12 Z" />
     </svg>
-    <div class="grow">
-      <div class="ml-4 not-xl:hidden bg-white text-base rounded-xl p-2">
+    <div class="relative grow">
+      <div
+        class="sticky top-32 h-fit ml-4 not-xl:hidden bg-white text-base rounded-xl p-2"
+      >
         <ContentTable {headers} />
       </div>
     </div>
@@ -307,6 +309,7 @@
     <button
       class="absolute top-0 left-0 full cursor-not-allowed!"
       title="overlay"
+      onwheel={(e) => e.preventDefault()}
       onclick={() => (toggled = false)}
     ></button>
     <div
