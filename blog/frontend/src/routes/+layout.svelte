@@ -44,7 +44,7 @@
       {#if route !== "login"}
         <NavigationSideBar {route} />
       {/if}
-      <div class="w-full overflow-x-hidden">
+      <div class="w-full">
         {@render children?.()}
       </div>
     </div>
