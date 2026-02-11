@@ -9,7 +9,6 @@ import "@/Styles/Card.css";
 import CardInfo, { type CardInfoProps } from "./CardInfo";
 import { toRGB, type Color } from "@/Utils/color";
 import gsap from "gsap";
-import { smallWidth } from "@/Utils/common";
 import { useGSAP } from "@gsap/react";
 import medievalReact from "@/Assets/SVGs/react.svg";
 import trianglePattern from "@/Assets/SVGs/triangle.svg";
@@ -475,7 +474,7 @@ export default function Card({
                   </div>
                   <div className="flex flex-col h-full pt-7">
                     <div
-                      className="flex-1 px-2"
+                      className="flex-1 px-2 [&>p]:text-base"
                       style={{
                         cursor: expanded ? "text" : "pointer",
                       }}

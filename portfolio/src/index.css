@@ -3,280 +3,278 @@
 @source "Styles/";
 
 @font-face {
-    font-family: "Omori1";
-    src: url("./Assets/Fonts/OMORI_GAME.ttf") format("truetype");
-    font-weight: normal;
-    font-style: normal;
+  font-family: "Omori1";
+  src: url("./Assets/Fonts/OMORI_GAME.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
 }
 
 @font-face {
-    font-family: "Omori2";
-    src: url("./Assets/Fonts/OMORI_GAME2.ttf") format("truetype");
-    font-weight: normal;
-    font-style: normal;
+  font-family: "Omori2";
+  src: url("./Assets/Fonts/OMORI_GAME2.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
 }
 
 :root {
-    --yellow-chalk: 250, 214, 42;
-    --green-chalk: 120, 220, 150;
-    --aquamarine-chalk: 83, 186, 105;
-    --blue-chalk: 110, 200, 255;
-    --cyan-chalk: 224, 255, 255;
-    --navi-chalk: 82, 124, 245;
-    --orange-chalk: 255, 160, 60;
-    --orange-red-chalk: 255, 94, 12;
-    --salmon-chalk: 255, 175, 214;
-    --gray-chalk: 180, 180, 180;
-    --light-gray-chalk: 180, 180, 180;
-    --skin-chalk: 255, 220, 185;
-    --pink-chalk: 226, 178, 245;
-    --blush-chalk: 255, 140, 150;
-    --purple-chalk: 190, 140, 255;
-    --violet-chalk: 166, 104, 235;
-    --silver-chalk: 212, 212, 212;
-    --dark-gray-chalk: 50, 50, 50;
-    --white-chalk: 245, 245, 245;
-    --black-chalk: 46, 37, 34;
-    --dark-charcoal-chalk: 26, 26, 26;
-    --darkboard: 32, 26, 24;
-    --blackboard: 46, 37, 34;
+  --yellow-chalk: 250, 214, 42;
+  --green-chalk: 120, 220, 150;
+  --aquamarine-chalk: 83, 186, 105;
+  --blue-chalk: 85, 165, 225;
+  --cyan-chalk: 224, 255, 255;
+  --navi-chalk: 82, 124, 245;
+  --orange-chalk: 255, 160, 60;
+  --orange-red-chalk: 255, 94, 12;
+  --salmon-chalk: 255, 175, 214;
+  --gray-chalk: 180, 180, 180;
+  --light-gray-chalk: 180, 180, 180;
+  --skin-chalk: 255, 220, 185;
+  --pink-chalk: 226, 178, 245;
+  --blush-chalk: 255, 140, 150;
+  --purple-chalk: 190, 140, 255;
+  --violet-chalk: 166, 104, 235;
+  --silver-chalk: 212, 212, 212;
+  --dark-gray-chalk: 50, 50, 50;
+  --white-chalk: 245, 245, 245;
+  --black-chalk: 46, 37, 34;
+  --dark-charcoal-chalk: 26, 26, 26;
+  --darkboard: 32, 26, 24;
+  --blackboard: 46, 37, 34;
 }
 
 @theme {
-    --color-blackboard: rgb(var(--blackboard));
-    --color-darkboard: rgb(var(--darkboard));
-    --color-yellow-chalk: rgb(var(--yellow-chalk));
-    --color-white-chalk: rgb(var(--white-chalk));
-    --color-blue-chalk: rgb(var(--blue-chalk));
-    --color-purple-chalk: rgb(var(--purple-chalk));
-    --color-violet-chalk: rgb(var(--violet-chalk));
-    --color-deep-violet: #5f249f;
-    --color-mpg-green: #006c66;
-    --color-green-chalk: rgb(var(--green-chalk));
-    --color-orange-chalk: rgb(var(--orange-chalk));
-    --color-gray-chalk: rgb(var(--gray-chalk));
-    --color-skin-chalk: rgb(var(--skin-chalk));
-    --color-blush-chalk: rgb(var(--blush-chalk));
-    --color-navi-chalk: rgb(var(--navi-chalk));
+  --color-blackboard: rgb(var(--blackboard));
+  --color-darkboard: rgb(var(--darkboard));
+  --color-yellow-chalk: rgb(var(--yellow-chalk));
+  --color-white-chalk: rgb(var(--white-chalk));
+  --color-blue-chalk: rgb(var(--blue-chalk));
+  --color-purple-chalk: rgb(var(--purple-chalk));
+  --color-violet-chalk: rgb(var(--violet-chalk));
+  --color-deep-violet: #5f249f;
+  --color-mpg-green: #006c66;
+  --color-green-chalk: rgb(var(--green-chalk));
+  --color-orange-chalk: rgb(var(--orange-chalk));
+  --color-gray-chalk: rgb(var(--gray-chalk));
+  --color-skin-chalk: rgb(var(--skin-chalk));
+  --color-blush-chalk: rgb(var(--blush-chalk));
+  --color-navi-chalk: rgb(var(--navi-chalk));
 
-    --color-orange-chalk-dark: rgb(200, 120, 40);
-    --color-gray-chalk-dark: rgb(140, 140, 140);
-    --color-skin-chalk-dark: rgb(210, 180, 145);
-    --color-blush-chalk-dark: rgb(200, 100, 110);
-    --color-green-chalk-dark: rgb(80, 170, 110);
-    --color-purple-chalk-dark: rgb(140, 90, 200);
-    --color-blue-chalk-dark: rgb(70, 150, 200);
-    --color-white-chalk-dark: rgb(200, 200, 200);
-    --color-yellow-chalk-dark: rgb(200, 170, 30);
+  --color-orange-chalk-dark: rgb(200, 120, 40);
+  --color-gray-chalk-dark: rgb(140, 140, 140);
+  --color-skin-chalk-dark: rgb(210, 180, 145);
+  --color-blush-chalk-dark: rgb(200, 100, 110);
+  --color-green-chalk-dark: rgb(80, 170, 110);
+  --color-purple-chalk-dark: rgb(140, 90, 200);
+  --color-blue-chalk-dark: rgb(70, 150, 200);
+  --color-white-chalk-dark: rgb(200, 200, 200);
+  --color-yellow-chalk-dark: rgb(200, 170, 30);
 
-    --font-cabin-sketch: "Cabin Sketch", sans-serif;
-    --font-courier-prime: "Courier Prime", monospace;
-    --font-omori-1: "Omori1", sans-serif;
-    --font-omori-2: "Omori2", sans-serif;
+  --font-cabin-sketch: "Cabin Sketch", sans-serif;
+  --font-courier-prime: "Courier Prime", monospace;
+  --font-omori-1: "Omori1", sans-serif;
+  --font-omori-2: "Omori2", sans-serif;
 
-    --breakpoint-xs: 30rem;
-    --breakpoint-2xs: 21rem;
-    --breakpoint-3xs: 10rem;
-    --breakpoint-4xs: 9rem;
+  --breakpoint-xs: 30rem;
+  --breakpoint-2xs: 21rem;
+  --breakpoint-3xs: 10rem;
+  --breakpoint-4xs: 9rem;
 }
 
 .filter-blackboard {
-    filter: brightness(0) saturate(100%) invert(7%) sepia(3%) saturate(6940%)
-        hue-rotate(345deg) brightness(89%) contrast(79%);
+  filter: brightness(0) saturate(100%) invert(7%) sepia(3%) saturate(6940%)
+    hue-rotate(345deg) brightness(89%) contrast(79%);
 }
 
 .filter-darkboard {
-    filter: brightness(0) saturate(100%) invert(4%) sepia(10%) saturate(1917%)
-        hue-rotate(329deg) brightness(101%) contrast(86%);
+  filter: brightness(0) saturate(100%) invert(4%) sepia(10%) saturate(1917%)
+    hue-rotate(329deg) brightness(101%) contrast(86%);
 }
 
 .super-bold {
-    b {
-        font-weight: 700;
-        text-decoration: underline;
-    }
+  b {
+    font-weight: 700;
+    text-decoration: underline;
+  }
 }
 
 html {
-    overflow-x: hidden;
+  overflow-x: hidden;
 }
 
 body {
-    font-family: "Open Sans", sans-serif;
-    font-optical-sizing: auto;
-    font-weight: 300;
-    font-style: normal;
-    font-variation-settings: "wdth" 100;
-    width: 100%;
-    overflow-x: hidden;
+  font-family: "Open Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 300;
+  font-style: normal;
+  font-variation-settings: "wdth" 100;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 @keyframes scrollingBackground {
-    0% {
-        background-position-x: 0%;
-    }
-    50% {
-        background-position-x: 100%;
-    }
-    100% {
-        background-position-x: 0%;
-    }
+  0% {
+    background-position-x: 0%;
+  }
+  50% {
+    background-position-x: 100%;
+  }
+  100% {
+    background-position-x: 0%;
+  }
 }
 
 @keyframes fadeIn {
-    to {
-        opacity: 1;
-    }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fadeOut {
-    to {
-        opacity: 0;
-    }
+  to {
+    opacity: 0;
+  }
 }
 
 @keyframes shiftDown {
-    0% {
-        transform: translateY(-10px);
-    }
-    50% {
-        transform: translateY(5px);
-    }
-    100% {
-        transform: translateY(0px);
-    }
+  0% {
+    transform: translateY(-10px);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
 }
 
 .shift-down {
-    animation: shiftDown 0.5s ease forwards;
+  animation: shiftDown 0.5s ease forwards;
 }
 
 @keyframes blink {
-    0%,
-    100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0;
-    }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 @keyframes panBackground {
-    0% {
-        background-position: 0% 0%;
-    }
-    100% {
-        background-position: 100% 100%;
-    }
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 100%;
+  }
 }
 
 @keyframes sineWave {
-    0% {
-        transform: translateY(0);
-    }
-    50% {
-        transform: translateY(-1rem);
-    }
-    100% {
-        transform: translateY(0);
-    }
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1rem);
+  }
+  100% {
+    transform: translateY(0);
+  }
 }
 
 @keyframes breath {
-    0%,
-    100% {
-        transform: scale(1) rotate(0deg);
-    }
-    30% {
-        transform: scale(1.1) rotate(3deg);
-    }
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  30% {
+    transform: scale(1.1) rotate(3deg);
+  }
 }
 
 @keyframes expandWidth {
-    0% {
-        opacity: 0;
-        width: min(75rem, calc(100% - 10rem));
-    }
-    100% {
-        opacity: 1;
-        width: 100%;
-    }
-}
-
-.animate-blink {
-    animation: blink 1s step-start infinite;
-}
-
-.submit-button {
-    &::before {
-        @apply absolute w-full h-full bg-transparent left-0 top-0 transition-all duration-100 -z-1;
-        content: "";
-    }
-    &:hover {
-        &::before {
-            @apply bg-orange-chalk/35 translate-x-2 translate-y-2;
-        }
-    }
-    &:active {
-        &::before {
-            @apply bg-orange-chalk/35 translate-x-0 translate-y-0;
-        }
-    }
-}
-
-.scrollbar-custom {
-    scrollbar-width: thin;
-}
-
-.scrollbar-custom::-webkit-scrollbar {
-    width: 4rem;
-}
-
-.scrollbar-custom::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.scrollbar-custom::-webkit-scrollbar-thumb {
-    border-radius: 9999px;
-}
-
-.scroll-thumb-orange.scrollbar-custom::-webkit-scrollbar-thumb {
-    background-color: var(--color-orange-chalk);
-}
-
-.scroll-thumb-orange.scrollbar-custom {
-    scrollbar-color: var(--color-orange-chalk) transparent;
-}
-
-.scroll-thumb-black.scrollbar-custom::-webkit-scrollbar-thumb {
-    background-color: var(--color-blackboard);
-}
-
-.scroll-thumb-black.scrollbar-custom {
-    scrollbar-color: var(--color-blackboard) transparent;
+  0% {
+    opacity: 0;
+    width: min(75rem, calc(100% - 10rem));
+  }
+  100% {
+    opacity: 1;
+    width: 100%;
+  }
 }
 
 .animate-blink {
   animation: blink 1s step-start infinite;
 }
 
+.submit-button {
+  &::before {
+    @apply absolute w-full h-full bg-transparent left-0 top-0 transition-all duration-100 -z-1;
+    content: "";
+  }
+  &:hover {
+    &::before {
+      @apply bg-orange-chalk/35 translate-x-2 translate-y-2;
+    }
+  }
+  &:active {
+    &::before {
+      @apply bg-orange-chalk/35 translate-x-0 translate-y-0;
+    }
+  }
+}
+
+.scrollbar-custom {
+  scrollbar-width: thin;
+}
+
+.scrollbar-custom::-webkit-scrollbar {
+  width: 4rem;
+}
+
+.scrollbar-custom::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+}
+
+.scroll-thumb-orange.scrollbar-custom::-webkit-scrollbar-thumb {
+  background-color: var(--color-orange-chalk);
+}
+
+.scroll-thumb-orange.scrollbar-custom {
+  scrollbar-color: var(--color-orange-chalk) transparent;
+}
+
+.scroll-thumb-black.scrollbar-custom::-webkit-scrollbar-thumb {
+  background-color: var(--color-blackboard);
+}
+
+.scroll-thumb-black.scrollbar-custom {
+  scrollbar-color: var(--color-blackboard) transparent;
+}
+
+.animate-blink {
+  animation: blink 1s step-start infinite;
+}
 
 .submit-button {
-
+  &::before {
+    @apply absolute w-full h-full bg-transparent left-0 top-0 transition-all duration-100 -z-1;
+    content: "";
+  }
+  &:hover {
     &::before {
-        @apply absolute w-full h-full bg-transparent left-0 top-0 transition-all duration-100 -z-1;
-        content: '';
+      @apply bg-orange-chalk/35 translate-x-2 translate-y-2;
     }
-    &:hover {
-        &::before {
-            @apply bg-orange-chalk/35 translate-x-2 translate-y-2;
-        }
+  }
+  &:active {
+    &::before {
+      @apply bg-orange-chalk/35 translate-x-0 translate-y-0;
     }
-    &:active {
-        &::before {
-            @apply bg-orange-chalk/35 translate-x-0 translate-y-0;
-        }
-    }
+  }
 }
 
 .scrollbar-custom {
