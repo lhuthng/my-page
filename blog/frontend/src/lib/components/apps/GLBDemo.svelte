@@ -3,11 +3,13 @@
   import * as THREE from "three";
   import GLBLoader from "./GLBLoader.svelte";
   import { derived } from "svelte/store";
+  import { fly } from "svelte/transition";
 
-  let { name, width = "100%", height = "500px", config } = $props();
+  let { name, width = "100%", height = "500px", config, temp } = $props();
 
   let toggleWireframe = $state();
   let toggleOrbit = $state();
+  let isReady = $state(false);
 
   let wireframe = $state(false);
   let animation = $state(false);
@@ -56,9 +58,22 @@
   style:max-width={width}
   style:height
 >
-  <Canvas renderMode="on-demand" toneMapping={THREE.NoToneMapping}>
-    <GLBLoader {name} {cameraConfig} bind:toggleWireframe bind:toggleOrbit />
-  </Canvas>
+  <div
+    class="full opacity-0 transition-opacity duration-1000"
+    class:opacity-100={isReady}
+  >
+    <Canvas renderMode="on-demand" toneMapping={THREE.NoToneMapping}>
+      <GLBLoader
+        {name}
+        url={temp}
+        {cameraConfig}
+        bind:toggleWireframe
+        bind:toggleOrbit
+        bind:isReady
+      />
+    </Canvas>
+  </div>
+
   <div
     class="absolute top-0 right-0 w-full pointer-events-none has-focus:*:opacity-100! *:transition-opacity *:duration-200"
   >
@@ -83,24 +98,29 @@
       </ul>
     </div>
   </div>
-  <div class="absolute left-0 bottom-4 w-full flex gap-2 justify-center">
+  {#if isReady}
     <div
-      class="w-fit duo-btn duration-0!"
-      class:duo-blue={!wireframe}
-      class:duo-white={wireframe}
+      in:fly={{ y: 10, duration: 1000 }}
+      class="absolute left-0 bottom-4 w-full flex gap-2 justify-center"
     >
-      <button class="duration-0!" onclick={() => (wireframe = !wireframe)}
-        >Wireframe {wireframe ? "on" : "off"}</button
+      <div
+        class="w-fit duo-btn duration-0!"
+        class:duo-blue={!wireframe}
+        class:duo-white={wireframe}
       >
-    </div>
-    <div
-      class="w-fit duo-btn duration-0!"
-      class:duo-blue={!wireframe}
-      class:duo-white={wireframe}
-    >
-      <button class="duration-0!" onclick={() => (orbit = !orbit)}
-        >Auto Rotate {orbit ? "on" : "off"}</button
+        <button class="duration-0!" onclick={() => (wireframe = !wireframe)}
+          >Wireframe {wireframe ? "on" : "off"}</button
+        >
+      </div>
+      <div
+        class="w-fit duo-btn duration-0!"
+        class:duo-blue={!wireframe}
+        class:duo-white={wireframe}
       >
+        <button class="duration-0!" onclick={() => (orbit = !orbit)}
+          >Auto Rotate {orbit ? "on" : "off"}</button
+        >
+      </div>
     </div>
-  </div>
+  {/if}
 </div>

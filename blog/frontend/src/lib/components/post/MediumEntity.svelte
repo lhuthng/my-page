@@ -96,6 +96,23 @@
           {/if}
         </button>
       </div>
+    {:else if type.startsWith("model")}
+      <svg
+        class="m-auto w-8 h-8 lg:w-10 lg:h-10 text-primary"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linejoin="round"
+        stroke-linecap="round"
+        aria-label="3d-model"
+        role="img"
+      >
+        <path d="M12 2 3.5 6.5 12 11 20.5 6.5 12 2Z" />
+        <path d="M3.5 6.5V17.5L12 22V11" />
+        <path d="M20.5 6.5V17.5L12 22" />
+        <path d="M12 11 20.5 6.5" />
+      </svg>
     {/if}
   </div>
   {#if changeName}

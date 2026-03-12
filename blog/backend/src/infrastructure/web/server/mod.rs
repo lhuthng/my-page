@@ -57,6 +57,7 @@ impl MediaConfig {
             MediaType::AudioMp3,
             MediaType::AudioOgg,
             MediaType::AudioMp3,
+            MediaType::ModelGlb,
         ];
 
         let allowed_avatar_types = vec![
