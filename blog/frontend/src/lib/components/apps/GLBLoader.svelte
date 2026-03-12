@@ -4,17 +4,17 @@
     Environment,
     GLTF,
     OrbitControls,
-    useDraco,
-    useGltf,
     useGltfAnimations,
   } from "@threlte/extras";
   import { AgXToneMapping, LinearToneMapping, SRGBColorSpace } from "three";
 
   let {
     name,
+    url,
     cameraConfig,
     toggleWireframe = $bindable(),
     toggleOrbit = $bindable(),
+    isReady = $bindable(),
   } = $props();
 
   let { position, fov, target, autoRotate } = $state(cameraConfig);
@@ -29,6 +29,23 @@
       Object.values($actions).forEach((clip) => {
         clip.reset().play();
       });
+    }
+  });
+
+  let gltfUrl = $state();
+  $effect(async () => {
+    isReady = false;
+    if (url) {
+      gltfUrl = url;
+      isReady = true;
+    } else {
+      const tryUrl = `/api/media/i/${name}`;
+      const res = await fetch(tryUrl);
+
+      if (res.ok) {
+        gltfUrl = tryUrl;
+        isReady = true;
+      }
     }
   });
 
@@ -56,4 +73,6 @@
   />
 </T.PerspectiveCamera>
 
-<GLTF {name} url={`/models/${name}`} useDraco={true} bind:gltf={$gltf} />
+{#if isReady && gltfUrl}
+  <GLTF {name} url={gltfUrl} bind:gltf={$gltf} />
+{/if}

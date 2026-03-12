@@ -15,19 +15,10 @@ pub enum MediaType {
     AudioMp3,
     AudioOgg,
     AudioWav,
+    ModelGlb,
 }
 
 impl MediaType {
-    // pub fn as_str(&self) -> &'static str {
-    //     match self {
-    //         MediaType::ImagePng => "image/png",
-    //         MediaType::ImageJpeg => "image/jpeg",
-    //         MediaType::ImageGif => "image/gif",
-    //         MediaType::ImageWebp => "image/webp",
-    //         MediaType::VideoMp4 => "video/mp4",
-    //         MediaType::VideoWebm => "video/webm",
-    //     }
-    // }
     pub fn get_extension(&self) -> &'static str {
         match self {
             MediaType::ImagePng => ".png",
@@ -39,6 +30,7 @@ impl MediaType {
             MediaType::AudioMp3 => ".mp3",
             MediaType::AudioOgg => ".ogg",
             MediaType::AudioWav => ".wav",
+            MediaType::ModelGlb => ".glb",
         }
     }
 }
@@ -56,6 +48,7 @@ impl FromStr for MediaType {
             "audio/mpeg" => Ok(Self::AudioMp3),
             "audio/ogg" => Ok(Self::AudioOgg),
             "audio/wav" => Ok(Self::AudioWav),
+            "model/gltf-binary" => Ok(Self::ModelGlb),
             _ => Err(MediaError::InvalidFileType),
         }
     }

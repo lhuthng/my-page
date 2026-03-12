@@ -39,7 +39,7 @@
       .use(mkKatex)
       .use(mediaWithShortcutPlugin, { mediaDictionary })
       .use(youtubeBlockPlugin)
-      .use(appBlockPlugin)
+      .use(appBlockPlugin, { mediaDictionary })
       .use(revealPlugin)
       .use(namedContainerPlugin)
       .use(codeHighlightPlugin)
