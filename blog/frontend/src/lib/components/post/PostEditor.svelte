@@ -15,6 +15,12 @@
   import PBody from "../PBody.svelte";
 
   const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
+  const glbSyntax = /:::app\s+glb-demo\s+([^\s]+)\s*/g;
+
+  // temporary usage only
+  const ignored = [".glb"];
+  //
+
   const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
   const maxFileSize = 5 * 1024 * 1024;
 
@@ -227,11 +233,22 @@
           ...editingData.content.matchAll(mediaSyntax).map((match) => match[1]),
         ],
         ...[
+          ...editingData.content.matchAll(glbSyntax).map((match) => match[1]),
+        ],
+        ...[
           ...editingData.draft.matchAll(mediaSyntax).map((match) => match[1]),
         ],
+        ...[...editingData.draft.matchAll(glbSyntax).map((match) => match[1])],
       ];
 
-      offlineKeys = keys.filter((key) => !isOnline(key));
+      offlineKeys = keys.filter((key) => {
+        if (ignored.some((ext) => key.endsWith(ext))) {
+          return false;
+        }
+        return !isOnline(key);
+      });
+
+      console.log(keys, offlineKeys);
 
       const missing = offlineKeys.filter((key) => !isOffline(key));
 

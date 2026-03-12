@@ -92,6 +92,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/s/{short_name}", get(handlers::media::get_link))
+                .route("/i/{short_name}", get(handlers::media::get_media))
                 .route("/all", get(handlers::media::search)),
         )
         .fallback_service(get_service(ServeDir::new(&state.media_config.dir)));
