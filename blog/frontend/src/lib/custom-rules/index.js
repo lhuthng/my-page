@@ -11,11 +11,11 @@ export function pluginExtend(root) {
     if (container.__mounted) return;
     container.__mounted = true;
 
-    const { name, type, width, height, config } = container.dataset;
+    const { name, type, width, height, config, temp } = container.dataset;
 
     mount(App, {
       target: container,
-      props: { name, type, width, height, config },
+      props: { name, type, width, height, config, temp },
     });
   });
 
@@ -286,7 +286,9 @@ export function youtubeBlockPlugin(md) {
   };
 }
 
-export function appBlockPlugin(md) {
+export function appBlockPlugin(md, options) {
+  const mediaDictionary = options?.mediaDictionary || {};
+
   md.block.ruler.before("fence", "app", (state, startLine, endLine, silent) => {
     const pos = state.bMarks[startLine] + state.tShift[startLine];
     const max = state.eMarks[startLine];
@@ -303,24 +305,23 @@ export function appBlockPlugin(md) {
     const width = !parts[3] || parts[3] === "_" ? "100%" : parts[3];
     const height = !parts[4] || parts[4] === "_" ? "400px" : parts[4];
     const rest = parts.slice(5).join("-") || "";
+    const temp = mediaDictionary[name];
 
     const token = state.push("app_block", "", 0);
-    token.meta = { type, name, width, height, rest };
+    token.meta = { type, name, width, height, rest, temp };
 
     state.line = startLine + 1;
     return true;
   });
 
   md.renderer.rules.app_block = (tokens, idx) => {
-    const { type, name, width, height, rest } = tokens[idx].meta;
+    const { type, name, width, height, rest, temp } = tokens[idx].meta;
 
-    const dataBlock =
+    let dataBlock =
       `
-      data-name="${name}"
-      data-type="${type}"
-      data-width="${width}px"
-      data-height="${height}px"
-    ` + (rest ? `data-config=${rest}` : "");
+      data-name=${name} data-type=${type} data-width=${width}px data-height=${height}px ` +
+      (rest ? `data-config=${rest} ` : "") +
+      (temp ? `data-temp=${temp} ` : "");
 
     // Return an empty div with data attributes
     return `

@@ -3,13 +3,13 @@
   import HTMLApp from "./apps/HTMLApp.svelte";
   import LottieStateSwitcher from "./apps/LottieStateSwitcher.svelte";
 
-  let { name, type, width, height, config } = $props();
+  let { name, type, width, height, config, temp } = $props();
 </script>
 
 {#if type === "html"}
   <HTMLApp {name} {width} {height} {config} />
 {:else if type === "glb-demo"}
-  <GLBDemo {name} {type} {width} {height} {config} />
+  <GLBDemo {name} {type} {width} {height} {config} {temp} />
 {:else if type === "lottie"}
   {@const states = config
     .split("-")
