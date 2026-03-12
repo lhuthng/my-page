@@ -6,7 +6,9 @@ use axum::{
     extract::{Multipart, Path, Query, State},
     response::IntoResponse,
 };
+use http::{HeaderValue, header};
 use serde::{Deserialize, Serialize};
+use tokio::fs;
 
 use crate::{
     application::{
@@ -180,6 +182,26 @@ pub async fn get_link(
         url: link.url,
         file_type: link.file_type,
     }))
+}
+
+#[axum::debug_handler]
+pub async fn get_media(
+    State(state): State<Arc<AppState>>,
+    Path(short_name): Path<String>,
+) -> Result<impl IntoResponse, MediaError> {
+    let link = state
+        .media_service
+        .get_link(GetLinkCommand { short_name })
+        .await?;
+
+    let bytes = fs::read(&link.url)
+        .await
+        .map_err(|_| MediaError::FileNotFound)?;
+
+    let content_type = HeaderValue::from_str(&link.file_type)
+        .map_err(|_| MediaError::InternalError("Invalid content type".to_string()))?;
+
+    Ok(([(header::CONTENT_TYPE, content_type)], bytes))
 }
 
 #[axum::debug_handler]

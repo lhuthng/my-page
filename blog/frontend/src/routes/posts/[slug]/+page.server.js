@@ -21,7 +21,7 @@ export async function load({ fetch, params, setHeaders }) {
 
   if (res.ok) {
     setHeaders({
-      "cache-control": "public, max-age=60, s-maxage=60",
+      "cache-control": "public, max-age=10, s-maxage=10",
     });
     const data = await res.json();
 

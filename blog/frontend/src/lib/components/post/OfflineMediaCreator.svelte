@@ -17,6 +17,8 @@
     "audio/mpeg",
     "audio/ogg",
     "audio/wav",
+
+    "model/gltf-binary",
   ];
   function addMedia(files) {
     const media = [];
