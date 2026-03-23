@@ -39,7 +39,7 @@
 
     Sign the sub domains, be sure they are correctly assigned on your dns manager.
     ```bash
-    sudo certbot --nginx -d portfolio.huuthang.site -d blog.huuthang.site -d ws.huuthang.site
+    sudo certbot --nginx -d portfolio.huuthangle.site -d blog.huuthangle.site -d ws.huuthangle.site
     ```
 
     Create the configs for the portfolio and blog
