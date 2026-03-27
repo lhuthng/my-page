@@ -15,10 +15,11 @@ export default function MaxPlanck({ active, onClick }: ProjectProps) {
       }
       description={
         <div className="flex flex-col w-full h-full bg-mpg-green space-y-4 p-4 text-white-chalk">
-          <h1>Scientific Code Optimization</h1>
+          <h1>3D Data Pipeline Modernization</h1>
           <p>
-            Performance overhaul of complex scientific processing, migrating
-            legacy MATLAB scripts to a faster, fully tested Python environment.
+            Modernized high-complexity 3D data processing pipelines by migrating
+            legacy MATLAB codebases to high-performance Python environments,
+            integrating automated testing and custom file parsing.
           </p>
           <p>
             <strong>Technologies:</strong> Python (NumPy, SciPy, Pandas,
@@ -27,41 +28,53 @@ export default function MaxPlanck({ active, onClick }: ProjectProps) {
         </div>
       }
       details={
-        <div className="w-full h-full bg-white border-mpg-green text-black space-y-4 md:rounded-tr-xl not-md:rounded-bl-xl p-2 border-2">
+        <div className="w-full h-full bg-white border-mpg-green text-black space-y-4 md:rounded-tr-xl not-md:rounded-bl-xl p-4 border-2 box-border">
           <h1>
-            Scientific Code Optimization: A Shift from GUI Development to
-            Performance Engineering
+            <strong>
+              Scientific Code Optimization: From Visualization to Performance
+              Engineering
+            </strong>
           </h1>
           <p>
             My role at the Max-Planck-Institut für Biophysik began with GUI
             development for scientific visualization. However, I soon pivoted to
-            address a critical departmental bottleneck: the slow, unsupported,
-            and unverified legacy MATLAB processing pipeline. This operational
-            friction was severely limiting research velocity.
+            address a critical departmental bottleneck: a slow, unverified
+            legacy MATLAB processing pipeline that was limiting research
+            velocity.
           </p>
           <h1>
-            Project Focus: Performance Overhaul and Migration (MATLAB to Python)
+            <strong>
+              Project Focus: 3D Pipeline Migration &amp; Optimization (MATLAB to
+              Python)
+            </strong>
           </h1>
           <p>
-            I led the effort to move all the old code to a new, faster system.
+            I executed the technical migration of core 3D data processing
+            workflows to a modern, scalable Python ecosystem.
           </p>
           <ul className="list-disc list-inside space-y-2">
             <li>
-              <strong>Move the Code:</strong> I took most of the complex data
-              process and moved it from old MATLAB scripts to a faster Python
-              system.
+              <strong>System Migration:</strong> Ported complex mathematical
+              data processing logic from legacy MATLAB scripts to a
+              high-performance Python environment, ensuring 1:1 functional
+              parity.
             </li>
             <li>
-              <strong>Make it Faster:</strong> I rewrote the key math steps
-              using powerful Python tools like NumPy and Pandas. This made the
-              data processing much quicker, letting scientists test ideas right
-              away.
+              <strong>Mathematical Optimization:</strong> Rewrote core
+              computational steps using <strong>NumPy and Pandas</strong>,
+              significantly accelerating processing speeds and enabling
+              real-time data iteration for researchers.
             </li>
             <li>
-              <strong>Custom Data Parser:</strong> I built a custom Python tool
-              to read and write specialized data files with a unique extension.
-              This made handling these files much faster, which cut the time
-              scientists spent on preparing data by half.
+              <strong>Specialized File Parsers:</strong> Engineered custom
+              Python parsers for specialized data extensions, automating data
+              ingestion and reducing manual preparation time by 50%.
+            </li>
+            <li>
+              <strong>Quality Assurance:</strong> Established code reliability
+              by implementing a comprehensive automated testing suite using{" "}
+              <strong>pytest</strong>
+              to validate scientific data integrity.
             </li>
           </ul>
         </div>

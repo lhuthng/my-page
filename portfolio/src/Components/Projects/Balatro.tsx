@@ -159,75 +159,80 @@ export default function Balatro({ active, onClick }: ProjectProps) {
         </div>
       }
       description={
-        <div className="flex flex-col w-full h-full space-y-4 p-4 bg-white-chalk text-black">
-          <h1>Balatro Localization</h1>
+        <div className="flex flex-col w-full h-full space-y-4 p-4 bg-white-chalk text-black border-2 border-black">
+          <h1>Game Reverse Engineering & Localization</h1>
           <p>
-            Full Vietnamese localization for the popular Poker-builder game
-            Balatro, including custom font support and cultural adjustments.
+            Developed a full Vietnamese localization for the roguelike Balatro.
+            This involved reverse-engineering Lua-based game logic, engineering
+            custom pixel-font glyphs, and building automated regex-based
+            extraction tools.
           </p>
           <p>
-            <strong>Technologies:</strong> Lua, Bash, Custom Localization Tool
-            (HTML/JS)
+            <strong>Technologies:</strong> Lua (Löve Engine), Bash, FontForge,
+            JavaScript, Regex
           </p>
         </div>
       }
       details={
-        <div className="bg-orange-chalk w-full h-full text-black overflow-hidden p-4 space-y-4">
+        <div className="bg-orange-chalk w-full h-full text-black overflow-hidden p-4 space-y-4 border-2 border-black">
           <p>
-            As a passionate player of Balatro, I initiated a full Vietnamese
-            localization project after discovering the game was built on the
-            highly accessible <strong>Löve (Lua) engine</strong>). This required
-            me to reverse-engineer the game's source code, gaining a deep
-            understanding of its internal logic, data handling, and rendering
-            pipelines to correctly inject custom translation and logic hooks.{" "}
-            <strong>
-              You can interact with the red strip on the video above to see the
-              translation in action - it's draggable!
+            As a fan of Balatro, I initiated this project to bring the game to
+            the Vietnamese community. By reverse-engineering the{" "}
+            <strong>Löve (Lua) engine</strong>, I gained access to the game's
+            source code, allowing me to hook into the rendering pipeline and
+            modify internal data structures.
+            <br />
+            <strong className="block mt-2">
+              Interaction: You can drag the red strip on the video above to
+              toggle between the English and Vietnamese versions in real-time.
             </strong>
           </p>
           <p>
-            To support the Vietnamese language's complex character set, I
-            performed essential font engineering. I used{" "}
-            <strong>FontForge</strong> to modify and extend the game's typeface,
-            ensuring proper rendering of all diacritics. The project also
-            included the development of technical tooling, such as a Bash script
-            to reliably locate and inject the custom fonts and localization
-            files into the game directory.
+            <strong>The Glyph Challenge:</strong> Balatro uses a specialized
+            pixel-art typeface. To support Vietnamese diacritics while
+            preserving the game's aesthetic, I used <strong>FontForge</strong>{" "}
+            and sprite-sheet manipulation to manually engineer missing glyphs
+            into the game's font atlas, ensuring perfect alignment with the
+            original pixel grid.
           </p>
           <p>
-            Finally, I built a custom, user-friendly localization tool using{" "}
-            <strong>HTML/JavaScript</strong>. This utility streamlined the
-            process of reading, modifying, and managing the translation data,
-            significantly improving the iteration speed and accuracy of the
-            overall localization effort.
+            <strong>Automation Tooling:</strong> To manage thousands of strings
+            across complex Lua files, I developed a{" "}
+            <strong>custom web utility (HTML/JS)</strong>. This tool used{" "}
+            <strong>Regex</strong> to safely isolate translatable text from
+            executable code, preventing syntax errors during injection. I also
+            authored
+            <strong>Bash scripts</strong> to automate the extraction and
+            repacking of game resources (the <code>.love</code> archive).
           </p>
-          <p>
-            View the full installation instructions here:{" "}
+          <div className="flex items-center gap-4 pt-2">
             <a
               href="https://github.com/lhuthng/balatro-vi-localization"
               target="_blank"
+              rel="noopener noreferrer"
             >
               <i
-                className="inline-block w-8 h-8 translate-y-2 hover:scale-105"
+                className="inline-block w-8 h-8 hover:scale-110 transition-transform"
                 style={{
                   backgroundColor: "black",
                   maskImage: `url(${github})`,
+                  WebkitMaskImage: `url(${github})`,
+                  maskRepeat: "no-repeat",
+                  maskPosition: "center",
                 }}
               />
             </a>
-          </p>
-          <p>
-            For an in-depth write-up on the technical challenges, you can read
-            more on my blog{" "}
-            <a
-              className="font-bold text-blue-400 hover:brightness-110"
-              target="_blank"
-              href="https://blog.huuthang.site/posts/i-added-vietnamese-localization-to-balatro"
-            >
-              here
-            </a>
-            .
-          </p>
+            <p>
+              Read the full technical breakdown on my blog:{" "}
+              <a
+                className="font-bold text-blue-700 hover:underline"
+                target="_blank"
+                href="https://blog.huuthangle.site/posts/i-added-vietnamese-localization-to-balatro"
+              >
+                huuthangle.site
+              </a>
+            </p>
+          </div>
         </div>
       }
     />

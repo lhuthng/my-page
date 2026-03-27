@@ -60,51 +60,60 @@ export default function StyledPortfolio({ active, onClick }: ProjectProps) {
         <div className="flex flex-col w-full h-full space-y-4 p-4 bg-purple-300 text-black font-omori-2 text-2xl">
           <h1 className="font-omori-1 text-3xl!">Digital Creative Portfolio</h1>
           <p>
-            Personal portfolio built with React focused on showing digital arts,
-            3D modeling, and music production, styled with a custom, hand-drawn
-            aesthetic.
+            A highly stylized React-based showcase for my 3D modeling, digital
+            arts, and music production, featuring a custom hand-drawn "notebook"
+            UI.
           </p>
           <p>
-            <strong>Technology:</strong> React, HTML5, CSS3, JavaScript
+            <strong>Stack:</strong> React, Custom CSS3, GSAP, Multimedia APIs
           </p>
         </div>
       }
       details={
-        <div className="bg-purple-300 w-full h-full not-md:border-t-2 md:border-l-2 border-black text-black font-omori-2 text-2xl p-4">
+        <div className="bg-purple-300 w-full h-full not-md:border-t-2 md:border-l-2  text-black font-omori-2 text-2xl p-4 space-y-4">
           <p>
-            This is a personal portfolio built with React to display my creative
-            work: digital arts, 3D modeling, and music production.
+            This project serves as a curated digital gallery for my creative
+            outputs outside of traditional software engineering—bridging the gap
+            between technical development and artistic production.
           </p>
 
-          <div>
-            Key Features and Style
-            <ul className="[&>li>strong]:font-extrabold">
+          <div className="space-y-4">
+            <h2 className="font-omori-1 text-3xl">Artistic Features & Style</h2>
+            <ul className="space-y-4 [&>li>strong]:font-extrabold">
               <li className="flex flex-col">
-                <figure className="py-4">
+                <figure className="py-2">
                   <img
-                    className="mx-auto rounded-xl overflow-hidden"
+                    className="mx-auto rounded-xl border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
                     src={skills}
                     style={{
                       height: "auto",
-                      width: "min(80%, 40rem)",
+                      width: "min(90%, 40rem)",
                     }}
+                    alt="Hand-drawn skills interface snippet"
                   />
-                  <figcaption className="text-center">A snippet</figcaption>
+                  <figcaption className="text-center text-sm mt-2 font-bold italic">
+                    Custom "Omori-style" Skill Tree Interface
+                  </figcaption>
                 </figure>
-                <strong>Custom Design:</strong> The entire UI is styled with a
-                custom, hand-drawn, notebook aesthetic, directly inspired by the
-                game Omori. I used custom CSS3 and unique assets to create this
-                look.
+                <p className="mt-2">
+                  <strong>Immersive Hand-Drawn UI:</strong> Developed a unique
+                  "notebook" aesthetic inspired by <em>Omori</em>. The entire
+                  interface is built from custom-sketched assets and hand-coded
+                  CSS3 borders, breaking away from standard "flat" design to
+                  create a tactile, organic user experience.
+                </p>
               </li>
               <li>
-                <strong>Art Gallery:</strong> The site uses React to manage the
-                art gallery, ensuring a responsive and smooth experience for
-                viewing all media types, including high-resolution images and
-                embedded music.
+                <strong>Multimedia Gallery:</strong> Engineered a custom media
+                handler in React to manage high-fidelity 3D renders, digital
+                illustrations, and embedded audio tracks with synchronized UI
+                feedback.
               </li>
               <li>
-                <strong>Technology:</strong> Built as a single-page application
-                using React, HTML5, CSS3, and JavaScript.
+                <strong>Thematic Consistency:</strong> Integrated specialized
+                typography and custom SVG-masked filters to ensure all
+                components—from buttons to cards—remain consistent with the
+                hand-drawn theme.
               </li>
             </ul>
           </div>

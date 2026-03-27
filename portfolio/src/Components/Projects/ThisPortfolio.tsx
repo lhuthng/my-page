@@ -20,79 +20,91 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
       }
       description={
         <div className="flex flex-col w-full h-full space-y-4 p-4 bg-orange-chalk text-black">
-          <h1>Personal Web Server</h1>
+          <h1>Self-Hosted Infrastructure & DevOps</h1>
           <p>
-            A VPS-based, full-stack environment that hosts this portfolio, a
-            personal blog, backend services, and live development demos for
-            clients.
+            A custom-architected VPS environment hosting a multi-tenant
+            ecosystem of Svelte/React apps, Rust backends, and automated CI/CD
+            pipelines with Nginx/Apache orchestration.
           </p>
           <p>
-            <strong>Technology:</strong> GitHub Actions (CI/CD), VPS, Nginx,
-            Apache2, Node.js, React, Svelte, UI/UX Design, HTML5, CSS3,
-            JavaScript
+            <strong>Stack:</strong> Linux (Ubuntu), Nginx, Apache, Docker,
+            GitHub Actions, Rust, Node.js
           </p>
         </div>
       }
       details={
-        <div className="bg-orange-chalk w-full h-full not-md:border-t-2 md:border-l-2 border-black text-black space-y-4 p-4">
-          <p>
-            A playground without constraints. Building the engine from scratch
-            to own the foundation, the wiring, and the blueprint.
+        <div className="bg-orange-chalk w-full h-full not-md:border-t-2 md:border-l-2 text-black space-y-4 p-4">
+          <p className="italic font-medium">
+            "A playground without constraints. Building the engine from scratch
+            to own the foundation, the wiring, and the blueprint."
           </p>
           <p>
-            This project showcases advanced DevOps and server management
-            expertise across a multi-faceted hosting architecture.
+            This infrastructure project demonstrates my ability to manage the
+            full deployment lifecycle, moving beyond "black-box" hosting to a
+            transparent, self-managed server architecture.
           </p>
           <div className="space-y-4">
-            <h1>Key Features &amp; Technical Depth: </h1>
+            <h2 className="text-xl font-bold border-b border-black pb-1">
+              Technical Architecture:
+            </h2>
             <ul className="list-disc list-inside ml-2 space-y-2">
               <li>
-                <strong>Infrastructure:</strong> Full-stack environment hosted
-                on a Linux VPS (Contabo) serving as the core hosting
-                infrastructure for the portfolio, blog, and backend services.
+                <strong>Traffic Orchestration:</strong> Implemented a
+                <strong> multi-layered proxy system</strong> using{" "}
+                <strong>Nginx</strong> as a high-performance entry point for SSL
+                termination, efficiently routing traffic to{" "}
+                <strong>Apache2</strong> and <strong>Node.js</strong>{" "}
+                microservices.
               </li>
               <li>
-                <strong>Custom Engine:</strong> Modular architecture using a{" "}
-                <strong>Rust</strong> and <strong>Node.Js</strong> backend with
-                a <strong>Svelte 5</strong>to remove middleman limitations.
+                <strong>Modular Backend:</strong> Leverages a high-performance
+                <strong> Rust</strong> and <strong>Node.js</strong> runtime
+                environment to serve a diverse range of{" "}
+                <strong>Svelte 5</strong> and
+                <strong> React</strong> applications with minimal overhead.
               </li>
               <li>
-                <strong>Traffic Orchestration: </strong> Multi-layered proxy
-                system using <strong>Nginx</strong> for SSL termination and
-                caching, with <strong>Apache2</strong>
-                for specialized application hosting.
+                <strong>Deployment Automation:</strong> Engineered
+                <strong> GitHub Actions</strong> CI/CD workflows for automated
+                build/deploy cycles, ensuring zero-downtime updates across the
+                entire application suite.
               </li>
               <li>
-                <strong>Automation:</strong> Fully automated CI/CD pipeline
-                utilizing GitHub Actions for zero-downtime deployment.
+                <strong>Network Sovereignty:</strong> Managed domain
+                segmentation and DNS via <strong>Joker.com</strong>, including
+                subdomain logic for dedicated mail servers and private
+                development environments.
               </li>
               <li>
-                <strong>Network Services:</strong> Domain configuration via
-                joker.com, including subdomain segmentation and maintenance of a
-                dedicated mail server.
-              </li>
-              <li>
-                <strong>Diverse Content Hosting:</strong> The single platform
-                concurrently hosts a variety of personal and client-facing
-                assets, including the main <strong>Digital Portfolio</strong>,{" "}
-                <strong>a Personal Blog</strong>, various{" "}
-                <strong>backend APIs</strong>,{" "}
-                <strong>live development demos</strong>, and custom{" "}
-                <strong>game servers</strong>.
+                <strong>Diverse Ecosystem:</strong> Concurrently hosts
+                <strong> Digital Arts Gallery</strong>,{" "}
+                <strong>Personal Blog</strong>,<strong> backend APIs</strong>,
+                and custom <strong>game servers</strong>
+                on a single, optimized Linux instance (Contabo).
               </li>
             </ul>
           </div>
-          <p>
-            If you are interested in the "How" and "Why" behind this
-            architecture, you can read this kick-off on my blog:{" "}
-            <a
-              className="text-cyan-600 hover:font-semibold"
-              href="https://blog.huuthang.site/posts/i-made-a-blog"
-            >
-              [So..., I Made a Blog]
-            </a>
-            .
-          </p>
+          <div className="pt-2">
+            <p className="font-bold">Explore the "How" and "Why":</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>
+                <a
+                  className="text-cyan-700 hover:underline"
+                  href="https://blog.huuthangle.site/posts/the-hosting-cloud"
+                >
+                  [Technical Setup: The Hosting Cloud]
+                </a>
+              </li>
+              <li>
+                <a
+                  className="text-cyan-700 hover:underline"
+                  href="https://blog.huuthangle.site/posts/i-made-a-blog"
+                >
+                  [Philosophy: So..., I Made a Blog]
+                </a>
+              </li>
+            </ul>
+          </div>
         </div>
       }
     />
