@@ -127,81 +127,82 @@ export default function Limpext({ active, onClick }: ProjectProps) {
       }
       description={
         <div className="flex flex-col w-full h-full bg-blue-400 space-y-4 p-4 text-white">
-          <h1>Client Web Development & SEO</h1>
+          <h1>Full-Stack Web Development &amp; SEO</h1>
           <p>
             Developed custom, high-performance landing pages using Svelte 5 and
-            Tailwind CSS, featuring dynamic localization and deployment support.
+            Tailwind CSS, featuring Leaflet map integrations, full localization
+            support, and optimized Apache server configurations.
           </p>
           <p>
-            <strong>Technologies:</strong> Svelte 5, HTML5, CSS3, JavaScript,
-            Tailwind CSS, GSAP, PHP, Apache, SEO
+            <strong>Technologies:</strong> Svelte 5, GSAP, Tailwind CSS,
+            Leaflet, PHP, Apache, SEO
           </p>
         </div>
       }
       details={
         <div className="w-full h-full bg-white text-black border-blue-400 md:rounded-tr-xl not-md:rounded-bl-xl p-4 border-2 space-y-4">
           <h1>
-            Client Web Development &amp; SEO: High-Performance Landing Pages
+            <strong>
+              Freelance Web Development &amp; SEO: High-Performance Landing
+              Pages
+            </strong>
           </h1>
           <p>
-            As a freelancer, I delivered a complete web solution for{" "}
+            As a developer, I delivered an end-to-end web solution for{" "}
             <a
               className="text-blue-500 hover:brightness-110 hover:underline"
               href="https://limpext.de"
             >
               Limpext
             </a>
-            , focusing on speed, custom design, and integrated SEO to boost
-            their online presence.
+            , focusing on performance engineering, custom interactive
+            components, and strategic SEO to drive client engagement.
           </p>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-4">
             <div>
-              <strong>Core Contributions:</strong>
-              <ul className="ml-4 list-disc list-inside">
+              <strong>Frontend &amp; Performance Engineering:</strong>
+              <ul className="ml-4 list-disc list-inside space-y-1">
                 <li>
-                  <strong>Custom Site Development: </strong>Built two fully
-                  customized, high-performance landing sites using{" "}
-                  <strong>Svelte 5</strong> and <strong>Tailwind CSS</strong>. I
-                  used no templates, ensuring the design and layout perfectly
-                  matched the client's brand and needs.
+                  <strong>Custom UI Development: </strong>Built two
+                  zero-template, high-performance landing sites using{" "}
+                  <strong>Svelte 5</strong> and
+                  <strong> Tailwind CSS</strong> to perfectly match the client's
+                  branding and service requirements.
                 </li>
                 <li>
-                  <strong>Performance &amp; Localization: </strong>Engineered a
-                  seamless localization framework directly into the sites to
-                  maximize speed and support dynamic language switching without
-                  slow page reloads.
+                  <strong>Localization &amp; Speed: </strong>Engineered a custom
+                  localization framework to support dynamic language switching
+                  without page reloads, maintaining high Lighthouse performance
+                  scores.
                 </li>
                 <li>
-                  <strong>Interactive Features:</strong> Developed and
-                  integrated an interactive map directly onto the page to
-                  improve user engagement and usability for location-based
-                  information.
-                </li>
-                <li>
-                  <strong>Design &amp; Animation:</strong> Redesigned the
-                  client's logos and created engaging animations using GSAP
-                  (GreenSock Animation Platform) to modernize the look and feel
-                  of the site.
+                  <strong>Interactive Components:</strong> Integrated custom
+                  <strong> Leaflet</strong> map integrations and created
+                  engaging scroll animations using <strong>GSAP</strong> to
+                  modernize the user journey.
                 </li>
               </ul>
             </div>
             <div>
-              <strong>Technical &amp; Backend Integration:</strong>
-              <ul className="ml-4 list-disc list-inside">
+              <strong>System Architecture &amp; Visibility:</strong>
+              <ul className="ml-4 list-disc list-inside space-y-1">
                 <li>
-                  <strong>Deployment and Hosting:</strong> Assisted in the full
-                  deployment process with <strong>Alfahosting</strong>, setting
-                  up the environment on <strong>Apache2</strong>.
+                  <strong>Deployment &amp; Routing:</strong> Managed the
+                  production deployment on <strong>Alfahosting</strong>,
+                  configuring
+                  <strong> Apache</strong> environments including web routing
+                  and server-side environment settings.
                 </li>
                 <li>
-                  <strong>Backend Service: </strong>Integrated a simple backend
-                  service (using PHP) to successfully handle and manage
-                  submissions from the contact forms.
+                  <strong>Data Handling: </strong>Architected backend workflows
+                  with
+                  <strong> PHP</strong> to manage secure data handling and
+                  automated lead generation from customer contact forms.
                 </li>
                 <li>
-                  <strong>SEO Implementation:</strong> Optimized the sites for
-                  search engines by implementing structured metadata to ensure
-                  better indexing and visibility on search results pages.
+                  <strong>SEO Optimization:</strong> Implemented structured
+                  metadata and SEO-friendly routing to ensure organic search
+                  visibility and proper indexing.
                 </li>
               </ul>
             </div>

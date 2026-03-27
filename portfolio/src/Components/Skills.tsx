@@ -765,7 +765,7 @@ export default function Skills() {
         </div>
         <div className="relative flex justify-center items-center gap-10 bg-amber-100 w-full h-20 border-t-2 border-b-2 border-gray-chalk-dark text-base [&>a]:bg-red-600 [&>a]:p-[2px_12px] [&>a]:rounded-md [&>a]:cursor-pointer [&>a]:hover:brightness-110 [&>a]:hover:scale-105 [&>a]:transition-all [&>a]:duration-100 text-white z-0">
           <span className="absolute left-1/2 top-1/2 -translate-1/2 h-1 w-20 bg-red-600 -z-1" />
-          <a href="https://blog.huuthang.site/posts">View the Campaign Log</a>
+          <a href="https://blog.huuthangle.site/posts">View the Campaign Log</a>
           <a href="#contact-form">Propose a New Quest</a>
         </div>
         <span className="absolute right-4 bottom-4">4</span>
