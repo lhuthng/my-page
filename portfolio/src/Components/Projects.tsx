@@ -35,7 +35,7 @@ export default function Projects() {
               More projects can be found on{" "}
               <a
                 className="inline-block w-16 hover:font-semibold text-blue-500"
-                href="https://blog.huuthang.site"
+                href="https://blog.huuthangle.site"
               >
                 my blog
               </a>
