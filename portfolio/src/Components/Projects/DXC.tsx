@@ -18,15 +18,15 @@ export default function DXC({ active, onClick }: ProjectProps) {
       }
       description={
         <div className="flex flex-col w-full h-full space-y-4 p-4 bg-deep-violet text-white-chalk">
-          <h1>Enterprise Application Maintenance &amp; Migration</h1>
+          <h1>Enterprise E-Commerce Engineering &amp; Modernization</h1>
           <p>
-            Support for a large-scale, legacy e-commerce system, including
-            critical transaction bug resolution and the creation of internal API
-            testing tools.
+            Engineered responsive UIs and optimized backend logic for enterprise
+            e-commerce platforms, focusing on high-scale stability, REST API
+            integrations, and automated regional system migrations.
           </p>
           <p>
-            <strong>Technologies:</strong> HTML/CSS/JS, AngularJS, C#, ASP.NET
-            Framework, MongoDB, OracleDB, ISS, TaskScheduler
+            <strong>Technologies:</strong> React, TypeScript, JavaScript, .NET
+            Framework, OracleDB, IIS, Task Scheduler, Azure DevOps
           </p>
         </div>
       }
@@ -46,29 +46,30 @@ export default function DXC({ active, onClick }: ProjectProps) {
             <div>
               <h1>
                 <strong>
-                  Project 1: E-Commerce Stability &amp; Tooling (Baker &amp;
+                  Project 1: Enterprise E-Commerce & Internal Tooling (Baker &
                   Taylor)
                 </strong>
               </h1>
               <p>
-                I provided full-stack support for a high-volume e-commerce
-                platform.
+                I engineered high-performance front-end solutions and optimized
+                data handling for a high-volume e-commerce ecosystem.
               </p>
               <ul className="list-disc list-inside">
                 <li>
-                  <strong>Front-End Focus: </strong>Used AngularJS to enhance
-                  the user experience, refining key interfaces like the Book
-                  Details page for reliability and visual accuracy.
+                  <strong>Modern UI Engineering: </strong>Developed responsive
+                  user interfaces and internal tools using{" "}
+                  <strong>React and TypeScript</strong>, ensuring a type-safe
+                  and scalable codebase.
                 </li>
                 <li>
-                  <strong>Critical Resolution: </strong>Resolved a high-priority
-                  transactional bug that created discrepancies in the customer
-                  shopping cart data and affected order placement.
+                  <strong>API & Data Integration: </strong>Integrated front-end
+                  services with .NET Framework REST APIs and OracleDB backends
+                  to maintain data integrity across the platform.
                 </li>
                 <li>
-                  <strong>Efficiency: </strong>Contributed to the development of
-                  an internal C# tool used by the dev team to quickly retrieve
-                  complex book and inventory information.
+                  <strong>System Reliability: </strong>Optimized application
+                  stability by debugging complex API logic and managing
+                  automated batch scripts via Task Scheduler.
                 </li>
               </ul>
             </div>
