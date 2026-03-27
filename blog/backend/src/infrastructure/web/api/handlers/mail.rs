@@ -45,21 +45,21 @@ pub async fn receive_contact_form(
 
     // 2. Prepare emails
     //
-    let message_id = format!("<{}@huuthang.site>", uuid::Uuid::new_v4());
+    let message_id = format!("<{}@huuthangle.site>", uuid::Uuid::new_v4());
     let confirmation_email = Message::builder()
-        .from("Thắng <contact@huuthang.site>".parse().unwrap())
+        .from("Thắng <contact@huuthangle.site>".parse().unwrap())
         .to(email.parse().unwrap())
         .subject("Thanks for contacting !")
         .message_id(Some(message_id))
         .body(format!(
-            "Hi {},\n\nThanks for your message!\n\n- huuthang.site",
+            "Hi {},\n\nThanks for your message!\n\n- huuthangle.site",
             name
         ))
         .unwrap();
 
-    let message_id = format!("<{}@huuthang.site>", uuid::Uuid::new_v4());
+    let message_id = format!("<{}@huuthangle.site>", uuid::Uuid::new_v4());
     let notification_email = Message::builder()
-        .from("System <contact@huuthang.site>".parse().unwrap())
+        .from("System <contact@huuthangle.site>".parse().unwrap())
         .to("huuthang.l@outlook.com".parse().unwrap())
         .subject("New Contact Form Submission")
         .message_id(Some(message_id))
