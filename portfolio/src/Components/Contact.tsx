@@ -234,7 +234,7 @@ export default function Contact() {
                   message = messageRef.current.value;
 
                 const res = await fetch(
-                  "https://blog.huuthang.site/api/mail/contact-form",
+                  "https://blog.huuthangle.site/api/mail/contact-form",
                   {
                     method: "POST",
                     headers: {
