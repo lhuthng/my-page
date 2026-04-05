@@ -2,6 +2,7 @@
   import {
     appBlockPlugin,
     codeHighlightPlugin,
+    iframeBlockPlugin,
     mediaWithShortcutPlugin,
     namedContainerPlugin,
     revealPlugin,
@@ -38,6 +39,7 @@
     new MarkdownIt()
       .use(mkKatex)
       .use(mediaWithShortcutPlugin, { mediaDictionary })
+      .use(iframeBlockPlugin)
       .use(youtubeBlockPlugin)
       .use(appBlockPlugin, { mediaDictionary })
       .use(revealPlugin)

@@ -72,13 +72,17 @@
   const appendMedia = (files) => {};
 
   const fetchMore = async () => {
-    if (posts.fetchedAll || posts.data.fetchingMore) return;
+    if (posts.fetchedAll || posts.fetchingMore) return;
 
     const before = posts.data.length;
-    posts.data.fetchingMore = true;
+    posts.fetchingMore = true;
 
     const res = await fetch(
       `/api/users/${username}/posts?limit=${limit}&offset=${before}`,
+      {
+        headers:
+          $user?.username === username ? { Authorization: auth() } : undefined,
+      },
     );
 
     if (!res.ok) {
@@ -409,7 +413,7 @@
           bind:this={postContainer}
           class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
         >
-          {#each posts.data as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, status, url }, index (slug)}
+          {#each posts.data as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, status, url, stats }, index (slug)}
             <li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
               <PostCard
                 id={status === "draft" ? id : undefined}
@@ -423,6 +427,7 @@
                 }}
                 tags={tag_slugs}
                 src={url}
+                {stats}
               />
             </li>
           {/each}

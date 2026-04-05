@@ -43,6 +43,7 @@ pub struct PostDetails {
     pub cover_url: Option<String>,
     pub medium_urls: Vec<String>,
     pub medium_short_names: Vec<String>,
+    pub is_owner: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -216,9 +216,9 @@ export default function Contact() {
           </div>
           <div className="w-full md:w-[60%] text-blackboard text-lg space-y-2">
             <p>
-              - I'd love to hear from you! Whether you want to learn more about
-              me and my work or just want to say hi, feel free to send me a
-              message.
+              - Got a project in mind, a question about my work, or just want to
+              connect? Drop me a message — I read every one and I'll get back to
+              you.
             </p>
             <form
               className="bg-white-chalk-dark/35 py-3 px-4 rounded-lg"

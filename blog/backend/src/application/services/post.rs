@@ -16,7 +16,7 @@ pub trait PostService {
     async fn new_post(
         &self,
         cmd: commands::post::NewPostCommand,
-    ) -> Result<(), errors::post::PostError>;
+    ) -> Result<i64, errors::post::PostError>;
     async fn update_post(
         &self,
         cmd: commands::post::UpdatePostCommand,
