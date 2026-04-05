@@ -33,7 +33,7 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
         </div>
       }
       details={
-        <div className="bg-orange-chalk w-full h-full not-md:border-t-2 md:border-l-2 text-black space-y-4 p-4">
+        <div className="bg-white-chalk w-full h-full not-md:border-t-2 md:border-l-2 border-orange-chalk text-black space-y-4 p-4">
           <p className="italic font-medium">
             "A playground without constraints. Building the engine from scratch
             to own the foundation, the wiring, and the blueprint."
@@ -84,26 +84,48 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
               </li>
             </ul>
           </div>
-          <div className="pt-2">
-            <p className="font-bold">Explore the "How" and "Why":</p>
-            <ul className="list-disc list-inside space-y-1">
-              <li>
-                <a
-                  className="text-cyan-700 hover:underline"
-                  href="https://blog.huuthangle.site/posts/the-hosting-cloud"
-                >
-                  [Technical Setup: The Hosting Cloud]
-                </a>
-              </li>
-              <li>
-                <a
-                  className="text-cyan-700 hover:underline"
-                  href="https://blog.huuthangle.site/posts/i-made-a-blog"
-                >
-                  [Philosophy: So..., I Made a Blog]
-                </a>
-              </li>
-            </ul>
+          <div className="pt-2 space-y-3">
+            <div>
+              <p className="font-bold">Live Environment:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>
+                  <a
+                    className="font-semibold text-orange-chalk-dark hover:underline"
+                    href="https://blog.huuthangle.site"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    blog.huuthangle.site
+                  </a>{" "}
+                  — Personal Blog (Svelte 5 + Rust backend)
+                </li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-bold">Explore the "How" and "Why":</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>
+                  <a
+                    className="text-cyan-700 hover:underline"
+                    href="https://blog.huuthangle.site/posts/the-hosting-cloud"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    [Technical Setup: The Hosting Cloud]
+                  </a>
+                </li>
+                <li>
+                  <a
+                    className="text-cyan-700 hover:underline"
+                    href="https://blog.huuthangle.site/posts/i-made-a-blog"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    [Philosophy: So..., I Made a Blog]
+                  </a>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       }

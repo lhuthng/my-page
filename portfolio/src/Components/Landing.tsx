@@ -154,8 +154,9 @@ export default function Landing() {
             </div>
             <div className="mt-10">
               <p>
-                Passionate about computer science, I've been coding and building
-                projects for years. Welcome to my portfolio!
+                From competitive programming contests to production full-stack
+                systems — I've spent years turning ideas into code. This is
+                where I show my work.
               </p>
             </div>
           </div>
