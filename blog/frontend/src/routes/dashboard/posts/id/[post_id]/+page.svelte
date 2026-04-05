@@ -10,18 +10,19 @@
     series,
     cover_url: coverUrl,
     series_slug: seriesSlug,
-    series_cover_url: seriesCoverUrl,
     content,
     draft,
     tags,
     excerpt,
     medium_short_names: mediumShortNames,
     medium_urls: mediumUrls,
+    is_owner: isOwner = true,
   } = data;
 </script>
 
 <PostEditor
   mode="edit"
+  {isOwner}
   data={{
     id,
     title,
@@ -29,7 +30,6 @@
     coverUrl,
     series,
     seriesSlug,
-    seriesCoverUrl,
     content,
     draft,
     tags,
