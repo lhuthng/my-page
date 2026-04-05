@@ -6,6 +6,7 @@ import DXC from "./Projects/DXC";
 import MaxPlanck from "./Projects/MaxPlanck";
 import Limpext from "./Projects/Limpext";
 import StyledPortfolio from "./Projects/StyledPortfolio";
+import SynRecordia from "./Projects/SynRecordia";
 
 export default function Projects() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -15,6 +16,7 @@ export default function Projects() {
     Limpext,
     Balatro,
     StyledPortfolio,
+    SynRecordia,
     ThisPortfolio,
   ];
   return (
@@ -32,13 +34,15 @@ export default function Projects() {
           ))}
           <li className="col-span-full w-full flex items-center justify-center bg-white rounded-2xl text-black p-4">
             <p>
-              More projects can be found on{" "}
+              This is just the highlight reel — more projects, write-ups, and
+              experiments live on{" "}
               <a
-                className="inline-block w-16 hover:font-semibold text-blue-500"
+                className="inline-block hover:font-semibold text-blue-500"
                 href="https://blog.huuthangle.site"
               >
                 my blog
               </a>
+              .
             </p>
           </li>
         </ul>

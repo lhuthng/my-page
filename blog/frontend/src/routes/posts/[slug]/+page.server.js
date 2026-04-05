@@ -2,6 +2,7 @@ import { mediaSyntax } from "$lib/common.js";
 import {
   appBlockPlugin,
   codeHighlightPlugin,
+  iframeBlockPlugin,
   mediaWithShortcutPlugin,
   namedContainerPlugin,
   revealPlugin,
@@ -47,6 +48,7 @@ export async function load({ fetch, params, setHeaders }) {
     const md = new MarkdownIt()
       .use(mkKatex)
       .use(mediaWithShortcutPlugin, { mediaDictionary })
+      .use(iframeBlockPlugin)
       .use(youtubeBlockPlugin)
       .use(appBlockPlugin)
       .use(revealPlugin)

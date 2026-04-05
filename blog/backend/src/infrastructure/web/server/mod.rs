@@ -8,7 +8,7 @@ use jsonwebtoken::Algorithm;
 
 use crate::{
     domain::entities::{auth::AuthConfig, media::MediaType},
-    infrastructure::web::api::{self, services},
+    infrastructure::{persistence, web::api},
 };
 
 pub struct AppConfig {
@@ -25,11 +25,12 @@ pub struct MediaConfig {
 pub struct AppState {
     pub config: AppConfig,
     pub media_config: MediaConfig,
-    pub auth_service: services::auth::AuthServiceImpl,
-    pub user_service: services::user::UserServiceImpl,
-    pub media_service: services::media::MediaServiceImpl,
-    pub post_service: services::post::PostServiceImpl,
-    pub series_service: services::series::SeriesServiceImpl,
+    pub auth_service: persistence::auth::AuthServiceImpl,
+    pub user_service: persistence::user::UserServiceImpl,
+    pub media_service: persistence::media::MediaServiceImpl,
+    pub post_service: persistence::post::PostServiceImpl,
+    pub series_service: persistence::series::SeriesServiceImpl,
+    pub dashboard_service: persistence::dashboard::DashboardServiceImpl,
 }
 
 pub struct HTTPServer<'a> {
@@ -145,11 +146,12 @@ impl<'a> HTTPServer<'a> {
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
             media_config: MediaConfig::from_env(),
-            auth_service: services::auth::AuthServiceImpl::new(pool.clone()),
-            user_service: services::user::UserServiceImpl::new(pool.clone()),
-            media_service: services::media::MediaServiceImpl::new(pool.clone()),
-            post_service: services::post::PostServiceImpl::new(pool.clone()),
-            series_service: services::series::SeriesServiceImpl::new(pool.clone()),
+            auth_service: persistence::auth::AuthServiceImpl::new(pool.clone()),
+            user_service: persistence::user::UserServiceImpl::new(pool.clone()),
+            media_service: persistence::media::MediaServiceImpl::new(pool.clone()),
+            post_service: persistence::post::PostServiceImpl::new(pool.clone()),
+            series_service: persistence::series::SeriesServiceImpl::new(pool.clone()),
+            dashboard_service: persistence::dashboard::DashboardServiceImpl::new(pool.clone()),
         });
         let router = api::router::build_router(state);
 
