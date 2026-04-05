@@ -70,7 +70,7 @@ export default function StyledPortfolio({ active, onClick }: ProjectProps) {
         </div>
       }
       details={
-        <div className="bg-purple-300 w-full h-full not-md:border-t-2 md:border-l-2  text-black font-omori-2 text-2xl p-4 space-y-4">
+        <div className="bg-purple-100 border-purple-300 w-full h-full not-md:border-t-2 md:border-l-2 text-black font-omori-2 text-2xl p-4 space-y-4">
           <p>
             This project serves as a curated digital gallery for my creative
             outputs outside of traditional software engineering—bridging the gap
