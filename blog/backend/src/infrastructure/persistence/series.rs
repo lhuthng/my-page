@@ -23,9 +23,9 @@ use crate::{
         },
         errors::{media::MediaError, series::SeriesError},
     },
-    infrastructure::web::{
-        api::services::media::{HashData, hash_bytes},
-        server::MediaConfig,
+    infrastructure::{
+        persistence::media::{HashData, hash_bytes},
+        web::server::MediaConfig,
     },
 };
 

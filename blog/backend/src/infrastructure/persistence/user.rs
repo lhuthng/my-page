@@ -16,7 +16,7 @@ use crate::{
         },
         errors::user::UserError,
     },
-    infrastructure::web::api::services::post::PostRow,
+    infrastructure::persistence::post::PostRow,
 };
 
 pub struct UserServiceImpl {
