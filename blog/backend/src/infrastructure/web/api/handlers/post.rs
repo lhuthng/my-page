@@ -102,6 +102,7 @@ pub struct GetPostDetailsResponse {
     pub medium_short_names: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    pub is_owner: bool,
 }
 
 pub async fn get_post_details(
@@ -109,15 +110,18 @@ pub async fn get_post_details(
     Extension(claims): Extension<Claims>,
     Path(post_id): Path<String>,
 ) -> Result<impl IntoResponse, PostError> {
-    let required_author_id = Some(
-        claims
-            .user_id
-            .parse::<i64>()
-            .map_err(|e| PostError::InternalError(e.to_string()))?,
-    );
+    let uploader_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|e| PostError::InternalError(e.to_string()))?;
+    let is_admin = claims.role == "admin";
     let post_id = post_id
         .parse::<i64>()
         .map_err(|e| PostError::InternalError(e.to_string()))?;
+
+    // Admins can view any post; others can only view their own
+    let required_author_id = if is_admin { None } else { Some(uploader_id) };
+
     let PostDetails {
         id,
         title,
@@ -132,10 +136,12 @@ pub async fn get_post_details(
         cover_url,
         medium_urls,
         medium_short_names,
+        is_owner,
     } = state
         .post_service
         .get_post_details(GetDetailedPostsCommand {
             required_author_id,
+            viewing_user_id: uploader_id,
             post_id,
         })
         .await?;
@@ -154,6 +160,7 @@ pub async fn get_post_details(
         cover_url,
         medium_urls,
         medium_short_names,
+        is_owner,
     }))
 }
 
@@ -545,7 +552,7 @@ pub async fn new_post(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     mut multipart: Multipart,
-) -> Result<(), PostError> {
+) -> Result<impl IntoResponse, PostError> {
     let uploader_id = claims
         .user_id
         .parse::<i64>()
@@ -712,9 +719,9 @@ pub async fn new_post(
         media_usage,
     };
 
-    state.post_service.new_post(cmd).await?;
+    let post_id = state.post_service.new_post(cmd).await?;
 
-    Ok(())
+    Ok(Json(serde_json::json!({ "id": post_id })))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
