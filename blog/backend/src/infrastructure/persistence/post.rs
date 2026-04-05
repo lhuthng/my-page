@@ -277,7 +277,7 @@ impl PostService for PostServiceImpl {
 
         Ok(results)
     }
-    async fn new_post(&self, cmd: NewPostCommand) -> Result<(), PostError> {
+    async fn new_post(&self, cmd: NewPostCommand) -> Result<i64, PostError> {
         let mut tx = self.pool.begin().await?;
         let post_id: i64 = sqlx::query_scalar(
             r#"
@@ -294,6 +294,11 @@ impl PostService for PostServiceImpl {
         .bind("draft".to_string())
         .fetch_one(&mut *tx)
         .await?;
+
+        sqlx::query("INSERT INTO post_stats (post_id) VALUES (?)")
+            .bind(post_id)
+            .execute(&mut *tx)
+            .await?;
 
         if !cmd.media_usage.is_empty() {
             let placeholder = cmd
@@ -380,7 +385,7 @@ impl PostService for PostServiceImpl {
         }
 
         tx.commit().await?;
-        Ok(())
+        Ok(post_id)
     }
     async fn search(&self, cmd: SearchPostCommand) -> Result<Vec<PostSummary>, PostError> {
         let rows = sqlx::query_as::<_, PostSearchRow>(
@@ -1004,6 +1009,7 @@ impl PostService for PostServiceImpl {
             medium_urls,
             medium_short_names,
             cover_url,
+            is_owner: post_row.user_id == cmd.viewing_user_id,
         })
     }
     async fn post_new_comment(&self, cmd: PostNewCommentCommand) -> Result<i64, PostError> {

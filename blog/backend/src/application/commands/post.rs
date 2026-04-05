@@ -51,6 +51,7 @@ pub struct GetLatestPostsCommand {
 
 pub struct GetDetailedPostsCommand {
     pub required_author_id: Option<i64>,
+    pub viewing_user_id: i64,
     pub post_id: i64,
 }
 

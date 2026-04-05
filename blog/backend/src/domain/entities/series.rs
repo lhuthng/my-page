@@ -9,6 +9,8 @@ pub struct SeriesSnapshot {
     pub slug: String,
     pub description: String,
     pub url: Option<String>,
+    pub post_count: i64,
+    pub owner_username: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

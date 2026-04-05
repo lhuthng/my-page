@@ -12,6 +12,7 @@ use crate::{
     application::{
         commands::series::{
             AddPostToSeriesCommand, GetAllSeriesCommand, GetSeriesCommand, NewSeriesCommand,
+            RemovePostFromSeriesCommand,
         },
         services::series::SeriesService,
     },
@@ -32,6 +33,9 @@ pub struct SeriesResponse {
     pub slug: String,
     pub description: String,
     pub url: Option<String>,
+    pub post_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_username: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -47,24 +51,104 @@ pub async fn get_series(
         .user_id
         .parse::<i64>()
         .map_err(|_| SeriesError::InternalError("Cannot parse id".to_string()))?;
+    let is_admin = claims.role == "admin";
 
     let series = state
         .series_service
-        .get_series(GetSeriesCommand { user_id })
+        .get_series(GetSeriesCommand { user_id, is_admin })
         .await?;
 
     let series = series
         .into_iter()
-        .map(|series| SeriesResponse {
-            id: series.id,
-            title: series.title,
-            slug: series.slug,
-            description: series.description,
-            url: series.url,
+        .map(|s| SeriesResponse {
+            id: s.id,
+            title: s.title,
+            slug: s.slug,
+            description: s.description,
+            url: s.url,
+            post_count: s.post_count,
+            owner_username: s.owner_username,
         })
         .collect();
 
     Ok(Json(GetSeriesResponse { series }))
+}
+
+#[derive(Serialize)]
+pub struct SeriesPostItem {
+    pub post_id: i64,
+    pub title: String,
+    pub slug: String,
+    pub status: String,
+    pub number: i64,
+    pub cover_url: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct GetSeriesPostsResponse {
+    pub posts: Vec<SeriesPostItem>,
+}
+
+pub async fn get_series_posts(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Path(series_id): Path<i64>,
+) -> Result<impl IntoResponse, SeriesError> {
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|_| SeriesError::InternalError("Cannot parse id".to_string()))?;
+    let is_admin = claims.role == "admin";
+
+    let rows = if is_admin {
+        sqlx::query_as::<_, (i64, String, String, String, i64, Option<String>)>(
+            r#"
+            SELECT p.id, p.title, p.slug, p.status, sp.number, m.url
+            FROM series_post sp
+            JOIN posts p ON p.id = sp.post_id
+            LEFT JOIN media m ON m.id = p.cover_image_id
+            WHERE sp.series_id = ?
+            ORDER BY sp.number ASC
+            "#,
+        )
+        .bind(series_id)
+        .fetch_all(&state.series_service.pool)
+        .await
+        .map_err(|e| SeriesError::InternalError(e.to_string()))?
+    } else {
+        sqlx::query_as::<_, (i64, String, String, String, i64, Option<String>)>(
+            r#"
+            SELECT p.id, p.title, p.slug, p.status, sp.number, m.url
+            FROM series_post sp
+            JOIN posts p ON p.id = sp.post_id
+            LEFT JOIN media m ON m.id = p.cover_image_id
+            JOIN series s ON s.id = sp.series_id
+            WHERE sp.series_id = ? AND s.user_id = ?
+            ORDER BY sp.number ASC
+            "#,
+        )
+        .bind(series_id)
+        .bind(user_id)
+        .fetch_all(&state.series_service.pool)
+        .await
+        .map_err(|e| SeriesError::InternalError(e.to_string()))?
+    };
+
+    let posts = rows
+        .into_iter()
+        .map(
+            |(post_id, title, slug, status, number, cover_url)| SeriesPostItem {
+                post_id,
+                title,
+                slug,
+                status,
+                number,
+                cover_url,
+            },
+        )
+        .collect();
+
+    Ok(Json(GetSeriesPostsResponse { posts }))
 }
 
 #[derive(Deserialize)]
@@ -211,6 +295,29 @@ pub async fn add_post_to_series(
             series_id,
             user_id,
             number,
+        })
+        .await?;
+    Ok(())
+}
+
+pub async fn remove_post_from_series(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Path(series_id): Path<i64>,
+    Query(query): Query<AddPostToSeriesQuery>,
+) -> Result<impl IntoResponse, SeriesError> {
+    let post_id = query.post_id;
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|_| SeriesError::InternalError("Cannot parse id".to_string()))?;
+
+    state
+        .series_service
+        .remove_post_from_series(RemovePostFromSeriesCommand {
+            post_id,
+            series_id,
+            user_id,
         })
         .await?;
     Ok(())

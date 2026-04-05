@@ -2,6 +2,7 @@ use crate::domain::entities::media::MediumDetails;
 
 pub struct GetSeriesCommand {
     pub user_id: i64,
+    pub is_admin: bool,
 }
 
 pub struct GetAllSeriesCommand {
