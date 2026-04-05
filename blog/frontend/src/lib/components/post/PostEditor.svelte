@@ -109,7 +109,7 @@
     editingData.content = content;
     editingData.draft = draft;
     editingData.series = series;
-    editingData.seriesSlug = seriesSlug;
+    editingData.seriesSlug = seriesSlug ?? "";
     editingData.coverUrl = coverUrl;
 
     editor.view = "public";
