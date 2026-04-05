@@ -159,6 +159,16 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 )),
         );
 
+    let dashboard_routes = Router::new()
+        .route("/overview", get(handlers::dashboard::get_overview))
+        .route("/posts", get(handlers::dashboard::get_posts))
+        .route("/users", get(handlers::dashboard::get_users))
+        .layer(middleware::from_fn(middlewares::auth::mod_check))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            middlewares::auth::user_guard,
+        ));
+
     let mail_routes = Router::new().merge(
         Router::new()
             .route("/contact-form", post(handlers::mail::receive_contact_form))
@@ -172,6 +182,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/posts", post_routes)
         .nest("/series", series_routes)
         .nest("/mail", mail_routes)
+        .nest("/dashboard", dashboard_routes)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
