@@ -1,4 +1,5 @@
 <script>
+  import { goto } from "$app/navigation";
   import { auth, user } from "$lib/client/user";
   import {
     arraysEqualIgnoreOrder,
@@ -24,7 +25,12 @@
   const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
   const maxFileSize = 5 * 1024 * 1024;
 
-  let { mode = "create", data } = $props();
+  let {
+    mode = "create",
+    data,
+    series: initialSeries = [],
+    isOwner = true,
+  } = $props();
 
   let mediaDictionary = $state({});
   let searchMedia = $state(async (keyword) => {});
@@ -52,6 +58,7 @@
     content: "",
     draft: "",
     coverUrl: "",
+    pendingSeriesId: null,
     author: {
       username: $user?.username,
       displayName: $user?.displayName,
@@ -70,6 +77,7 @@
     coverFile: undefined,
     newCover: undefined,
     coverError: "",
+    isPublishing: false,
   });
 
   let renderedText = $state("");
@@ -101,10 +109,12 @@
     editingData.content = content;
     editingData.draft = draft;
     editingData.series = series;
-    editingData.seriesSlug = seriesSlug;
+    editingData.seriesSlug = seriesSlug ?? "";
     editingData.coverUrl = coverUrl;
 
     editor.view = "public";
+  } else if (mode === "create") {
+    editingData.series = initialSeries;
   }
 
   let slugDebounce = useDebounce(async (slug) => {
@@ -152,29 +162,23 @@
   });
 
   const newPost = async () => {
-    let {
-      title,
-      slug,
-      excerpt,
-      tags,
-      content = draft,
-      categories,
-    } = editingData;
-
-    tags = tags
+    const { title, slug, excerpt, draft } = editingData;
+    const tags = editingData.tags
       .trim()
       .split(" ")
       .filter((tag) => tag !== "");
 
-    const keys = [...editingData.content.matchAll(mediaSyntax)]
+    const keys = [...draft.matchAll(mediaSyntax)]
       .map((match) => match[1])
       .filter((key) => !isOnline(key));
 
     const missing = keys.filter((key) => !isOffline(key));
 
     if (missing.length > 0) {
+      editor.isCritical = true;
+      editor.status = `[${missing}] is/are missing`;
       console.error("Missing keys detected: ", missing);
-      return missing;
+      return;
     }
 
     const formData = new FormData();
@@ -187,7 +191,7 @@
             slug,
             excerpt,
             tags,
-            content,
+            content: draft,
             categories: [],
             number_of_files: keys.length,
           }),
@@ -197,8 +201,8 @@
     );
 
     for (let index = 0; index < keys.length; index++) {
-      const data = getNewMedia(keys[index]);
-      formData.append(`file_${index + 1}`, data.file, data.name);
+      const mediaItem = getNewMedia(keys[index]);
+      formData.append(`file_${index + 1}`, mediaItem.file, mediaItem.name);
       formData.append(`short_name_${index + 1}`, keys[index]);
     }
 
@@ -212,9 +216,19 @@
     });
 
     if (res.ok) {
-      // TODO: PREVENT RESUBMIT
       editor.isCritical = false;
       editor.status = "OK!";
+      const { id } = await res.json();
+      if (editingData.pendingSeriesId) {
+        await fetch(
+          `/api/series/id/${editingData.pendingSeriesId}?post_id=${id}`,
+          {
+            method: "PATCH",
+            headers: { Authorization: auth() },
+          },
+        );
+      }
+      goto(`/dashboard/posts/id/${id}`);
     } else {
       editor.isCritical = true;
       editor.status = await res.text();
@@ -229,16 +243,10 @@
     let offlineKeys = [];
     if (editingData.draft !== data.draft) {
       const keys = [
-        ...[
-          ...editingData.content.matchAll(mediaSyntax).map((match) => match[1]),
-        ],
-        ...[
-          ...editingData.content.matchAll(glbSyntax).map((match) => match[1]),
-        ],
-        ...[
-          ...editingData.draft.matchAll(mediaSyntax).map((match) => match[1]),
-        ],
-        ...[...editingData.draft.matchAll(glbSyntax).map((match) => match[1])],
+        ...[...editingData.content.matchAll(mediaSyntax)].map((m) => m[1]),
+        ...[...editingData.content.matchAll(glbSyntax)].map((m) => m[1]),
+        ...[...editingData.draft.matchAll(mediaSyntax)].map((m) => m[1]),
+        ...[...editingData.draft.matchAll(glbSyntax)].map((m) => m[1]),
       ];
 
       offlineKeys = keys.filter((key) => {
@@ -256,7 +264,7 @@
         editor.isCritical = true;
         editor.status = `[${missing}] is/are missing`;
         console.error("Missing keys detected: ", missing);
-        return missing;
+        return;
       }
 
       postData.number_of_files = offlineKeys.length;
@@ -280,7 +288,7 @@
       .trim()
       .split(" ")
       .filter((tag) => tag !== "");
-    if (!arraysEqualIgnoreOrder(editingData.tags, data.tags)) {
+    if (!arraysEqualIgnoreOrder(tags, data.tags)) {
       postData.tags = tags;
     }
 
@@ -293,9 +301,10 @@
       postData.content = editingData.content;
     }
 
-    formData.append("post_data", new Blob([JSON.stringify(postData)]), {
-      type: "application/json",
-    });
+    formData.append(
+      "post_data",
+      new Blob([JSON.stringify(postData)], { type: "application/json" }),
+    );
 
     const res = await fetch("/api/posts/id/" + data.id, {
       method: "PATCH",
@@ -314,15 +323,18 @@
   };
 
   const publishPost = async () => {
+    if (editor.isPublishing) return;
+    editor.isPublishing = true;
+
     const res = await fetch("/api/posts/id/" + data.id, {
       method: "POST",
       headers: { Authorization: auth() },
     });
 
+    editor.isPublishing = false;
     if (res.ok) {
-      // TODO: PREVENT RESUBMIT
       editor.isCritical = false;
-      editor.status = "OK!";
+      editor.status = "Published!";
     } else {
       editor.isCritical = true;
       editor.status = await res.text();
@@ -460,7 +472,7 @@
           comments_count: "#",
         }}
         onclick={() => {
-          if (mode !== "edit") return;
+          if (mode !== "edit" || !isOwner) return;
           editor.coverToggled = true;
         }}
       >
@@ -479,7 +491,7 @@
   />
   <div id="padding"></div>
   <div
-    class="fixed top-full left-1/2 -translate-x-1/2 w-full max-w-400 transition-transform duration-100 -translate-y-14"
+    class="fixed z-10 top-full left-1/2 -translate-x-1/2 w-full max-w-400 transition-transform duration-100 -translate-y-14"
     class:-translate-y-full={editor.toggled}
   >
     <div
@@ -499,7 +511,7 @@
               >{editor.toggled ? "Collapse" : "Expand"}</button
             >
           </div>
-          {#if mode === "edit"}
+          {#if mode === "edit" && isOwner}
             <div in:fly={{ duration: 200 }} class="duo-btn duo-blue">
               <button
                 onclick={() => {
@@ -525,6 +537,13 @@
         <div class="flex gap-2">
           {#if editor.toggled}
             {#if mode === "create"}
+              <div
+                class="my-auto"
+                class:text-accent-green={!editor.isCritical}
+                class:text-accent-red={editor.isCritical}
+              >
+                <span>{editor.status}</span>
+              </div>
               <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
                 <button onclick={newPost}>Submit</button>
               </div>
@@ -536,12 +555,20 @@
               >
                 <span>{editor.status}</span>
               </div>
-              <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
-                <button onclick={updatePost}>Change</button>
-              </div>
-              <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
-                <button onclick={publishPost}>Publish</button>
-              </div>
+              {#if !isOwner}
+                <div class="my-auto text-dark/50 text-sm italic">
+                  <span>View only</span>
+                </div>
+              {:else}
+                <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+                  <button onclick={updatePost}>Change</button>
+                </div>
+                <div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+                  <button onclick={publishPost} disabled={editor.isPublishing}>
+                    {editor.isPublishing ? "Publishing…" : "Publish"}
+                  </button>
+                </div>
+              {/if}
             {/if}
           {/if}
         </div>
@@ -557,8 +584,10 @@
                 <input
                   id="title"
                   class="grow px-1 min-w-0 bg-white rounded-sm"
+                  class:bg-transparent!={!isOwner}
                   bind:value={editingData.title}
                   autocomplete="off"
+                  readonly={!isOwner}
                   required
                 />
               </div>
@@ -578,6 +607,7 @@
                   ] === "ready"}
                   bind:value={editingData.slug}
                   autocomplete="off"
+                  readonly={!isOwner}
                   required
                 />
               </div>
@@ -588,6 +618,7 @@
                   autocorrect="off"
                   autocomplete="off"
                   rows="2"
+                  readonly={!isOwner}
                   bind:value={editingData.tags}
                 ></textarea>
               </div>
@@ -598,16 +629,18 @@
                   autocorrect="off"
                   autocomplete="off"
                   rows="5"
+                  readonly={!isOwner}
                   bind:value={editingData.excerpt}
                 ></textarea>
               </div>
-              {#if mode === "edit"}
-                <SeriesController
-                  postId={editingData.id}
-                  series={editingData.series}
-                  seriesSlug={editingData.seriesSlug}
-                />
-              {/if}
+              <SeriesController
+                postId={mode === "edit" ? editingData.id : null}
+                bind:series={editingData.series}
+                bind:seriesSlug={editingData.seriesSlug}
+                onSelect={(id) => {
+                  editingData.pendingSeriesId = id;
+                }}
+              />
             </div>
           </div>
           <ContentDebounceEdtior
