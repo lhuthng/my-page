@@ -8,6 +8,7 @@
   const tabs = [
     { label: "Overview", path: "/dashboard" },
     { label: "Posts", path: "/dashboard/posts" },
+    { label: "Series", path: "/dashboard/series" },
     { label: "Users", path: "/dashboard/users" },
   ];
 </script>

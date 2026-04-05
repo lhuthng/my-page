@@ -59,12 +59,12 @@
   ul {
     @apply relative;
     &:after {
-      @apply absolute z-10 content-[''] right-4 top-1 bottom-3 lg:bottom-1 w-1.5 bg-white;
+      @apply absolute z-8 content-[''] right-4 top-1 bottom-3 lg:bottom-1 w-1.5 bg-white;
     }
   }
 
   ul > li {
-    @apply relative z-11 ml-auto drop-shadow-sm drop-shadow-dark w-fit bg-white text-dark pr-1 rounded-r-lg;
+    @apply relative z-9 ml-auto drop-shadow-sm drop-shadow-dark w-fit bg-white text-dark pr-1 rounded-r-lg;
   }
   ul > li::before {
     @apply absolute content-[''] bg-white right-full h-full w-3;

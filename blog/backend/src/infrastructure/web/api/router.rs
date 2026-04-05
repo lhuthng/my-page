@@ -152,6 +152,14 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     "/id/{series_id}",
                     patch(handlers::series::add_post_to_series),
                 )
+                .route(
+                    "/id/{series_id}",
+                    delete(handlers::series::remove_post_from_series),
+                )
+                .route(
+                    "/id/{series_id}/posts",
+                    get(handlers::series::get_series_posts),
+                )
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
