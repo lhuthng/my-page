@@ -54,27 +54,65 @@ impl SeriesServiceImpl {
 #[async_trait::async_trait]
 impl SeriesService for SeriesServiceImpl {
     async fn get_series(&self, cmd: GetSeriesCommand) -> Result<Vec<SeriesSnapshot>, SeriesError> {
-        let series = sqlx::query_as::<_, (i64, String, String, String, Option<String>)>(
-            r#"
-            SELECT series.id, series.title, series.slug, series.description, media.url
-            FROM series
-            LEFT JOIN media ON series.cover_image_id = media.id
-            WHERE user_id = ?
-            "#,
-        )
-        .bind(&cmd.user_id)
-        .fetch_all(&self.pool)
-        .await?;
+        // Row type: (series_id, title, slug, description, cover_url, post_count, owner_username)
+        type Row = (
+            i64,
+            String,
+            String,
+            String,
+            Option<String>,
+            i64,
+            Option<String>,
+        );
 
-        let result = series
+        let rows: Vec<Row> = if cmd.is_admin {
+            sqlx::query_as::<_, Row>(
+                r#"
+                SELECT s.id, s.title, s.slug, s.description, m.url,
+                       COUNT(sp.post_id) AS post_count,
+                       u.username AS owner_username
+                FROM series s
+                LEFT JOIN media m ON m.id = s.cover_image_id
+                LEFT JOIN series_post sp ON sp.series_id = s.id
+                LEFT JOIN users u ON u.id = s.user_id
+                GROUP BY s.id
+                ORDER BY s.created_at DESC
+                "#,
+            )
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, Row>(
+                r#"
+                SELECT s.id, s.title, s.slug, s.description, m.url,
+                       COUNT(sp.post_id) AS post_count,
+                       NULL AS owner_username
+                FROM series s
+                LEFT JOIN media m ON m.id = s.cover_image_id
+                LEFT JOIN series_post sp ON sp.series_id = s.id
+                WHERE s.user_id = ?
+                GROUP BY s.id
+                ORDER BY s.created_at DESC
+                "#,
+            )
+            .bind(cmd.user_id)
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        let result = rows
             .into_iter()
-            .map(|(id, title, slug, description, url)| SeriesSnapshot {
-                id,
-                title,
-                slug,
-                description,
-                url,
-            })
+            .map(
+                |(id, title, slug, description, url, post_count, owner_username)| SeriesSnapshot {
+                    id,
+                    title,
+                    slug,
+                    description,
+                    url,
+                    post_count,
+                    owner_username,
+                },
+            )
             .collect();
 
         Ok(result)
@@ -523,7 +561,7 @@ impl SeriesService for SeriesServiceImpl {
         let current_position: Option<i64> = sqlx::query_scalar(
             r#"
             SELECT sp.number
-            FROM series_posts sp
+            FROM series_post sp
             JOIN series s ON sp.series_id = s.id
             WHERE sp.series_id = ? AND sp.post_id = ? AND s.user_id = ?
             "#,
