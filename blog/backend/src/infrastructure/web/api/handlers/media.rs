@@ -211,8 +211,15 @@ pub async fn get_media(
     //  User avatar    hash = ".avt.<user_id>.<sha256>"
     //                 file = <media_dir>/avt/<uploader_id>/<sha256><ext>
     //
-    // Reconstructing from the hash (rather than the stored `url` column) is
-    // robust against MEDIA_PATH changes between upload and serve.
+    //  Series cover   hash = ".srs.<user_id>.<sha256>"  (fixed)
+    //                 file = <media_dir>/srs/<uploader_id>/<sha256><ext>
+    //                 Older rows were incorrectly stored with ".avt." prefix
+    //                 due to a copy-paste bug; those are caught by the fallback.
+    //
+    // Hash-based reconstruction is the primary path. If the file is missing
+    // (e.g. stale stored hash from the copy-paste bug), we fall back to
+    // reroot_path() which strips the old media-dir prefix from the stored
+    // `url` column and re-joins it under the current MEDIA_PATH.
     let extension = MediaType::from_str(&link.file_type)?.get_extension();
 
     let (file_path, content_hash) = if link.hash.starts_with('.') {
@@ -223,12 +230,12 @@ pub async fn get_media(
         // IMPORTANT: parts[2] is the post_id for ".post.*" entries, NOT the
         // user_id used as the on-disk subdirectory.  Always use uploader_id
         // (fetched from the DB) as the directory name — it is the user_id for
-        // both post covers and avatars.
+        // post covers, avatars, and series covers.
         let parts: Vec<&str> = link.hash.splitn(4, '.').collect();
         if parts.len() < 4 {
             return Err(MediaError::FileNotFound);
         }
-        let type_dir = parts[1]; // "post" or "avt"
+        let type_dir = parts[1]; // "post", "avt", or "srs"
         let sha256 = parts[3]; // plain SHA-256 hex
         let path = state
             .media_config
@@ -251,9 +258,20 @@ pub async fn get_media(
     // Open the file for streaming — avoids loading the entire file into RAM,
     // which previously caused OOM kills on the 256 MB machine when many
     // images were requested concurrently.
-    let file = fs::File::open(&file_path)
-        .await
-        .map_err(|_| MediaError::FileNotFound)?;
+    //
+    // If the hash-derived path doesn't exist (e.g. a series cover whose hash
+    // was written with the wrong ".avt." prefix), fall back to reconstructing
+    // the path from the stored `url` column via reroot_path().
+    let file = match fs::File::open(&file_path).await {
+        Ok(f) => f,
+        Err(_) => {
+            let fallback =
+                reroot_path(&link.url, &state.media_config.dir).ok_or(MediaError::FileNotFound)?;
+            fs::File::open(&fallback)
+                .await
+                .map_err(|_| MediaError::FileNotFound)?
+        }
+    };
 
     let body = Body::from_stream(ReaderStream::new(file));
 
@@ -268,6 +286,34 @@ pub async fn get_media(
         .header(header::ETAG, etag)
         .body(body)
         .map_err(|e| MediaError::InternalError(e.to_string()))
+}
+
+/// Re-root a stored file path under a new media directory.
+///
+/// The `stored_url` was written at upload time and may contain an old or
+/// relative media directory prefix (e.g. `"./media/srs/2/abc.webp"` or
+/// `"/old/path/to/media/post/11/abc.png"`).  This function finds the first
+/// path component whose name matches `media_dir`'s own directory name and
+/// returns `media_dir` joined with everything that came after it.
+///
+/// Returns `None` if the media directory name is not found in `stored_url`.
+fn reroot_path(stored_url: &str, media_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let dir_name = media_dir.file_name()?;
+    let p = std::path::Path::new(stored_url);
+    let mut after = std::path::PathBuf::new();
+    let mut found = false;
+    for component in p.components() {
+        if found {
+            after.push(component);
+        } else if component.as_os_str() == dir_name {
+            found = true;
+        }
+    }
+    if found {
+        Some(media_dir.join(after))
+    } else {
+        None
+    }
 }
 
 #[axum::debug_handler]
