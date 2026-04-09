@@ -176,7 +176,7 @@ impl PostServiceImpl {
 
         let sequel = format!(
             r#"
-            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, url, status, views, likes, comments_count
+            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, 'media/i/' || m.short_name AS url, status, views, likes, comments_count
             FROM posts p
                 JOIN users u ON u.id = p.user_id
                 JOIN user_meta um ON um.user_id = p.user_id
@@ -393,7 +393,7 @@ impl PostService for PostServiceImpl {
             SELECT
                 p.title,
                 p.slug,
-                m.url AS cover_image_url,
+                'media/i/' || m.short_name AS cover_image_url,
                 CASE
                     WHEN LOWER(p.title) = LOWER(?1) THEN 3
                     WHEN LOWER(p.title) LIKE LOWER(?1) || '%' THEN 2
@@ -650,7 +650,7 @@ impl PostService for PostServiceImpl {
             url,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, m1.url AS url, m2.url AS author_avatar_url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, 'media/i/' || m2.short_name AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
@@ -715,7 +715,7 @@ impl PostService for PostServiceImpl {
 
         let series_opt = sqlx::query_as::<_, (i64, String, String, String, i64)>(
             r#"
-            SELECT s.id, s.title, s.slug, m.url, sp.number
+            SELECT s.id, s.title, s.slug, 'media/i/' || m.short_name, sp.number
             FROM series_post sp
             JOIN series s ON s.id = sp.series_id
             LEFT JOIN media m ON m.id = s.cover_image_id
@@ -732,7 +732,7 @@ impl PostService for PostServiceImpl {
         if let Some((id, series_title, series_slug, series_cover_url, number)) = series_opt {
             let previous_post_opt = sqlx::query_as::<_, (String, String, Option<String>)>(
                 r#"
-                SELECT p.title, p.slug, m.url
+                SELECT p.title, p.slug, 'media/i/' || m.short_name
                 FROM series_post sp
                 JOIN series s ON s.id = sp.series_id
                 JOIN posts p ON p.id = sp.post_id
@@ -758,7 +758,7 @@ impl PostService for PostServiceImpl {
 
             let next_post_opt = sqlx::query_as::<_, (String, String, Option<String>)>(
                 r#"
-                SELECT p.title, p.slug, m.url
+                SELECT p.title, p.slug, 'media/i/' || m.short_name
                 FROM series_post sp
                 JOIN series s ON s.id = sp.series_id
                 JOIN posts p ON p.id = sp.post_id

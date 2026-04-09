@@ -655,7 +655,7 @@ impl MediaService for MediaServiceImpl {
             r#"
             SELECT DISTINCT
                 m.short_name,
-                m.url,
+                'media/i/' || m.short_name AS url,
                 m.file_type,
                 CASE
                     WHEN LOWER(m.short_name) = LOWER(?1) THEN 3

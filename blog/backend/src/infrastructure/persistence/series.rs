@@ -68,7 +68,7 @@ impl SeriesService for SeriesServiceImpl {
         let rows: Vec<Row> = if cmd.is_admin {
             sqlx::query_as::<_, Row>(
                 r#"
-                SELECT s.id, s.title, s.slug, s.description, m.url,
+                SELECT s.id, s.title, s.slug, s.description, 'media/i/' || m.short_name,
                        COUNT(sp.post_id) AS post_count,
                        u.username AS owner_username
                 FROM series s
@@ -84,7 +84,7 @@ impl SeriesService for SeriesServiceImpl {
         } else {
             sqlx::query_as::<_, Row>(
                 r#"
-                SELECT s.id, s.title, s.slug, s.description, m.url,
+                SELECT s.id, s.title, s.slug, s.description, 'media/i/' || m.short_name,
                        COUNT(sp.post_id) AS post_count,
                        NULL AS owner_username
                 FROM series s
@@ -167,7 +167,7 @@ impl SeriesService for SeriesServiceImpl {
 
         let sql = format!(
             r#"
-            SELECT s.id, s.title, s.slug, u.username, um.display_name, s.description, m.url
+            SELECT s.id, s.title, s.slug, u.username, um.display_name, s.description, 'media/i/' || m.short_name
             FROM series s
             LEFT JOIN users u ON u.id = s.user_id
             LEFT JOIN user_meta um ON um.user_id = u.id
@@ -198,7 +198,7 @@ impl SeriesService for SeriesServiceImpl {
 
         let sql = format!(
             r#"
-            SELECT p.id, p.title, p.slug, p.excerpt, um.display_name, u.username, p.status, m.url, ps.views, ps.likes, ps.comments_count
+            SELECT p.id, p.title, p.slug, p.excerpt, um.display_name, u.username, p.status, 'media/i/' || m.short_name, ps.views, ps.likes, ps.comments_count
             FROM posts p
             JOIN post_stats ps ON ps.post_id = p.id
             LEFT JOIN users u ON u.id = p.user_id

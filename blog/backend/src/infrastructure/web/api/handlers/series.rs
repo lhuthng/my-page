@@ -103,7 +103,7 @@ pub async fn get_series_posts(
     let rows = if is_admin {
         sqlx::query_as::<_, (i64, String, String, String, i64, Option<String>)>(
             r#"
-            SELECT p.id, p.title, p.slug, p.status, sp.number, m.url
+            SELECT p.id, p.title, p.slug, p.status, sp.number, 'media/i/' || m.short_name
             FROM series_post sp
             JOIN posts p ON p.id = sp.post_id
             LEFT JOIN media m ON m.id = p.cover_image_id
@@ -118,7 +118,7 @@ pub async fn get_series_posts(
     } else {
         sqlx::query_as::<_, (i64, String, String, String, i64, Option<String>)>(
             r#"
-            SELECT p.id, p.title, p.slug, p.status, sp.number, m.url
+            SELECT p.id, p.title, p.slug, p.status, sp.number, 'media/i/' || m.short_name
             FROM series_post sp
             JOIN posts p ON p.id = sp.post_id
             LEFT JOIN media m ON m.id = p.cover_image_id
