@@ -10,11 +10,11 @@ export function fixClientRoute(path) {
   return `/api/${path}`.replace("/./", "/");
 }
 
-export async function proxyFallback({ request, params, search }) {
+export async function proxyFallback({ request, params, search, extraHeaders }) {
   const url = `${env.API_URL}/${params.path}${search ?? ""}`;
 
   const proxyRequest = new Request(url, {
-    headers: request.headers,
+    headers: { ...Object.fromEntries(request.headers), ...extraHeaders },
     method: request.method,
     body: request.body,
     duplex: "half",
