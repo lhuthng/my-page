@@ -26,6 +26,7 @@ serde_json = "1.0.145"
 sha2 = "0.10.9"
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "macros", "sqlite", "uuid", "chrono"] }
 tokio = { version = "1.48.0", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
 tower = "0.5.2"
 tower-http = { version = "0.6.6", features = ["fs", "trace", "cors"] }
 tracing = "0.1.41"

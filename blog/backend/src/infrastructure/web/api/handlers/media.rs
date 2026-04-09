@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use axum::{
     Extension, Json,
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{Multipart, Path, Query, State},
     response::IntoResponse,
 };
-use http::{HeaderValue, header};
+use http::{Response, header};
 use serde::{Deserialize, Serialize};
 use tokio::fs;
+use tokio_util::io::ReaderStream;
 
 use crate::{
     application::{
@@ -194,14 +195,34 @@ pub async fn get_media(
         .get_link(GetLinkCommand { short_name })
         .await?;
 
-    let bytes = fs::read(&link.url)
+    // Open the file for streaming — avoids loading the entire file into RAM,
+    // which previously caused OOM kills on the 256 MB machine when many images
+    // were requested concurrently.
+    let file = fs::File::open(&link.url)
         .await
         .map_err(|_| MediaError::FileNotFound)?;
 
-    let content_type = HeaderValue::from_str(&link.file_type)
-        .map_err(|_| MediaError::InternalError("Invalid content type".to_string()))?;
+    let body = Body::from_stream(ReaderStream::new(file));
 
-    Ok(([(header::CONTENT_TYPE, content_type)], bytes))
+    // Derive a stable ETag from the filename stem, which is the SHA-256 content
+    // hash written by the upload handler.
+    let etag = std::path::Path::new(&link.url)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| format!("\"{}\"", s));
+
+    let mut builder = Response::builder()
+        .status(200)
+        .header(header::CONTENT_TYPE, &link.file_type)
+        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable");
+
+    if let Some(tag) = etag {
+        builder = builder.header(header::ETAG, tag);
+    }
+
+    builder
+        .body(body)
+        .map_err(|e| MediaError::InternalError(e.to_string()))
 }
 
 #[axum::debug_handler]
