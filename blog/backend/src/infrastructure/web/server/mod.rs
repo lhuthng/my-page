@@ -142,7 +142,13 @@ impl<'a> HTTPServer<'a> {
 
         println!("Connecting to {}", db_url);
 
-        let pool = sqlx::SqlitePool::connect(&db_url).await?;
+        let pool = sqlx::SqlitePool::connect_with(
+            db_url
+                .parse::<sqlx::sqlite::SqliteConnectOptions>()?
+                .create_if_missing(true),
+        )
+        .await?;
+        sqlx::migrate!().run(&pool).await?;
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
             media_config: MediaConfig::from_env(),

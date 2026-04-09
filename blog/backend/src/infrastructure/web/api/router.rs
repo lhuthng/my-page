@@ -17,16 +17,11 @@ use crate::infrastructure::web::{
 
 // This MUST retuns Router<()> instead of Router<AppState>
 pub fn build_router(state: Arc<AppState>) -> Router<()> {
+    let cors_origin = std::env::var("ALLOWED_ORIGIN")
+        .unwrap_or_else(|_| "https://portfolio.huuthangle.site".to_string());
     let cors = CorsLayer::new()
-        // Allow your specific subdomain
-        .allow_origin(
-            "https://portfolio.huuthang.site"
-                .parse::<HeaderValue>()
-                .unwrap(),
-        )
-        // Allow specific HTTP methods
+        .allow_origin(cors_origin.parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        // Allow the Content-Type header (required for JSON POSTs)
         .allow_headers([CONTENT_TYPE]);
 
     let auth_routes = Router::new()
