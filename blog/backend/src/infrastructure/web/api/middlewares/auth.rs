@@ -91,3 +91,18 @@ pub async fn mod_check(request: Request, next: Next) -> Result<impl IntoResponse
         Err(UserError::Unauthorized)
     }
 }
+
+#[axum::debug_middleware]
+pub async fn admin_check(request: Request, next: Next) -> Result<impl IntoResponse, UserError> {
+    let claims = request
+        .extensions()
+        .get::<Claims>()
+        .ok_or(UserError::InternalError("No claims found.".to_string()))?;
+    let role = UserRole::try_from(claims.role.clone())
+        .map_err(|_| UserError::InvalidData("Invalid role".to_string()))?;
+    if UserRole::Admin.include(&role) {
+        Ok(next.run(request).await)
+    } else {
+        Err(UserError::Unauthorized)
+    }
+}
