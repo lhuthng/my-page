@@ -28,6 +28,8 @@ struct MediaSearchRow {
     pub short_name: String,
     pub url: String,
     pub file_type: String,
+    pub hash: String,
+    pub uploader_id: i64,
 }
 
 pub struct MediaServiceImpl {
@@ -593,9 +595,9 @@ impl MediaService for MediaServiceImpl {
         }
     }
     async fn get_link(&self, cmd: GetLinkCommand) -> Result<LinkResult, MediaError> {
-        match sqlx::query_as::<_, (String, String)>(
+        match sqlx::query_as::<_, (String, String, String, i64)>(
             r#"
-                SELECT url, file_type FROM media WHERE short_name = ?;
+                SELECT url, file_type, hash, uploader_id FROM media WHERE short_name = ?;
             "#,
         )
         .bind(&cmd.short_name)
@@ -606,6 +608,8 @@ impl MediaService for MediaServiceImpl {
                 short_name: None,
                 url: row.0,
                 file_type: row.1,
+                hash: row.2,
+                uploader_id: row.3,
             }),
             Err(_) => Err(MediaError::FileNotFound),
         }
@@ -657,6 +661,8 @@ impl MediaService for MediaServiceImpl {
                 m.short_name,
                 'media/i/' || m.short_name AS url,
                 m.file_type,
+                m.hash,
+                m.uploader_id,
                 CASE
                     WHEN LOWER(m.short_name) = LOWER(?1) THEN 3
                     WHEN LOWER(m.short_name) LIKE LOWER(?1) || '%' THEN 2
@@ -685,6 +691,8 @@ impl MediaService for MediaServiceImpl {
                 short_name: Some(r.short_name),
                 url: r.url,
                 file_type: r.file_type,
+                hash: r.hash,
+                uploader_id: r.uploader_id,
             })
             .collect())
     }

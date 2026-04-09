@@ -59,6 +59,16 @@ pub struct LinkResult {
     pub short_name: Option<String>,
     pub url: String,
     pub file_type: String,
+    /// SHA-256 hex digest of the file content, stored at upload time.
+    /// Used by `get_media` to reconstruct the on-disk path from the current
+    /// MEDIA_PATH instead of relying on the potentially-stale `url` column.
+    pub hash: String,
+    /// The user who uploaded this media entry.
+    /// For post covers (.post.*) and avatars (.avt.*), the file lives at
+    /// <media_dir>/<type>/<uploader_id>/<sha256><ext>, so we need this to
+    /// reconstruct the path correctly (the hash only encodes post_id / user_id
+    /// for naming, which may differ from the uploader_id used as the dir).
+    pub uploader_id: i64,
 }
 
 #[derive(Debug, Clone)]
