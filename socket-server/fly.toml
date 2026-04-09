@@ -1,0 +1,17 @@
+# Rename `app` to something unique on Fly.io before running `fly launch`
+app = "my-ws-server"
+primary_region = "sin"
+
+[build]
+
+[http_service]
+  internal_port     = 5001
+  force_https       = true
+  auto_stop_machines  = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory   = "256mb"
+  cpu_kind = "shared"
+  cpus     = 1

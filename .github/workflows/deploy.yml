@@ -5,107 +5,58 @@ on:
     branches: [master]
     paths:
       - ".github/workflows/**"
-      - "portfolio/**"
       - "blog/**"
+      - "socket-server/**"
 
 jobs:
   filter:
     runs-on: ubuntu-latest
     outputs:
-      portfolio: ${{ steps.filter.outputs.portfolio }}
       blog: ${{ steps.filter.outputs.blog }}
+      socket: ${{ steps.filter.outputs.socket }}
     steps:
       - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
         id: filter
         with:
           filters: |
-            portfolio:
-              - 'portfolio/**'
             blog:
               - 'blog/**'
+            socket:
+              - 'socket-server/**'
 
-  deploy-portfolio:
+  deploy-blog-backend:
     needs: filter
-    if: needs.filter.outputs.portfolio == 'true' || contains(github.event.head_commit.message, '[deploy portfolio]')
+    if: needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')
     runs-on: ubuntu-latest
     steps:
-      - name: Run portfolio deploy script on VPS
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -e
+      - uses: actions/checkout@v3
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy blog backend
+        run: flyctl deploy --remote-only --config blog/backend/fly.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
-            echo "https://github.com/${{ github.repository }}.git"
-            echo "${{ secrets.GH_PAT }}"
-
-            REPO_DIR="/var/dev/my-page"
-            LIVE_DIR="/var/www/portfolio"
-            BRANCH="master"
-
-            mkdir -p "$REPO_DIR"
-            mkdir -p "$LIVE_DIR"
-
-            if [ ! -d "$REPO_DIR/.git" ]; then
-              git clone -b "$BRANCH" "https://${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git" "$REPO_DIR"
-            else
-              cd "$REPO_DIR"
-              git fetch origin "$BRANCH"
-              git reset --hard origin/"$BRANCH"
-              git clean -fd
-            fi
-
-            cd "$REPO_DIR/portfolio"
-
-            bun install
-            bun run build
-
-            rm -rf "$LIVE_DIR"/*
-            cp -r dist/* "$LIVE_DIR"
-
-            echo "Portfolio deployed successfully!"
-  deploy-blog:
-    needs: filter
-    if: |
-      needs.filter.outputs.blog ||
-      contains(github.event.head_commit.message, '[deploy blog]')
+  deploy-blog-frontend:
+    needs: [filter, deploy-blog-backend]
+    if: needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')
     runs-on: ubuntu-latest
     steps:
-      - name: Run blog deploy script on VPS
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -e
+      - uses: actions/checkout@v3
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy blog frontend
+        run: flyctl deploy --remote-only --config blog/frontend/fly.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
-            REPO_DIR="/var/dev/my-page"
-            BLOG_DIR="$REPO_DIR/blog"
-            BRANCH="master"
-
-            mkdir -p "$REPO_DIR"
-
-            if [ ! -d "$REPO_DIR/.git" ]; then
-              git clone -b "$BRANCH" "https://${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git" "$REPO_DIR"
-            else
-              cd "$REPO_DIR"
-              git fetch origin "$BRANCH"
-              git reset --hard origin/"$BRANCH"
-              git clean -fd
-            fi
-
-            cd "$BLOG_DIR/backend"
-
-            sqlx migrate run --database-url sqlite://data/blog.db
-
-            cd ..
-
-            docker compose build backend
-            docker compose build frontend
-            docker compose up -d
-
-            echo "Blog deployed successfully!"
+  deploy-socket-server:
+    needs: filter
+    if: needs.filter.outputs.socket == 'true' || contains(github.event.head_commit.message, '[deploy ws]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy socket server
+        run: flyctl deploy --remote-only --config socket-server/fly.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

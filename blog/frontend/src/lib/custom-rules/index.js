@@ -25,9 +25,12 @@ export function pluginExtend(root) {
     container.__mounted = true;
 
     const button = container.querySelector(".reveal-tooltip");
+    const originalText = button.textContent;
 
     button.addEventListener("click", () => {
       container.classList.toggle("toggled");
+      const isToggled = container.classList.contains("toggled");
+      button.textContent = isToggled ? "Click to hide" : originalText;
     });
   });
 
