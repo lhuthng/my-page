@@ -10,10 +10,30 @@ use http::{HeaderValue, Method, header::CONTENT_TYPE};
 use tower_http::trace::TraceLayer;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 
+use crate::domain::entities::secret::Claims;
+use crate::infrastructure::web::graphql::schema::BlogSchema;
 use crate::infrastructure::web::{
     api::{handlers, middlewares},
     server::AppState,
 };
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use axum::extract::Extension;
+
+async fn graphql_handler(
+    schema: Extension<BlogSchema>,
+    Extension(claims): Extension<Claims>,
+    req: GraphQLRequest,
+) -> GraphQLResponse {
+    let mut inner = req.into_inner();
+    inner = inner.data(claims);
+    schema.execute(inner).await.into()
+}
+
+async fn graphql_playground() -> impl axum::response::IntoResponse {
+    axum::response::Html(async_graphql::http::playground_source(
+        async_graphql::http::GraphQLPlaygroundConfig::new("/graphql"),
+    ))
+}
 
 // This MUST retuns Router<()> instead of Router<AppState>
 pub fn build_router(state: Arc<AppState>) -> Router<()> {
@@ -178,6 +198,18 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             .layer(cors),
     );
 
+    let graphql_routes = Router::new()
+        .route(
+            "/graphql",
+            axum::routing::get(graphql_playground).post(graphql_handler),
+        )
+        .layer(Extension(state.graphql_schema.clone()))
+        .layer(middleware::from_fn(middlewares::auth::admin_check))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            middlewares::auth::user_guard,
+        ));
+
     Router::new()
         .nest("/media", media_routes)
         .nest("/auth", auth_routes)
@@ -186,6 +218,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/series", series_routes)
         .nest("/mail", mail_routes)
         .nest("/dashboard", dashboard_routes)
+        .merge(graphql_routes)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
