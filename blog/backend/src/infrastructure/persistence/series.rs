@@ -403,7 +403,7 @@ impl SeriesService for SeriesServiceImpl {
 
             let short_name = format!(".srs.{}", hash);
 
-            hash = format!(".avt.{}.{}", &cmd.user_id, hash);
+            hash = format!(".srs.{}.{}", &cmd.user_id, hash);
 
             image_id = match sqlx::query_as::<_, (i64,)>(
                 r#"
