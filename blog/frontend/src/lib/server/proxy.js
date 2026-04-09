@@ -9,20 +9,25 @@ export function route(path) {
  * Convert a backend media path (e.g. "media/i/my-slug") into a URL the
  * browser can fetch directly.
  *
- * When PUBLIC_BACKEND_URL is set (e.g. "https://my-blog-backend.fly.dev"),
+ * When BACKEND_ORIGIN is set (e.g. "https://my-blog-backend.fly.dev"),
  * the browser fetches the image straight from the backend, skipping the
  * SvelteKit proxy entirely — one fewer network hop, no memory pressure on
  * the frontend machine, and proper Cache-Control headers reach the browser
  * without being rewritten.
  *
- * When PUBLIC_BACKEND_URL is not set (local dev or not yet configured), it
+ * When BACKEND_ORIGIN is not set (local dev or not yet configured), it
  * falls back to the existing /api/... proxy route so nothing breaks.
+ *
+ * NOTE: do NOT prefix this variable with PUBLIC_ — $env/dynamic/private
+ * intentionally excludes PUBLIC_-prefixed variables (those belong to
+ * $env/dynamic/public). Using a non-prefixed name keeps it server-only
+ * while still being readable at runtime.
  */
 export function fixClientRoute(path) {
   if (path == undefined) return undefined;
-  const publicBackend = env.PUBLIC_BACKEND_URL;
-  if (publicBackend) {
-    return `${publicBackend.replace(/\/$/, "")}/${path}`;
+  const backendOrigin = env.BACKEND_ORIGIN;
+  if (backendOrigin) {
+    return `${backendOrigin.replace(/\/$/, "")}/${path}`;
   }
   return `/api/${path}`.replace("/./", "/");
 }

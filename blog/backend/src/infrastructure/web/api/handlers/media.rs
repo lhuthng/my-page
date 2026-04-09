@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::{
@@ -20,7 +21,10 @@ use crate::{
         },
         services::media::MediaService,
     },
-    domain::{entities::secret::Claims, errors::media::MediaError},
+    domain::{
+        entities::{media::MediaType, secret::Claims},
+        errors::media::MediaError,
+    },
     infrastructure::web::{
         api::handlers::common::{MediumData, extract_medium},
         server::AppState,
@@ -195,32 +199,73 @@ pub async fn get_media(
         .get_link(GetLinkCommand { short_name })
         .await?;
 
+    // Decode the storage layout from the hash field. Three layouts exist:
+    //
+    //  Regular media  hash = "<sha256>"
+    //                 file = <media_dir>/<sha256[0..2]>/<sha256[2..4]>/<sha256><ext>
+    //
+    //  Post cover     hash = ".post.<post_id>.<sha256>"
+    //                 file = <media_dir>/post/<uploader_id>/<sha256><ext>
+    //                 NOTE: hash encodes post_id but the dir uses uploader_id!
+    //
+    //  User avatar    hash = ".avt.<user_id>.<sha256>"
+    //                 file = <media_dir>/avt/<uploader_id>/<sha256><ext>
+    //
+    // Reconstructing from the hash (rather than the stored `url` column) is
+    // robust against MEDIA_PATH changes between upload and serve.
+    let extension = MediaType::from_str(&link.file_type)?.get_extension();
+
+    let (file_path, content_hash) = if link.hash.starts_with('.') {
+        // Special layout: ".<type>.<id>.<sha256>"
+        // splitn(4, '.') keeps the sha256 tail (which has no dots) in one piece:
+        // ["", "<type>", "<id>", "<sha256>"]
+        //
+        // IMPORTANT: parts[2] is the post_id for ".post.*" entries, NOT the
+        // user_id used as the on-disk subdirectory.  Always use uploader_id
+        // (fetched from the DB) as the directory name — it is the user_id for
+        // both post covers and avatars.
+        let parts: Vec<&str> = link.hash.splitn(4, '.').collect();
+        if parts.len() < 4 {
+            return Err(MediaError::FileNotFound);
+        }
+        let type_dir = parts[1]; // "post" or "avt"
+        let sha256 = parts[3]; // plain SHA-256 hex
+        let path = state
+            .media_config
+            .dir
+            .join(type_dir)
+            .join(link.uploader_id.to_string()) // user_id used at upload time
+            .join(format!("{}{}", sha256, extension));
+        (path, sha256.to_string())
+    } else {
+        // Regular layout: hash is a plain SHA-256 hex string.
+        let path = state
+            .media_config
+            .dir
+            .join(&link.hash[0..2])
+            .join(&link.hash[2..4])
+            .join(format!("{}{}", link.hash, extension));
+        (path, link.hash.clone())
+    };
+
     // Open the file for streaming — avoids loading the entire file into RAM,
-    // which previously caused OOM kills on the 256 MB machine when many images
-    // were requested concurrently.
-    let file = fs::File::open(&link.url)
+    // which previously caused OOM kills on the 256 MB machine when many
+    // images were requested concurrently.
+    let file = fs::File::open(&file_path)
         .await
         .map_err(|_| MediaError::FileNotFound)?;
 
     let body = Body::from_stream(ReaderStream::new(file));
 
-    // Derive a stable ETag from the filename stem, which is the SHA-256 content
-    // hash written by the upload handler.
-    let etag = std::path::Path::new(&link.url)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .map(|s| format!("\"{}\"", s));
+    // Use the plain SHA-256 as the ETag — stable content identifier
+    // regardless of the storage layout.
+    let etag = format!("\"{}\"", content_hash);
 
-    let mut builder = Response::builder()
+    Response::builder()
         .status(200)
         .header(header::CONTENT_TYPE, &link.file_type)
-        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable");
-
-    if let Some(tag) = etag {
-        builder = builder.header(header::ETAG, tag);
-    }
-
-    builder
+        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+        .header(header::ETAG, etag)
         .body(body)
         .map_err(|e| MediaError::InternalError(e.to_string()))
 }
