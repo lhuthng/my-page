@@ -7,6 +7,11 @@ primary_region = "sin"
 [env]
   PORT = "8080"
   # API_URL is set via `fly secrets set API_URL=http://<your-backend-app-name>.internal:3000`
+  # Set this to your backend's public URL so the browser fetches images directly,
+  # bypassing the SvelteKit proxy (one fewer hop, no frontend memory pressure).
+  # e.g. fly secrets set PUBLIC_BACKEND_URL=https://my-blog-backend.fly.dev
+  # Leave unset to fall back to the /api/... proxy route (safe for local dev).
+  # PUBLIC_BACKEND_URL=https://my-blog-backend.fly.dev
 
 [http_service]
   internal_port      = 8080
