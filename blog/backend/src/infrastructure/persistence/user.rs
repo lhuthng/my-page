@@ -67,7 +67,7 @@ impl UserService for UserServiceImpl {
     async fn me(&self, cmd: MeCommand) -> Result<Me, UserError> {
         let me_row = sqlx::query_as::<_, MeRow>(
             r#"
-			SELECT username, display_name, role, media.url AS avatar_url
+			SELECT username, display_name, role, 'media/i/' || media.short_name AS avatar_url
 			FROM user_meta JOIN users ON users.id = user_id
 			LEFT JOIN media on user_meta.avatar_image_id = media.id
 			WHERE user_id = ?
@@ -132,7 +132,7 @@ impl UserService for UserServiceImpl {
                 u.username,
                 u.role,
                 um.display_name,
-                m.url AS avatar_url,
+                'media/i/' || m.short_name AS avatar_url,
                 CASE
                     WHEN LOWER(um.display_name) = LOWER(?1) THEN 3
                     WHEN LOWER(um.display_name) LIKE LOWER(?1) || '%' THEN 2
@@ -178,7 +178,7 @@ impl UserService for UserServiceImpl {
     async fn get_user(&self, cmd: GetUserCommand) -> Result<User, UserError> {
         let user_row = sqlx::query_as::<_, UserRow>(
             r#"
-            SELECT username, display_name, bio, role, media.url AS avatar_url
+            SELECT username, display_name, bio, role, 'media/i/' || media.short_name AS avatar_url
             FROM users
             JOIN user_meta ON users.id = user_id
             LEFT JOIN media ON media.id = avatar_image_id
@@ -226,7 +226,7 @@ impl UserService for UserServiceImpl {
 
         let sql = format!(
             r#"
-            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, status, url, views, likes, comments_count
+            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, status, 'media/i/' || m.short_name AS url, views, likes, comments_count
             FROM posts p
                 JOIN users u ON u.id = p.user_id
                 JOIN user_meta um ON u.id = um.user_id

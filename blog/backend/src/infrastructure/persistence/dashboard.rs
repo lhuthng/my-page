@@ -96,7 +96,7 @@ async fn fetch_snapshots_with_tags(
 const TOP_POSTS_SQL: &str = r#"
     SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
            u.username AS author_slug, um.display_name AS author_name,
-           m.url AS url, p.status,
+           'media/i/' || m.short_name AS url, p.status,
            ps.views, ps.likes, ps.comments_count
     FROM posts p
     JOIN users u ON u.id = p.user_id
@@ -152,7 +152,7 @@ impl DashboardService for DashboardServiceImpl {
             r#"
             SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
                    u.username AS author_slug, um.display_name AS author_name,
-                   m.url AS url, p.status,
+                   'media/i/' || m.short_name AS url, p.status,
                    ps.views, ps.likes, ps.comments_count
             FROM posts p
             JOIN users u ON u.id = p.user_id
@@ -174,7 +174,7 @@ impl DashboardService for DashboardServiceImpl {
         // --- Recent users ---
         let recent_users: Vec<DashboardUserInfo> = sqlx::query_as::<_, UserInfoRow>(
             r#"
-            SELECT u.username, um.display_name, u.role, m.url AS avatar_url, u.created_at
+            SELECT u.username, um.display_name, u.role, 'media/i/' || m.short_name AS avatar_url, u.created_at
             FROM users u
             JOIN user_meta um ON um.user_id = u.id
             LEFT JOIN media m ON m.id = um.avatar_image_id
@@ -308,7 +308,7 @@ impl DashboardService for DashboardServiceImpl {
             r#"
             SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
                    u.username AS author_slug, um.display_name AS author_name,
-                   m.url AS url, p.status,
+                   'media/i/' || m.short_name AS url, p.status,
                    ps.views, ps.likes, ps.comments_count
             FROM posts p
             JOIN users u ON u.id = p.user_id
@@ -393,7 +393,7 @@ impl DashboardService for DashboardServiceImpl {
         // Data query
         let data_sql = format!(
             r#"
-            SELECT u.username, um.display_name, u.role, m.url AS avatar_url, u.created_at
+            SELECT u.username, um.display_name, u.role, 'media/i/' || m.short_name AS avatar_url, u.created_at
             FROM users u
             JOIN user_meta um ON um.user_id = u.id
             LEFT JOIN media m ON m.id = um.avatar_image_id
