@@ -5,12 +5,22 @@
 
   let currentPath = $derived($page.url.pathname);
 
-  const tabs = [
+  const baseTabs = [
     { label: "Overview", path: "/dashboard" },
     { label: "Posts", path: "/dashboard/posts" },
     { label: "Series", path: "/dashboard/series" },
     { label: "Users", path: "/dashboard/users" },
   ];
+
+  // $page.data.role is returned by +layout.server.js on every navigation
+  // (both SSR and client-side), so it's always reliable. $page.data.user
+  // is only populated on the initial HTML request (set via hooks.server.js)
+  // and becomes null on subsequent client-side navigations.
+  let tabs = $derived(
+    $page.data.role === "admin"
+      ? [...baseTabs, { label: "Database", path: "/dashboard/database" }]
+      : baseTabs,
+  );
 </script>
 
 <svelte:head>

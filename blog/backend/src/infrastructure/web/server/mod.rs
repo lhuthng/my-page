@@ -31,6 +31,7 @@ pub struct AppState {
     pub post_service: persistence::post::PostServiceImpl,
     pub series_service: persistence::series::SeriesServiceImpl,
     pub dashboard_service: persistence::dashboard::DashboardServiceImpl,
+    pub graphql_schema: crate::infrastructure::web::graphql::schema::BlogSchema,
 }
 
 pub struct HTTPServer<'a> {
@@ -149,6 +150,8 @@ impl<'a> HTTPServer<'a> {
         )
         .await?;
         sqlx::migrate!().run(&pool).await?;
+        let graphql_schema =
+            crate::infrastructure::web::graphql::schema::build_schema(pool.clone());
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
             media_config: MediaConfig::from_env(),
@@ -158,6 +161,7 @@ impl<'a> HTTPServer<'a> {
             post_service: persistence::post::PostServiceImpl::new(pool.clone()),
             series_service: persistence::series::SeriesServiceImpl::new(pool.clone()),
             dashboard_service: persistence::dashboard::DashboardServiceImpl::new(pool.clone()),
+            graphql_schema,
         });
         let router = api::router::build_router(state);
 
