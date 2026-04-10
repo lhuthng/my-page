@@ -1,38 +1,65 @@
-# sv
+# Blog Frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit frontend for the blog, using [`svelte-adapter-bun`](https://github.com/gornostay25/svelte-adapter-bun) for SSR. Bun is both the runtime and the package manager. Runs at [blog.huuthangle.site](https://blog.huuthangle.site).
 
-## Creating a project
+## Overview
 
-If you're seeing this, you've probably already done this step. Congrats!
+The app is fully server-side rendered. There is no static export — it runs as a persistent Bun process. In production it's containerized (`FROM oven/bun:1`) and sits behind nginx on the same VM as the backend.
 
-```sh
-# create a new project in the current directory
-npx sv create
+## Request Flow
 
-# create a new project in my-app
-npx sv create my-app
+Three distinct paths depending on what's being requested:
+
+```
+1. Server-side data fetching (hooks.server.js, +page.server.js)
+   └── route() in $lib/server/proxy.js
+         └── prepends API_URL → http://backend:3000 (Docker internal, never public)
+
+2. Browser API calls
+   └── fetch('/api/<path>')
+         └── src/routes/api/[...path]/+server.js
+               └── proxyFallback() → API_URL (backend)
+
+3. Media files
+   └── fixClientRoute() in $lib/server/proxy.js
+         ├── BACKEND_ORIGIN set → direct browser fetch from that origin
+         │     (nginx routes /media/* straight to the backend, skipping SvelteKit)
+         └── BACKEND_ORIGIN unset → /api/media/... (proxy fallback)
 ```
 
-## Developing
+**Why the split for media?** When `BACKEND_ORIGIN` is set, the browser fetches images directly from the backend origin. This means one fewer network hop, no memory pressure on the frontend container, and the backend's `Cache-Control` headers reach the browser unmodified.
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Environment Variables
 
-```sh
-npm run dev
+| Variable | Description |
+|---|---|
+| `API_URL` | Backend URL for server-side calls. In Docker: `http://backend:3000`. Locally: `http://localhost:3000`. Never exposed to the browser. |
+| `BACKEND_ORIGIN` | Public origin of the backend (e.g. `https://blog.huuthangle.site`). Tells `fixClientRoute()` to build direct browser-facing media URLs. Optional — omit it and media falls back to the `/api/media/...` proxy. |
+| `PORT` | Port the SvelteKit server listens on. Set to `8080` in `docker-compose.yml`. |
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+See `example.env` for a starting point.
+
+## Local Development
+
+Run the frontend standalone (you'll need the backend running separately at `http://localhost:3000`):
+
+```bash
+bun install
+bun dev
 ```
+
+Or spin up the full stack with Docker Compose from the `blog/` directory:
+
+```bash
+docker compose up -d --build
+```
+
+Frontend will be available at `http://localhost:5000`.
 
 ## Building
 
-To create a production version of your app:
-
-```sh
-npm run build
+```bash
+bun run build
 ```
 
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Output goes to `build/`. The entry point is `build/index.js` — run it directly with `bun run build/index.js`. The Docker image does exactly this via its `ENTRYPOINT`.
