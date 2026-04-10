@@ -1,140 +1,153 @@
-# Prerequisite:
-0. **Update**
-    ```bash
-    sudo apt update
-    sudo apt upgrade -y
-    ```
-1. **Nginx**
-    Install `nginx`
-    ```bash
-    sudo apt install nginx -y
-    ```
+# CI/CD & Infrastructure
 
-    On the VPS, make sure to create the folders:
-    | dev                  | live                 |
-    |----------------------|----------------------|
-    | `/var/dev/portfolio` | `/var/www/portfolio` |
-    | `/var/dev/blog`      | `/var/www/blog`      |
-    | `/var/dev/ws`        | `/var/www/ws`        |
+## Pipeline Overview
 
-    Generate a github-actions key-pair
-    ```bash
-    ssh-keygen -t ed25519 -C "github-actions" -f github_actions_key -N ""
-    ```
-3. **Certbot**
-    Install `certbot` and its plugin for nginx
-    ```bash
-    sudo apt install certbot python3-certbot-nginx -y
-    ```
+Defined in `.github/workflows/deploy.yml`. Triggers on push to `master`, but only runs jobs relevant to what actually changed — a `dorny/paths-filter` step gates each job on its path.
 
-    To renew
-    ```bash
-    sudo certbot renew
-    ```
+You can also force a deploy regardless of changed paths by including `[deploy blog]` or `[deploy ws]` in your commit message.
 
-    Sometime `apache` or something else might use the port 80, you can check the port and get rid of them if exist
-    ```bash
-    sudo lsof -i :80
-    ```
+---
 
-    Sign the sub domains, be sure they are correctly assigned on your dns manager.
-    ```bash
-    sudo certbot --nginx -d portfolio.huuthangle.site -d blog.huuthangle.site -d ws.huuthangle.site
-    ```
+## Blog Deployment
 
-    Create the configs for the portfolio and blog
-    ```bash
-    sudo nano /etc/nginx/sites-available/portfolio
-    sudo nano /etc/nginx/sites-available/blog
-    sudo nano /etc/nginx/sites-available/ws
-    ```
+Triggered by changes in `blog/`.
 
-    Link them to the sites-enabled to make it enabled
-    ```bash
-    sudo ln -s /etc/nginx/sites-available/portfolio /etc/nginx/sites-enabled/
-    sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
-    sudo ln -s /etc/nginx/sites-available/ /etc/nginx/sites-enabled/
-    ```
-    *(the reference files can be found here: [portfolio](./nginx/portfolio.conf), [blog](./nginx/blog.conf), and, [ws](./nginx/ws.conf))*
+### `build-push-backend` and `build-push-frontend`
 
-    Test and reload
-    ```bash
-    sudo nginx -t
-    sudo systemctl reload nginx
-    ```
+These two jobs run in parallel on GitHub's servers. Each builds a Docker image for `linux/amd64` and pushes it to GHCR:
 
-4. **Portfolio: React**
-    Install `npm` and `bun`
-    ```bash
-    sudo apt install npm -y
-    npm install -g bun
-    ```
+- `ghcr.io/lhuthng/blog-backend:latest`
+- `ghcr.io/lhuthng/blog-frontend:latest`
 
-5. **Blog: Blazor server app** 
-    Install `dotnet`
-    ```bash
-    sudo add-apt-repository ppa:dotnet/backports
-    sudo apt-get install dotnet-sdk-9.0 -y
-    sudo apt-get install aspnetcore-runtime-9.0 -y
-    ```
+Both use `cache-from: type=gha` / `cache-to: type=gha,mode=max`, so unchanged Rust deps and npm packages are restored from GitHub Actions cache instead of being rebuilt.
 
-    The Blog is different from the Portfolio, we need a service to run in the background on a certain port and tell `nginx` to reverse proxy to that service.
-    
-    The reference service can be found [here](./services/blog.service). Create such file at `/etc/systemd/system/blog.service` then execute
-    ```bash
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now blog.service
-    ```
-    To check the service:
-    ```bash
-    sudo systemctl status blog.service
-    ```
-6. **(new) Blog: Svelte+Rust server app**
-    Fuck Blazor, please remove the service
-    ```bash
-    sudo systemctl stop blog.service
-    sudo systemctl disable blog.service
-    sudo rm /etc/systemd/system/blog.service
-    sudo systemctl daemon-reload
-    sudo systemctl reset-failed
-    ```
-    Remove the .NET runtime
-    ```bash
-    sudo apt remove --purge dotnet-sdk-9.0 aspnetcore-runtime-9.0 -y
-    sudo apt autoremove -y
-    ```
+### `deploy-blog`
 
-    Install docker
+Runs after both build jobs succeed. SSHes into the Oracle VM and runs:
 
-    ```bash
-    sudo apt install -y ca-certificates curl gnupg lsb-release
-    sudo install -m 0755 -d /etc/apt/keyrings
-    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-    sudo chmod a+r /etc/apt/keyrings/docker.asc
+```bash
+docker login ghcr.io
+docker compose pull
+docker compose up -d --remove-orphans
+docker image prune -f
+```
 
-    # Add the repository to Apt sources:
-    sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
-    Types: deb
-    URIs: https://download.docker.com/linux/ubuntu
-    Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-    Components: stable
-    Signed-By: /etc/apt/keyrings/docker.asc
-    EOF
-    
-    sudo apt update
+---
 
-    sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+## Socket Server Deployment
 
-    ```
-    
-    ### *ADD A RATE LIMITER*
-    inside `/etc/nginx/nginx.conf`
-    ```bash
-    http {
-        # Add this line here:
-        limit_req_zone $binary_remote_addr zone=blog:10m rate=5r/s;
-    
-        # ... leave everything else as it is ...
-    }
-    ```
-    Dont forget to update your blog config
+Triggered by changes in `socket-server/`.
+
+### `deploy-socket-server`
+
+Runs `flyctl deploy --remote-only` from the `socket-server/` directory. Fly.io handles the build remotely — no local Docker required.
+
+---
+
+## Required GitHub Secrets
+
+| Secret | Description |
+|---|---|
+| `VM_HOST` | Oracle Cloud VM public IP |
+| `VM_USER` | SSH username (`ubuntu`) |
+| `VM_SSH_KEY` | Private SSH key contents for VM access |
+| `GHCR_TOKEN` | GitHub PAT with `read:packages` scope — used by the VM to pull images from GHCR |
+| `FLY_API_TOKEN` | Fly.io deploy token — used for socket server deployment |
+
+`GITHUB_TOKEN` is used automatically by the build jobs to push images; no secret needed for that.
+
+---
+
+## Nginx Configs
+
+Reference configs live in `nginx/`. Copy to `/etc/nginx/sites-available/` and symlink to `sites-enabled/`.
+
+| File | Domain | Behavior |
+|---|---|---|
+| `blog.conf` | `blog.huuthangle.site` | `/media/*` → `backend:3001`, everything else → `frontend:5000` |
+| `root.conf` | `huuthangle.site` | 301 redirect to `blog.huuthangle.site` |
+| `ws.conf` | `ws.huuthangle.site` | WebSocket proxy to `localhost:5001` — legacy VPS config, kept for reference |
+| `portfolio.conf` | `portfolio.huuthangle.site` | Static files from `/var/www/portfolio` — legacy VPS config, kept for reference |
+
+`ws.conf` and `portfolio.conf` are no longer active. The socket server is on Fly.io and the portfolio is on Cloudflare Pages — neither goes through nginx anymore.
+
+Add a rate limiter in `/etc/nginx/nginx.conf`:
+
+```nginx
+http {
+    limit_req_zone $binary_remote_addr zone=blog:10m rate=5r/s;
+    # ... rest of config unchanged ...
+}
+```
+
+Then reference it in `blog.conf` as needed.
+
+---
+
+## Oracle Cloud VM — First-Time Setup
+
+See the full migration journal: `journal-logs/2026-04-10-oracle-cloud-migration.md`
+
+Quick reference:
+
+**1. Create the VM**
+
+Use `VM.Standard.E2.1.Micro` (free tier AMD) or `VM.Standard.A1.Flex` (free tier ARM, better) in the Oracle Cloud Console.
+
+**2. Open ports in OCI Security List**
+
+Add ingress rules for TCP ports 80 and 443.
+
+**3. SSH in and install dependencies**
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt install -y nginx certbot python3-certbot-nginx rsync
+```
+
+**4. Add swap** (critical on the AMD micro — Rust compilation will OOM without it)
+
+```bash
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+**5. Fix iptables**
+
+Oracle's default iptables has a blanket REJECT rule. Insert ACCEPT rules for ports 80 and 443 **before** it (position 5):
+
+```bash
+sudo iptables -I INPUT 5 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT 5 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+```
+
+**6. Set up nginx**
+
+```bash
+sudo cp nginx/blog.conf /etc/nginx/sites-available/blog
+sudo cp nginx/root.conf /etc/nginx/sites-available/root
+sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/root /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**7. TLS with certbot**
+
+Make sure DNS is pointed at the VM before running this.
+
+```bash
+sudo certbot --nginx -d blog.huuthangle.site -d huuthangle.site
+```
+
+**8. Clone the repo and start the stack**
+
+```bash
+git clone https://github.com/lhuthng/MyPage.git ~/MyPage
+cd ~/MyPage/blog
+docker compose up -d
+```
+
+From here, GitHub Actions handles all future deploys automatically.
