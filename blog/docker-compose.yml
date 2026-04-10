@@ -1,5 +1,6 @@
 services:
   backend:
+    image: ghcr.io/lhuthng/blog-backend:latest
     build: ./backend
     volumes:
       - ./backend/data:/app/data
@@ -13,6 +14,7 @@ services:
       - ./backend/.env
 
   frontend:
+    image: ghcr.io/lhuthng/blog-frontend:latest
     build: ./frontend
     container_name: svelte-frontend
     depends_on:
@@ -27,6 +29,7 @@ services:
       - PORT=8080
       - API_URL=http://backend:3000
       - BODY_SIZE_LIMIT=100M
+
 networks:
   appnet:
     driver: bridge
