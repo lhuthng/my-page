@@ -136,23 +136,22 @@ jobs:
         working-directory: socket-server
         run: GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o server-linux .
 
-      - name: Copy binary to VM
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.WS_VM_HOST }}
-          username: ${{ secrets.WS_VM_USER }}
-          key: ${{ secrets.WS_VM_SSH_KEY }}
-          source: "socket-server/server-linux"
-          target: "/tmp/"
-
-      - name: Restart service
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.WS_VM_HOST }}
-          username: ${{ secrets.WS_VM_USER }}
-          key: ${{ secrets.WS_VM_SSH_KEY }}
-          script: |
-            sudo mv /tmp/socket-server/server-linux /usr/local/bin/socket-server
+      - name: Deploy and restart service
+        env:
+          WS_VM_KEY: ${{ secrets.WS_VM_SSH_KEY }}
+          WS_VM_HOST: ${{ secrets.WS_VM_HOST }}
+          WS_VM_USER: ${{ secrets.WS_VM_USER }}
+        run: |
+          echo "$WS_VM_KEY" > /tmp/ws_vm_key
+          chmod 600 /tmp/ws_vm_key
+          scp -i /tmp/ws_vm_key -o StrictHostKeyChecking=no \
+            socket-server/server-linux \
+            "$WS_VM_USER@$WS_VM_HOST:/tmp/socket-server-linux"
+          ssh -i /tmp/ws_vm_key -o StrictHostKeyChecking=no \
+            "$WS_VM_USER@$WS_VM_HOST" bash -s << 'EOF'
+            sudo mv /tmp/socket-server-linux /usr/local/bin/socket-server
             sudo chmod +x /usr/local/bin/socket-server
             sudo systemctl restart socket-server
             sudo systemctl status socket-server --no-pager
+          EOF
+          rm -f /tmp/ws_vm_key
