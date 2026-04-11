@@ -114,16 +114,45 @@ jobs:
             docker compose up -d --remove-orphans
             docker image prune -f
 
-  # ── Socket server stays on Fly.io ─────────────────────────────────────────
+  # ── Cross-compile Go binary and deploy to Oracle VM ───────────────────────
+  # Required GitHub Secrets:
+  #   WS_VM_HOST    — WebSocket VM public IP (130.61.121.230)
+  #   WS_VM_USER    — ubuntu
+  #   WS_VM_SSH_KEY — private SSH key contents for the WebSocket VM
   deploy-socket-server:
     needs: filter
     if: needs.filter.outputs.socket == 'true' || contains(github.event.head_commit.message, '[deploy ws]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: Deploy socket server
-        run: flyctl deploy --remote-only
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: socket-server/go.mod
+          cache-dependency-path: socket-server/go.sum
+
+      - name: Build Linux binary
         working-directory: socket-server
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o server-linux .
+
+      - name: Copy binary to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.WS_VM_HOST }}
+          username: ${{ secrets.WS_VM_USER }}
+          key: ${{ secrets.WS_VM_SSH_KEY }}
+          source: "socket-server/server-linux"
+          target: "/tmp/"
+
+      - name: Restart service
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.WS_VM_HOST }}
+          username: ${{ secrets.WS_VM_USER }}
+          key: ${{ secrets.WS_VM_SSH_KEY }}
+          script: |
+            sudo mv /tmp/socket-server/server-linux /usr/local/bin/socket-server
+            sudo chmod +x /usr/local/bin/socket-server
+            sudo systemctl restart socket-server
+            sudo systemctl status socket-server --no-pager

@@ -12,7 +12,7 @@ Three independently deployed services living in one repo: a blog, a portfolio, a
 |---|---|---|---|
 | Blog | [blog.huuthangle.site](https://blog.huuthangle.site) | SvelteKit SSR + Rust/Axum + SQLite | Oracle Cloud VM (Docker Compose) |
 | Portfolio | [portfolio.huuthangle.site](https://portfolio.huuthangle.site) | React 19 + Tailwind + GSAP + Lottie, static | Cloudflare Pages |
-| WebSocket server | [ws.huuthangle.site](https://ws.huuthangle.site) | Node.js `ws` library | Fly.io |
+| WebSocket server | [wss.huuthangle.site](https://wss.huuthangle.site) | Go + gorilla/websocket | Oracle Cloud VM (systemd) |
 
 ---
 
@@ -28,7 +28,7 @@ my-page/
 │   ├── frontend/              # SvelteKit SSR app
 │   └── docker-compose.yml
 ├── portfolio/                 # React static site
-├── socket-server/             # Node.js WebSocket server
+├── socket-server/             # Go WebSocket relay server
 └── journal-logs/              # Migration and ops journals
 ```
 
@@ -42,7 +42,7 @@ Browser
   └─→ Cloudflare DNS
         │
         ├─→ blog.huuthangle.site
-        │     └─→ Oracle Cloud VM
+        │     └─→ Oracle Cloud VM  (141.147.45.193)
         │           └─→ nginx
         │                 ├─→ SvelteKit frontend (:5000)
         │                 │     └─→ backend (Docker internal, :3000)
@@ -51,12 +51,13 @@ Browser
         ├─→ portfolio.huuthangle.site
         │     └─→ Cloudflare Pages CDN (static)
         │
-        └─→ ws.huuthangle.site
-              └─→ Fly.io
-                    └─→ Node.js WebSocket server (:5001)
+        └─→ wss.huuthangle.site
+              └─→ Oracle Cloud VM  (130.61.121.230)
+                    └─→ nginx (TLS termination)
+                          └─→ Go WebSocket server (:5001)
 ```
 
-The blog runs entirely on the Oracle VM. nginx handles TLS termination and proxies to the SvelteKit container; SvelteKit makes server-side requests to the Rust backend over the Docker internal network, so the backend is never directly exposed to the public internet. The portfolio is fully static — no server involved at runtime. The WebSocket server is a lightweight standalone process on Fly.io.
+The blog runs entirely on the Oracle VM. nginx handles TLS termination and proxies to the SvelteKit container; SvelteKit makes server-side requests to the Rust backend over the Docker internal network, so the backend is never directly exposed to the public internet. The portfolio is fully static — no server involved at runtime. The WebSocket server is a standalone Go binary managed by systemd on a dedicated Oracle VM, with nginx in front for TLS.
 
 ---
 
@@ -67,7 +68,7 @@ Push to `master` triggers the [GitHub Actions pipeline](.github/workflows/deploy
 | Changed path | What happens |
 |---|---|
 | `blog/**` | Docker images built on GitHub's servers, pushed to GHCR, then SSH'd onto the Oracle VM to pull and restart containers |
-| `socket-server/**` | `flyctl deploy` to Fly.io |
+| `socket-server/**` | Go binary cross-compiled on GitHub's servers, SCP'd to the Oracle VM, service restarted via SSH |
 | `portfolio/**` | Cloudflare Pages detects the push and deploys automatically — no workflow step needed |
 
 You can also force a blog or socket deploy regardless of changed files by including `[deploy blog]` or `[deploy ws]` in your commit message.
@@ -76,11 +77,13 @@ Required GitHub secrets:
 
 | Secret | Purpose |
 |---|---|
-| `VM_HOST` | Oracle VM public IP |
+| `VM_HOST` | Blog Oracle VM public IP |
 | `VM_USER` | SSH username (`ubuntu`) |
-| `VM_SSH_KEY` | Private key for the `github-actions` keypair |
+| `VM_SSH_KEY` | Private key for the blog VM |
 | `GHCR_TOKEN` | GitHub PAT with `read:packages` (so the VM can pull images) |
-| `FLY_API_TOKEN` | Fly.io deploy token |
+| `WS_VM_HOST` | WebSocket Oracle VM public IP |
+| `WS_VM_USER` | SSH username (`ubuntu`) |
+| `WS_VM_SSH_KEY` | Private key for the WebSocket VM |
 
 See [`.github/README.md`](.github/README.md) for full infrastructure setup instructions.
 
@@ -112,7 +115,9 @@ cd portfolio && bun install && bun dev
 ### Socket server
 
 ```bash
-cd socket-server && node server.js
+cd socket-server && go run .
+# custom port / room size
+PORT=8080 MAX_ROOM_SIZE=2 go run .
 ```
 
 ---
