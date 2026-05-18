@@ -166,7 +166,7 @@ PORT=8080 MAX_ROOM_SIZE=2 go run .
 
 ## Deployment
 
-Hosted on an Oracle Cloud VM (`REDACTED_IP`) behind nginx + Let's Encrypt TLS.
+Hosted on an Oracle Cloud VM behind nginx + Let's Encrypt TLS.
 
 Push changes to `socket-server/**` on `master` — the `deploy-socket-server` GitHub Actions job will:
 1. Cross-compile a `linux/amd64` binary on GitHub's servers
