@@ -114,6 +114,27 @@ jobs:
             docker compose up -d --remove-orphans
             docker image prune -f
 
+      # Migrations run automatically via sqlx::migrate!() inside the Rust binary
+      # when the backend container starts. This step waits for startup, then
+      # prints backend logs so any migration error is visible in the CI output,
+      # and fails the job if the container didn't come up.
+      - name: Verify migration and backend health
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/MyPage/blog
+            sleep 10
+            echo "=== Backend startup logs (includes migration output) ==="
+            docker compose logs backend --tail=40
+            echo ""
+            echo "=== Container status ==="
+            docker compose ps
+            docker compose ps backend | grep -Eq "(running|Up)" || \
+              (echo "ERROR: backend is not running — check migration logs above" && exit 1)
+
   # ── Cross-compile Go binary and deploy to Oracle VM ───────────────────────
   # Required GitHub Secrets:
   #   WS_VM_HOST    — WebSocket VM public IP (130.61.121.230)

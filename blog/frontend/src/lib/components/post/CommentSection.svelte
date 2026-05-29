@@ -1,19 +1,29 @@
 <script>
   import { autoHResize } from "$lib/client/auto-resize";
   import { auth, user } from "$lib/client/user";
-  import { onMount } from "svelte";
   import { gsap } from "gsap";
-  import { fade, fly } from "svelte/transition";
-  import Heart from "$lib/components/svgs/Heart.svelte";
-  import Diamond from "$lib/components/svgs/Diamond.svelte";
-  import Club from "$lib/components/svgs/Club.svelte";
-  import Spade from "$lib/components/svgs/Spade.svelte";
+  import { fade } from "svelte/transition";
   import MarkdownIt from "markdown-it";
   import Comment from "./Comment.svelte";
-  import { codeHighlightPlugin } from "$lib/custom-rules";
+  import CommentThread from "./CommentThread.svelte";
+  import { codeHighlightPlugin, mentionProfilePlugin } from "$lib/custom-rules";
 
-  const limit = 3;
-  const md = new MarkdownIt().use(codeHighlightPlugin);
+  const rootLimit = 3;
+  const replyLimit = 5;
+  const mentionDictionary = {};
+  const mentionProfileCache = new Map();
+  const mentionProfileInFlight = new Map();
+  const rootPageCache = new Map();
+  const rootPageInFlight = new Map();
+  const replyPageCache = new Map();
+  const replyPageInFlight = new Map();
+  const md = new MarkdownIt()
+    .use(codeHighlightPlugin)
+    .use(mentionProfilePlugin, { mentionDictionary });
+  const mentionDebounceMs = 250;
+  const mentionMinChars = 3;
+  const mentionMaxProfiles = 5;
+  const mentionRegex = /(^|[\s(>])@([A-Za-z0-9_-]{3,32})\b/g;
 
   let { postId } = $props();
   let last = -1;
@@ -24,48 +34,444 @@
 
   let comments = $state({
     current: "",
-    initialized: false,
     fetching: false,
     sending: false,
     endReached: false,
     lastId: 0,
-    data: [],
+    roots: [],
   });
+  let replyThreads = $state({});
 
   let textarea = $state();
   let tab = $state("write");
+  let replyTo = $state(null);
+  let mentionState = $state({
+    open: false,
+    loading: false,
+    query: "",
+    start: -1,
+    selected: 0,
+    items: [],
+    requestId: 0,
+  });
+  let mentionDebounceTimer = $state();
 
-  const updateComments = (newComments) => {
-    comments.data = [...comments.data, ...newComments].sort(
-      (a, b) => b.id - a.id,
+  const extractMentionUsernames = (value) => {
+    if (!value) return [];
+    const usernames = new Set();
+    let match;
+    const scan = new RegExp(mentionRegex.source, "g");
+    while ((match = scan.exec(value)) !== null) {
+      if (match[2]) usernames.add(match[2]);
+    }
+    return [...usernames];
+  };
+
+  const normalizeAvatarUrl = (url) => {
+    if (!url) return "/anonymous.webp";
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/api/") || url.startsWith("/")) return url;
+    return `/api/${url.replace(/^\.?\//, "")}`;
+  };
+
+  const ensureMentionProfile = async (username) => {
+    if (mentionProfileCache.has(username)) {
+      const cached = mentionProfileCache.get(username);
+      if (cached) {
+        mentionDictionary[username] = cached;
+      }
+      return cached;
+    }
+
+    if (mentionProfileInFlight.has(username)) {
+      return mentionProfileInFlight.get(username);
+    }
+
+    const request = (async () => {
+      try {
+        const res = await fetch(`/api/users/${encodeURIComponent(username)}`);
+        if (!res.ok) {
+          mentionProfileCache.set(username, null);
+          return null;
+        }
+
+        const profile = await res.json();
+        profile.avatar_url = normalizeAvatarUrl(profile.avatar_url);
+
+        mentionProfileCache.set(username, profile);
+        mentionDictionary[username] = profile;
+        return profile;
+      } catch {
+        mentionProfileCache.set(username, null);
+        return null;
+      } finally {
+        mentionProfileInFlight.delete(username);
+      }
+    })();
+
+    mentionProfileInFlight.set(username, request);
+    return request;
+  };
+
+  const prepareComments = async (commentRows) => {
+    await hydrateMentionDictionary(commentRows.map((comment) => comment.content));
+    return commentRows.map((comment) => ({
+      ...comment,
+      content: md.render(comment.content),
+    }));
+  };
+
+  const getRootPageKey = (before) =>
+    `${postId}:${before == null || before === 0 ? "start" : before}`;
+
+  const getReplyPageKey = (parentId, before) =>
+    `${postId}:reply:${parentId}:${before == null || before === 0 ? "start" : before}`;
+
+  const fetchRootsPage = async (before) => {
+    const key = getRootPageKey(before);
+
+    if (rootPageCache.has(key)) {
+      return rootPageCache.get(key);
+    }
+
+    if (rootPageInFlight.has(key)) {
+      return rootPageInFlight.get(key);
+    }
+
+    const api =
+      before == null || before === 0
+        ? `/api/posts/id/${postId}/comments?limit=${rootLimit}`
+        : `/api/posts/id/${postId}/comments?limit=${rootLimit}&before=${before}`;
+
+    const request = (async () => {
+      const res = await fetch(api);
+      if (!res.ok) {
+        return { comments: [], has_more: false };
+      }
+
+      const data = await res.json();
+      const prepared = await prepareComments(data.comments ?? []);
+      const page = { comments: prepared, has_more: Boolean(data.has_more) };
+      rootPageCache.set(key, page);
+      return page;
+    })();
+
+    rootPageInFlight.set(key, request);
+
+    try {
+      return await request;
+    } finally {
+      rootPageInFlight.delete(key);
+    }
+  };
+
+  const fetchRepliesPage = async (parentId, before) => {
+    const key = getReplyPageKey(parentId, before);
+
+    if (replyPageCache.has(key)) {
+      return replyPageCache.get(key);
+    }
+
+    if (replyPageInFlight.has(key)) {
+      return replyPageInFlight.get(key);
+    }
+
+    const api =
+      before == null || before === 0
+        ? `/api/posts/id/${postId}/comments?parent_id=${parentId}&limit=${replyLimit}`
+        : `/api/posts/id/${postId}/comments?parent_id=${parentId}&limit=${replyLimit}&before=${before}`;
+
+    const request = (async () => {
+      const res = await fetch(api);
+      if (!res.ok) {
+        return { comments: [], has_more: false };
+      }
+
+      const data = await res.json();
+      const prepared = await prepareComments(data.comments ?? []);
+      const page = { comments: prepared, has_more: Boolean(data.has_more) };
+      replyPageCache.set(key, page);
+      return page;
+    })();
+
+    replyPageInFlight.set(key, request);
+
+    try {
+      return await request;
+    } finally {
+      replyPageInFlight.delete(key);
+    }
+  };
+
+  const hydrateMentionDictionary = async (contents) => {
+    const missing = new Set();
+    contents.forEach((content) => {
+      extractMentionUsernames(content).forEach((username) => {
+        if (!mentionDictionary[username]) {
+          missing.add(username);
+        }
+      });
+    });
+
+    if (missing.size === 0) return;
+
+    await Promise.all(
+      [...missing].map((username) => ensureMentionProfile(username)),
     );
+  };
 
-    const length = comments.data.length;
+  const resetMentionState = () => {
+    mentionState.open = false;
+    mentionState.loading = false;
+    mentionState.query = "";
+    mentionState.start = -1;
+    mentionState.selected = 0;
+    mentionState.items = [];
+  };
+
+  const getMentionContext = () => {
+    if (!textarea) return null;
+    const caret = textarea.selectionStart ?? comments.current.length;
+    const before = comments.current.slice(0, caret);
+    const match = before.match(/(?:^|\s)@([A-Za-z0-9_-]+)$/);
+
+    if (!match) return null;
+
+    const query = match[1];
+    if (query.length < mentionMinChars) return null;
+
+    const fullMatch = match[0];
+    const start = before.length - fullMatch.length + fullMatch.lastIndexOf("@");
+
+    return { query, start, caret };
+  };
+
+  const searchMentionProfiles = async () => {
+    const context = getMentionContext();
+
+    if (!context) {
+      resetMentionState();
+      return;
+    }
+
+    mentionState.query = context.query;
+    mentionState.start = context.start;
+    mentionState.loading = true;
+    const requestId = mentionState.requestId + 1;
+    mentionState.requestId = requestId;
+
+    try {
+      const res = await fetch(
+        `/api/users?term=${encodeURIComponent(context.query)}&size=${mentionMaxProfiles}&offset=0`,
+      );
+
+      if (requestId !== mentionState.requestId) {
+        return;
+      }
+
+      if (!res.ok) {
+        resetMentionState();
+        return;
+      }
+
+      const data = await res.json();
+      mentionState.items = (data.users ?? []).map((profile) => ({
+        ...profile,
+        avatar_url: normalizeAvatarUrl(profile.avatar_url),
+      }));
+      mentionState.items.forEach((profile) => {
+        mentionProfileCache.set(profile.username, profile);
+        mentionDictionary[profile.username] = profile;
+      });
+      mentionState.selected = 0;
+      mentionState.open = mentionState.items.length > 0;
+      mentionState.loading = false;
+    } catch {
+      if (requestId === mentionState.requestId) {
+        resetMentionState();
+      }
+    }
+  };
+
+  const scheduleMentionSearch = () => {
+    if (mentionDebounceTimer) {
+      clearTimeout(mentionDebounceTimer);
+    }
+
+    mentionDebounceTimer = setTimeout(searchMentionProfiles, mentionDebounceMs);
+  };
+
+  const pickMention = (pickedUser) => {
+    if (!textarea || mentionState.start < 0) return;
+
+    const caret = textarea.selectionStart ?? comments.current.length;
+    const left = comments.current.slice(0, mentionState.start + 1);
+    const right = comments.current.slice(caret);
+    const injected = `${left}${pickedUser.username} ${right}`;
+
+    comments.current = injected;
+    resetMentionState();
+
+    requestAnimationFrame(() => {
+      const nextCaret = left.length + pickedUser.username.length + 1;
+      textarea.focus();
+      textarea.setSelectionRange(nextCaret, nextCaret);
+    });
+  };
+
+  const handleTextareaKeydown = (event) => {
+    if (!mentionState.open || mentionState.items.length === 0) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      mentionState.selected = (mentionState.selected + 1) % mentionState.items.length;
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      mentionState.selected =
+        (mentionState.selected - 1 + mentionState.items.length) %
+        mentionState.items.length;
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      pickMention(mentionState.items[mentionState.selected]);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      resetMentionState();
+    }
+  };
+
+  const updateRoots = (newComments, hasMore) => {
+    const merged = new Map();
+    [...comments.roots, ...newComments].forEach((comment) => {
+      merged.set(comment.id, comment);
+    });
+
+    comments.roots = [...merged.values()].sort((a, b) => b.id - a.id);
+
+    const length = comments.roots.length;
 
     if (length > 0) {
-      comments.lastId = comments.data[length - 1].id;
+      comments.lastId = comments.roots[length - 1].id;
     }
 
-    if (newComments < limit) {
-      comments.endReached = true;
+    comments.endReached = !hasMore;
+  };
+
+  const ensureReplyThread = (parentId, total = 0) => {
+    if (!replyThreads[parentId]) {
+      replyThreads[parentId] = {
+        expanded: false,
+        fetching: false,
+        endReached: true,
+        lastId: 0,
+        total,
+        items: [],
+      };
+    } else if (total != null && total >= 0) {
+      replyThreads[parentId].total = total;
     }
+
+    return replyThreads[parentId];
+  };
+
+  const updateReplyItems = (parentId, newReplies, hasMore) => {
+    const thread = ensureReplyThread(parentId);
+    const merged = new Map();
+    [...thread.items, ...newReplies].forEach((reply) => {
+      merged.set(reply.id, reply);
+    });
+
+    thread.items = [...merged.values()].sort((a, b) => b.id - a.id);
+    if (thread.items.length > 0) {
+      thread.lastId = thread.items[thread.items.length - 1].id;
+    }
+
+    thread.endReached = !hasMore;
+  };
+
+  const loadMoreReplies = async (parentId) => {
+    const thread = ensureReplyThread(parentId);
+    if (thread.fetching || thread.endReached) return;
+
+    thread.fetching = true;
+    const before = thread.lastId === 0 ? null : thread.lastId;
+    const page = await fetchRepliesPage(parentId, before);
+    updateReplyItems(parentId, page.comments, page.has_more);
+    page.comments.forEach((reply) => {
+      ensureReplyThread(reply.id, reply.direct_reply_count ?? 0);
+    });
+    thread.fetching = false;
+  };
+
+  const toggleReplies = async (comment) => {
+    const total = comment.direct_reply_count ?? 0;
+    const thread = ensureReplyThread(comment.id, total);
+    thread.expanded = !thread.expanded;
+
+    if (thread.expanded && thread.items.length === 0 && total > 0) {
+      thread.endReached = false;
+      await loadMoreReplies(comment.id);
+    }
+  };
+
+  const findCommentById = (id) => {
+    if (id == null) return null;
+
+    const root = comments.roots.find((item) => item.id === id);
+    if (root) return root;
+
+    for (const parentId of Object.keys(replyThreads)) {
+      const thread = replyThreads[parentId];
+      const found = thread.items.find((item) => item.id === id);
+      if (found) return found;
+    }
+
+    return null;
+  };
+
+  const expandReplyChain = async (commentId) => {
+    let currentId = commentId;
+
+    while (currentId != null) {
+      const current = findCommentById(currentId);
+      if (!current) break;
+
+      const thread = ensureReplyThread(currentId, current.direct_reply_count ?? 0);
+      thread.expanded = true;
+
+      if (thread.items.length === 0 && (current.direct_reply_count ?? 0) > 0) {
+        thread.endReached = false;
+        await loadMoreReplies(currentId);
+      }
+
+      currentId = current.parent_id ?? null;
+    }
+  };
+
+  const handleReply = (comment, rootId) => {
+    replyTo = {
+      ...comment,
+      rootId,
+    };
+    textarea?.focus();
   };
 
   const fetchComments = async () => {
     if (comments.fetching) return;
     comments.fetching = true;
-    const api =
-      comments.lastId === 0
-        ? `/api/posts/id/${postId}/comments?limit=${limit}`
-        : `/api/posts/id/${postId}/comments?limit=${limit}&before=${comments.lastId}`;
-    const res = await fetch(api);
-    if (res.ok) {
-      const data = await res.json();
-      data.comments.forEach((comment) => {
-        comment.content = md.render(comment.content);
-      });
-      updateComments(data.comments);
-    }
+    const nextPage = await fetchRootsPage(comments.lastId === 0 ? null : comments.lastId);
+    updateRoots(nextPage.comments, nextPage.has_more);
+    nextPage.comments.forEach((root) => {
+      ensureReplyThread(root.id, root.direct_reply_count ?? 0);
+    });
     comments.fetching = false;
   };
 
@@ -75,13 +481,19 @@
 
       comments = {
         current: "",
-        initialized: false,
         fetching: false,
         sending: false,
         endReached: false,
         lastId: 0,
-        data: [],
+        roots: [],
       };
+      replyThreads = {};
+      replyTo = null;
+
+      rootPageCache.clear();
+      rootPageInFlight.clear();
+      replyPageCache.clear();
+      replyPageInFlight.clear();
 
       const onScrolled = gsap.to(start, {
         scrollTrigger: {
@@ -137,9 +549,46 @@
                 class="block w-full min-h-16 lg:min-h-20 overflow-hidden outline-none resize-none p-2"
                 bind:this={textarea}
                 bind:value={comments.current}
+                oninput={scheduleMentionSearch}
+                onclick={scheduleMentionSearch}
+                onkeyup={scheduleMentionSearch}
+                onkeydown={handleTextareaKeydown}
+                onblur={() => {
+                  setTimeout(resetMentionState, 100);
+                }}
                 {@attach autoHResize}
               >
               </textarea>
+            {/if}
+
+            {#if mentionState.open}
+              <ul
+                class="absolute left-2 right-2 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border-2 border-primary bg-white p-1 shadow-lg"
+              >
+                {#each mentionState.items as profile, index (profile.username)}
+                  <li>
+                    <button
+                      type="button"
+                      class="flex w-full items-center gap-3 rounded-lg px-2 py-1 text-left hover:bg-primary-20"
+                      class:bg-primary-20={index === mentionState.selected}
+                      onmousedown={(event) => {
+                        event.preventDefault();
+                        pickMention(profile);
+                      }}
+                    >
+                      <img
+                        class="h-8 w-8 rounded-full object-cover outline-2 outline-primary"
+                        src={profile.avatar_url ?? "/anonymous.webp"}
+                        alt={`${profile.display_name} avatar`}
+                      />
+                      <div class="min-w-0 flex-1">
+                        <p class="truncate font-semibold">{profile.display_name}</p>
+                        <p class="truncate text-xs opacity-80">@{profile.username}</p>
+                      </div>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
             {/if}
           </div>
           <div
@@ -272,6 +721,20 @@
             {/if}
           </div>
         </div>
+        {#if replyTo}
+          <div class="flex items-center justify-between gap-4 rounded-xl border-2 border-dark/20 bg-primary-20 px-3 py-2">
+            <span class="text-sm text-dark/80">
+              Replying to {replyTo.display_name ?? replyTo.username ?? "comment"}
+            </span>
+            <button
+              type="button"
+              class="text-sm text-dark/70 hover:text-dark"
+              onclick={() => (replyTo = null)}
+            >
+              cancel
+            </button>
+          </div>
+        {/if}
         <div class="ml-auto w-fit duo-btn duo-blue">
           <button
             class="fill-white"
@@ -295,6 +758,7 @@
                 headers,
                 body: JSON.stringify({
                   content: comments.current,
+                  parent_id: replyTo?.id ?? null,
                 }),
               });
               if (res.ok) {
@@ -311,12 +775,39 @@
                   id: data.comment_id,
                   avatar_url: userAvatarUrl,
                   content: comments.current,
+                  parent_id: replyTo?.id ?? null,
+                  direct_reply_count: 0,
                   created_at: undefined,
                   ...userData,
                 };
                 comments.current = "";
+                await hydrateMentionDictionary([newComment.content]);
                 newComment.content = md.render(newComment.content);
-                updateComments([newComment]);
+
+                if (newComment.parent_id == null) {
+                  updateRoots([newComment], !comments.endReached);
+                  ensureReplyThread(newComment.id, 0);
+                } else {
+                  const parentId = newComment.parent_id;
+                  await expandReplyChain(parentId);
+
+                  const parentComment = findCommentById(parentId);
+                  if (parentComment) {
+                    const previous = parentComment.direct_reply_count ?? 0;
+                    parentComment.direct_reply_count = previous + 1;
+                  }
+
+                  const thread = ensureReplyThread(
+                    parentId,
+                    parentComment?.direct_reply_count ?? 1,
+                  );
+                  thread.total = Math.max(thread.total ?? 0, 1);
+                  updateReplyItems(parentId, [newComment], true);
+                  thread.endReached = thread.items.length >= (thread.total ?? 0);
+                }
+
+                replyTo = null;
+                resetMentionState();
               }
               comments.sending = false;
             }}
@@ -340,84 +831,13 @@
       </div>
     </div>
   </div>
-  <ul>
-    {#each comments.data as { id, avatar_url: url, content, created_at: createdAt, display_name: displayName, username, user_role: userRole }, index (id)}
-      {@const anonymous = username !== undefined && displayName}
-      <li in:fly={{ y: 10, duration: 500 }}>
-        <div class="flex py-4">
-          <div
-            class="ml-2 min-w-10 lg:min-w-12 w-10 lg:w-12 h-10 lg:h-12 outline-primary outline-3 rounded-full shadow-md overflow-hidden"
-          >
-            {#if anonymous}
-              <a class="full" href={"/profiles/" + username}>
-                <img
-                  class="full object-cover"
-                  src={url ?? "/anonymous.webp"}
-                  alt="comment-posting-avatar"
-                />
-              </a>
-            {:else}
-              <img
-                class="full object-cover"
-                src={url ?? "/anonymous.webp"}
-                alt="comment-posting-avatar"
-              />
-            {/if}
-          </div>
-          <div class="relative flex flex-col grow">
-            <div class="pl-2 -translate-y-2">
-              <div class="relative w-fit">
-                <div class="w-fit p-2 bg-primary/20 rounded-2xl rounded-tl-md">
-                  <div class="flex items-center lg:text-base">
-                    {#if anonymous}
-                      <a class="font-semibold" href={"/profiles/" + username}
-                        >{displayName}
-                      </a>
-                    {:else}
-                      <span class="font-normal select-none italic"
-                        >Anonymous</span
-                      >
-                    {/if}
-                    <span
-                      class="*:w-8 hover:*:translate-x-1 *:transition-all *:duration-200 tooltip-container"
-                      data-tooltip={userRole === "admin"
-                        ? "Admin! ꨄ︎"
-                        : userRole === "moderator"
-                          ? "a mod!"
-                          : userRole === "user"
-                            ? "user"
-                            : "wanderer"}
-                    >
-                      {#if userRole === "admin"}
-                        <Heart class="fill-accent-red" />
-                      {:else if userRole === "moderator"}
-                        <Diamond class="fill-accent-red" />
-                      {:else if userRole === "user"}
-                        <Club class="fill-dark" />
-                      {:else}
-                        <Spade class="fill-dark" />
-                      {/if}
-                    </span>
-                  </div>
-
-                  <Comment {content} />
-                </div>
-                <div
-                  class="absolute flex min-w-20 w-full justify-between gap-2 left-0 top-full text-sm"
-                >
-                  <span class="pl-2">{createdAt ?? "new"}</span>
-                  <div class="text-nowrap *:cursor-pointer">
-                    <span>reply</span>
-                    <span>report</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </li>
-    {/each}
-  </ul>
+  <CommentThread
+    comments={comments.roots}
+    {replyThreads}
+    onReply={handleReply}
+    onToggleReplies={toggleReplies}
+    onLoadMoreReplies={loadMoreReplies}
+  />
   <div class="mt-8 mx-auto w-fit duo-btn duo-blue">
     <button
       disabled={comments.endReached || comments.fetching}

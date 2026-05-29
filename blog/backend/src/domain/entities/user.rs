@@ -59,3 +59,16 @@ pub struct UserSummary {
     pub role: String,
     pub avatar_url: Option<String>,
 }
+
+#[derive(Debug, Clone)]
+pub struct LatestComment {
+    pub id: i64,
+    pub parent_id: Option<i64>,
+    pub content: String,
+    pub created_at: String,
+    pub post_title: String,
+    pub post_slug: String,
+    pub avatar_url: Option<String>,
+    pub display_name: Option<String>,
+    pub username: Option<String>,
+}

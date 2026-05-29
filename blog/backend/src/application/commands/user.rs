@@ -32,3 +32,10 @@ pub struct SearchUserCommand {
     pub size: i64,
     pub offset: i64,
 }
+
+#[derive(serde::Deserialize)]
+pub struct GetLatestCommentsCommand {
+    pub username: String,
+    pub limit: i64,
+    pub offset: i64,
+}

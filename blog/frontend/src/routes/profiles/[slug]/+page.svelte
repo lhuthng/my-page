@@ -15,6 +15,7 @@
   import { fade, fly } from "svelte/transition";
   import { autoHResize } from "$lib/client/auto-resize.js";
   import PBody from "$lib/components/PBody.svelte";
+  import Comment from "$lib/components/post/Comment.svelte";
   import { preventDefault } from "$lib/common.js";
   import { page } from "$app/state";
 
@@ -29,6 +30,7 @@
   let bio = $state("");
   let postContainer = $state();
   let avatarUrl = $state("/missing.png");
+  let latestComments = $derived(data.comments ?? []);
 
   $effect(() => {
     avatarUrl = data.response.avatar_url ?? "/missing.png";
@@ -396,6 +398,40 @@
         <p class="py-4 text-lg whitespace-pre-wrap">{bio}</p>
       {/if}
     </div>
+  </div>
+  <div class="flex flex-col gap-4">
+    <h2 class="inline font-bold text-2xl">Latest comments</h2>
+    {#if latestComments.length === 0}
+      <div class="rounded-xl border-2 border-dark/20 bg-primary-20 p-4 text-dark/70">
+        No recent comments yet.
+      </div>
+    {:else}
+      <ul class="grid grid-cols-1 gap-3">
+        {#each latestComments as comment (comment.id)}
+          <li class="rounded-xl border-2 border-dark bg-white p-4 shadow-sm">
+            <div class="flex items-start gap-3">
+              <img
+                class="w-10 h-10 rounded-full outline-primary outline-2 object-cover"
+                src={comment.avatar_url ?? "/anonymous.webp"}
+                alt="comment-avatar"
+              />
+              <div class="min-w-0 grow">
+                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <a class="font-semibold text-dark hover:text-primary" href={`/posts/${comment.post_slug}#comment-${comment.id}`}>
+                    {comment.post_title}
+                  </a>
+                  <span class="text-dark/50">•</span>
+                  <span class="text-sm text-dark/70">{comment.created_at}</span>
+                </div>
+                <div class="mt-2">
+                  <Comment content={comment.content_html} />
+                </div>
+              </div>
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
   </div>
   {#if hasPosts}
     <div class="flex flex-col gap-4">
