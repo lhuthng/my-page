@@ -4,3 +4,6 @@ target
 .DS_Store
 
 tmp/*
+blog/backend/.env
+blog/frontend/.env
+socket-server/.env

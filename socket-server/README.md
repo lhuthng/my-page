@@ -180,8 +180,8 @@ To deploy manually:
 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o server-linux .
 
 # copy and restart
-scp -i ~/.ssh/ssh-key-support-server.key server-linux ubuntu@130.61.121.230:/tmp/socket-server
-ssh -i ~/.ssh/ssh-key-support-server.key ubuntu@130.61.121.230 "
+scp -i ~/.ssh/your-ssh-key.key server-linux ubuntu@<your-server-ip>:/tmp/socket-server
+ssh -i ~/.ssh/your-ssh-key.key ubuntu@<your-server-ip> "
   sudo mv /tmp/socket-server /usr/local/bin/socket-server
   sudo chmod +x /usr/local/bin/socket-server
   sudo systemctl restart socket-server
