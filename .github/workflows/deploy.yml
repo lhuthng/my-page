@@ -89,9 +89,9 @@ jobs:
 
   # ── SSH into Oracle VM, pull new images, restart containers ───────────────
   # Required GitHub Secrets:
-  #   VM_HOST      — Oracle VM public IP (REDACTED_IP)
+  #   VM_HOST      — Oracle VM public IP (stored in secrets)
   #   VM_USER      — ubuntu
-  #   VM_SSH_KEY   — private SSH key (~/.ssh/ssh-key-2026-04-10.key contents)
+  #   VM_SSH_KEY   — private SSH key (stored in secrets)
   #   GHCR_TOKEN   — GitHub PAT with read:packages scope (for VM to pull images)
   deploy-blog:
     needs: [build-push-backend, build-push-frontend]
@@ -137,9 +137,9 @@ jobs:
 
   # ── Cross-compile Go binary and deploy to Oracle VM ───────────────────────
   # Required GitHub Secrets:
-  #   WS_VM_HOST    — WebSocket VM public IP (REDACTED_IP)
+  #   WS_VM_HOST    — WebSocket VM public IP (stored in secrets)
   #   WS_VM_USER    — ubuntu
-  #   WS_VM_SSH_KEY — private SSH key contents for the WebSocket VM
+  #   WS_VM_SSH_KEY — private SSH key contents for the WebSocket VM (stored in secrets)
   deploy-socket-server:
     needs: filter
     if: needs.filter.outputs.socket == 'true' || contains(github.event.head_commit.message, '[deploy ws]')
