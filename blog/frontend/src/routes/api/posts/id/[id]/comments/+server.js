@@ -1,7 +1,5 @@
 import { dateTillNow } from "$lib/common.js";
 import { fixClientRoute, proxyFallback } from "$lib/server/proxy";
-import MarkdownIt from "markdown-it/dist/markdown-it.js";
-import mkKatex from "markdown-it-katex";
 
 export async function GET({ request, params, fetch, url }) {
   const res = await proxyFallback({

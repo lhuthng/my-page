@@ -26,6 +26,25 @@
     & a {
       @apply text-accent-blue hover:text-accent-blue-light-1 underline;
     }
+    & a.mention-link {
+      @apply relative inline-flex items-center gap-1 rounded-md bg-primary-20 px-1.5 py-0.5 no-underline text-primary hover:bg-primary/30;
+    }
+    & .mention-chip {
+      @apply font-semibold;
+    }
+    & .mention-preview {
+      @apply pointer-events-none absolute left-0 bottom-full z-50 mb-2 hidden w-max min-w-max items-center gap-2 whitespace-nowrap rounded-xl bg-primary p-2 shadow-xl;
+    }
+    & a.mention-link:hover .mention-preview,
+    & a.mention-link:focus-visible .mention-preview {
+      @apply inline-flex;
+    }
+    & .mention-preview-avatar {
+      @apply h-10 w-10 rounded-lg object-cover m-0! max-h-max! border-2;
+    }
+    & .mention-preview-name {
+      @apply block flex-none whitespace-nowrap text-sm font-semibold text-white;
+    }
     & img {
       @apply mt-2 max-h-40 rounded-lg mr-auto;
     }

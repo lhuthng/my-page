@@ -60,6 +60,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/{username}/posts", get(handlers::user::get_posts))
+                .route("/{username}/comments", get(handlers::user::get_latest_comments))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::optional_user_guard,

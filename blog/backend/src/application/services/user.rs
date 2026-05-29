@@ -26,4 +26,8 @@ pub trait UserService {
         &self,
         cmd: commands::user::GetPostsCommand,
     ) -> Result<Vec<entities::post::PostSnapshot>, errors::user::UserError>;
+    async fn get_latest_comments(
+        &self,
+        cmd: commands::user::GetLatestCommentsCommand,
+    ) -> Result<Vec<entities::user::LatestComment>, errors::user::UserError>;
 }

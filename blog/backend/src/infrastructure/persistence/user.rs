@@ -5,14 +5,15 @@ use sqlx::{SqlitePool, prelude::FromRow};
 use crate::{
     application::{
         commands::user::{
-            ChangeDetailsCommand, GetPostsCommand, GetUserCommand, MeCommand, SearchUserCommand,
+            ChangeDetailsCommand, GetLatestCommentsCommand, GetPostsCommand, GetUserCommand,
+            MeCommand, SearchUserCommand,
         },
         services::user::UserService,
     },
     domain::{
         entities::{
-            post::{PostSnapshot, PostStats},
-            user::{Me, User, UserSummary},
+            post::PostSnapshot,
+            user::{LatestComment, Me, User, UserSummary},
         },
         errors::user::UserError,
     },
@@ -53,6 +54,19 @@ struct UserSearchRow {
     role: String,
     avatar_url: Option<String>,
     score: i32,
+}
+
+#[derive(Debug, FromRow)]
+struct LatestCommentRow {
+    id: i64,
+    parent_id: Option<i64>,
+    content: String,
+    created_at: String,
+    post_title: String,
+    post_slug: String,
+    avatar_url: Option<String>,
+    display_name: Option<String>,
+    username: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
@@ -295,5 +309,49 @@ impl UserService for UserServiceImpl {
         }
 
         Ok(posts)
+    }
+
+    async fn get_latest_comments(&self, cmd: GetLatestCommentsCommand) -> Result<Vec<LatestComment>, UserError> {
+        let rows = sqlx::query_as::<_, LatestCommentRow>(
+            r#"
+            SELECT c.id,
+                   c.parent_id,
+                   c.content,
+                   c.created_at,
+                   p.title AS post_title,
+                   p.slug AS post_slug,
+                   'media/i/' || m.short_name AS avatar_url,
+                   um.display_name,
+                   u.username
+            FROM comments c
+            JOIN posts p ON p.id = c.post_id
+            LEFT JOIN users u ON u.id = c.user_id
+            LEFT JOIN user_meta um ON um.user_id = c.user_id
+            LEFT JOIN media m ON m.id = um.avatar_image_id
+            WHERE u.username = ?
+            ORDER BY c.created_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(&cmd.username)
+        .bind(&cmd.limit)
+        .bind(&cmd.offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| LatestComment {
+                id: row.id,
+                parent_id: row.parent_id,
+                content: row.content,
+                created_at: row.created_at,
+                post_title: row.post_title,
+                post_slug: row.post_slug,
+                avatar_url: row.avatar_url,
+                display_name: row.display_name,
+                username: row.username,
+            })
+            .collect())
     }
 }
