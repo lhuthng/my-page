@@ -13,7 +13,8 @@ use crate::{
         commands::{
             media::ChangeAvatarCommand,
             user::{
-                ChangeDetailsCommand, GetPostsCommand, GetUserCommand, MeCommand, SearchUserCommand,
+                ChangeDetailsCommand, GetLatestCommentsCommand, GetPostsCommand, GetUserCommand,
+                MeCommand, SearchUserCommand,
             },
         },
         services::{media::MediaService, user::UserService},
@@ -214,6 +215,28 @@ pub struct GetPostsResponse {
     pub posts: Vec<Post>,
 }
 
+#[derive(Serialize)]
+pub struct LatestComment {
+    pub id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<i64>,
+    pub content: String,
+    pub created_at: String,
+    pub post_title: String,
+    pub post_slug: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct GetLatestCommentsResponse {
+    pub comments: Vec<LatestComment>,
+}
+
 #[axum::debug_handler]
 pub async fn get_posts(
     State(state): State<Arc<AppState>>,
@@ -262,6 +285,44 @@ pub async fn get_posts(
     };
 
     Ok(Json(wrapped_posts))
+}
+
+#[derive(Deserialize)]
+pub struct GetLatestCommentsQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+pub async fn get_latest_comments(
+    State(state): State<Arc<AppState>>,
+    Path(username): Path<String>,
+    Query(query): Query<GetLatestCommentsQuery>,
+) -> Result<impl IntoResponse, UserError> {
+    let comments = state
+        .user_service
+        .get_latest_comments(GetLatestCommentsCommand {
+            username,
+            limit: query.limit.unwrap_or(5),
+            offset: query.offset.unwrap_or(0),
+        })
+        .await?;
+
+    Ok(Json(GetLatestCommentsResponse {
+        comments: comments
+            .into_iter()
+            .map(|comment| LatestComment {
+                id: comment.id,
+                parent_id: comment.parent_id,
+                content: comment.content,
+                created_at: comment.created_at,
+                post_title: comment.post_title,
+                post_slug: comment.post_slug,
+                avatar_url: comment.avatar_url,
+                display_name: comment.display_name,
+                username: comment.username,
+            })
+            .collect(),
+    }))
 }
 
 #[derive(Debug, Serialize)]

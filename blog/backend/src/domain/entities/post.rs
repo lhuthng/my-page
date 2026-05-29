@@ -83,10 +83,18 @@ pub struct Post {
 #[derive(Debug, Clone)]
 pub struct Comment {
     pub id: i64,
+    pub parent_id: Option<i64>,
+    pub direct_reply_count: Option<i64>,
     pub content: String,
     pub created_at: String,
     pub display_name: Option<String>,
     pub username: Option<String>,
     pub avatar_url: Option<String>,
     pub user_role: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CommentPage {
+    pub comments: Vec<Comment>,
+    pub has_more: bool,
 }

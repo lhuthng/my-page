@@ -64,10 +64,12 @@ pub struct SearchPostCommand {
 pub struct PostNewCommentCommand {
     pub post_id: i64,
     pub user_id: i64,
+    pub parent_id: Option<i64>,
     pub content: String,
 }
 pub struct PostNewAnynymouseCommentCommand {
     pub post_id: i64,
+    pub parent_id: Option<i64>,
     pub content: String,
 }
 
@@ -75,6 +77,7 @@ pub struct GetCommentsCommand {
     pub post_id: i64,
     pub limit: i64,
     pub before: Option<i64>,
+    pub parent_id: Option<i64>,
 }
 
 pub struct PushNewViewCommand {

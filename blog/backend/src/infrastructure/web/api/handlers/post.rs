@@ -898,6 +898,7 @@ pub async fn get_latest_posts(
 #[derive(Deserialize)]
 pub struct NewCommentBody {
     pub content: String,
+    pub parent_id: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -924,6 +925,7 @@ pub async fn new_comment(
                 .post_new_comment(PostNewCommentCommand {
                     post_id,
                     user_id,
+                    parent_id: body.parent_id,
                     content: body.content,
                 })
                 .await?
@@ -933,6 +935,7 @@ pub async fn new_comment(
                 .post_service
                 .post_new_anonymous_comment(PostNewAnynymouseCommentCommand {
                     post_id,
+                    parent_id: body.parent_id,
                     content: body.content,
                 })
                 .await?
@@ -946,11 +949,16 @@ pub async fn new_comment(
 pub struct CommentsQuery {
     pub before: Option<i64>,
     pub limit: Option<i64>,
+    pub parent_id: Option<i64>,
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct Comment {
     pub id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direct_reply_count: Option<i64>,
     pub content: String,
     pub created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -966,6 +974,7 @@ pub struct Comment {
 #[derive(Deserialize, Serialize)]
 pub struct CommentsResponse {
     comments: Vec<Comment>,
+    has_more: bool,
 }
 
 pub async fn get_comments(
@@ -975,21 +984,26 @@ pub async fn get_comments(
 ) -> Result<impl IntoResponse, PostError> {
     let before = query.before;
     let limit = query.limit.unwrap_or(1);
+    let parent_id = query.parent_id;
     let post_id = post_id_str.parse::<i64>().unwrap();
 
-    let comments = state
+    let page = state
         .post_service
         .get_comments(GetCommentsCommand {
             post_id,
             limit,
             before,
+            parent_id,
         })
         .await?;
 
-    let comments: Vec<Comment> = comments
+    let comments: Vec<Comment> = page
+        .comments
         .into_iter()
         .map(|comment| Comment {
             id: comment.id,
+            parent_id: comment.parent_id,
+            direct_reply_count: comment.direct_reply_count,
             content: comment.content,
             created_at: comment.created_at,
             username: comment.username,
@@ -999,7 +1013,10 @@ pub async fn get_comments(
         })
         .collect();
 
-    let wrapped_comments = CommentsResponse { comments };
+    let wrapped_comments = CommentsResponse {
+        comments,
+        has_more: page.has_more,
+    };
 
     Ok(Json(wrapped_comments))
 }

@@ -48,7 +48,7 @@ pub trait PostService {
     async fn get_comments(
         &self,
         cmd: commands::post::GetCommentsCommand,
-    ) -> Result<Vec<entities::post::Comment>, errors::post::PostError>;
+    ) -> Result<entities::post::CommentPage, errors::post::PostError>;
     async fn post_new_comment(
         &self,
         cmd: commands::post::PostNewCommentCommand,

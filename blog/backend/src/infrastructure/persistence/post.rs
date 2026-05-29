@@ -1,7 +1,12 @@
+use std::collections::HashSet;
 use std::collections::HashMap;
 
 use futures::TryFutureExt;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use sqlx::{SqlitePool, prelude::FromRow};
+
+static MENTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"@([A-Za-z0-9_-]+)").unwrap());
 
 use crate::{
     application::{
@@ -15,8 +20,8 @@ use crate::{
     },
     domain::{
         entities::post::{
-            CategoryResult, Comment, Post, PostDetails, PostSeries, PostSnapshot, PostStats,
-            PostSummary,
+            CategoryResult, Comment, CommentPage, Post, PostDetails, PostSeries, PostSnapshot,
+            PostStats, PostSummary,
         },
         errors::post::PostError,
     },
@@ -1013,61 +1018,319 @@ impl PostService for PostServiceImpl {
         })
     }
     async fn post_new_comment(&self, cmd: PostNewCommentCommand) -> Result<i64, PostError> {
+        let mut tx = self.pool.begin().await?;
+
+        if let Some(parent_id) = cmd.parent_id {
+            let parent_post_id: Option<i64> = sqlx::query_scalar(
+                r#"
+                SELECT post_id
+                FROM comments
+                WHERE id = ?
+                "#,
+            )
+            .bind(parent_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            if parent_post_id != Some(cmd.post_id) {
+                return Err(PostError::PostNotFound);
+            }
+        }
+
         let id = sqlx::query_scalar(
             r#"
-            INSERT INTO comments (post_id, user_id, content)
-            VALUES (?, ?, ?)
+            INSERT INTO comments (post_id, user_id, parent_id, content)
+            VALUES (?, ?, ?, ?)
             RETURNING id
             "#,
         )
         .bind(&cmd.post_id)
         .bind(&cmd.user_id)
+        .bind(&cmd.parent_id)
         .bind(&cmd.content)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        if let Some(parent_id) = cmd.parent_id {
+            let recipient_user_id: Option<i64> = sqlx::query_scalar(
+                r#"
+                SELECT user_id
+                FROM comments
+                WHERE id = ?
+                "#,
+            )
+            .bind(parent_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            if let Some(recipient_user_id) = recipient_user_id {
+                if recipient_user_id != cmd.user_id {
+                    sqlx::query(
+                        r#"
+                        INSERT INTO notifications (
+                            recipient_user_id,
+                            actor_user_id,
+                            post_id,
+                            comment_id,
+                            type
+                        )
+                        VALUES (?, ?, ?, ?, 'reply')
+                        "#,
+                    )
+                    .bind(recipient_user_id)
+                    .bind(cmd.user_id)
+                    .bind(cmd.post_id)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
+        }
+
+        // Notify any @mentioned registered users
+        let mentioned: HashSet<String> = MENTION_RE
+            .captures_iter(&cmd.content)
+            .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
+            .collect();
+        if !mentioned.is_empty() {
+            let placeholders = mentioned.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+            let sql = format!("SELECT id FROM users WHERE username IN ({})", placeholders);
+            let mut q = sqlx::query_scalar::<_, i64>(&sql);
+            for username in &mentioned {
+                q = q.bind(username);
+            }
+            let mentioned_ids: Vec<i64> = q.fetch_all(&mut *tx).await?;
+            for mentioned_id in mentioned_ids {
+                if mentioned_id != cmd.user_id {
+                    sqlx::query(
+                        r#"
+                        INSERT INTO notifications (recipient_user_id, actor_user_id, post_id, comment_id, type)
+                        VALUES (?, ?, ?, ?, 'mention')
+                        "#,
+                    )
+                    .bind(mentioned_id)
+                    .bind(cmd.user_id)
+                    .bind(cmd.post_id)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
+        }
+
+        tx.commit().await?;
         Ok(id)
     }
     async fn post_new_anonymous_comment(
         &self,
         cmd: PostNewAnynymouseCommentCommand,
     ) -> Result<i64, PostError> {
+        let mut tx = self.pool.begin().await?;
+
+        if let Some(parent_id) = cmd.parent_id {
+            let parent_post_id: Option<i64> = sqlx::query_scalar(
+                r#"
+                SELECT post_id
+                FROM comments
+                WHERE id = ?
+                "#,
+            )
+            .bind(parent_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            if parent_post_id != Some(cmd.post_id) {
+                return Err(PostError::PostNotFound);
+            }
+        }
+
         let id = sqlx::query_scalar(
             r#"
-            INSERT INTO comments (post_id, content)
-            VALUES (?, ?)
+            INSERT INTO comments (post_id, parent_id, content)
+            VALUES (?, ?, ?)
             RETURNING id
             "#,
         )
         .bind(&cmd.post_id)
+        .bind(&cmd.parent_id)
         .bind(&cmd.content)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        // Anonymous commenter CAN write @mentions; notify matched registered users
+        // (actor_user_id is NULL since there is no authenticated user)
+        let mentioned: HashSet<String> = MENTION_RE
+            .captures_iter(&cmd.content)
+            .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
+            .collect();
+        if !mentioned.is_empty() {
+            let placeholders = mentioned.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+            let sql = format!("SELECT id FROM users WHERE username IN ({})", placeholders);
+            let mut q = sqlx::query_scalar::<_, i64>(&sql);
+            for username in &mentioned {
+                q = q.bind(username);
+            }
+            let mentioned_ids: Vec<i64> = q.fetch_all(&mut *tx).await?;
+            for mentioned_id in mentioned_ids {
+                sqlx::query(
+                    r#"
+                    INSERT INTO notifications (recipient_user_id, actor_user_id, post_id, comment_id, type)
+                    VALUES (?, NULL, ?, ?, 'mention')
+                    "#,
+                )
+                .bind(mentioned_id)
+                .bind(cmd.post_id)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        tx.commit().await?;
         Ok(id)
     }
-    async fn get_comments(&self, cmd: GetCommentsCommand) -> Result<Vec<Comment>, PostError> {
+    async fn get_comments(&self, cmd: GetCommentsCommand) -> Result<CommentPage, PostError> {
+        if let Some(parent_id) = cmd.parent_id {
+            let parent_post_id: Option<i64> = sqlx::query_scalar(
+                r#"
+                SELECT post_id
+                FROM comments
+                WHERE id = ?
+                "#,
+            )
+            .bind(parent_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            if parent_post_id != Some(cmd.post_id) {
+                return Err(PostError::PostNotFound);
+            }
+
+            let sequel = format!(
+                r#"
+                SELECT
+                    comments.id,
+                    comments.parent_id,
+                    content,
+                    comments.created_at,
+                    users.username,
+                    user_meta.display_name,
+                    media.url,
+                    users.role,
+                    (
+                        SELECT COUNT(*)
+                        FROM comments AS replies
+                        WHERE replies.parent_id = comments.id
+                          AND replies.is_deleted = 0
+                    ) AS direct_reply_count
+                FROM comments
+                LEFT JOIN users ON users.id = comments.user_id
+                LEFT JOIN user_meta ON user_meta.user_id = comments.user_id
+                LEFT JOIN media ON media.id = user_meta.avatar_image_id
+                WHERE comments.post_id = ?
+                  AND comments.parent_id = ?
+                  AND comments.is_deleted = 0
+                  {}
+                ORDER BY comments.id DESC
+                LIMIT ?
+                "#,
+                cmd.before.map(|_| "AND comments.id < ?").unwrap_or("")
+            );
+
+            let mut query = sqlx::query_as::<
+                _,
+                (
+                    i64,
+                    Option<i64>,
+                    String,
+                    String,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                    i64,
+                ),
+            >(&sequel)
+            .bind(&cmd.post_id)
+            .bind(parent_id);
+
+            if let Some(before) = &cmd.before {
+                query = query.bind(before)
+            }
+
+            query = query.bind(cmd.limit + 1);
+
+            let mut comment_rows = query.fetch_all(&self.pool).await?;
+            let has_more = comment_rows.len() as i64 > cmd.limit;
+            if has_more {
+                comment_rows.truncate(cmd.limit as usize);
+            }
+
+            let comments = comment_rows
+                .into_iter()
+                .map(
+                    |(id, parent_id, content, created_at, username, display_name, avatar_url, user_role, direct_reply_count)| {
+                        Comment {
+                            id,
+                            parent_id,
+                            direct_reply_count: Some(direct_reply_count),
+                            content,
+                            created_at,
+                            username,
+                            display_name,
+                            avatar_url,
+                            user_role,
+                        }
+                    },
+                )
+                .collect();
+
+            return Ok(CommentPage { comments, has_more });
+        }
+
         let sequel = format!(
             r#"
-            SELECT comments.id, content, comments.created_at, users.username, user_meta.display_name, media.url, users.role
+            SELECT
+                comments.id,
+                comments.parent_id,
+                comments.content,
+                comments.created_at,
+                users.username,
+                user_meta.display_name,
+                media.url,
+                users.role,
+                (
+                    SELECT COUNT(*)
+                    FROM comments AS replies
+                    WHERE replies.parent_id = comments.id
+                      AND replies.is_deleted = 0
+                ) AS direct_reply_count
             FROM comments
             LEFT JOIN users ON users.id = comments.user_id
             LEFT JOIN user_meta ON user_meta.user_id = comments.user_id
             LEFT JOIN media ON media.id = user_meta.avatar_image_id
-            WHERE post_id = ? {}
+            WHERE comments.post_id = ?
+              AND comments.parent_id IS NULL
+              AND comments.is_deleted = 0
+              {}
             ORDER BY comments.id DESC
             LIMIT ?
             "#,
             cmd.before.map(|_| "AND comments.id < ?").unwrap_or("")
         );
+
         let mut query = sqlx::query_as::<
             _,
             (
                 i64,
+                Option<i64>,
                 String,
                 String,
                 Option<String>,
                 Option<String>,
                 Option<String>,
                 Option<String>,
+                i64,
             ),
         >(&sequel)
         .bind(&cmd.post_id);
@@ -1076,16 +1339,22 @@ impl PostService for PostServiceImpl {
             query = query.bind(before)
         }
 
-        query = query.bind(&cmd.limit);
+        query = query.bind(cmd.limit + 1);
 
-        let comment_rows = query.fetch_all(&self.pool).await?;
+        let mut comment_rows = query.fetch_all(&self.pool).await?;
+        let has_more = comment_rows.len() as i64 > cmd.limit;
+        if has_more {
+            comment_rows.truncate(cmd.limit as usize);
+        }
 
         let comments = comment_rows
             .into_iter()
             .map(
-                |(id, content, created_at, username, display_name, avatar_url, user_role)| {
+                |(id, parent_id, content, created_at, username, display_name, avatar_url, user_role, direct_reply_count)| {
                     Comment {
                         id,
+                        parent_id,
+                        direct_reply_count: Some(direct_reply_count),
                         content,
                         created_at,
                         username,
@@ -1097,7 +1366,7 @@ impl PostService for PostServiceImpl {
             )
             .collect();
 
-        Ok(comments)
+        Ok(CommentPage { comments, has_more })
     }
 
     async fn push_new_view(&self, cmd: PushNewViewCommand) -> Result<(), PostError> {
