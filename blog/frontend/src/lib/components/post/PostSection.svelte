@@ -340,8 +340,11 @@
 			<path d="M 0,0 L 12,0 A 12,12 0 0 0 0,12 Z" />
 		</svg>
 		<div class="relative grow">
-			<div class="sticky top-32 h-fit ml-4 not-xl:hidden bg-white text-base rounded-xl p-2">
-				<ContentTable {headers} />
+			<div class="sticky top-32 ml-4 not-xl:hidden bg-white text-base rounded-xl py-2">
+				<h2 class="text-center font-semibold text-lg pb-2">Table of contents</h2>
+				<div class="max-h-[calc(100vh-12.25rem)] px-2 overflow-y-auto custom-scrollbar">
+					<ContentTable {headers} />
+				</div>
 			</div>
 		</div>
 	</div>
@@ -356,10 +359,14 @@
 			onclick={() => (toggled = false)}
 		></button>
 		<div
-			class="fixed max-h-160 overflow-y-scroll custom-scrollbar max-w-full w-max text-dark top-1/2 left-1/2 -translate-1/2 bg-white rounded-xl p-4"
-			title="table-of-contents"
+			class="fixed top-[calc(50%+1.75rem)] left-1/2 -translate-x-1/2 -translate-y-1/2 text-dark bg-white rounded-xl py-4"
 		>
-			<ContentTable {headers} />
+			<h2 class="text-center font-semibold text-lg pb-2">Table of contents</h2>
+			<div
+				class="max-h-[calc(100vh-9rem)] overflow-y-scroll custom-scrollbar max-w-full w-max px-4"
+			>
+				<ContentTable {headers} />
+			</div>
 		</div>
 	</PBody>
 {/if}
