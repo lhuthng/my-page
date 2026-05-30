@@ -509,6 +509,73 @@
 			};
 		}
 	});
+
+	let showGifSearch = $state(false);
+	let gifQuery = $state('');
+	let gifResults = $state([]);
+	let gifLoading = $state(false);
+	let gifOffset = $state(0);
+	let gifError = $state(null);
+
+	const fetchGifs = async (reset = false) => {
+		if (gifLoading) return;
+		gifLoading = true;
+		gifError = null;
+
+		const currentOffset = reset ? 0 : gifOffset;
+		if (reset) {
+			gifResults = [];
+			gifOffset = 0;
+		}
+
+		try {
+			const url = `/api/gifs?q=${encodeURIComponent(gifQuery)}&offset=${currentOffset}`;
+			const res = await fetch(url);
+			if (!res.ok) {
+				throw new Error('Failed to load GIFs');
+			}
+			const payload = await res.json();
+			const newGifs = payload.data || [];
+
+			if (reset) {
+				gifResults = newGifs;
+			} else {
+				gifResults = [...gifResults, ...newGifs];
+			}
+			gifOffset = currentOffset + newGifs.length;
+		} catch (err) {
+			gifError = 'Could not load GIFs. Please check your connection.';
+		} finally {
+			gifLoading = false;
+		}
+	};
+
+	const selectGif = (gif) => {
+		if (!textarea) return;
+		const gifUrl = gif.images.original.url;
+		const title = gif.title || 'gif';
+		const markdownImage = `![${title}](${gifUrl})`;
+
+		const startPos = textarea.selectionStart;
+		const endPos = textarea.selectionEnd;
+
+		comments.current =
+			textarea.value.slice(0, startPos) + markdownImage + textarea.value.slice(endPos);
+
+		showGifSearch = false; // Close drawer after selection
+
+		requestAnimationFrame(() => {
+			const nextCursor = startPos + markdownImage.length;
+			textarea.focus();
+			textarea.setSelectionRange(nextCursor, nextCursor);
+		});
+	};
+
+	$effect(() => {
+		if (showGifSearch && gifResults.length === 0) {
+			fetchGifs(true);
+		}
+	});
 </script>
 
 <section class="w-full xl:w-[calc(100%-15rem)] bg-white p-4 rounded-xl">
@@ -517,7 +584,7 @@
 		<hr class="border-t-3 border-dark mb-6" />
 		<div class="flex gap-8">
 			<div
-				class="not-xxs:hidden w-12 lg:w-20 h-12 lg:h-20 outline-primary outline-3 rounded-full overflow-hidden"
+				class="not-xxs:hidden min-w-12 max-w-12 lg:min-w-20 lg:max-w-20 h-12 lg:h-20 outline-primary outline-3 rounded-full overflow-hidden"
 			>
 				<img class="full object-cover" src={userAvatarUrl} alt="comment-posting-avatar" />
 			</div>
@@ -551,6 +618,72 @@
 								}}
 								{@attach autoHResize}
 							></textarea>
+						{/if}
+
+						{#if showGifSearch && tab === 'write'}
+							<div class="border-t-2 border-primary/20 bg-white/40 p-3 flex flex-col gap-3">
+								<div class="flex gap-2 h-9">
+									<input
+										type="text"
+										bind:value={gifQuery}
+										placeholder="Search Giphy..."
+										class="flex-1 bg-white border border-primary/30 rounded-xl px-2 py-1 text-base text-dark placeholder-dark/50 outline-none focus:border-primary focus:border-2 transition-colors"
+										onkeydown={(e) => {
+											if (e.key === 'Enter') {
+												e.preventDefault();
+												fetchGifs(true);
+											}
+										}}
+									/>
+									<div class="ml-auto w-fit duo-btn duo-blue">
+										<button type="button" onclick={() => fetchGifs(true)}>Search</button>
+									</div>
+								</div>
+
+								{#if gifError}
+									<p class="text-xs text-accent-red font-medium">{gifError}</p>
+								{/if}
+
+								<div
+									class="grid grid-cols-3 xs:grid-cols-4 sm:grid-cols-6 gap-2 max-h-120 overflow-y-auto pr-1 custom-scrollbar"
+								>
+									{#each gifResults as gif (gif.id)}
+										<button
+											type="button"
+											class="group relative rounded-lg overflow-hidden aspect-square border border-primary/10 hover:border-primary transition-all bg-dark/5"
+											onclick={() => selectGif(gif)}
+										>
+											<img
+												src={gif.images.fixed_height.url}
+												alt={gif.title}
+												class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+												loading="lazy"
+											/>
+											<div
+												class="absolute inset-0 bg-primary/70 opacity-0 group-hover:opacity-100 flex items-center justify-center font-bold text-xl text-white transition-opacity duration-150"
+											>
+												Select
+											</div>
+										</button>
+									{/each}
+
+									{#if gifLoading}
+										{#each Array(6) as _}
+											<div class="animate-pulse bg-primary/10 rounded-lg aspect-square"></div>
+										{/each}
+									{/if}
+								</div>
+
+								{#if gifResults.length > 0 && !gifLoading}
+									<button
+										type="button"
+										class="text-md font-semibold text-primary hover:text-dark mx-auto py-1"
+										onclick={() => fetchGifs(false)}
+									>
+										Load More
+									</button>
+								{/if}
+							</div>
 						{/if}
 
 						{#if mentionState.open}
@@ -603,7 +736,10 @@
 								class:z-9={tab !== 'preview'}
 								class:opacity-100={tab === 'preview'}
 								class:opacity-90={tab !== 'preview'}
-								onclick={() => (tab = 'preview')}
+								onclick={() => {
+									tab = 'preview';
+									showGifSearch = false;
+								}}
 							>
 								Preview
 							</button>
@@ -704,6 +840,20 @@
 										<path
 											d="m11.28 3.22 4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L13.94 8l-3.72-3.72a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215Zm-6.56 0a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L2.06 8l3.72 3.72a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L.47 8.53a.75.75 0 0 1 0-1.06Z"
 										></path>
+									</svg>
+								</button>
+								<button
+									title="Insert GIF"
+									type="button"
+									class:bg-primary-20={showGifSearch}
+									onclick={() => {
+										showGifSearch = !showGifSearch;
+									}}
+								>
+									<svg class="w-4 h-4" viewBox="0 0 40 40">
+										<path
+											d="M28.75,11.88V8.94H25.53V6H8.73V34H31.27V11.88Zm-16.94,19V9.08H23v5.46h5.18V30.92Z"
+										/>
 									</svg>
 								</button>
 							</div>
