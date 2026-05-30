@@ -43,7 +43,6 @@
 	let replyThreads = $state({});
 
 	let textarea = $state();
-	let tab = $state('write');
 	let replyTo = $state(null);
 	let mentionState = $state({
 		open: false,
@@ -599,28 +598,22 @@
 					<div
 						class="relative text-base w-full bg-primary-20 border-primary border-2 border-b-0 rounded-t-xl"
 					>
-						{#if tab === 'preview'}
-							<div class="w-full min-h-16 lg:min-h-20 overflow-hidden p-2">
-								<Comment content={md.render(comments.current)} />
-							</div>
-						{:else if tab === 'write'}
-							<textarea
-								name="comment-input"
-								class="block w-full min-h-16 lg:min-h-20 overflow-hidden outline-none resize-none p-2"
-								bind:this={textarea}
-								bind:value={comments.current}
-								oninput={scheduleMentionSearch}
-								onclick={scheduleMentionSearch}
-								onkeyup={scheduleMentionSearch}
-								onkeydown={handleTextareaKeydown}
-								onblur={() => {
-									setTimeout(resetMentionState, 100);
-								}}
-								{@attach autoHResize}
-							></textarea>
-						{/if}
+						<textarea
+							name="comment-input"
+							class="block w-full min-h-16 lg:min-h-20 overflow-hidden outline-none resize-none p-2 bg-transparent"
+							bind:this={textarea}
+							bind:value={comments.current}
+							oninput={scheduleMentionSearch}
+							onclick={scheduleMentionSearch}
+							onkeyup={scheduleMentionSearch}
+							onkeydown={handleTextareaKeydown}
+							onblur={() => {
+								setTimeout(resetMentionState, 100);
+							}}
+							{@attach autoHResize}
+						></textarea>
 
-						{#if showGifSearch && tab === 'write'}
+						{#if showGifSearch}
 							<div class="border-t-2 border-primary/20 bg-white/40 p-3 flex flex-col gap-3">
 								<div class="flex gap-2 h-9">
 									<input
@@ -686,6 +679,17 @@
 							</div>
 						{/if}
 
+						<div class="border-t-2 border-primary/15 bg-white/40 p-3 flex flex-col gap-2">
+							<span class="text-xs font-semibold text-primary/70 select-none">Live Preview</span>
+							<div class="w-full min-h-12 overflow-hidden">
+								{#if comments.current.trim().length > 0}
+									<Comment content={md.render(comments.current)} />
+								{:else}
+									<p class="text-sm text-dark/40 italic">Nothing to preview yet. Start typing... ✍️</p>
+								{/if}
+							</div>
+						</div>
+
 						{#if mentionState.open}
 							<ul
 								class="absolute left-2 right-2 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border-2 border-primary bg-white p-1 shadow-lg"
@@ -719,145 +723,120 @@
 					<div
 						class="comment-editor flex not-xxs:flex-col justify-between min-h-8 bg-primary rounded-b-xl"
 					>
-						<div class="flex">
+						<span class="text-white text-xs font-semibold px-3 my-auto opacity-80 select-none">
+							Markdown Editor
+						</span>
+						<div
+							class="flex ml-auto h-full my-auto *:bg-primary fill-white *:w-8 *:h-8 *:*:mx-auto *:hover:brightness-120 *:active:*:translate-y-0.5 gap-2 mr-2"
+						>
 							<button
-								class="w-fit h-8 px-2 bg-primary-20 border-2 border-primary border-t-0 rounded-b-xl"
-								class:z-11={tab === 'write'}
-								class:z-9={tab !== 'write'}
-								class:opacity-100={tab === 'write'}
-								class:opacity-90={tab !== 'write'}
-								onclick={() => (tab = 'write')}
-							>
-								Write
-							</button>
-							<button
-								class="w-fit h-8 px-2 -translate-x-0.5 bg-primary-20 border-2 border-primary border-t-0 rounded-b-xl"
-								class:z-11={tab === 'preview'}
-								class:z-9={tab !== 'preview'}
-								class:opacity-100={tab === 'preview'}
-								class:opacity-90={tab !== 'preview'}
+								title="Header"
 								onclick={() => {
-									tab = 'preview';
-									showGifSearch = false;
+									if (!textarea) return;
+									const start = textarea.selectionStart;
+									const end = textarea.selectionEnd;
+									comments.current =
+										textarea.value.slice(0, start) + '# ' + textarea.value.slice(start);
+
+									requestAnimationFrame(() => {
+										textarea.setSelectionRange(start + 2, end + 2);
+										textarea.focus();
+									});
 								}}
 							>
-								Preview
+								<svg class="w-4 h-4" viewBox="0 0 16 16">
+									<path
+										d="M3.75 2a.75.75 0 0 1 .75.75V7h7V2.75a.75.75 0 0 1 1.5 0v10.5a.75.75 0 0 1-1.5 0V8.5h-7v4.75a.75.75 0 0 1-1.5 0V2.75A.75.75 0 0 1 3.75 2Z"
+									></path>
+								</svg>
+							</button>
+							<button
+								title="Bold"
+								onclick={() => {
+									if (!textarea) return;
+									const start = textarea.selectionStart;
+									const end = textarea.selectionEnd;
+									comments.current =
+										textarea.value.slice(0, start) +
+										'**' +
+										textarea.value.slice(start, end) +
+										'**' +
+										textarea.value.slice(end);
+									requestAnimationFrame(() => {
+										textarea.setSelectionRange(start + 2, end + 2);
+										textarea.focus();
+									});
+								}}
+							>
+								<svg class="w-4 h-4" viewBox="0 0 16 16">
+									<path
+										d="M4 2h4.5a3.501 3.501 0 0 1 2.852 5.53A3.499 3.499 0 0 1 9.5 14H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm1 7v3h4.5a1.5 1.5 0 0 0 0-3Zm3.5-2a1.5 1.5 0 0 0 0-3H5v3Z"
+									></path>
+								</svg>
+							</button>
+							<button
+								title="Italic"
+								onclick={() => {
+									if (!textarea) return;
+									const start = textarea.selectionStart;
+									const end = textarea.selectionEnd;
+									comments.current =
+										textarea.value.slice(0, start) +
+										'_' +
+										textarea.value.slice(start, end) +
+										'_' +
+										textarea.value.slice(end);
+									requestAnimationFrame(() => {
+										textarea.setSelectionRange(start + 1, end + 1);
+										textarea.focus();
+									});
+								}}
+							>
+								<svg class="w-4 h-4" viewBox="0 0 16 16">
+									<path
+										d="M6 2.75A.75.75 0 0 1 6.75 2h6.5a.75.75 0 0 1 0 1.5h-2.505l-3.858 9H9.25a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1 0-1.5h2.505l3.858-9H6.75A.75.75 0 0 1 6 2.75Z"
+									></path>
+								</svg>
+							</button>
+							<button
+								title="Code"
+								onclick={() => {
+									if (!textarea) return;
+									const start = textarea.selectionStart;
+									const end = textarea.selectionEnd;
+									textarea.value =
+										textarea.value.slice(0, start) +
+										'`' +
+										textarea.value.slice(start, end) +
+										'`' +
+										textarea.value.slice(end);
+									requestAnimationFrame(() => {
+										textarea.setSelectionRange(start + 1, end + 1);
+										textarea.focus();
+									});
+								}}
+							>
+								<svg class="w-4 h-4" viewBox="0 0 16 16">
+									<path
+										d="m11.28 3.22 4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L13.94 8l-3.72-3.72a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215Zm-6.56 0a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L2.06 8l3.72 3.72a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L.47 8.53a.75.75 0 0 1 0-1.06Z"
+									></path>
+								</svg>
+							</button>
+							<button
+								title="Insert GIF"
+								type="button"
+								class:bg-primary-20={showGifSearch}
+								onclick={() => {
+									showGifSearch = !showGifSearch;
+								}}
+							>
+								<svg class="w-4 h-4" viewBox="0 0 40 40">
+									<path
+										d="M28.75,11.88V8.94H25.53V6H8.73V34H31.27V11.88Zm-16.94,19V9.08H23v5.46h5.18V30.92Z"
+									/>
+								</svg>
 							</button>
 						</div>
-						{#if tab === 'write'}
-							<div
-								class="flex ml-auto h-full my-auto *:bg-primary fill-white *:w-8 *:h-8 *:*:mx-auto *:hover:brightness-120 *:active:*:translate-y-0.5 gap-2 mr-2"
-								in:fade={{ duration: 100 }}
-							>
-								<button
-									title="Header"
-									onclick={() => {
-										if (!textarea) return;
-										const start = textarea.selectionStart;
-										const end = textarea.selectionEnd;
-										comments.current =
-											textarea.value.slice(0, start) + '# ' + textarea.value.slice(start);
-
-										requestAnimationFrame(() => {
-											textarea.setSelectionRange(start + 2, end + 2);
-											textarea.focus();
-										});
-									}}
-								>
-									<svg class="w-4 h-4" viewBox="0 0 16 16">
-										<path
-											d="M3.75 2a.75.75 0 0 1 .75.75V7h7V2.75a.75.75 0 0 1 1.5 0v10.5a.75.75 0 0 1-1.5 0V8.5h-7v4.75a.75.75 0 0 1-1.5 0V2.75A.75.75 0 0 1 3.75 2Z"
-										></path>
-									</svg>
-								</button>
-								<button
-									title="Bold"
-									onclick={() => {
-										if (!textarea) return;
-										const start = textarea.selectionStart;
-										const end = textarea.selectionEnd;
-										comments.current =
-											textarea.value.slice(0, start) +
-											'**' +
-											textarea.value.slice(start, end) +
-											'**' +
-											textarea.value.slice(end);
-										requestAnimationFrame(() => {
-											textarea.setSelectionRange(start + 2, end + 2);
-											textarea.focus();
-										});
-									}}
-								>
-									<svg class="w-4 h-4" viewBox="0 0 16 16">
-										<path
-											d="M4 2h4.5a3.501 3.501 0 0 1 2.852 5.53A3.499 3.499 0 0 1 9.5 14H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm1 7v3h4.5a1.5 1.5 0 0 0 0-3Zm3.5-2a1.5 1.5 0 0 0 0-3H5v3Z"
-										></path>
-									</svg>
-								</button>
-								<button
-									title="Italic"
-									onclick={() => {
-										if (!textarea) return;
-										const start = textarea.selectionStart;
-										const end = textarea.selectionEnd;
-										comments.current =
-											textarea.value.slice(0, start) +
-											'_' +
-											textarea.value.slice(start, end) +
-											'_' +
-											textarea.value.slice(end);
-										requestAnimationFrame(() => {
-											textarea.setSelectionRange(start + 1, end + 1);
-											textarea.focus();
-										});
-									}}
-								>
-									<svg class="w-4 h-4" viewBox="0 0 16 16">
-										<path
-											d="M6 2.75A.75.75 0 0 1 6.75 2h6.5a.75.75 0 0 1 0 1.5h-2.505l-3.858 9H9.25a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1 0-1.5h2.505l3.858-9H6.75A.75.75 0 0 1 6 2.75Z"
-										></path>
-									</svg>
-								</button>
-								<button
-									title="Code"
-									onclick={() => {
-										if (!textarea) return;
-										const start = textarea.selectionStart;
-										const end = textarea.selectionEnd;
-										textarea.value =
-											textarea.value.slice(0, start) +
-											'`' +
-											textarea.value.slice(start, end) +
-											'`' +
-											textarea.value.slice(end);
-										requestAnimationFrame(() => {
-											textarea.setSelectionRange(start + 1, end + 1);
-											textarea.focus();
-										});
-									}}
-								>
-									<svg class="w-4 h-4" viewBox="0 0 16 16">
-										<path
-											d="m11.28 3.22 4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L13.94 8l-3.72-3.72a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215Zm-6.56 0a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L2.06 8l3.72 3.72a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L.47 8.53a.75.75 0 0 1 0-1.06Z"
-										></path>
-									</svg>
-								</button>
-								<button
-									title="Insert GIF"
-									type="button"
-									class:bg-primary-20={showGifSearch}
-									onclick={() => {
-										showGifSearch = !showGifSearch;
-									}}
-								>
-									<svg class="w-4 h-4" viewBox="0 0 40 40">
-										<path
-											d="M28.75,11.88V8.94H25.53V6H8.73V34H31.27V11.88Zm-16.94,19V9.08H23v5.46h5.18V30.92Z"
-										/>
-									</svg>
-								</button>
-							</div>
-						{/if}
 					</div>
 				</div>
 				{#if replyTo}
