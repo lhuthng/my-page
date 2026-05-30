@@ -28,7 +28,7 @@
 	let { postId } = $props();
 	let last = -1;
 
-	let userAvatarUrl = $derived($user?.avatarUrl ?? '/anonymous.webp');
+	let userAvatarUrl = $derived($user?.avatarUrl ?? '/anonymous.gif');
 
 	let start = $state();
 
@@ -67,7 +67,7 @@
 	};
 
 	const normalizeAvatarUrl = (url) => {
-		if (!url) return '/anonymous.webp';
+		if (!url) return '/anonymous.gif';
 		if (url.startsWith('http://') || url.startsWith('https://')) return url;
 		if (url.startsWith('/api/') || url.startsWith('/')) return url;
 		return `/api/${url.replace(/^\.?\//, '')}`;
@@ -515,6 +515,7 @@
 	let gifLoading = $state(false);
 	let gifOffset = $state(0);
 	let gifError = $state(null);
+	let showMarkdownHelp = $state(false);
 
 	const fetchGifs = async (reset = false) => {
 		if (gifLoading) return;
@@ -575,6 +576,10 @@
 			fetchGifs(true);
 		}
 	});
+
+	const closeMarkdownHelp = () => {
+		showMarkdownHelp = false;
+	};
 </script>
 
 <section class="w-full xl:w-[calc(100%-15rem)] bg-white p-4 rounded-xl">
@@ -680,12 +685,14 @@
 						{/if}
 
 						<div class="border-t-2 border-primary/15 bg-white/40 p-3 flex flex-col gap-2">
-							<span class="text-xs font-semibold text-primary/70 select-none">Live Preview</span>
+							<span class="text-base font-semibold text-primary/70 select-none">Live Preview</span>
 							<div class="w-full min-h-12 overflow-hidden">
 								{#if comments.current.trim().length > 0}
 									<Comment content={md.render(comments.current)} />
 								{:else}
-									<p class="text-sm text-dark/40 italic">Nothing to preview yet. Start typing... ✍️</p>
+									<p class="text-sm text-dark/40 italic select-none">
+										Nothing to preview yet. Start typing... <span aria-hidden="true">ヽ(ヅ)ノ</span>
+									</p>
 								{/if}
 							</div>
 						</div>
@@ -707,7 +714,7 @@
 										>
 											<img
 												class="h-8 w-8 rounded-full object-cover outline-2 outline-primary"
-												src={profile.avatar_url ?? '/anonymous.webp'}
+												src={profile.avatar_url ?? '/anonymous.gif'}
 												alt={`${profile.display_name} avatar`}
 											/>
 											<div class="min-w-0 flex-1">
@@ -721,14 +728,31 @@
 						{/if}
 					</div>
 					<div
-						class="comment-editor flex not-xxs:flex-col justify-between min-h-8 bg-primary rounded-b-xl"
+						class="comment-editor flex not-sm:flex-col justify-between min-h-8 bg-primary rounded-b-xl"
 					>
-						<span class="text-white text-xs font-semibold px-3 my-auto opacity-80 select-none">
+						<span class="text-white text-base font-semibold px-3 my-auto opacity-80 select-none">
 							Markdown Editor
 						</span>
 						<div
 							class="flex ml-auto h-full my-auto *:bg-primary fill-white *:w-8 *:h-8 *:*:mx-auto *:hover:brightness-120 *:active:*:translate-y-0.5 gap-2 mr-2"
 						>
+							<button
+								title="Markdown Help"
+								type="button"
+								class:bg-primary-20={showMarkdownHelp}
+								onclick={() => {
+									showMarkdownHelp = !showMarkdownHelp;
+									if (showMarkdownHelp) {
+										showGifSearch = false;
+									}
+								}}
+							>
+								<svg class="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
+									<path
+										d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 17a1.25 1.25 0 1 1 1.25-1.25A1.25 1.25 0 0 1 12 19Zm1.42-7.6-.57.4a1.48 1.48 0 0 0-.6 1.2v.5h-1.5V13a2.97 2.97 0 0 1 1.23-2.42l.57-.4a1.63 1.63 0 0 0 .7-1.3A1.75 1.75 0 1 0 9.5 9H8a3.25 3.25 0 1 1 6.5-.12 3.14 3.14 0 0 1-1.08 2.52Z"
+									></path>
+								</svg>
+							</button>
 							<button
 								title="Header"
 								onclick={() => {
@@ -839,6 +863,114 @@
 						</div>
 					</div>
 				</div>
+				{#if showMarkdownHelp}
+					<div class="fixed inset-0 z-40 overflow-visible" role="presentation" transition:fade>
+						<div
+							class="absolute inset-2 lg:inset-10 bottom-auto overflow-y-auto rounded-lg border-2 border-primary bg-white p-4 shadow-xl custom-scrollbar"
+							role="dialog"
+							tabindex="-1"
+							aria-modal="true"
+							aria-labelledby="markdown-help-title"
+						>
+							<div class="mb-3 flex items-start justify-between gap-4">
+								<div>
+									<h5 id="markdown-help-title" class="text-xl font-bold text-dark">
+										Markdown Help
+									</h5>
+									<p class="text-sm text-dark/70">Quick syntax reference for comments.</p>
+								</div>
+								<div class="duo-btn duo-primary">
+									<button type="button" class="text-sm font-semibold" onclick={closeMarkdownHelp}>
+										Close
+									</button>
+								</div>
+							</div>
+
+							<div class="space-y-4 text-sm text-dark/90">
+								<div>
+									<p class="mb-1 font-semibold">Basic Markdown</p>
+									<ul class="space-y-1 list-disc pl-5">
+										<li>
+											<code># Heading</code>
+											for a title line
+										</li>
+										<li>
+											<code>**bold text**</code>
+											for bold emphasis
+										</li>
+										<li>
+											<code>_italic text_</code>
+											for italic emphasis
+										</li>
+										<li>
+											<code>`inline code`</code>
+											for code snippets
+										</li>
+										<li>
+											<code>![alt text](https://example.com/image.gif)</code>
+											for images/GIFs
+										</li>
+									</ul>
+								</div>
+
+								<div>
+									<p class="mb-1 font-semibold">Mention Syntax</p>
+									<ul class="space-y-1 list-disc pl-5">
+										<li>
+											Type <code>@username</code>
+											(letters, numbers,
+											<code>_</code>
+											,
+											<code>-</code>
+											; min 3 chars)
+										</li>
+										<li>
+											Suggestions appear while typing after <code>@</code>
+										</li>
+										<li>
+											Use <code>Arrow Up/Down</code>
+											to pick, then
+											<code>Enter</code>
+											or
+											<code>Tab</code>
+										</li>
+										<li>
+											Use <code>Escape</code>
+											to close mention suggestions
+										</li>
+									</ul>
+								</div>
+
+								<div>
+									<p class="mb-1 font-semibold">Toolbar Shortcuts (4)</p>
+									<ul class="space-y-1 list-disc pl-5">
+										<li>
+											<span class="font-semibold">Header:</span>
+											adds
+											<code>#</code>
+											at the cursor
+										</li>
+										<li>
+											<span class="font-semibold">Bold:</span>
+											wraps selection with
+											<code>**...**</code>
+										</li>
+										<li>
+											<span class="font-semibold">Italic:</span>
+											wraps selection with
+											<code>_..._</code>
+										</li>
+										<li>
+											<span class="font-semibold">Code:</span>
+											wraps selection with
+											<code>`...`</code>
+										</li>
+									</ul>
+								</div>
+							</div>
+						</div>
+					</div>
+				{/if}
 				{#if replyTo}
 					<div
 						class="flex items-center justify-between gap-4 rounded-xl border-2 border-dark/20 bg-primary-20 px-3 py-2"
