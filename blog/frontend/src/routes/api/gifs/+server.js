@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
-import { GIPHY_API_KEY } from '$env/static/private';
+import { env } from '$env/dynamic/private';
+
+const GIPHY_API_KEY = env.GIPHY_API_KEY;
 
 export async function GET({ url }) {
 	const query = url.searchParams.get('q') || '';
