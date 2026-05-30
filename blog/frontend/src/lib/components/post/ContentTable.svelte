@@ -74,7 +74,7 @@
   @reference "../../../app.css";
 
   .active {
-    @apply underline text-accent-blue;
+    @apply italic text-accent-blue;
   }
 
   ol {

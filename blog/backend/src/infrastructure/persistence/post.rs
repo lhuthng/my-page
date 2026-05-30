@@ -12,16 +12,18 @@ use crate::{
     application::{
         commands::post::{
             CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand, GetDetailedPostsCommand,
-            GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand, NewPostCommand,
+            GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand,
+            GetPostsByTagCommand, GetRelatedPostsCommand, NewPostCommand,
             PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
-            PushNewLikeCommand, PushNewViewCommand, SearchPostCommand, UpdatePostCommand,
+            PushNewLikeCommand, PushNewViewCommand, SearchPostCommand, SearchTagsCommand,
+            SetRelatedPostsCommand, UpdatePostCommand,
         },
         services::post::PostService,
     },
     domain::{
         entities::post::{
             CategoryResult, Comment, CommentPage, Post, PostDetails, PostSeries, PostSnapshot,
-            PostStats, PostSummary,
+            PostStats, PostSummary, TagSummary,
         },
         errors::post::PostError,
     },
@@ -123,6 +125,14 @@ pub struct TagRow {
 }
 
 #[derive(Debug, FromRow)]
+pub struct TagSummaryRow {
+    pub name: String,
+    pub slug: String,
+    pub post_count: i64,
+    pub score: i32,
+}
+
+#[derive(Debug, FromRow)]
 pub struct MediumUsageRow {
     pub code: i64,
     pub url: String,
@@ -150,6 +160,52 @@ pub struct PostDetailsRow {
 }
 
 impl PostServiceImpl {
+    async fn hydrate_post_rows(&self, post_rows: Vec<PostRow>) -> Result<Vec<PostSnapshot>, PostError> {
+        if post_rows.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let placeholder = post_rows
+            .iter()
+            .map(|_| "?".to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let sequel = format!(
+            r#"
+            SELECT post_id, tag_id, tags.name AS tag_name, tags.slug AS tag_slug
+            FROM post_tags
+            JOIN tags ON tags.id = post_tags.tag_id
+            WHERE post_tags.post_id IN ({})
+            "#,
+            placeholder
+        );
+
+        let mut query = sqlx::query_as::<_, TagRow>(&sequel);
+
+        let mut posts_map: HashMap<i64, usize> = HashMap::new();
+        let mut snapshots = vec![];
+
+        for post_row in post_rows {
+            posts_map.insert(post_row.post_id, snapshots.len());
+            query = query.bind(post_row.post_id);
+            snapshots.push(post_row.into_snapshot(vec![], vec![]));
+        }
+
+        let tag_rows = query.fetch_all(&self.pool).await?;
+
+        for tag_row in tag_rows {
+            if let Some(index) = posts_map.get(&tag_row.post_id) {
+                if let Some(post) = snapshots.get_mut(*index) {
+                    post.tag_names.push(tag_row.tag_name);
+                    post.tag_slugs.push(tag_row.tag_slug);
+                }
+            }
+        }
+
+        Ok(snapshots)
+    }
+
     async fn get_posts(
         &self,
         is_public: bool,
@@ -201,50 +257,7 @@ impl PostServiceImpl {
             .fetch_all(&self.pool)
             .await?;
 
-        if post_rows.len() == 0 {
-            return Ok(vec![]);
-        }
-
-        let placeholder = post_rows
-            .iter()
-            .map(|_| "?".to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        let sequel = format!(
-            r#"
-            SELECT post_id, tag_id, tags.name AS tag_name, tags.slug AS tag_slug
-            FROM post_tags
-            JOIN tags ON tags.id = post_tags.tag_id
-            WHERE post_tags.post_id IN ({})
-            "#,
-            placeholder
-        );
-
-        let mut query = sqlx::query_as::<_, TagRow>(&sequel);
-
-        let mut posts_map: HashMap<i64, usize> = HashMap::new();
-
-        let mut featured_posts = vec![];
-
-        for post_row in post_rows {
-            posts_map.insert(post_row.post_id, featured_posts.len());
-            query = query.bind(post_row.post_id.clone());
-            featured_posts.push(post_row.into_snapshot(vec![], vec![]));
-        }
-
-        let tag_rows = query.fetch_all(&self.pool).await?;
-
-        for tag_row in tag_rows {
-            if let Some(index) = posts_map.get_mut(&tag_row.post_id) {
-                if let Some(post) = featured_posts.get_mut(*index) {
-                    post.tag_names.push(tag_row.tag_name);
-                    post.tag_slugs.push(tag_row.tag_slug);
-                }
-            }
-        }
-
-        Ok(featured_posts)
+        self.hydrate_post_rows(post_rows).await
     }
 }
 
@@ -437,6 +450,116 @@ impl PostService for PostServiceImpl {
             .collect::<Vec<_>>();
 
         Ok(summaries)
+    }
+    async fn search_tags(&self, cmd: SearchTagsCommand) -> Result<Vec<TagSummary>, PostError> {
+        let rows = sqlx::query_as::<_, TagSummaryRow>(
+            r#"
+            SELECT
+                t.name,
+                t.slug,
+                COUNT(DISTINCT p.id) AS post_count,
+                CASE
+                    WHEN ?1 IS NULL THEN 0
+                    WHEN LOWER(t.slug) = LOWER(?1) THEN 3
+                    WHEN LOWER(t.slug) LIKE LOWER(?1) || '%' THEN 2
+                    ELSE 1
+                END AS score
+            FROM tags t
+            LEFT JOIN post_tags pt ON pt.tag_id = t.id
+            LEFT JOIN posts p ON p.id = pt.post_id AND p.status = 'published'
+            WHERE
+                ?1 IS NULL
+                OR LOWER(t.slug) LIKE '%' || LOWER(?1) || '%'
+            GROUP BY t.id, t.name, t.slug
+            HAVING COUNT(DISTINCT p.id) > 0
+            ORDER BY score DESC, post_count DESC, t.name ASC
+            LIMIT ?2 OFFSET ?3
+            "#,
+        )
+        .bind(cmd.term)
+        .bind(cmd.size)
+        .bind(cmd.offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| TagSummary {
+                name: row.name,
+                slug: row.slug,
+                post_count: row.post_count,
+            })
+            .collect())
+    }
+    async fn get_posts_by_tag(
+        &self,
+        cmd: GetPostsByTagCommand,
+    ) -> Result<(TagSummary, Vec<PostSnapshot>), PostError> {
+        let tag = sqlx::query_as::<_, TagSummaryRow>(
+            r#"
+            SELECT
+                t.name,
+                t.slug,
+                COUNT(DISTINCT p.id) AS post_count,
+                0 AS score
+            FROM tags t
+            LEFT JOIN post_tags pt ON pt.tag_id = t.id
+            LEFT JOIN posts p ON p.id = pt.post_id AND p.status = 'published'
+            WHERE t.slug = ?1
+            GROUP BY t.id, t.name, t.slug
+            "#,
+        )
+        .bind(&cmd.slug)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(PostError::TagNotFound)?;
+
+        let post_rows = sqlx::query_as::<_, PostRow>(
+            r#"
+            SELECT
+                p.id AS post_id,
+                title,
+                slug,
+                excerpt,
+                username AS author_slug,
+                display_name AS author_name,
+                'media/i/' || m.short_name AS url,
+                status,
+                views,
+                likes,
+                comments_count
+            FROM posts p
+                JOIN users u ON u.id = p.user_id
+                JOIN user_meta um ON um.user_id = p.user_id
+                JOIN post_stats ps ON ps.post_id = p.id
+                LEFT JOIN media m ON m.id = p.cover_image_id
+            WHERE p.status = 'published'
+                AND EXISTS (
+                    SELECT 1
+                    FROM post_tags pt
+                    JOIN tags t ON t.id = pt.tag_id
+                    WHERE pt.post_id = p.id AND t.slug = ?1
+                )
+            ORDER BY p.created_at DESC
+            LIMIT ?2 OFFSET ?3
+            "#,
+        )
+        .bind(&cmd.slug)
+        .bind(cmd.limit)
+        .bind(cmd.offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let posts = self.hydrate_post_rows(post_rows).await?;
+
+        Ok((
+            TagSummary {
+                name: tag.name,
+                slug: tag.slug,
+                post_count: tag.post_count,
+            },
+            posts,
+        ))
     }
     async fn update_post(&self, cmd: UpdatePostCommand) -> Result<(), PostError> {
         let mut tx = self.pool.begin().await?;
@@ -1398,6 +1521,61 @@ impl PostService for PostServiceImpl {
         .bind(cmd.post_id)
         .execute(&self.pool)
         .await?;
+        Ok(())
+    }
+
+    async fn get_related_posts(
+        &self,
+        cmd: GetRelatedPostsCommand,
+    ) -> Result<Vec<PostSummary>, PostError> {
+        let rows = sqlx::query_as::<_, (String, String, Option<String>)>(
+            r#"
+            SELECT p.title, p.slug, 'media/i/' || m.short_name AS cover_url
+            FROM related_posts rp
+            JOIN posts p ON rp.related_post_id = p.id
+            LEFT JOIN media m ON m.id = p.cover_image_id
+            WHERE rp.post_id = ? AND p.status = 'published'
+            ORDER BY rp.display_order ASC
+            "#,
+        )
+        .bind(cmd.post_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(title, slug, cover_url)| PostSummary {
+                title,
+                slug,
+                cover_url,
+            })
+            .collect())
+    }
+
+    async fn set_related_posts(
+        &self,
+        cmd: SetRelatedPostsCommand,
+    ) -> Result<(), PostError> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("DELETE FROM related_posts WHERE post_id = ?")
+            .bind(cmd.post_id)
+            .execute(&mut *tx)
+            .await?;
+
+        for (order, slug) in cmd.related_post_slugs.iter().enumerate() {
+            sqlx::query(
+                "INSERT OR IGNORE INTO related_posts (post_id, related_post_id, display_order) \
+                 SELECT ?, id, ? FROM posts WHERE slug = ? LIMIT 1",
+            )
+            .bind(cmd.post_id)
+            .bind(order as i64)
+            .bind(slug)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
         Ok(())
     }
 }

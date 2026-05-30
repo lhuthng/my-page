@@ -1,245 +1,244 @@
 <script>
-  import PostCard from "./PostCard.svelte";
-  import gsap from "gsap";
-  import { Flip } from "gsap/Flip";
-  import { tick, untrack } from "svelte";
-  import { fade, fly } from "svelte/transition";
-  import { flip } from "svelte/animate";
+	import PostCard from './PostCard.svelte';
+	import gsap from 'gsap';
+	import { Flip } from 'gsap/Flip';
+	import { tick, untrack } from 'svelte';
+	import { fade, fly } from 'svelte/transition';
+	import { flip } from 'svelte/animate';
 
-  const { featuredPosts } = $props();
+	const { featuredPosts } = $props();
 
-  let categories = $state(
-    ["programming", "art", "music"].map((tag) => ({
-      value: tag,
-      selected: false,
-    })),
-  );
+	let categories = $state(
+		['programming', 'art', 'music'].map((tag) => ({
+			value: tag,
+			selected: false
+		}))
+	);
 
-  let tabContainer = $state();
-  let discoverTab = $state();
-  let freshTab = $state();
+	let tabContainer = $state();
+	let discoverTab = $state();
+	let freshTab = $state();
 
-  let tab = $state({
-    preindex: 1,
-    index: 1,
-    container: null,
-    discover: null,
-    fresh: null,
-  });
+	let tab = $state({
+		preindex: 1,
+		index: 1,
+		container: null,
+		discover: null,
+		fresh: null
+	});
 
-  let fresh = $state({
-    created: {
-      status: "unset",
-      cache: [],
-    },
-    updated: {
-      status: "unset",
-      cache: [],
-    },
-  });
+	let fresh = $state({
+		created: {
+			status: 'unset',
+			cache: []
+		},
+		updated: {
+			status: 'unset',
+			cache: []
+		}
+	});
 
-  $effect(() => {
-    if (!tab.container || !tab.discover || !tab.fresh) return;
+	$effect(() => {
+		if (!tab.container || !tab.discover || !tab.fresh) return;
 
-    if (tab.preindex === tab.index) return;
+		if (tab.preindex === tab.index) return;
 
-    tab.preindex = tab.index;
+		tab.preindex = tab.index;
 
-    const state = Flip.getState(tab.container);
+		const state = Flip.getState(tab.container);
 
-    if (tab.index !== 1) {
-      tab.discover.classList.toggle("hidden", true);
-      tab.fresh.classList.toggle("hidden", false);
-      tab.fresh.classList.toggle("grid", true);
-    } else {
-      tab.discover.classList.toggle("hidden", false);
-      tab.fresh.classList.toggle("hidden", true);
-      tab.fresh.classList.toggle("grid", false);
-    }
-    Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
-  });
+		if (tab.index !== 1) {
+			tab.discover.classList.toggle('hidden', true);
+			tab.fresh.classList.toggle('hidden', false);
+			tab.fresh.classList.toggle('grid', true);
+		} else {
+			tab.discover.classList.toggle('hidden', false);
+			tab.fresh.classList.toggle('hidden', true);
+			tab.fresh.classList.toggle('grid', false);
+		}
+		Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
+	});
 
-  let order = $state();
-  let _order = $state();
+	let order = $state();
+	let _order = $state();
 
-  $effect(() => {
-    if (tab.index !== 2) {
-      if (order === undefined) {
-        order = "created";
-      }
-      _order = order;
-    }
-  });
+	$effect(() => {
+		if (tab.index !== 2) {
+			if (order === undefined) {
+				order = 'created';
+			}
+			_order = order;
+		}
+	});
 
-  $effect(async () => {
-    if (tab.index !== 2) return;
-    order;
-    const orderFresh = untrack(() => fresh[order]);
+	$effect(async () => {
+		if (tab.index !== 2) return;
+		order;
+		const orderFresh = untrack(() => fresh[order]);
 
-    if (orderFresh.status === "fetched" || orderFresh.status === "pending")
-      return;
+		if (orderFresh.status === 'fetched' || orderFresh.status === 'pending') return;
 
-    orderFresh.status = "pending";
-    const res = await fetch(
-      `api/posts/latest?limit=5&offset=0&${order === "created" ? "sorted_by_created=true" : "sorted_by_updated=true"}`,
-      {
-        method: "GET",
-      },
-    );
+		orderFresh.status = 'pending';
+		const res = await fetch(
+			`api/posts/latest?limit=5&offset=0&${order === 'created' ? 'sorted_by_created=true' : 'sorted_by_updated=true'}`,
+			{
+				method: 'GET'
+			}
+		);
 
-    if (res.ok) {
-      setTimeout(async () => {
-        const state = Flip.getState(tab.container);
-        orderFresh.cache = (await res.json()).featured_posts;
-        orderFresh.status = "fetched";
+		if (res.ok) {
+			setTimeout(async () => {
+				const state = Flip.getState(tab.container);
+				orderFresh.cache = (await res.json()).featured_posts;
+				orderFresh.status = 'fetched';
 
-        await tick();
+				await tick();
 
-        Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
-      }, 500);
-    } else {
-      orderFresh.cache = [];
-      orderFresh.status = "failed";
-    }
-  });
+				Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
+			}, 500);
+		} else {
+			orderFresh.cache = [];
+			orderFresh.status = 'failed';
+		}
+	});
 </script>
 
 {#snippet exploreMore(link)}
-  <li
-    class="flex justify-center items-center full min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34 rounded-lg border-2 border-dashed"
-  >
-    <div class="duo-btn duo-blue">
-      <a class="no-underline!" href={link}>explore more</a>
-    </div>
-  </li>
+	<li
+		class="flex justify-center items-center full min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34 rounded-lg border-2 border-dashed"
+	>
+		<div class="duo-btn duo-blue">
+			<a class="no-underline!" href={link}>explore more</a>
+		</div>
+	</li>
 {/snippet}
 
 <div class="space-y-4 pt-4">
-  <div class="flex not-sm:flex-col justify-between">
-    <ul id="home-tab" class="text-xl font-medium h-8">
-      <li class:left={true} class:selected={tab.index === 1}>
-        <button onclick={() => (tab.index = 1)}>Discover</button>
-      </li>
-      <li class:right={true} class:selected={tab.index === 2}>
-        <button onclick={() => (tab.index = 2)}>Fresh</button>
-      </li>
-    </ul>
-    {#if tab.index === 2}
-      <select
-        class="focus:outline-none border-2 border-dark p-1 rounded-lg hover:bg-dark hover:text-white transition-colors duration-200 mt-2 ml-auto w-fit"
-        name="post-filter"
-        bind:value={_order}
-        in:fly={{ y: -10, duration: 200 }}
-        out:fly={{ y: -10, duration: 200 }}
-        onchange={async (e) => {
-          const value = e.target.value;
+	<div class="flex not-sm:flex-col items-center justify-between">
+		<ul id="home-tab" class="text-xl font-medium h-8">
+			<li class:left={true} class:selected={tab.index === 1}>
+				<button onclick={() => (tab.index = 1)}>Discover</button>
+			</li>
+			<li class:right={true} class:selected={tab.index === 2}>
+				<button onclick={() => (tab.index = 2)}>Fresh</button>
+			</li>
+		</ul>
+		{#if tab.index === 2}
+			<select
+				class="focus:outline-none border-2 border-dark p-1 rounded-lg hover:bg-dark hover:text-white transition-colors duration-200 not-sm:mt-2 sm:ml-auto w-fit cursor-pointer"
+				name="post-filter"
+				bind:value={_order}
+				in:fly={{ y: -10, duration: 200 }}
+				out:fly={{ y: -10, duration: 200 }}
+				onchange={async (e) => {
+					const value = e.target.value;
 
-          if (fresh[value].status !== "fetched") {
-            const state = Flip.getState(tab.container);
-            order = value;
-            await tick();
-            Flip.from(state, { duration: 0.5, ease: "power3.inOut" });
-          } else {
-            order = value;
-          }
-          _order = order;
-        }}
-      >
-        <option value="created">By Created</option>
-        <option value="updated">By Updated</option>
-      </select>
-    {/if}
-  </div>
-  <div bind:this={tab.container} class="pb-2">
-    <ul
-      bind:this={tab.discover}
-      class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
-    >
-      {#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
-        <li in:fly={{ y: -20, duration: 500 }}>
-          <PostCard
-            {title}
-            {slug}
-            {excerpt}
-            author={{
-              name: author_name,
-              slug: author_slug,
-            }}
-            tags={tag_slugs}
-            src={url}
-            {stats}
-          />
-        </li>
-      {/each}
-      {@render exploreMore("/posts")}
-    </ul>
-    <ul
-      bind:this={tab.fresh}
-      class="hidden grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
-    >
-      {#if fresh[order]?.status === "fetched"}
-        {#each fresh[order].cache as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
-          <li
-            in:fly={{ y: -20, duration: 500 }}
-            animate:flip={{ delay: index * 80, duration: 500 }}
-          >
-            <PostCard
-              {title}
-              {slug}
-              {excerpt}
-              author={{
-                name: author_name,
-                slug: author_slug,
-              }}
-              tags={tag_slugs}
-              src={url}
-              {stats}
-            />
-          </li>
-        {/each}
-        {@render exploreMore("/posts")}
-      {:else}
-        <div class="w-full col-span-full py-10 text-center">Loading</div>
-      {/if}
-    </ul>
-  </div>
+					if (fresh[value].status !== 'fetched') {
+						const state = Flip.getState(tab.container);
+						order = value;
+						await tick();
+						Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
+					} else {
+						order = value;
+					}
+					_order = order;
+				}}
+			>
+				<option value="created">By Created</option>
+				<option value="updated">By Updated</option>
+			</select>
+		{/if}
+	</div>
+	<div bind:this={tab.container} class="pb-2">
+		<ul
+			bind:this={tab.discover}
+			class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+		>
+			{#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
+				<li in:fly={{ y: -20, duration: 500 }}>
+					<PostCard
+						{title}
+						{slug}
+						{excerpt}
+						author={{
+							name: author_name,
+							slug: author_slug
+						}}
+						tags={tag_slugs}
+						src={url}
+						{stats}
+					/>
+				</li>
+			{/each}
+			{@render exploreMore('/posts')}
+		</ul>
+		<ul
+			bind:this={tab.fresh}
+			class="hidden grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+		>
+			{#if fresh[order]?.status === 'fetched'}
+				{#each fresh[order].cache as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
+					<li
+						in:fly={{ y: -20, duration: 500 }}
+						animate:flip={{ delay: index * 80, duration: 500 }}
+					>
+						<PostCard
+							{title}
+							{slug}
+							{excerpt}
+							author={{
+								name: author_name,
+								slug: author_slug
+							}}
+							tags={tag_slugs}
+							src={url}
+							{stats}
+						/>
+					</li>
+				{/each}
+				{@render exploreMore('/posts')}
+			{:else}
+				<div class="w-full col-span-full py-10 text-center">Loading</div>
+			{/if}
+		</ul>
+	</div>
 </div>
 
 <style lang="postcss">
-  @reference "../../../app.css";
+	@reference "../../../app.css";
 
-  #home-tab {
-    @apply flex gap-4;
-    li {
-      @apply relative;
-      button {
-        @apply text-dark/70 relative z-10;
-      }
+	#home-tab {
+		@apply flex gap-4;
+		li {
+			@apply relative;
+			button {
+				@apply relative z-10 text-dark/70;
+			}
 
-      &::before {
-        @apply absolute z-9 content-[""] -top-1 h-[calc(100%+0.25rem)] w-0 bg-linear-to-t from-background/40 via-background/20 to-primary/0 transition-all duration-200;
-      }
-      &::after {
-        @apply absolute z-9 content-[""] bottom-0 h-1 w-0 bg-dark transition-all duration-200;
-      }
-      &.left::after,
-      &.left::before {
-        right: -0.5rem;
-      }
-      &.right::after,
-      &.right::before {
-        left: -0.5rem;
-      }
-    }
-    li.selected > button {
-      @apply text-dark relative z-10;
-    }
-    li.selected::after,
-    li.selected::before {
-      @apply w-[calc(100%+1rem)];
-    }
-  }
-  button {
-    @apply focus:outline-none;
-  }
+			&::before {
+				@apply absolute -top-1 z-9 h-[calc(100%+0.25rem)] w-0 bg-linear-to-t from-background/40 via-background/20 to-primary/0 transition-all duration-200 content-[""];
+			}
+			&::after {
+				@apply absolute bottom-0 z-9 h-1 w-0 bg-dark transition-all duration-200 content-[""];
+			}
+			&.left::after,
+			&.left::before {
+				right: -0.5rem;
+			}
+			&.right::after,
+			&.right::before {
+				left: -0.5rem;
+			}
+		}
+		li.selected > button {
+			@apply relative z-10 text-dark;
+		}
+		li.selected::after,
+		li.selected::before {
+			@apply w-[calc(100%+1rem)];
+		}
+	}
+	button {
+		@apply focus:outline-none;
+	}
 </style>
