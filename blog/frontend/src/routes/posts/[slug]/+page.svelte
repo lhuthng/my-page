@@ -94,5 +94,5 @@
     }}
   />
 
-  <CommentSection postId={id} />
+  <CommentSection postId={id} postAuthorUsername={author_slug} />
 </article>
