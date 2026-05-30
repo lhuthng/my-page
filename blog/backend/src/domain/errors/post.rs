@@ -1,5 +1,6 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use tracing::error;
 
 use crate::domain::errors::media::MediaError;
 
@@ -40,6 +41,7 @@ impl IntoResponse for PostError {
                     // }
                     PostError::UploadFailed(msg) => (StatusCode::BAD_REQUEST, msg),
                     PostError::InternalError(msg) => {
+                        error!("Internal post error: {}", msg);
                         if cfg!(debug_assertions) {
                             (StatusCode::INTERNAL_SERVER_ERROR, msg)
                         } else {

@@ -1,5 +1,6 @@
 use dotenvy::dotenv;
 use std::env;
+use tracing_subscriber::EnvFilter;
 
 use crate::infrastructure::web::server::HTTPServer;
 
@@ -11,6 +12,14 @@ mod infrastructure;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
+
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,tower_http=info"));
+    tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .with_target(false)
+        .compact()
+        .init();
 
     let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:data/blog.db".to_string());
 
