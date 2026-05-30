@@ -546,7 +546,7 @@ export function mentionProfilePlugin(md, options = {}) {
   const mentionDictionary = options.mentionDictionary || {};
 
   const normalizeAvatar = (url) => {
-    if (!url) return "/anonymous.webp";
+    if (!url) return "/anonymous.gif";
     if (url.startsWith("http://") || url.startsWith("https://")) return url;
     if (url.startsWith("/api/") || url.startsWith("/")) return url;
     return `/api/${String(url).replace(/^\.?\//, "")}`;
