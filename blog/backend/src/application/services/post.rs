@@ -45,6 +45,14 @@ pub trait PostService {
         &self,
         cmd: commands::post::SearchPostCommand,
     ) -> Result<Vec<entities::post::PostSummary>, errors::post::PostError>;
+    async fn search_tags(
+        &self,
+        cmd: commands::post::SearchTagsCommand,
+    ) -> Result<Vec<entities::post::TagSummary>, errors::post::PostError>;
+    async fn get_posts_by_tag(
+        &self,
+        cmd: commands::post::GetPostsByTagCommand,
+    ) -> Result<(entities::post::TagSummary, Vec<entities::post::PostSnapshot>), errors::post::PostError>;
     async fn get_comments(
         &self,
         cmd: commands::post::GetCommentsCommand,
@@ -64,5 +72,13 @@ pub trait PostService {
     async fn push_new_like(
         &self,
         cmd: commands::post::PushNewLikeCommand,
+    ) -> Result<(), errors::post::PostError>;
+    async fn get_related_posts(
+        &self,
+        cmd: commands::post::GetRelatedPostsCommand,
+    ) -> Result<Vec<entities::post::PostSummary>, errors::post::PostError>;
+    async fn set_related_posts(
+        &self,
+        cmd: commands::post::SetRelatedPostsCommand,
     ) -> Result<(), errors::post::PostError>;
 }

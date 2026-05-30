@@ -16,9 +16,11 @@ use crate::{
             post::{
                 CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand,
                 GetDetailedPostsCommand, GetFeaturedPostsCommand, GetLatestPostsCommand,
-                GetPostCommand, NewPostCommand, PostNewAnynymouseCommentCommand,
-                PostNewCommentCommand, PublishCommand, PushNewLikeCommand, PushNewViewCommand,
-                SearchPostCommand, UpdatePostCommand,
+                GetPostCommand, GetPostsByTagCommand, GetRelatedPostsCommand,
+                NewPostCommand, PostNewAnynymouseCommentCommand, PostNewCommentCommand,
+                PublishCommand, PushNewLikeCommand, PushNewViewCommand,
+                SearchPostCommand, SearchTagsCommand, SetRelatedPostsCommand,
+                UpdatePostCommand,
             },
         },
         services::{media::MediaService, post::PostService},
@@ -26,7 +28,7 @@ use crate::{
     domain::{
         entities::{
             media::MediumDetails,
-            post::{PostDetails, PostSnapshot, PostSummary},
+            post::{PostDetails, PostSnapshot, PostSummary, TagSummary},
             secret::Claims,
         },
         errors::{media::MediaError, post::PostError},
@@ -163,6 +165,61 @@ pub async fn get_post_details(
         is_owner,
     }))
 }
+
+#[derive(Serialize)]
+pub struct GetRelatedPostsResponse {
+    pub posts: Vec<SearchPostResult>,
+}
+
+pub async fn get_related_posts(
+    State(state): State<Arc<AppState>>,
+    Path(post_id): Path<i64>,
+) -> Result<impl IntoResponse, PostError> {
+    let related = state
+        .post_service
+        .get_related_posts(GetRelatedPostsCommand { post_id })
+        .await?;
+
+    let posts: Vec<SearchPostResult> = related
+        .into_iter()
+        .map(|s| SearchPostResult {
+            title: s.title,
+            slug: s.slug,
+            cover_url: s.cover_url,
+        })
+        .collect();
+
+    Ok(Json(GetRelatedPostsResponse { posts }))
+}
+
+#[derive(Deserialize)]
+pub struct SetRelatedPostsBody {
+    pub related_post_slugs: Vec<String>,
+}
+
+pub async fn set_related_posts(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Path(post_id): Path<i64>,
+    Json(body): Json<SetRelatedPostsBody>,
+) -> Result<impl IntoResponse, PostError> {
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|e| PostError::InternalError(e.to_string()))?;
+
+    state
+        .post_service
+        .set_related_posts(SetRelatedPostsCommand {
+            user_id,
+            post_id,
+            related_post_slugs: body.related_post_slugs,
+        })
+        .await?;
+
+    Ok(())
+}
+
 
 pub async fn update_post(
     State(state): State<Arc<AppState>>,
@@ -425,6 +482,7 @@ pub struct PostResponse {
     pub author_avatar_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub series: Option<PostSeriesResponse>,
+    pub related_posts: Vec<SearchPostResult>,
 }
 
 pub async fn get_post_by_slug(
@@ -447,6 +505,21 @@ pub async fn get_post_by_slug(
     }
 
     let post = state.post_service.get_post(cmd).await?;
+    let related = state
+        .post_service
+        .get_related_posts(GetRelatedPostsCommand { post_id: post.id })
+        .await
+        .unwrap_or_default();
+
+    let related_posts: Vec<SearchPostResult> = related
+        .into_iter()
+        .map(|s| SearchPostResult {
+            title: s.title,
+            slug: s.slug,
+            cover_url: s.cover_url,
+        })
+        .collect();
+
     Ok(Json(PostResponse {
         id: post.id,
         title: post.title,
@@ -484,6 +557,7 @@ pub async fn get_post_by_slug(
             })
         }),
         cover_url: post.cover_url,
+        related_posts,
     }))
 }
 
@@ -744,6 +818,31 @@ pub struct SearchPostResponse {
     pub posts: Vec<SearchPostResult>,
 }
 
+#[derive(Deserialize)]
+pub struct SearchTagsQuery {
+    pub term: Option<String>,
+    pub size: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct SearchTagResult {
+    pub name: String,
+    pub slug: String,
+    pub post_count: i64,
+}
+
+#[derive(Serialize)]
+pub struct SearchTagsResponse {
+    pub tags: Vec<SearchTagResult>,
+}
+
+#[derive(Serialize)]
+pub struct TagPostsResponse {
+    pub tag: SearchTagResult,
+    pub posts: Vec<Post>,
+}
+
 #[axum::debug_handler]
 pub async fn search(
     State(state): State<Arc<AppState>>,
@@ -774,6 +873,69 @@ pub async fn search(
         .collect();
 
     Ok(Json(SearchPostResponse { posts }))
+}
+
+#[axum::debug_handler]
+pub async fn search_tags(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<SearchTagsQuery>,
+) -> Result<impl IntoResponse, PostError> {
+    let tags = state
+        .post_service
+        .search_tags(SearchTagsCommand {
+            term: query.term,
+            size: query.size.unwrap_or(24),
+            offset: query.offset.unwrap_or(0),
+        })
+        .await?;
+
+    let tags = tags
+        .into_iter()
+        .map(
+            |TagSummary {
+                 name,
+                 slug,
+                 post_count,
+             }| SearchTagResult {
+                name,
+                slug,
+                post_count,
+            },
+        )
+        .collect();
+
+    Ok(Json(SearchTagsResponse { tags }))
+}
+
+#[derive(Deserialize)]
+pub struct GetTagPostsQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[axum::debug_handler]
+pub async fn get_posts_by_tag(
+    State(state): State<Arc<AppState>>,
+    Path(tag_slug): Path<String>,
+    Query(query): Query<GetTagPostsQuery>,
+) -> Result<impl IntoResponse, PostError> {
+    let (tag, posts) = state
+        .post_service
+        .get_posts_by_tag(GetPostsByTagCommand {
+            slug: tag_slug,
+            limit: query.limit.unwrap_or(24),
+            offset: query.offset.unwrap_or(0),
+        })
+        .await?;
+
+    Ok(Json(TagPostsResponse {
+        tag: SearchTagResult {
+            name: tag.name,
+            slug: tag.slug,
+            post_count: tag.post_count,
+        },
+        posts: posts.into_iter().map(Into::into).collect(),
+    }))
 }
 
 #[derive(Deserialize)]

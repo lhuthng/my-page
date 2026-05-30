@@ -21,6 +21,7 @@
     tags,
     series,
     cover_url,
+    relatedPosts,
   } = $derived(data);
   let liked = $state();
   $effect(() => {
@@ -85,6 +86,7 @@
     {content}
     {series}
     {liked}
+    {relatedPosts}
     author={{
       username: author_slug,
       displayName: author_name,
