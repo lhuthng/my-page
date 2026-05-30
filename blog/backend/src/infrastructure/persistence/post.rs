@@ -1175,7 +1175,7 @@ impl PostService for PostServiceImpl {
         .await?;
 
         if let Some(parent_id) = cmd.parent_id {
-            let recipient_user_id: Option<i64> = sqlx::query_scalar(
+            let recipient_user_id = sqlx::query_scalar::<_, Option<i64>>(
                 r#"
                 SELECT user_id
                 FROM comments
@@ -1184,7 +1184,8 @@ impl PostService for PostServiceImpl {
             )
             .bind(parent_id)
             .fetch_optional(&mut *tx)
-            .await?;
+            .await?
+            .flatten();
 
             if let Some(recipient_user_id) = recipient_user_id {
                 if recipient_user_id != cmd.user_id {
