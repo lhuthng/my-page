@@ -5,6 +5,7 @@ use crate::domain::errors::media::MediaError;
 
 pub enum PostError {
     PostNotFound,
+    TagNotFound,
     Forbidden,
     // InvalidPostContent,
     UploadFailed(String),
@@ -26,6 +27,9 @@ impl IntoResponse for PostError {
                 let (status, body) = match self {
                     PostError::PostNotFound => {
                         (StatusCode::NOT_FOUND, "Post not found".to_string())
+                    }
+                    PostError::TagNotFound => {
+                        (StatusCode::NOT_FOUND, "Tag not found".to_string())
                     }
                     PostError::Forbidden => (
                         StatusCode::FORBIDDEN,

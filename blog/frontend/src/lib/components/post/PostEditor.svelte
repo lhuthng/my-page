@@ -13,6 +13,7 @@
   import MediaDictionaryController from "./MediaDictionaryController.svelte";
   import PostSection from "./PostSection.svelte";
   import SeriesController from "./SeriesController.svelte";
+  import RelatedPostsController from "./RelatedPostsController.svelte";
   import PBody from "../PBody.svelte";
 
   const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
@@ -59,6 +60,7 @@
     draft: "",
     coverUrl: "",
     pendingSeriesId: null,
+    relatedPosts: [],
     author: {
       username: $user?.username,
       displayName: $user?.displayName,
@@ -111,6 +113,14 @@
     editingData.series = series;
     editingData.seriesSlug = seriesSlug ?? "";
     editingData.coverUrl = coverUrl;
+
+    // Load existing related posts asynchronously
+    fetch(`/api/posts/id/${id}/related`, {
+      headers: { Authorization: auth() },
+    })
+      .then((r) => r.ok ? r.json() : { posts: [] })
+      .then(({ posts }) => { editingData.relatedPosts = posts ?? []; })
+      .catch(() => {});
 
     editor.view = "public";
   } else if (mode === "create") {
@@ -634,13 +644,19 @@
                 ></textarea>
               </div>
               <SeriesController
-                postId={mode === "edit" ? editingData.id : null}
+                postId={mode === 'edit' ? editingData.id : null}
                 bind:series={editingData.series}
                 bind:seriesSlug={editingData.seriesSlug}
                 onSelect={(id) => {
                   editingData.pendingSeriesId = id;
                 }}
               />
+              {#if mode === 'edit'}
+                <RelatedPostsController
+                  postId={editingData.id}
+                  bind:relatedPosts={editingData.relatedPosts}
+                />
+              {/if}
             </div>
           </div>
           <ContentDebounceEdtior
