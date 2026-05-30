@@ -25,7 +25,7 @@
 	const mentionMaxProfiles = 5;
 	const mentionRegex = /(^|[\s(>])@([A-Za-z0-9_-]{3,32})\b/g;
 
-	let { postId } = $props();
+	let { postId, postAuthorUsername = null } = $props();
 	let last = -1;
 
 	let userAvatarUrl = $derived($user?.avatarUrl ?? '/anonymous.gif');
@@ -1088,6 +1088,7 @@
 	{/if}
 	<CommentThread
 		comments={comments.roots}
+		{postAuthorUsername}
 		{replyThreads}
 		onReply={handleReply}
 		onToggleReplies={toggleReplies}

@@ -9,6 +9,7 @@
 
 	let {
 		comments = [],
+		postAuthorUsername = null,
 		replyThreads = {},
 		onReply = () => {},
 		onToggleReplies = () => {},
@@ -18,6 +19,8 @@
 	} = $props();
 
 	const isAuthor = (comment) => Boolean(comment.username && comment.display_name);
+	const isPostAuthor = (comment) =>
+		Boolean(postAuthorUsername && comment.username === postAuthorUsername);
 
 	const roleTooltip = (comment) => {
 		if (comment.user_role === 'admin') return 'Admin! ꨄ︎';
@@ -82,6 +85,9 @@
 										<a class="font-semibold" href={`/profiles/${comment.username}`}>
 											{comment.display_name}
 										</a>
+										{#if isPostAuthor(comment)}
+											<span class="ml-1 italic select-none text-dark/60">(author)</span>
+										{/if}
 									{:else}
 										<span class="font-normal select-none italic">Anonymous</span>
 									{/if}
@@ -153,6 +159,7 @@
 					{:else if thread.items.length > 0}
 						<CommentThread
 							comments={thread.items}
+							{postAuthorUsername}
 							{replyThreads}
 							{onReply}
 							{onToggleReplies}
