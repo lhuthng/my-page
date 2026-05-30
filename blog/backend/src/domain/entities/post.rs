@@ -54,6 +54,13 @@ pub struct PostSummary {
 }
 
 #[derive(Debug, Clone)]
+pub struct TagSummary {
+    pub name: String,
+    pub slug: String,
+    pub post_count: i64,
+}
+
+#[derive(Debug, Clone)]
 pub struct PostSeries {
     pub series_title: String,
     pub series_slug: String,

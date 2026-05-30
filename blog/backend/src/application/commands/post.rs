@@ -61,6 +61,18 @@ pub struct SearchPostCommand {
     pub offset: i64,
 }
 
+pub struct SearchTagsCommand {
+    pub term: Option<String>,
+    pub size: i64,
+    pub offset: i64,
+}
+
+pub struct GetPostsByTagCommand {
+    pub slug: String,
+    pub limit: i64,
+    pub offset: i64,
+}
+
 pub struct PostNewCommentCommand {
     pub post_id: i64,
     pub user_id: i64,
@@ -86,4 +98,14 @@ pub struct PushNewViewCommand {
 
 pub struct PushNewLikeCommand {
     pub post_id: i64,
+}
+
+pub struct GetRelatedPostsCommand {
+    pub post_id: i64,
+}
+
+pub struct SetRelatedPostsCommand {
+    pub user_id: i64,
+    pub post_id: i64,
+    pub related_post_slugs: Vec<String>,
 }

@@ -114,7 +114,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .fallback_service(get_service(ServeDir::new(&state.media_config.dir)));
 
     let post_routes = Router::new()
-        // optional
+        // optional-auth routes (view post, new comment)
         .merge(
             Router::new()
                 .route(
@@ -128,7 +128,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 ))
                 .layer(DefaultBodyLimit::max(2 * 1024 * 1024)),
         )
-        // user protected
+        // mod-protected routes
         .merge(
             Router::new()
                 .route("/new", post(handlers::post::new_post))
@@ -136,6 +136,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/id/{post_id}", get(handlers::post::get_post_details))
                 .route("/id/{post_id}", patch(handlers::post::update_post))
                 .route("/id/{post_id}/cover", patch(handlers::post::change_cover))
+                .route(
+                    "/id/{post_id}/related",
+                    patch(handlers::post::set_related_posts),
+                )
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
@@ -143,18 +147,26 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 ))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
         )
-        // public
+        // public routes
         .merge(
             Router::new()
                 .route("/id/{post_id}/comments", get(handlers::post::get_comments))
                 .route("/id/{post_id}/view", post(handlers::post::push_view))
                 .route("/id/{post_id}/like", post(handlers::post::push_like))
+                .route(
+                    "/id/{post_id}/related",
+                    get(handlers::post::get_related_posts),
+                )
                 .route("/featured", get(handlers::post::get_featured_posts))
                 .route("/latest", get(handlers::post::get_latest_posts))
                 .route("/check", get(handlers::post::check_post))
                 .route("/categories", get(handlers::post::get_categories))
                 .route("/", get(handlers::post::search)),
         );
+
+    let tag_routes = Router::new()
+        .route("/", get(handlers::post::search_tags))
+        .route("/{tag_slug}", get(handlers::post::get_posts_by_tag));
 
     let series_routes = Router::new()
         // optional
@@ -216,6 +228,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/auth", auth_routes)
         .nest("/users", user_routes)
         .nest("/posts", post_routes)
+        .nest("/tags", tag_routes)
         .nest("/series", series_routes)
         .nest("/mail", mail_routes)
         .nest("/dashboard", dashboard_routes)

@@ -67,7 +67,20 @@ export async function load({ fetch, params, setHeaders }) {
       fixPost(series.next_post);
     }
 
-    return { content, author_avatar_url, cover_url, ...rest };
+    // Fetch related posts (non-fatal — empty array on failure)
+    let relatedPosts = [];
+    try {
+      const relRes = await fetch(route(`posts/id/${rest.id}/related`));
+      if (relRes.ok) {
+        const relData = await relRes.json();
+        relatedPosts = (relData.posts ?? []).map((p) => ({
+          ...p,
+          cover_url: fixClientRoute(p.cover_url),
+        }));
+      }
+    } catch (_) {}
+
+    return { content, author_avatar_url, cover_url, relatedPosts, ...rest };
   } else {
     console.log(await res.text());
   }
