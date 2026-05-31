@@ -287,10 +287,10 @@ location /media/ {
 
 | Type | Name | Content | Proxy |
 |---|---|---|---|
-| A | `blog` | `REDACTED_IP` | ⚪ DNS only |
-| A | `huuthangle.site` | `REDACTED_IP` | ⚪ DNS only |
-| A | `dev` | `REDACTED_IP` | ⚪ DNS only |
-| A | `ws` | `66.241.124.10` | ⚪ DNS only |
+| A | `blog` | | ⚪ DNS only |
+| A | `huuthangle.site` | | ⚪ DNS only |
+| A | `dev` | | ⚪ DNS only |
+| A | `ws` | | ⚪ DNS only |
 
 DNS-only (grey cloud) is required because TLS is terminated directly on the VM by Certbot/nginx. Cloudflare proxy would intercept the ACME HTTP-01 challenge and prevent certificate issuance.
 
