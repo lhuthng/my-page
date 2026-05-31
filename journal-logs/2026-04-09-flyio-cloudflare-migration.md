@@ -254,5 +254,3 @@ fly ssh console --app my-blog-backend -C "sqlite3 /app/data/blog.db 'SELECT COUN
 - [ ] Consider adding [Litestream](https://litestream.io/) for continuous SQLite replication to Cloudflare R2 as a backup strategy
 - [ ] Update the footer text in `blog/frontend` — it still says "Running on a VPS"
 ```
-
-Now let me commit it:
