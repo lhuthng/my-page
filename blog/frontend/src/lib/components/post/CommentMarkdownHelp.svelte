@@ -9,25 +9,31 @@
 {/snippet}
 
 {#if open}
-	<div class="fixed inset-0 z-40 max-h-full overflow-y-hidden" role="presentation" transition:fade>
+	<div
+		class="fixed inset-0 z-40 max-h-full drop-shadow-xl/10 overflow-y-hidden"
+		role="presentation"
+		transition:fade
+	>
 		<div
-			class="absolute inset-2 lg:inset-10 max-h-[100%-5rem] overflow-y-auto rounded-lg border-2 border-primary bg-white p-4 shadow-xl custom-scrollbar overscroll-contain not-lg:overscroll-auto"
+			class="absolute inset-x-2 top-2 lg:inset-x-10 lg:top-10 bottom-auto max-h-[100%-5rem] overflow-y-auto rounded-lg border-2 border-primary bg-white p-4 shadow-xl custom-scrollbar overscroll-contain not-lg:overscroll-auto"
 			role="dialog"
 			tabindex="-1"
 			aria-modal="true"
 			aria-labelledby="markdown-help-title"
 		>
+			<div class="fixed top-4 right-6 lg:top-13 lg:right-14">
+				<div class="duo-btn duo-primary">
+					<button type="button" class="text-base font-semibold" onclick={close}>Close</button>
+				</div>
+			</div>
 			<div class="mb-3 flex items-start justify-between gap-4">
 				<div>
 					<h5 id="markdown-help-title" class="text-xl font-bold text-dark">Markdown Help</h5>
-					<p class="text-sm text-dark/70">Quick syntax reference for comments.</p>
-				</div>
-				<div class="duo-btn duo-primary">
-					<button type="button" class="text-sm font-semibold" onclick={close}>Close</button>
+					<p class="text-base text-dark/70">Quick syntax reference for comments.</p>
 				</div>
 			</div>
 
-			<div class="space-y-4 text-sm text-dark/90">
+			<div class="space-y-4 text-base text-dark/90">
 				<div>
 					<p class="mb-1 font-semibold">Basic Markdown</p>
 					<ul class="space-y-1 list-disc pl-5">
@@ -77,7 +83,7 @@
 					<p class="mb-1 font-semibold">Mention Syntax</p>
 					<ul class="space-y-1 list-disc pl-5">
 						<li>
-							Type <code>@{@render dim('username')}</code>
+							Type <code>@{@render dim('username', 'text-accent-blue')}</code>
 							(letters, numbers,
 							<code>_</code>
 							,
@@ -144,16 +150,25 @@
 							<span class="font-semibold">Bold:</span>
 							wraps selection with
 							<code>**...**</code>
+							(shortcut:
+							<code class="text-accent-blue">Ctrl/Cmd + B</code>
+							)
 						</li>
 						<li>
 							<span class="font-semibold">Italic:</span>
 							wraps selection with
 							<code>_..._</code>
+							(shortcut:
+							<code class="text-accent-blue">Ctrl/Cmd + I</code>
+							)
 						</li>
 						<li>
 							<span class="font-semibold">Code:</span>
 							wraps selection with
 							<code>`...`</code>
+							(shortcut:
+							<code class="text-accent-blue">Ctrl/Cmd + E</code>
+							)
 						</li>
 						<li>
 							<span class="font-semibold">Kaomoji:</span>

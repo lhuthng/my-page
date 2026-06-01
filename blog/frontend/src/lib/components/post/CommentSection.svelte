@@ -845,6 +845,25 @@
 	};
 
 	const handleTextareaKeydown = (event) => {
+		if (event.ctrlKey || event.metaKey) {
+			const key = event.key.toLowerCase();
+			if (key === 'b') {
+				event.preventDefault();
+				wrapSelection('**');
+				return;
+			}
+			if (key === 'i') {
+				event.preventDefault();
+				wrapSelection('_');
+				return;
+			}
+			if (key === 'e') {
+				event.preventDefault();
+				wrapSelection('`');
+				return;
+			}
+		}
+
 		if (commandState.open) {
 			const activeItems =
 				commandState.items.length > 0 ? commandState.items : commandState.suggestions;
@@ -1418,13 +1437,13 @@
 		<hr class="border-t-3 border-dark mb-6" />
 		<div class="flex gap-8">
 			<div
-				class="not-xxs:hidden min-w-12 max-w-12 lg:min-w-20 lg:max-w-20 h-12 lg:h-20 outline-primary outline-3 rounded-full overflow-hidden"
+				class="not-md:hidden min-w-12 max-w-12 lg:min-w-20 lg:max-w-20 h-12 lg:h-20 outline-primary outline-3 rounded-full overflow-hidden"
 			>
 				<img class="full object-cover" src={userAvatarUrl} alt="comment-posting-avatar" />
 			</div>
 			<div class="grow min-w-0 flex flex-col gap-4 relative">
 				<svg
-					class="not-xxs:hidden absolute fill-primary top-6 lg:top-10 -left-4 -translate-y-1/2 w-4 h-4"
+					class="not-md:hidden absolute fill-primary top-6 lg:top-10 -left-4 -translate-y-1/2 w-4 h-4"
 					viewBox="0 0 24 24"
 				>
 					<polygon points="0,12 24,0 24,24" />

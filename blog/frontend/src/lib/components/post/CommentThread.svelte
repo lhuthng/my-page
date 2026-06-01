@@ -148,12 +148,6 @@
 				>
 					<div class="absolute -left-2 top-0 w-0.5 h-full bg-primary/35"></div>
 
-					{#if depth === 0}
-						<div class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-primary/80">
-							Reply thread
-						</div>
-					{/if}
-
 					{#if thread.items.length === 0 && !thread.fetching}
 						<p class="text-sm text-dark/70">No replies yet.</p>
 					{:else if thread.items.length > 0}
