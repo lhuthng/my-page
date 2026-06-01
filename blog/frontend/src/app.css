@@ -10,6 +10,8 @@ html {
   font-variation-settings: "wdth" 100;
   overflow-y: scroll;
   scroll-behavior: smooth;
+	scrollbar-color: var(--color-white) var(--color-dark);
+	scrollbar-width: thin;
 }
 
 body {
@@ -163,7 +165,12 @@ button {
 .custom-scrollbar {
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(73, 92, 131, 0.4) transparent;
+  scrollbar-color: var(--color-primary) transparent;
+	overscroll-behavior: auto;
+}
+
+.scrollbar-primary {
+	scrollbar-color: var(--color-primary) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
