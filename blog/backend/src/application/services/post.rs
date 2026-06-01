@@ -81,4 +81,8 @@ pub trait PostService {
         &self,
         cmd: commands::post::SetRelatedPostsCommand,
     ) -> Result<(), errors::post::PostError>;
+    async fn set_post_featured(
+        &self,
+        cmd: commands::post::SetFeaturedPostCommand,
+    ) -> Result<(), errors::post::PostError>;
 }

@@ -16,7 +16,7 @@ use crate::{
             GetPostsByTagCommand, GetRelatedPostsCommand, NewPostCommand,
             PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
             PushNewLikeCommand, PushNewViewCommand, SearchPostCommand, SearchTagsCommand,
-            SetRelatedPostsCommand, UpdatePostCommand,
+            SetFeaturedPostCommand, SetRelatedPostsCommand, UpdatePostCommand,
         },
         services::post::PostService,
     },
@@ -1577,6 +1577,26 @@ impl PostService for PostServiceImpl {
         }
 
         tx.commit().await?;
+        Ok(())
+    }
+
+    async fn set_post_featured(
+        &self,
+        cmd: SetFeaturedPostCommand,
+    ) -> Result<(), PostError> {
+        let is_featured_val = if cmd.is_featured { 1 } else { 0 };
+        sqlx::query(
+            r#"
+            UPDATE posts
+            SET is_featured = ?
+            WHERE id = ?
+            "#,
+        )
+        .bind(is_featured_val)
+        .bind(cmd.post_id)
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 }
