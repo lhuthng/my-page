@@ -845,6 +845,79 @@
 	};
 
 	const handleTextareaKeydown = (event) => {
+		if (event.key === 'Home') {
+			event.preventDefault();
+			event.stopPropagation();
+			const text = textarea.value;
+			const cursor = textarea.selectionStart;
+			const lineStart = text.lastIndexOf('\n', cursor - 1) + 1;
+			if (event.shiftKey) {
+				textarea.setSelectionRange(lineStart, textarea.selectionEnd);
+			} else {
+				textarea.setSelectionRange(lineStart, lineStart);
+			}
+			return;
+		}
+
+		if (event.key === 'End') {
+			event.preventDefault();
+			event.stopPropagation();
+			const text = textarea.value;
+			const cursor = textarea.selectionEnd;
+			let lineEnd = text.indexOf('\n', cursor);
+			if (lineEnd === -1) lineEnd = text.length;
+			if (event.shiftKey) {
+				textarea.setSelectionRange(textarea.selectionStart, lineEnd);
+			} else {
+				textarea.setSelectionRange(lineEnd, lineEnd);
+			}
+			return;
+		}
+
+		if (event.key === 'PageUp') {
+			event.preventDefault();
+			event.stopPropagation();
+			const text = textarea.value;
+			const cursor = textarea.selectionStart;
+			let pos = cursor;
+			for (let i = 0; i < 10; i++) {
+				const prev = text.lastIndexOf('\n', pos - 1);
+				if (prev === -1) {
+					pos = 0;
+					break;
+				}
+				pos = prev;
+			}
+			if (event.shiftKey) {
+				textarea.setSelectionRange(pos, textarea.selectionEnd);
+			} else {
+				textarea.setSelectionRange(pos, pos);
+			}
+			return;
+		}
+
+		if (event.key === 'PageDown') {
+			event.preventDefault();
+			event.stopPropagation();
+			const text = textarea.value;
+			const cursor = textarea.selectionEnd;
+			let pos = cursor;
+			for (let i = 0; i < 10; i++) {
+				const next = text.indexOf('\n', pos + 1);
+				if (next === -1) {
+					pos = text.length;
+					break;
+				}
+				pos = next;
+			}
+			if (event.shiftKey) {
+				textarea.setSelectionRange(textarea.selectionStart, pos);
+			} else {
+				textarea.setSelectionRange(pos, pos);
+			}
+			return;
+		}
+
 		if (event.ctrlKey || event.metaKey) {
 			const key = event.key.toLowerCase();
 			if (key === 'b') {
