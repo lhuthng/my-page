@@ -24,7 +24,10 @@ use crate::{
         errors::{media::MediaError, series::SeriesError},
     },
     infrastructure::{
-        persistence::media::{HashData, hash_bytes},
+        persistence::{
+            media::{HashData, hash_bytes},
+            image_convert::convert_to_webp,
+        },
         web::server::MediaConfig,
     },
 };
@@ -376,14 +379,20 @@ impl SeriesService for SeriesServiceImpl {
         let mut image_id: Option<i64> = None;
         let mut created_file_path: Option<PathBuf> = None;
         if let Some(cover_image) = cmd.cover_image {
+            let (bytes, content_type, filename) = convert_to_webp(
+                cover_image.bytes,
+                &cover_image.content_type,
+                &cover_image.filename,
+            )?;
+
             if !self
-                .is_cover_supported(&cover_image.content_type, config)
+                .is_cover_supported(&content_type, config)
                 .await?
             {
                 return Err(SeriesError::Media(MediaError::InvalidFileType));
             }
 
-            let extension = MediaType::from_str(&cover_image.content_type)?.get_extension();
+            let extension = MediaType::from_str(&content_type)?.get_extension();
 
             let root = config.dir.join("srs").join(&cmd.user_id.to_string());
 
@@ -392,14 +401,14 @@ impl SeriesService for SeriesServiceImpl {
                 size,
                 dir_path,
                 file_path,
-            } = hash_bytes(&cover_image.bytes, &root, extension.to_string(), false).await?;
+            } = hash_bytes(&bytes, &root, extension.to_string(), false).await?;
 
             if fs::try_exists(&file_path).await? {
                 return Ok(true);
             }
 
             fs::create_dir_all(&dir_path).await?;
-            fs::write(&file_path, &cover_image.bytes).await?;
+            fs::write(&file_path, &bytes).await?;
 
             let short_name = format!(".srs.{}", hash);
 
@@ -415,8 +424,8 @@ impl SeriesService for SeriesServiceImpl {
             )
             .bind(&hash)
             .bind(short_name)
-            .bind(&cover_image.filename)
-            .bind(&cover_image.content_type)
+            .bind(&filename)
+            .bind(&content_type)
             .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
                 "Failed to get file path".to_string(),
             ))?)

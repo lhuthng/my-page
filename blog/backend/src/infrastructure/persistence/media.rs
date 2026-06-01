@@ -7,6 +7,7 @@ use sqlx::{SqlitePool, prelude::FromRow};
 use tokio::fs;
 
 use crate::{
+    infrastructure::persistence::image_convert::convert_to_webp,
     application::{
         commands::media::{
             AddAliasCommand, ChangeAliasCommand, ChangeAvatarCommand, ChangeMediaDetailsCommand,
@@ -140,21 +141,22 @@ impl MediaService for MediaServiceImpl {
         if !self.is_supported(&cmd.content_type, config).await? {
             return Err(MediaError::InvalidFileType);
         }
-        let extension = MediaType::from_str(&cmd.content_type)?.get_extension();
+        let (bytes, content_type, file_name) = convert_to_webp(cmd.bytes, &cmd.content_type, &cmd.file_name)?;
+        let extension = MediaType::from_str(&content_type)?.get_extension();
 
         let HashData {
             hash,
             size,
             dir_path,
             file_path,
-        } = hash_bytes(&cmd.bytes, &config.dir, extension.to_string(), true).await?;
+        } = hash_bytes(&bytes, &config.dir, extension.to_string(), true).await?;
 
         if fs::try_exists(&file_path).await? {
             return Err(MediaError::Duplication);
         }
 
         fs::create_dir_all(&dir_path).await?;
-        fs::write(&file_path, &cmd.bytes).await?;
+        fs::write(&file_path, &bytes).await?;
 
         let mut tx = self.pool.begin().await?;
 
@@ -167,8 +169,8 @@ impl MediaService for MediaServiceImpl {
         )
         .bind(&hash)
         .bind(&cmd.short_name)
-        .bind(&cmd.file_name)
-        .bind(&cmd.content_type)
+        .bind(&file_name)
+        .bind(&content_type)
         .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
             "Failed to get file path".to_string(),
         ))?)
@@ -202,6 +204,8 @@ impl MediaService for MediaServiceImpl {
             filename,
             bytes,
         } = cmd.medium_details;
+
+        let (bytes, content_type, filename) = convert_to_webp(bytes, &content_type, &filename)?;
 
         if !self.is_avatar_supported(&content_type, config).await? {
             return Err(MediaError::InvalidFileType);
@@ -346,6 +350,8 @@ impl MediaService for MediaServiceImpl {
             filename,
             bytes,
         } = cmd.medium_details;
+
+        let (bytes, content_type, filename) = convert_to_webp(bytes, &content_type, &filename)?;
 
         if !self.is_avatar_supported(&content_type, config).await? {
             return Err(MediaError::InvalidFileType);
@@ -500,6 +506,19 @@ impl MediaService for MediaServiceImpl {
         cmd: UploadMediaWithoutDescriptionCommand,
         config: &MediaConfig,
     ) -> Result<(), MediaError> {
+        let mut cmd = cmd;
+        for i in 0..cmd.number_of_files {
+            let bytes = cmd.bytes_list[i].clone();
+            let (new_bytes, new_content_type, new_filename) = convert_to_webp(
+                bytes,
+                &cmd.content_types[i],
+                &cmd.file_names[i],
+            )?;
+            cmd.bytes_list[i] = new_bytes;
+            cmd.content_types[i] = new_content_type;
+            cmd.file_names[i] = new_filename;
+        }
+
         for content_type in &cmd.content_types {
             if !self.is_supported(&content_type, config).await? {
                 println!("InvalidFileType?");
