@@ -178,5 +178,11 @@
     & .audio-sync-container {
       @apply mx-auto w-fit border-2 border-secondary bg-secondary px-5 pb-4 rounded-[2.8rem];
     }
+    & span.kaomoji {
+      display: inline-block;
+      width: max-content;
+      max-width: 100%;
+      white-space: normal;
+    }
   }
 </style>
