@@ -126,6 +126,13 @@
 		& .reveal > .reveal-tooltip {
 			@apply w-full;
 		}
+		& .reveal p > code,
+		& .reveal li > code {
+			@apply bg-white/15 text-white hover:bg-white/25;
+		}
+		& .reveal pre {
+			@apply border border-white/20 bg-white/10;
+		}
 		& .reveal.toggled {
 			@apply max-h-full;
 		}
