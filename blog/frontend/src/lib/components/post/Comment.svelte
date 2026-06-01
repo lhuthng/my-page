@@ -15,6 +15,9 @@
 			overflow-wrap: anywhere;
 			word-break: break-word;
 		}
+		& hr {
+			@apply mt-4 border-t-2 border-dashed;
+		}
 		& h1 {
 			@apply text-2xl font-bold;
 		}
