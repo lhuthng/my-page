@@ -2,7 +2,7 @@
 
 Personal website monorepo — [Huu Thang](https://github.com/lhuthng) · [github.com/lhuthng/my-page](https://github.com/lhuthng/my-page)
 
-Three independently deployed services living in one repo: a blog, a portfolio, and a WebSocket server.
+Three independently deployed services living in one repo: a blog, a portfolio, and a WebSocket server (I think I should move it to another repo ▼⁠・⁠ᴥ⁠・⁠▼)
 
 ---
 
@@ -42,7 +42,7 @@ Browser
   └─→ Cloudflare DNS
         │
         ├─→ blog.huuthangle.site
-        │     └─→ Oracle Cloud VM  (REDACTED_IP)
+        │     └─→ Oracle Cloud VM
         │           └─→ nginx
         │                 ├─→ SvelteKit frontend (:5000)
         │                 │     └─→ backend (Docker internal, :3000)
@@ -52,7 +52,7 @@ Browser
         │     └─→ Cloudflare Pages CDN (static)
         │
         └─→ wss.huuthangle.site
-              └─→ Oracle Cloud VM  (REDACTED_IP)
+              └─→ Oracle Cloud VM
                     └─→ nginx (TLS termination)
                           └─→ Go WebSocket server (:5001)
 ```
