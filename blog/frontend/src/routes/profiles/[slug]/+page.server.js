@@ -1,9 +1,9 @@
 import { fixClientRoute, route } from "$lib/server/proxy.js";
-import { codeHighlightPlugin } from "$lib/custom-rules/index.js";
+import { codeHighlightPlugin, kaomojiPlugin } from "$lib/custom-rules/index.js";
 import { error } from "@sveltejs/kit";
 import MarkdownIt from "markdown-it";
 
-const md = new MarkdownIt().use(codeHighlightPlugin);
+const md = new MarkdownIt().use(codeHighlightPlugin).use(kaomojiPlugin);
 
 export async function load({ fetch, params, setHeaders }) {
   const username = params.slug;

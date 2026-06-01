@@ -46,7 +46,7 @@
 	const rootForComment = (comment) => rootId ?? comment.id;
 </script>
 
-<ul class="flex flex-col gap-4">
+<ul class="flex flex-col gap-4 w-full min-w-0">
 	{#each comments as comment (comment.id)}
 		{@const thread = getThread(comment)}
 		{@const anonymous = isAuthor(comment)}
@@ -54,9 +54,9 @@
 
 		<li
 			in:fly={{ y: 10, duration: 500 }}
-			class={`rounded-xl ${depth === 0 ? 'bg-white/80' : 'bg-white/60'}`}
+			class={`rounded-xl min-w-0 ${depth === 0 ? 'bg-white/80' : 'bg-white/60'}`}
 		>
-			<div class="flex py-2">
+			<div class="flex py-2 min-w-0">
 				<div
 					class="ml-2 min-w-10 lg:min-w-12 w-10 lg:w-12 h-10 lg:h-12 outline-primary outline-2 rounded-full shadow-md overflow-hidden"
 				>
@@ -77,9 +77,9 @@
 					{/if}
 				</div>
 				<div class="relative flex flex-col grow min-w-0">
-					<div class="pl-2 -translate-y-2">
-						<div class="relative w-fit max-w-full">
-							<div class="w-fit max-w-full p-2 bg-primary/20 rounded-2xl rounded-tl-md">
+					<div class="pl-2 -translate-y-2 min-w-0">
+						<div class="relative max-w-full min-w-0">
+							<div class="max-w-full min-w-0 p-2 bg-primary/20 rounded-2xl rounded-tl-md">
 								<div class="flex items-center lg:text-base">
 									{#if anonymous}
 										<a class="font-semibold" href={`/profiles/${comment.username}`}>

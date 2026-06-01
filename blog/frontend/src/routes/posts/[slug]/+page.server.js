@@ -8,6 +8,7 @@ import {
   revealPlugin,
   slugify,
   youtubeBlockPlugin,
+  kaomojiPlugin,
 } from "$lib/custom-rules/index.js";
 import { fixClientRoute, route } from "$lib/server/proxy.js";
 import { error } from "@sveltejs/kit";
@@ -54,6 +55,7 @@ export async function load({ fetch, params, setHeaders }) {
       .use(revealPlugin)
       .use(namedContainerPlugin)
       .use(codeHighlightPlugin)
+      .use(kaomojiPlugin)
       .use(anchor, { slugify });
     content = md.render(content);
 
