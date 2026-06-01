@@ -6,7 +6,7 @@
 	<ul class="list-disc list-inside">
 		<li>Add the Projects page</li>
 		<li>Set up newsletter</li>
-		<li>
+		<li class="line-through">
 			Add Kaomoji shortcuts? Why not? <span class="text-nowrap">(◕‿◕)♡</span>
 		</li>
 		<li class="line-through">Add a Proxy for GIF search</li>

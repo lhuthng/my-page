@@ -1,29 +1,53 @@
 <script>
-	import { autoHResize } from '$lib/client/auto-resize';
+	import { autoHResize, resizeTextarea } from '$lib/client/auto-resize';
 	import { auth, user } from '$lib/client/user';
 	import { gsap } from 'gsap';
-	import { fade } from 'svelte/transition';
 	import MarkdownIt from 'markdown-it';
 	import Comment from './Comment.svelte';
+	import CommentAutocompletePopover from './CommentAutocompletePopover.svelte';
+	import CommentComposerToolbar from './CommentComposerToolbar.svelte';
+	import CommentGifDrawer from './CommentGifDrawer.svelte';
+	import CommentKaomojiDrawer from './CommentKaomojiDrawer.svelte';
+	import CommentMarkdownHelp from './CommentMarkdownHelp.svelte';
 	import CommentThread from './CommentThread.svelte';
-	import { codeHighlightPlugin, mentionProfilePlugin } from '$lib/custom-rules';
+	import {
+		buildCommandToken,
+		COMMENT_COMMANDS,
+		getActiveCommentCommand,
+		replaceCommandRange
+	} from './comment-syntax';
+	import { codeHighlightPlugin, mentionProfilePlugin, kaomojiPlugin } from '$lib/custom-rules';
 
 	const rootLimit = 3;
 	const replyLimit = 5;
 	const mentionDictionary = {};
 	const mentionProfileCache = new Map();
 	const mentionProfileInFlight = new Map();
+	const mentionSearchCache = new Map();
+	const mentionSearchInFlight = new Map();
 	const rootPageCache = new Map();
 	const rootPageInFlight = new Map();
 	const replyPageCache = new Map();
 	const replyPageInFlight = new Map();
+	const commandKaomojiCache = new Map();
+	const commandKaomojiInFlight = new Map();
+	const commandGifCache = new Map();
+	const commandGifInFlight = new Map();
+	const drawerGifCache = new Map();
+	const drawerGifInFlight = new Map();
+	const drawerKaomojiCache = new Map();
+	const drawerKaomojiInFlight = new Map();
 	const md = new MarkdownIt()
 		.use(codeHighlightPlugin)
-		.use(mentionProfilePlugin, { mentionDictionary });
+		.use(mentionProfilePlugin, { mentionDictionary })
+		.use(kaomojiPlugin);
 	const mentionDebounceMs = 250;
 	const mentionMinChars = 3;
 	const mentionMaxProfiles = 5;
 	const mentionRegex = /(^|[\s(>])@([A-Za-z0-9_-]{3,32})\b/g;
+	const commandDebounceMs = 250;
+	const commandMaxKaomojis = 12;
+	const commandMaxGifs = 12;
 
 	let { postId, postAuthorUsername = null } = $props();
 	let last = -1;
@@ -54,6 +78,111 @@
 		requestId: 0
 	});
 	let mentionDebounceTimer = $state();
+	let commandState = $state({
+		open: false,
+		loading: false,
+		type: '',
+		query: '',
+		start: -1,
+		replaceEnd: -1,
+		hasClosingParen: false,
+		selected: 0,
+		items: [],
+		suggestions: [],
+		error: null,
+		requestId: 0
+	});
+	let commandDebounceTimer = $state();
+	let composerSurface;
+	let popoverTop = $state(null);
+	let popoverAnchorRaf;
+
+	const getTextareaAnchorOffsetY = (node, anchorIndex) => {
+		if (!node || anchorIndex == null || anchorIndex < 0) return null;
+
+		const styles = window.getComputedStyle(node);
+		const mirror = document.createElement('div');
+		const span = document.createElement('span');
+		const safeIndex = Math.min(anchorIndex, node.value.length);
+
+		mirror.style.position = 'absolute';
+		mirror.style.visibility = 'hidden';
+		mirror.style.pointerEvents = 'none';
+		mirror.style.whiteSpace = 'pre-wrap';
+		mirror.style.overflowWrap = 'anywhere';
+		mirror.style.wordBreak = 'break-word';
+		mirror.style.boxSizing = styles.boxSizing;
+		mirror.style.fontFamily = styles.fontFamily;
+		mirror.style.fontSize = styles.fontSize;
+		mirror.style.fontWeight = styles.fontWeight;
+		mirror.style.fontStyle = styles.fontStyle;
+		mirror.style.lineHeight = styles.lineHeight;
+		mirror.style.letterSpacing = styles.letterSpacing;
+		mirror.style.textTransform = styles.textTransform;
+		mirror.style.textIndent = styles.textIndent;
+		mirror.style.paddingTop = styles.paddingTop;
+		mirror.style.paddingRight = styles.paddingRight;
+		mirror.style.paddingBottom = styles.paddingBottom;
+		mirror.style.paddingLeft = styles.paddingLeft;
+		mirror.style.borderTopWidth = styles.borderTopWidth;
+		mirror.style.borderRightWidth = styles.borderRightWidth;
+		mirror.style.borderBottomWidth = styles.borderBottomWidth;
+		mirror.style.borderLeftWidth = styles.borderLeftWidth;
+		mirror.style.borderTopStyle = styles.borderTopStyle;
+		mirror.style.borderRightStyle = styles.borderRightStyle;
+		mirror.style.borderBottomStyle = styles.borderBottomStyle;
+		mirror.style.borderLeftStyle = styles.borderLeftStyle;
+		mirror.style.width = `${node.clientWidth}px`;
+
+		mirror.textContent = node.value.slice(0, safeIndex);
+		span.textContent = node.value[safeIndex] || '\u200b';
+		mirror.append(span);
+
+		document.body.append(mirror);
+
+		const lineHeight = Number.parseFloat(styles.lineHeight);
+		const fallbackLineHeight = Number.parseFloat(styles.fontSize) * 1.35;
+		const effectiveLineHeight = Number.isFinite(lineHeight) ? lineHeight : fallbackLineHeight;
+		const y = span.offsetTop - node.scrollTop + effectiveLineHeight + 6;
+
+		mirror.remove();
+		return y;
+	};
+
+	const schedulePopoverAnchor = () => {
+		if (popoverAnchorRaf) {
+			cancelAnimationFrame(popoverAnchorRaf);
+		}
+
+		popoverAnchorRaf = requestAnimationFrame(() => {
+			if (!textarea || !composerSurface) {
+				popoverTop = null;
+				return;
+			}
+
+			const anchorIndex = commandState.open
+				? commandState.start
+				: mentionState.open
+					? mentionState.start
+					: -1;
+
+			if (anchorIndex < 0) {
+				popoverTop = null;
+				return;
+			}
+
+			const textareaRect = textarea.getBoundingClientRect();
+			const containerRect = composerSurface.getBoundingClientRect();
+			const anchorOffset = getTextareaAnchorOffsetY(textarea, anchorIndex);
+
+			if (anchorOffset == null) {
+				popoverTop = null;
+				return;
+			}
+
+			popoverTop = Math.max(0, textareaRect.top - containerRect.top + anchorOffset);
+		});
+	};
 
 	const extractMentionUsernames = (value) => {
 		if (!value) return [];
@@ -224,6 +353,22 @@
 		mentionState.start = -1;
 		mentionState.selected = 0;
 		mentionState.items = [];
+		popoverTop = null;
+	};
+
+	const resetCommandState = () => {
+		commandState.open = false;
+		commandState.loading = false;
+		commandState.type = '';
+		commandState.query = '';
+		commandState.start = -1;
+		commandState.replaceEnd = -1;
+		commandState.hasClosingParen = false;
+		commandState.selected = 0;
+		commandState.items = [];
+		commandState.suggestions = [];
+		commandState.error = null;
+		popoverTop = null;
 	};
 
 	const getMentionContext = () => {
@@ -251,31 +396,79 @@
 			return;
 		}
 
+		if (
+			mentionState.open &&
+			mentionState.query === context.query &&
+			mentionState.start === context.start
+		) {
+			return;
+		}
+
 		mentionState.query = context.query;
 		mentionState.start = context.start;
 		mentionState.loading = true;
 		const requestId = mentionState.requestId + 1;
 		mentionState.requestId = requestId;
 
+		const cacheKey = context.query.trim().toLowerCase();
+		if (mentionSearchCache.has(cacheKey)) {
+			if (requestId !== mentionState.requestId) return;
+			mentionState.items = mentionSearchCache.get(cacheKey);
+			mentionState.selected = 0;
+			mentionState.open = mentionState.items.length > 0;
+			mentionState.loading = false;
+			schedulePopoverAnchor();
+			return;
+		}
+
+		if (mentionSearchInFlight.has(cacheKey)) {
+			try {
+				const items = await mentionSearchInFlight.get(cacheKey);
+				if (requestId !== mentionState.requestId) return;
+				mentionState.items = items;
+				mentionState.selected = 0;
+				mentionState.open = mentionState.items.length > 0;
+				mentionState.loading = false;
+				schedulePopoverAnchor();
+				return;
+			} catch {
+				mentionSearchInFlight.delete(cacheKey);
+				if (requestId === mentionState.requestId) {
+					resetMentionState();
+				}
+				return;
+			}
+		}
+
 		try {
-			const res = await fetch(
-				`/api/users?term=${encodeURIComponent(context.query)}&size=${mentionMaxProfiles}&offset=0`
-			);
+			const request = (async () => {
+				const res = await fetch(
+					`/api/users?term=${encodeURIComponent(context.query)}&size=${mentionMaxProfiles}&offset=0`
+				);
+
+				if (!res.ok) {
+					return [];
+				}
+
+				const data = await res.json();
+				const items = (data.users ?? []).map((profile) => ({
+					...profile,
+					avatar_url: normalizeAvatarUrl(profile.avatar_url)
+				}));
+
+				mentionSearchCache.set(cacheKey, items);
+				return items;
+			})();
+
+			mentionSearchInFlight.set(cacheKey, request);
+			const items = await request;
+			mentionSearchInFlight.delete(cacheKey);
 
 			if (requestId !== mentionState.requestId) {
 				return;
 			}
 
-			if (!res.ok) {
-				resetMentionState();
-				return;
-			}
-
-			const data = await res.json();
-			mentionState.items = (data.users ?? []).map((profile) => ({
-				...profile,
-				avatar_url: normalizeAvatarUrl(profile.avatar_url)
-			}));
+			mentionState.items = items;
 			mentionState.items.forEach((profile) => {
 				mentionProfileCache.set(profile.username, profile);
 				mentionDictionary[profile.username] = profile;
@@ -283,7 +476,9 @@
 			mentionState.selected = 0;
 			mentionState.open = mentionState.items.length > 0;
 			mentionState.loading = false;
+			schedulePopoverAnchor();
 		} catch {
+			mentionSearchInFlight.delete(cacheKey);
 			if (requestId === mentionState.requestId) {
 				resetMentionState();
 			}
@@ -298,6 +493,344 @@
 		mentionDebounceTimer = setTimeout(searchMentionProfiles, mentionDebounceMs);
 	};
 
+	const buildGifMarkdown = (gif) => {
+		const gifUrl = gif?.images?.original?.url;
+		if (!gifUrl) return null;
+
+		const safeTitle = String(gif?.title ?? 'gif')
+			.replace(/\[/g, ' ')
+			.replace(/\]/g, ' ')
+			.trim();
+
+		return `![${safeTitle || 'gif'}](${gifUrl})`;
+	};
+
+	const applyCommandReplacement = (context, replacement, nextCaretOffset = replacement.length) => {
+		if (!textarea || !context) return;
+
+		comments.current = replaceCommandRange(comments.current, context, replacement);
+		resetCommandState();
+		syncTextareaLayout(context.start + nextCaretOffset);
+	};
+
+	const searchKaomojis = async (context, requestId) => {
+		const mood = context.query.trim().toLowerCase();
+		if (!mood) {
+			if (requestId === commandState.requestId) resetCommandState();
+			return;
+		}
+
+		const cacheKey = mood;
+		if (commandKaomojiCache.has(cacheKey)) {
+			if (requestId !== commandState.requestId) return;
+			const cached = commandKaomojiCache.get(cacheKey);
+			commandState.items = cached.items;
+			commandState.suggestions = cached.suggestions;
+			commandState.selected = 0;
+			commandState.loading = false;
+			commandState.error = cached.error;
+			commandState.open =
+				commandState.items.length > 0 ||
+				commandState.suggestions.length > 0 ||
+				Boolean(commandState.error);
+			schedulePopoverAnchor();
+			return;
+		}
+
+		try {
+			let payload = null;
+			let status = 200;
+
+			if (commandKaomojiInFlight.has(cacheKey)) {
+				({ payload, status } = await commandKaomojiInFlight.get(cacheKey));
+			} else {
+				const request = (async () => {
+					const res = await fetch(
+						`https://kaomoji-search.netlify.app/${encodeURIComponent(mood)}?page=1&limit=${commandMaxKaomojis}`
+					);
+					const body = await res.json().catch(() => ({}));
+					return { payload: body, status: res.status };
+				})();
+
+				commandKaomojiInFlight.set(cacheKey, request);
+				({ payload, status } = await request);
+				commandKaomojiInFlight.delete(cacheKey);
+			}
+
+			if (requestId !== commandState.requestId) return;
+
+			if (status === 404) {
+				const suggestions = Array.isArray(payload?.suggestions)
+					? payload.suggestions.filter(Boolean)
+					: [];
+				const cached = {
+					items: [],
+					suggestions,
+					error: suggestions.length === 0 ? 'Mood not found.' : null
+				};
+				commandKaomojiCache.set(cacheKey, cached);
+
+				commandState.items = cached.items;
+				commandState.suggestions = cached.suggestions;
+				commandState.selected = 0;
+				commandState.loading = false;
+				commandState.error = cached.error;
+				commandState.open = suggestions.length > 0 || Boolean(commandState.error);
+				schedulePopoverAnchor();
+				return;
+			}
+
+			if (status < 200 || status >= 300) {
+				commandState.items = [];
+				commandState.suggestions = [];
+				commandState.loading = false;
+				commandState.error = 'Could not load kaomojis right now.';
+				commandState.open = true;
+				schedulePopoverAnchor();
+				return;
+			}
+
+			const items = Array.isArray(payload?.results)
+				? payload.results.filter(Boolean).map((value, index) => ({
+						id: `kao-${index}-${value}`,
+						value
+					}))
+				: [];
+			const cached = {
+				items,
+				suggestions: [],
+				error: items.length === 0 ? 'No kaomojis found for that mood.' : null
+			};
+			commandKaomojiCache.set(cacheKey, cached);
+
+			commandState.items = cached.items;
+			commandState.suggestions = cached.suggestions;
+			commandState.selected = 0;
+			commandState.loading = false;
+			commandState.error = cached.error;
+			commandState.open = items.length > 0 || Boolean(commandState.error);
+			schedulePopoverAnchor();
+		} catch {
+			commandKaomojiInFlight.delete(cacheKey);
+			if (requestId !== commandState.requestId) return;
+			commandState.items = [];
+			commandState.suggestions = [];
+			commandState.loading = false;
+			commandState.error = 'Could not load kaomojis right now.';
+			commandState.open = true;
+			schedulePopoverAnchor();
+		}
+	};
+
+	const searchSyntaxGifs = async (context, requestId) => {
+		const query = context.query.trim();
+		if (!query) {
+			if (requestId === commandState.requestId) resetCommandState();
+			return;
+		}
+
+		const cacheKey = query.toLowerCase();
+		if (commandGifCache.has(cacheKey)) {
+			if (requestId !== commandState.requestId) return;
+			const cached = commandGifCache.get(cacheKey);
+			commandState.items = cached.items;
+			commandState.suggestions = [];
+			commandState.selected = 0;
+			commandState.loading = false;
+			commandState.error = cached.error;
+			commandState.open = commandState.items.length > 0 || Boolean(commandState.error);
+			schedulePopoverAnchor();
+			return;
+		}
+
+		try {
+			let payload = null;
+			let status = 200;
+
+			if (commandGifInFlight.has(cacheKey)) {
+				({ payload, status } = await commandGifInFlight.get(cacheKey));
+			} else {
+				const request = (async () => {
+					const res = await fetch(`/api/gifs?q=${encodeURIComponent(query)}&offset=0`);
+					const body = await res.json().catch(() => ({}));
+					return { payload: body, status: res.status };
+				})();
+
+				commandGifInFlight.set(cacheKey, request);
+				({ payload, status } = await request);
+				commandGifInFlight.delete(cacheKey);
+			}
+
+			if (requestId !== commandState.requestId) return;
+
+			if (status < 200 || status >= 300) {
+				commandState.items = [];
+				commandState.loading = false;
+				commandState.error = 'Could not load GIF suggestions.';
+				commandState.open = true;
+				schedulePopoverAnchor();
+				return;
+			}
+
+			const gifs = Array.isArray(payload?.data) ? payload.data.slice(0, commandMaxGifs) : [];
+			const items = gifs.filter(
+				(gif) => gif?.images?.original?.url && gif?.images?.fixed_height?.url
+			);
+			const cached = {
+				items,
+				error: items.length === 0 ? 'No GIFs found for that query.' : null
+			};
+			commandGifCache.set(cacheKey, cached);
+
+			commandState.items = cached.items;
+			commandState.suggestions = [];
+			commandState.selected = 0;
+			commandState.loading = false;
+			commandState.error = cached.error;
+			commandState.open = items.length > 0 || Boolean(commandState.error);
+			schedulePopoverAnchor();
+		} catch {
+			commandGifInFlight.delete(cacheKey);
+			if (requestId !== commandState.requestId) return;
+			commandState.items = [];
+			commandState.suggestions = [];
+			commandState.loading = false;
+			commandState.error = 'Could not load GIF suggestions.';
+			commandState.open = true;
+			schedulePopoverAnchor();
+		}
+	};
+
+	const searchCommandSuggestions = async () => {
+		if (!textarea) {
+			resetCommandState();
+			return;
+		}
+
+		const caret = textarea.selectionStart ?? comments.current.length;
+		const context = getActiveCommentCommand(comments.current, caret);
+
+		if (!context) {
+			resetCommandState();
+			return;
+		}
+
+		if (
+			commandState.open &&
+			commandState.query === context.query &&
+			commandState.start === context.start &&
+			commandState.type === context.kind
+		) {
+			return;
+		}
+
+		resetMentionState();
+
+		commandState.loading = true;
+		commandState.open = false;
+		commandState.type = context.kind;
+		commandState.query = context.query;
+		commandState.start = context.start;
+		commandState.replaceEnd = context.replaceEnd;
+		commandState.hasClosingParen = context.hasClosingParen;
+		commandState.selected = 0;
+		commandState.items = [];
+		commandState.suggestions = [];
+		commandState.error = null;
+
+		const requestId = commandState.requestId + 1;
+		commandState.requestId = requestId;
+
+		if (context.kind === COMMENT_COMMANDS.KAOMOJI) {
+			await searchKaomojis(context, requestId);
+			return;
+		}
+
+		if (context.kind === COMMENT_COMMANDS.GIF) {
+			await searchSyntaxGifs(context, requestId);
+			return;
+		}
+
+		resetCommandState();
+	};
+
+	const scheduleCommandSearch = () => {
+		if (commandDebounceTimer) {
+			clearTimeout(commandDebounceTimer);
+		}
+
+		commandDebounceTimer = setTimeout(searchCommandSuggestions, commandDebounceMs);
+	};
+
+	const applyKaomojiSuggestion = (suggestion) => {
+		if (!textarea || commandState.start < 0 || commandState.type !== COMMENT_COMMANDS.KAOMOJI)
+			return;
+
+		const context = {
+			start: commandState.start,
+			replaceEnd: commandState.replaceEnd,
+			hasClosingParen: commandState.hasClosingParen
+		};
+
+		const token = buildCommandToken(COMMENT_COMMANDS.KAOMOJI, suggestion, context.hasClosingParen);
+		comments.current = replaceCommandRange(comments.current, context, token);
+
+		requestAnimationFrame(() => {
+			const nextCaret = context.start + token.length - (context.hasClosingParen ? 1 : 0);
+			resizeTextarea(textarea);
+			textarea.focus();
+			textarea.setSelectionRange(nextCaret, nextCaret);
+			searchCommandSuggestions();
+		});
+	};
+
+	const pickCommandItem = (item) => {
+		if (commandState.start < 0) return;
+
+		const context = {
+			start: commandState.start,
+			replaceEnd: commandState.replaceEnd,
+			hasClosingParen: commandState.hasClosingParen
+		};
+
+		if (commandState.type === COMMENT_COMMANDS.KAOMOJI) {
+			const kaomoji = typeof item === 'string' ? item : item?.value;
+			if (!kaomoji) return;
+			applyCommandReplacement(context, `@@[${kaomoji}]@@ `);
+			return;
+		}
+
+		if (commandState.type === COMMENT_COMMANDS.GIF) {
+			const markdownImage = buildGifMarkdown(item);
+			if (!markdownImage) return;
+			applyCommandReplacement(context, `${markdownImage} `);
+		}
+	};
+
+	const handleComposerInput = (event) => {
+		if (event && event.type === 'keyup') {
+			const ignoredKeys = [
+				'ArrowDown',
+				'ArrowUp',
+				'Enter',
+				'Escape',
+				'Tab',
+				'Shift',
+				'Control',
+				'Alt',
+				'Meta',
+				'CapsLock'
+			];
+			if (ignoredKeys.includes(event.key)) {
+				schedulePopoverAnchor();
+				return;
+			}
+		}
+		scheduleMentionSearch();
+		scheduleCommandSearch();
+		schedulePopoverAnchor();
+	};
+
 	const pickMention = (pickedUser) => {
 		if (!textarea || mentionState.start < 0) return;
 
@@ -308,27 +841,70 @@
 
 		comments.current = injected;
 		resetMentionState();
-
-		requestAnimationFrame(() => {
-			const nextCaret = left.length + pickedUser.username.length + 1;
-			textarea.focus();
-			textarea.setSelectionRange(nextCaret, nextCaret);
-		});
+		syncTextareaLayout(left.length + pickedUser.username.length + 1);
 	};
 
 	const handleTextareaKeydown = (event) => {
+		if (commandState.open) {
+			const activeItems =
+				commandState.items.length > 0 ? commandState.items : commandState.suggestions;
+
+			if (event.key === 'ArrowDown') {
+				event.preventDefault();
+				if (activeItems.length > 0) {
+					commandState.selected = (commandState.selected + 1) % activeItems.length;
+				}
+				return;
+			}
+
+			if (event.key === 'ArrowUp') {
+				event.preventDefault();
+				if (activeItems.length > 0) {
+					commandState.selected =
+						(commandState.selected - 1 + activeItems.length) % activeItems.length;
+				}
+				return;
+			}
+
+			if (event.key === 'Enter' || event.key === 'Tab') {
+				if (commandState.items.length > 0) {
+					event.preventDefault();
+					pickCommandItem(commandState.items[commandState.selected]);
+					return;
+				}
+
+				if (commandState.suggestions.length > 0) {
+					event.preventDefault();
+					applyKaomojiSuggestion(
+						commandState.suggestions[commandState.selected] ?? commandState.suggestions[0]
+					);
+					return;
+				}
+			}
+
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				resetCommandState();
+				return;
+			}
+		}
+
 		if (!mentionState.open || mentionState.items.length === 0) return;
 
 		if (event.key === 'ArrowDown') {
 			event.preventDefault();
-			mentionState.selected = (mentionState.selected + 1) % mentionState.items.length;
+			if (mentionState.items.length > 0) {
+				mentionState.selected = (mentionState.selected + 1) % mentionState.items.length;
+			}
 			return;
 		}
 
 		if (event.key === 'ArrowUp') {
 			event.preventDefault();
-			mentionState.selected =
-				(mentionState.selected - 1 + mentionState.items.length) % mentionState.items.length;
+			if (mentionState.items.length > 0) {
+				mentionState.selected =
+					(mentionState.selected - 1 + mentionState.items.length) % mentionState.items.length;
+			}
 			return;
 		}
 
@@ -485,6 +1061,8 @@
 			};
 			replyThreads = {};
 			replyTo = null;
+			resetCommandState();
+			resetMentionState();
 
 			rootPageCache.clear();
 			rootPageInFlight.clear();
@@ -510,12 +1088,109 @@
 	});
 
 	let showGifSearch = $state(false);
+	let showKaomojiSearch = $state(false);
 	let gifQuery = $state('');
 	let gifResults = $state([]);
 	let gifLoading = $state(false);
 	let gifOffset = $state(0);
 	let gifError = $state(null);
+	let kaomojiMood = $state('');
+	let kaomojiResults = $state([]);
+	let kaomojiSuggestions = $state([]);
+	let kaomojiLoading = $state(false);
+	let kaomojiPage = $state(1);
+	let kaomojiTotal = $state(0);
+	let kaomojiError = $state(null);
 	let showMarkdownHelp = $state(false);
+
+	const syncTextareaLayout = (
+		selectionStart = null,
+		selectionEnd = selectionStart,
+		focus = true
+	) => {
+		requestAnimationFrame(() => {
+			if (!textarea) return;
+
+			resizeTextarea(textarea);
+
+			if (focus) {
+				textarea.focus();
+			}
+
+			if (selectionStart != null) {
+				textarea.setSelectionRange(selectionStart, selectionEnd ?? selectionStart);
+			}
+		});
+	};
+
+	const insertTextAtSelection = (text) => {
+		if (!textarea) return;
+
+		const startPos = textarea.selectionStart ?? comments.current.length;
+		const endPos = textarea.selectionEnd ?? startPos;
+		comments.current = textarea.value.slice(0, startPos) + text + textarea.value.slice(endPos);
+
+		syncTextareaLayout(startPos + text.length);
+	};
+
+	const wrapSelection = (prefix, suffix = prefix, selectionOffset = prefix.length) => {
+		if (!textarea) return;
+
+		const startPos = textarea.selectionStart ?? comments.current.length;
+		const endPos = textarea.selectionEnd ?? startPos;
+		comments.current =
+			textarea.value.slice(0, startPos) +
+			prefix +
+			textarea.value.slice(startPos, endPos) +
+			suffix +
+			textarea.value.slice(endPos);
+
+		syncTextareaLayout(startPos + selectionOffset, endPos + selectionOffset);
+	};
+
+	const insertAtCursor = (prefix, cursorOffset = prefix.length) => {
+		if (!textarea) return;
+
+		const startPos = textarea.selectionStart ?? comments.current.length;
+		const endPos = textarea.selectionEnd ?? startPos;
+		comments.current = textarea.value.slice(0, startPos) + prefix + textarea.value.slice(endPos);
+
+		syncTextareaLayout(startPos + cursorOffset, startPos + cursorOffset);
+	};
+
+	const toggleMarkdownHelp = () => {
+		showMarkdownHelp = !showMarkdownHelp;
+		if (showMarkdownHelp) {
+			showGifSearch = false;
+			showKaomojiSearch = false;
+			resetCommandState();
+		}
+	};
+
+	const toggleKaomojiDrawer = () => {
+		showKaomojiSearch = !showKaomojiSearch;
+		showGifSearch = false;
+		showMarkdownHelp = false;
+		resetCommandState();
+		if (!showKaomojiSearch) {
+			resetKaomojiSearch();
+		}
+	};
+
+	const toggleGifDrawer = () => {
+		showGifSearch = !showGifSearch;
+		showKaomojiSearch = false;
+		showMarkdownHelp = false;
+		resetCommandState();
+	};
+
+	const resetKaomojiSearch = () => {
+		kaomojiResults = [];
+		kaomojiSuggestions = [];
+		kaomojiPage = 1;
+		kaomojiTotal = 0;
+		kaomojiError = null;
+	};
 
 	const fetchGifs = async (reset = false) => {
 		if (gifLoading) return;
@@ -528,14 +1203,46 @@
 			gifOffset = 0;
 		}
 
+		const query = gifQuery.trim();
+		const cacheKey = `${query.toLowerCase()}|${currentOffset}`;
+		if (drawerGifCache.has(cacheKey)) {
+			const cached = drawerGifCache.get(cacheKey);
+			const nextGifs = cached.data;
+			if (reset) {
+				gifResults = nextGifs;
+			} else {
+				gifResults = [...gifResults, ...nextGifs];
+			}
+			gifOffset = currentOffset + nextGifs.length;
+			gifLoading = false;
+			return;
+		}
+
 		try {
-			const url = `/api/gifs?q=${encodeURIComponent(gifQuery)}&offset=${currentOffset}`;
-			const res = await fetch(url);
-			if (!res.ok) {
+			let payload = null;
+			let status = 200;
+
+			if (drawerGifInFlight.has(cacheKey)) {
+				({ payload, status } = await drawerGifInFlight.get(cacheKey));
+			} else {
+				const request = (async () => {
+					const url = `/api/gifs?q=${encodeURIComponent(gifQuery)}&offset=${currentOffset}`;
+					const res = await fetch(url);
+					const body = await res.json().catch(() => ({}));
+					return { payload: body, status: res.status };
+				})();
+
+				drawerGifInFlight.set(cacheKey, request);
+				({ payload, status } = await request);
+				drawerGifInFlight.delete(cacheKey);
+			}
+
+			if (status < 200 || status >= 300) {
 				throw new Error('Failed to load GIFs');
 			}
-			const payload = await res.json();
+
 			const newGifs = payload.data || [];
+			drawerGifCache.set(cacheKey, { data: newGifs });
 
 			if (reset) {
 				gifResults = newGifs;
@@ -544,9 +1251,117 @@
 			}
 			gifOffset = currentOffset + newGifs.length;
 		} catch (err) {
+			drawerGifInFlight.delete(cacheKey);
 			gifError = 'Could not load GIFs. Please check your connection.';
 		} finally {
 			gifLoading = false;
+		}
+	};
+
+	const fetchKaomojis = async (reset = false) => {
+		if (kaomojiLoading) return;
+
+		const mood = kaomojiMood.trim().toLowerCase();
+		if (!mood) {
+			kaomojiError = null;
+			return;
+		}
+
+		kaomojiLoading = true;
+		kaomojiError = null;
+
+		const nextPage = reset ? 1 : kaomojiPage;
+		if (reset) {
+			resetKaomojiSearch();
+		}
+
+		const cacheKey = `${mood}|${nextPage}`;
+		if (drawerKaomojiCache.has(cacheKey)) {
+			const cached = drawerKaomojiCache.get(cacheKey);
+			kaomojiSuggestions = cached.suggestions;
+			kaomojiTotal = cached.total;
+			kaomojiPage = nextPage + 1;
+
+			if (reset) {
+				kaomojiResults = cached.results;
+			} else {
+				kaomojiResults = [...kaomojiResults, ...cached.results];
+			}
+
+			kaomojiError = cached.error;
+			kaomojiLoading = false;
+			return;
+		}
+
+		try {
+			let payload = null;
+			let status = 200;
+
+			if (drawerKaomojiInFlight.has(cacheKey)) {
+				({ payload, status } = await drawerKaomojiInFlight.get(cacheKey));
+			} else {
+				const request = (async () => {
+					const res = await fetch(
+						`https://kaomoji-search.netlify.app/${encodeURIComponent(mood)}?page=${nextPage}&limit=18`
+					);
+					const body = await res.json().catch(() => ({}));
+					return { payload: body, status: res.status };
+				})();
+
+				drawerKaomojiInFlight.set(cacheKey, request);
+				({ payload, status } = await request);
+				drawerKaomojiInFlight.delete(cacheKey);
+			}
+
+			if (status === 404) {
+				const suggestions = Array.isArray(payload?.suggestions)
+					? payload.suggestions.filter(Boolean)
+					: [];
+				drawerKaomojiCache.set(cacheKey, {
+					results: [],
+					suggestions,
+					total: 0,
+					error: suggestions.length === 0 ? 'Mood not found. Try another search.' : null
+				});
+				kaomojiResults = [];
+				kaomojiSuggestions = suggestions;
+				kaomojiError =
+					kaomojiSuggestions.length === 0 ? 'Mood not found. Try another search.' : null;
+				kaomojiTotal = 0;
+				kaomojiPage = 1;
+				return;
+			}
+
+			if (status < 200 || status >= 300) {
+				throw new Error('Failed to load kaomojis');
+			}
+			const nextResults = Array.isArray(payload?.results) ? payload.results.filter(Boolean) : [];
+			const total = Number(payload?.total ?? 0);
+			drawerKaomojiCache.set(cacheKey, {
+				results: nextResults,
+				suggestions: [],
+				total,
+				error: nextResults.length === 0 ? 'No kaomojis found for that mood.' : null
+			});
+
+			kaomojiSuggestions = [];
+			kaomojiTotal = total;
+			kaomojiPage = nextPage + 1;
+
+			if (reset) {
+				kaomojiResults = nextResults;
+			} else {
+				kaomojiResults = [...kaomojiResults, ...nextResults];
+			}
+
+			if (kaomojiResults.length === 0) {
+				kaomojiError = 'No kaomojis found for that mood.';
+			}
+		} catch {
+			drawerKaomojiInFlight.delete(cacheKey);
+			kaomojiError = 'Could not load kaomojis right now.';
+		} finally {
+			kaomojiLoading = false;
 		}
 	};
 
@@ -556,19 +1371,20 @@
 		const title = gif.title || 'gif';
 		const markdownImage = `![${title}](${gifUrl})`;
 
-		const startPos = textarea.selectionStart;
-		const endPos = textarea.selectionEnd;
-
-		comments.current =
-			textarea.value.slice(0, startPos) + markdownImage + textarea.value.slice(endPos);
-
 		showGifSearch = false; // Close drawer after selection
+		insertTextAtSelection(markdownImage);
+	};
 
-		requestAnimationFrame(() => {
-			const nextCursor = startPos + markdownImage.length;
-			textarea.focus();
-			textarea.setSelectionRange(nextCursor, nextCursor);
-		});
+	const selectKaomoji = (kaomoji) => {
+		if (!textarea || !kaomoji) return;
+		showKaomojiSearch = false;
+		insertTextAtSelection(`@@[${kaomoji}]@@ `);
+	};
+
+	const applyKaomojiMoodSuggestion = (suggestion) => {
+		if (!suggestion) return;
+		kaomojiMood = suggestion;
+		fetchKaomojis(true);
 	};
 
 	$effect(() => {
@@ -577,12 +1393,26 @@
 		}
 	});
 
+	$effect(() => {
+		if (!showKaomojiSearch) return;
+		if (!kaomojiMood.trim()) return;
+		if (!kaomojiLoading && kaomojiResults.length === 0 && kaomojiSuggestions.length === 0) {
+			fetchKaomojis(true);
+		}
+	});
+
+	$effect(() => {
+		if (commandState.open || mentionState.open) {
+			schedulePopoverAnchor();
+		}
+	});
+
 	const closeMarkdownHelp = () => {
 		showMarkdownHelp = false;
 	};
 </script>
 
-<section class="w-full xl:w-[calc(100%-15rem)] bg-white p-4 rounded-xl">
+<section class="w-full xl:max-w-[calc(100%-15rem)] xl:w-[calc(100%-15rem)] bg-white p-4 rounded-xl">
 	<h4 class="text-lg lg:text-2xl">Join the discussion!</h4>
 	<div class="flex flex-col gap-4" bind:this={start}>
 		<hr class="border-t-3 border-dark mb-6" />
@@ -592,97 +1422,76 @@
 			>
 				<img class="full object-cover" src={userAvatarUrl} alt="comment-posting-avatar" />
 			</div>
-			<div class="grow flex flex-col gap-4 relative">
+			<div class="grow min-w-0 flex flex-col gap-4 relative">
 				<svg
 					class="not-xxs:hidden absolute fill-primary top-6 lg:top-10 -left-4 -translate-y-1/2 w-4 h-4"
 					viewBox="0 0 24 24"
 				>
 					<polygon points="0,12 24,0 24,24" />
 				</svg>
-				<div class="w-full">
+				<div class="w-full max-w-full">
 					<div
 						class="relative text-base w-full bg-primary-20 border-primary border-2 border-b-0 rounded-t-xl"
+						bind:this={composerSurface}
 					>
 						<textarea
 							name="comment-input"
-							class="block w-full min-h-16 lg:min-h-20 overflow-hidden outline-none resize-none p-2 bg-transparent"
+							class="comment-input block w-full min-h-16 lg:min-h-20 max-w-full overflow-hidden outline-none resize-none p-2 bg-transparent"
+							wrap="soft"
 							bind:this={textarea}
 							bind:value={comments.current}
-							oninput={scheduleMentionSearch}
-							onclick={scheduleMentionSearch}
-							onkeyup={scheduleMentionSearch}
+							oninput={handleComposerInput}
+							onclick={handleComposerInput}
+							onkeyup={handleComposerInput}
+							onscroll={schedulePopoverAnchor}
 							onkeydown={handleTextareaKeydown}
-							onblur={() => {
-								setTimeout(resetMentionState, 100);
+							onblur={(event) => {
+								setTimeout(() => {
+									const activeEl = document.activeElement;
+									if (activeEl && activeEl.closest('.comment-autocomplete-popover')) {
+										return;
+									}
+									if (
+										event.relatedTarget &&
+										event.relatedTarget.closest('.comment-autocomplete-popover')
+									) {
+										return;
+									}
+									resetMentionState();
+									resetCommandState();
+								}, 100);
 							}}
 							{@attach autoHResize}
 						></textarea>
 
-						{#if showGifSearch}
-							<div class="border-t-2 border-primary/20 bg-white/40 p-3 flex flex-col gap-3">
-								<div class="flex gap-2 h-9">
-									<input
-										type="text"
-										bind:value={gifQuery}
-										placeholder="Search Giphy..."
-										class="flex-1 bg-white border border-primary/30 rounded-xl px-2 py-1 text-base text-dark placeholder-dark/50 outline-none focus:border-primary focus:border-2 transition-colors"
-										onkeydown={(e) => {
-											if (e.key === 'Enter') {
-												e.preventDefault();
-												fetchGifs(true);
-											}
-										}}
-									/>
-									<div class="ml-auto w-fit duo-btn duo-blue">
-										<button type="button" onclick={() => fetchGifs(true)}>Search</button>
-									</div>
-								</div>
+						<CommentGifDrawer
+							show={showGifSearch}
+							{gifQuery}
+							onGifQueryInput={(value) => {
+								gifQuery = value;
+							}}
+							{gifResults}
+							{gifLoading}
+							{gifError}
+							{fetchGifs}
+							{selectGif}
+						/>
 
-								{#if gifError}
-									<p class="text-xs text-accent-red font-medium">{gifError}</p>
-								{/if}
-
-								<div
-									class="grid grid-cols-3 xs:grid-cols-4 sm:grid-cols-6 gap-2 max-h-120 overflow-y-auto pr-1 custom-scrollbar"
-								>
-									{#each gifResults as gif (gif.id)}
-										<button
-											type="button"
-											class="group relative rounded-lg overflow-hidden aspect-square border border-primary/10 hover:border-primary transition-all bg-dark/5"
-											onclick={() => selectGif(gif)}
-										>
-											<img
-												src={gif.images.fixed_height.url}
-												alt={gif.title}
-												class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-												loading="lazy"
-											/>
-											<div
-												class="absolute inset-0 bg-primary/70 opacity-0 group-hover:opacity-100 flex items-center justify-center font-bold text-xl text-white transition-opacity duration-150"
-											>
-												Select
-											</div>
-										</button>
-									{/each}
-
-									{#if gifLoading}
-										{#each Array(6) as _}
-											<div class="animate-pulse bg-primary/10 rounded-lg aspect-square"></div>
-										{/each}
-									{/if}
-								</div>
-
-								{#if gifResults.length > 0 && !gifLoading}
-									<button
-										type="button"
-										class="text-md font-semibold text-primary hover:text-dark mx-auto py-1"
-										onclick={() => fetchGifs(false)}
-									>
-										Load More
-									</button>
-								{/if}
-							</div>
-						{/if}
+						<CommentKaomojiDrawer
+							show={showKaomojiSearch}
+							{kaomojiMood}
+							onKaomojiMoodInput={(value) => {
+								kaomojiMood = value;
+							}}
+							{kaomojiResults}
+							{kaomojiSuggestions}
+							{kaomojiLoading}
+							{kaomojiTotal}
+							{kaomojiError}
+							{fetchKaomojis}
+							{selectKaomoji}
+							{applyKaomojiMoodSuggestion}
+						/>
 
 						<div class="border-t-2 border-primary/15 bg-white/40 p-3 flex flex-col gap-2">
 							<span class="text-base font-semibold text-primary/70 select-none">Live Preview</span>
@@ -697,280 +1506,29 @@
 							</div>
 						</div>
 
-						{#if mentionState.open}
-							<ul
-								class="absolute left-2 right-2 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border-2 border-primary bg-white p-1 shadow-lg"
-							>
-								{#each mentionState.items as profile, index (profile.username)}
-									<li>
-										<button
-											type="button"
-											class="flex w-full items-center gap-3 rounded-lg px-2 py-1 text-left hover:bg-primary-20"
-											class:bg-primary-20={index === mentionState.selected}
-											onmousedown={(event) => {
-												event.preventDefault();
-												pickMention(profile);
-											}}
-										>
-											<img
-												class="h-8 w-8 rounded-full object-cover outline-2 outline-primary"
-												src={profile.avatar_url ?? '/anonymous.gif'}
-												alt={`${profile.display_name} avatar`}
-											/>
-											<div class="min-w-0 flex-1">
-												<p class="truncate font-semibold">{profile.display_name}</p>
-												<p class="truncate text-xs opacity-80">@{profile.username}</p>
-											</div>
-										</button>
-									</li>
-								{/each}
-							</ul>
-						{/if}
+						<CommentAutocompletePopover
+							{commandState}
+							{mentionState}
+							{popoverTop}
+							{pickCommandItem}
+							{applyKaomojiSuggestion}
+							{pickMention}
+						/>
 					</div>
-					<div
-						class="comment-editor flex not-sm:flex-col justify-between min-h-8 bg-primary rounded-b-xl"
-					>
-						<span class="text-white text-base font-semibold px-3 my-auto opacity-80 select-none">
-							Markdown Editor
-						</span>
-						<div
-							class="flex ml-auto h-full my-auto *:bg-primary fill-white *:w-8 *:h-8 *:*:mx-auto *:hover:brightness-120 *:active:*:translate-y-0.5 gap-2 mr-2"
-						>
-							<button
-								title="Markdown Help"
-								type="button"
-								class:bg-primary-20={showMarkdownHelp}
-								onclick={() => {
-									showMarkdownHelp = !showMarkdownHelp;
-									if (showMarkdownHelp) {
-										showGifSearch = false;
-									}
-								}}
-							>
-								<svg class="w-4 h-4" viewBox="0 0 24 24" aria-hidden="true">
-									<path
-										d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 17a1.25 1.25 0 1 1 1.25-1.25A1.25 1.25 0 0 1 12 19Zm1.42-7.6-.57.4a1.48 1.48 0 0 0-.6 1.2v.5h-1.5V13a2.97 2.97 0 0 1 1.23-2.42l.57-.4a1.63 1.63 0 0 0 .7-1.3A1.75 1.75 0 1 0 9.5 9H8a3.25 3.25 0 1 1 6.5-.12 3.14 3.14 0 0 1-1.08 2.52Z"
-									></path>
-								</svg>
-							</button>
-							<button
-								title="Header"
-								onclick={() => {
-									if (!textarea) return;
-									const start = textarea.selectionStart;
-									const end = textarea.selectionEnd;
-									comments.current =
-										textarea.value.slice(0, start) + '# ' + textarea.value.slice(start);
-
-									requestAnimationFrame(() => {
-										textarea.setSelectionRange(start + 2, end + 2);
-										textarea.focus();
-									});
-								}}
-							>
-								<svg class="w-4 h-4" viewBox="0 0 16 16">
-									<path
-										d="M3.75 2a.75.75 0 0 1 .75.75V7h7V2.75a.75.75 0 0 1 1.5 0v10.5a.75.75 0 0 1-1.5 0V8.5h-7v4.75a.75.75 0 0 1-1.5 0V2.75A.75.75 0 0 1 3.75 2Z"
-									></path>
-								</svg>
-							</button>
-							<button
-								title="Bold"
-								onclick={() => {
-									if (!textarea) return;
-									const start = textarea.selectionStart;
-									const end = textarea.selectionEnd;
-									comments.current =
-										textarea.value.slice(0, start) +
-										'**' +
-										textarea.value.slice(start, end) +
-										'**' +
-										textarea.value.slice(end);
-									requestAnimationFrame(() => {
-										textarea.setSelectionRange(start + 2, end + 2);
-										textarea.focus();
-									});
-								}}
-							>
-								<svg class="w-4 h-4" viewBox="0 0 16 16">
-									<path
-										d="M4 2h4.5a3.501 3.501 0 0 1 2.852 5.53A3.499 3.499 0 0 1 9.5 14H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm1 7v3h4.5a1.5 1.5 0 0 0 0-3Zm3.5-2a1.5 1.5 0 0 0 0-3H5v3Z"
-									></path>
-								</svg>
-							</button>
-							<button
-								title="Italic"
-								onclick={() => {
-									if (!textarea) return;
-									const start = textarea.selectionStart;
-									const end = textarea.selectionEnd;
-									comments.current =
-										textarea.value.slice(0, start) +
-										'_' +
-										textarea.value.slice(start, end) +
-										'_' +
-										textarea.value.slice(end);
-									requestAnimationFrame(() => {
-										textarea.setSelectionRange(start + 1, end + 1);
-										textarea.focus();
-									});
-								}}
-							>
-								<svg class="w-4 h-4" viewBox="0 0 16 16">
-									<path
-										d="M6 2.75A.75.75 0 0 1 6.75 2h6.5a.75.75 0 0 1 0 1.5h-2.505l-3.858 9H9.25a.75.75 0 0 1 0 1.5h-6.5a.75.75 0 0 1 0-1.5h2.505l3.858-9H6.75A.75.75 0 0 1 6 2.75Z"
-									></path>
-								</svg>
-							</button>
-							<button
-								title="Code"
-								onclick={() => {
-									if (!textarea) return;
-									const start = textarea.selectionStart;
-									const end = textarea.selectionEnd;
-									textarea.value =
-										textarea.value.slice(0, start) +
-										'`' +
-										textarea.value.slice(start, end) +
-										'`' +
-										textarea.value.slice(end);
-									requestAnimationFrame(() => {
-										textarea.setSelectionRange(start + 1, end + 1);
-										textarea.focus();
-									});
-								}}
-							>
-								<svg class="w-4 h-4" viewBox="0 0 16 16">
-									<path
-										d="m11.28 3.22 4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L13.94 8l-3.72-3.72a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215Zm-6.56 0a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L2.06 8l3.72 3.72a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L.47 8.53a.75.75 0 0 1 0-1.06Z"
-									></path>
-								</svg>
-							</button>
-							<button
-								title="Insert GIF"
-								type="button"
-								class:bg-primary-20={showGifSearch}
-								onclick={() => {
-									showGifSearch = !showGifSearch;
-								}}
-							>
-								<svg class="w-4 h-4" viewBox="0 0 40 40">
-									<path
-										d="M28.75,11.88V8.94H25.53V6H8.73V34H31.27V11.88Zm-16.94,19V9.08H23v5.46h5.18V30.92Z"
-									/>
-								</svg>
-							</button>
-						</div>
-					</div>
+					<CommentComposerToolbar
+						{showMarkdownHelp}
+						{showKaomojiSearch}
+						{showGifSearch}
+						onToggleHelp={toggleMarkdownHelp}
+						onHeader={() => insertAtCursor('# ', 2)}
+						onBold={() => wrapSelection('**')}
+						onItalic={() => wrapSelection('_')}
+						onCode={() => wrapSelection('`')}
+						onToggleKaomoji={toggleKaomojiDrawer}
+						onToggleGif={toggleGifDrawer}
+					/>
 				</div>
-				{#if showMarkdownHelp}
-					<div class="fixed inset-0 z-40 overflow-visible" role="presentation" transition:fade>
-						<div
-							class="absolute inset-2 lg:inset-10 bottom-auto overflow-y-auto rounded-lg border-2 border-primary bg-white p-4 shadow-xl custom-scrollbar"
-							role="dialog"
-							tabindex="-1"
-							aria-modal="true"
-							aria-labelledby="markdown-help-title"
-						>
-							<div class="mb-3 flex items-start justify-between gap-4">
-								<div>
-									<h5 id="markdown-help-title" class="text-xl font-bold text-dark">
-										Markdown Help
-									</h5>
-									<p class="text-sm text-dark/70">Quick syntax reference for comments.</p>
-								</div>
-								<div class="duo-btn duo-primary">
-									<button type="button" class="text-sm font-semibold" onclick={closeMarkdownHelp}>
-										Close
-									</button>
-								</div>
-							</div>
-
-							<div class="space-y-4 text-sm text-dark/90">
-								<div>
-									<p class="mb-1 font-semibold">Basic Markdown</p>
-									<ul class="space-y-1 list-disc pl-5">
-										<li>
-											<code># Heading</code>
-											for a title line
-										</li>
-										<li>
-											<code>**bold text**</code>
-											for bold emphasis
-										</li>
-										<li>
-											<code>_italic text_</code>
-											for italic emphasis
-										</li>
-										<li>
-											<code>`inline code`</code>
-											for code snippets
-										</li>
-										<li>
-											<code>![alt text](https://example.com/image.gif)</code>
-											for images/GIFs
-										</li>
-									</ul>
-								</div>
-
-								<div>
-									<p class="mb-1 font-semibold">Mention Syntax</p>
-									<ul class="space-y-1 list-disc pl-5">
-										<li>
-											Type <code>@username</code>
-											(letters, numbers,
-											<code>_</code>
-											,
-											<code>-</code>
-											; min 3 chars)
-										</li>
-										<li>
-											Suggestions appear while typing after <code>@</code>
-										</li>
-										<li>
-											Use <code>Arrow Up/Down</code>
-											to pick, then
-											<code>Enter</code>
-											or
-											<code>Tab</code>
-										</li>
-										<li>
-											Use <code>Escape</code>
-											to close mention suggestions
-										</li>
-									</ul>
-								</div>
-
-								<div>
-									<p class="mb-1 font-semibold">Toolbar Shortcuts (4)</p>
-									<ul class="space-y-1 list-disc pl-5">
-										<li>
-											<span class="font-semibold">Header:</span>
-											adds
-											<code>#</code>
-											at the cursor
-										</li>
-										<li>
-											<span class="font-semibold">Bold:</span>
-											wraps selection with
-											<code>**...**</code>
-										</li>
-										<li>
-											<span class="font-semibold">Italic:</span>
-											wraps selection with
-											<code>_..._</code>
-										</li>
-										<li>
-											<span class="font-semibold">Code:</span>
-											wraps selection with
-											<code>`...`</code>
-										</li>
-									</ul>
-								</div>
-							</div>
-						</div>
-					</div>
-				{/if}
+				<CommentMarkdownHelp open={showMarkdownHelp} close={closeMarkdownHelp} />
 				{#if replyTo}
 					<div
 						class="flex items-center justify-between gap-4 rounded-xl border-2 border-dark/20 bg-primary-20 px-3 py-2"
@@ -987,7 +1545,7 @@
 						</button>
 					</div>
 				{/if}
-				<div class="ml-auto w-fit duo-btn duo-blue">
+				<div class="ml-auto mb-4 w-fit duo-btn duo-blue">
 					<button
 						class="fill-white"
 						type="button"
@@ -1033,6 +1591,7 @@
 									...userData
 								};
 								comments.current = '';
+								resizeTextarea(textarea);
 								await hydrateMentionDictionary([newComment.content]);
 								newComment.content = md.render(newComment.content);
 
@@ -1060,6 +1619,7 @@
 
 								replyTo = null;
 								resetMentionState();
+								resetCommandState();
 							}
 							comments.sending = false;
 						}}
@@ -1104,10 +1664,9 @@
 <style lang="postcss">
 	@reference "../../../app.css";
 
-	.comment-editor {
-		@apply relative *:relative;
-		&::before {
-			@apply pointer-events-none absolute! top-0 left-0 z-10 h-full w-full rounded-b-xl border-2 border-primary content-[''];
-		}
+	.comment-input {
+		overflow-wrap: anywhere;
+		word-break: break-word;
+		white-space: pre-wrap;
 	}
 </style>

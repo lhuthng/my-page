@@ -9,7 +9,6 @@ export async function GET({ request, params, fetch, url }) {
 
     if (!res.ok) {
         const text = await res.text();
-        console.log(text);
         return new Response(text, { status: res.status });
     }
 
@@ -19,6 +18,5 @@ export async function GET({ request, params, fetch, url }) {
         user.avatar_url = fixClientRoute(user.avatar_url);
     });
 
-    console.log(users);
     return new Response(JSON.stringify({ users }), { status: 200 });
 }

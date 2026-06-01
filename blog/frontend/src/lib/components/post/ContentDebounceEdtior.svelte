@@ -8,6 +8,7 @@
     revealPlugin,
     slugify,
     youtubeBlockPlugin,
+    kaomojiPlugin,
   } from "$lib/custom-rules";
   import { useDebounce } from "$lib/effects/debounce";
   import MarkdownIt from "markdown-it";
@@ -45,6 +46,7 @@
       .use(revealPlugin)
       .use(namedContainerPlugin)
       .use(codeHighlightPlugin)
+      .use(kaomojiPlugin)
       .use(anchor, { slugify }),
   );
 
