@@ -18,7 +18,11 @@
   // and becomes null on subsequent client-side navigations.
   let tabs = $derived(
     $page.data.role === "admin"
-      ? [...baseTabs, { label: "Database", path: "/dashboard/database" }]
+      ? [
+          ...baseTabs,
+          { label: "Highlights", path: "/dashboard/highlights" },
+          { label: "Database", path: "/dashboard/database" },
+        ]
       : baseTabs,
   );
 </script>

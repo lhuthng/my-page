@@ -147,6 +147,19 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 ))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
         )
+        // admin-protected routes
+        .merge(
+            Router::new()
+                .route(
+                    "/id/{post_id}/featured",
+                    put(handlers::post::set_post_featured),
+                )
+                .layer(middleware::from_fn(middlewares::auth::admin_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        )
         // public routes
         .merge(
             Router::new()

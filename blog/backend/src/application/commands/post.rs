@@ -109,3 +109,9 @@ pub struct SetRelatedPostsCommand {
     pub post_id: i64,
     pub related_post_slugs: Vec<String>,
 }
+
+pub struct SetFeaturedPostCommand {
+    pub post_id: i64,
+    pub is_featured: bool,
+}
+

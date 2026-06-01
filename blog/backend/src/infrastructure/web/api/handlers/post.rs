@@ -19,7 +19,7 @@ use crate::{
                 GetPostCommand, GetPostsByTagCommand, GetRelatedPostsCommand,
                 NewPostCommand, PostNewAnynymouseCommentCommand, PostNewCommentCommand,
                 PublishCommand, PushNewLikeCommand, PushNewViewCommand,
-                SearchPostCommand, SearchTagsCommand, SetRelatedPostsCommand,
+                SearchPostCommand, SearchTagsCommand, SetFeaturedPostCommand, SetRelatedPostsCommand,
                 UpdatePostCommand,
             },
         },
@@ -1278,3 +1278,22 @@ pub async fn change_cover(
 
     Ok(())
 }
+
+#[derive(Deserialize)]
+pub struct SetPostFeaturedBody {
+    pub is_featured: bool,
+}
+
+pub async fn set_post_featured(
+    State(state): State<Arc<AppState>>,
+    Path(post_id): Path<i64>,
+    Json(body): Json<SetPostFeaturedBody>,
+) -> Result<impl IntoResponse, PostError> {
+    let cmd = SetFeaturedPostCommand {
+        post_id,
+        is_featured: body.is_featured,
+    };
+    state.post_service.set_post_featured(cmd).await?;
+    Ok(())
+}
+
