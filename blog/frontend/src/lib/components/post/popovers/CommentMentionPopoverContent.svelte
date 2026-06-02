@@ -44,7 +44,7 @@
 </ul>
 
 <style lang="postcss">
-	@reference "../../../app.css";
+	@reference "../../../../app.css";
 	ul {
 		@apply max-h-64 overflow-y-auto rounded-xl bg-white px-2 shadow-lg;
 		& > li.searching {

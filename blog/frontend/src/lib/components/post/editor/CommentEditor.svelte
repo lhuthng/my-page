@@ -1,10 +1,10 @@
 <script>
 	import { autoHResize } from '$lib/client/auto-resize';
-	import Comment from './Comment.svelte';
-	import CommentAutocompletePopover from './CommentAutocompletePopover.svelte';
+	import Comment from 'Comment.svelte';
+	import CommentAutocompletePopover from '../popovers/CommentAutocompletePopover.svelte';
 	import CommentComposerToolbar from './CommentComposerToolbar.svelte';
-	import CommentGifDrawer from './CommentGifDrawer.svelte';
-	import CommentKaomojiDrawer from './CommentKaomojiDrawer.svelte';
+	import CommentGifDrawer from '../drawers/CommentGifDrawer.svelte';
+	import CommentKaomojiDrawer from '../drawers/CommentKaomojiDrawer.svelte';
 	import CommentMarkdownHelp from './CommentMarkdownHelp.svelte';
 
 	let {
@@ -193,8 +193,7 @@
 </div>
 
 <style lang="postcss">
-	@reference "../../../app.css";
-
+	@reference "../../../../app.css";
 	.comment-input {
 		overflow-wrap: anywhere;
 		word-break: break-word;

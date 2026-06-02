@@ -88,7 +88,7 @@
 </div>
 
 <style lang="postcss">
-	@reference "../../../app.css";
+	@reference "../../../../app.css";
 
 	.comment-editor {
 		@apply relative *:relative;

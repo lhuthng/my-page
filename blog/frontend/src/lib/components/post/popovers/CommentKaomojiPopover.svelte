@@ -41,7 +41,7 @@
 {/if}
 
 <style lang="postcss">
-	@reference "../../../app.css";
+	@reference "../../../../app.css";
 
 	.kaomoji-collection {
 		@apply flex flex-wrap gap-2;

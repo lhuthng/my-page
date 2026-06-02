@@ -1,7 +1,7 @@
 <script>
 	import CommentGifPopover from './CommentGifPopover.svelte';
 	import CommentKaomojiPopover from './CommentKaomojiPopover.svelte';
-	import { COMMENT_COMMANDS } from './comment-syntax';
+	import { COMMENT_COMMANDS } from '$lib/post/comment/comment-syntax.js';
 
 	let { commandState, pickCommandItem, applyKaomojiSuggestion } = $props();
 
@@ -48,7 +48,7 @@
 			{#if commandState.type === COMMENT_COMMANDS.GIF}
 				Type to search GIFs... (e.g. /gif cats)
 			{:else if commandState.type === COMMENT_COMMANDS.KAOMOJI}
-				Type a mood to search Kaomojis... (e.g. /kao happy)
+				Type a mood to search Kaomojis... (e.g. /kao joy)
 			{/if}
 		</p>
 	{/if}
