@@ -1,11 +1,11 @@
 <script>
 	import { autoHResize } from '$lib/client/auto-resize';
-	import Comment from 'Comment.svelte';
 	import CommentAutocompletePopover from '../popovers/CommentAutocompletePopover.svelte';
 	import CommentComposerToolbar from './CommentComposerToolbar.svelte';
 	import CommentGifDrawer from '../drawers/CommentGifDrawer.svelte';
 	import CommentKaomojiDrawer from '../drawers/CommentKaomojiDrawer.svelte';
 	import CommentMarkdownHelp from './CommentMarkdownHelp.svelte';
+	import Comment from '../Comment.svelte';
 
 	let {
 		textarea = $bindable(),

@@ -846,7 +846,11 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
 		commandDebounceTimer = setTimeout(searchCommandSuggestions, commandDebounceMs);
 	};
 
-	const syncTextareaLayout = (selectionStart = null, selectionEnd = selectionStart, focus = true) => {
+	const syncTextareaLayout = (
+		selectionStart = null,
+		selectionEnd = selectionStart,
+		focus = true
+	) => {
 		requestAnimationFrame(() => {
 			const textarea = getTextarea();
 			if (!textarea) return;
@@ -1142,6 +1146,8 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
 			const ignoredKeys = [
 				'ArrowDown',
 				'ArrowUp',
+				'ArrowLeft',
+				'ArrowRight',
 				'Enter',
 				'Escape',
 				'Tab',
@@ -1350,7 +1356,7 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
 			const activeItems =
 				commandState.items.length > 0 ? commandState.items : commandState.suggestions;
 
-			if (event.key === 'ArrowDown') {
+			if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
 				event.preventDefault();
 				if (activeItems.length > 0) {
 					commandState.selected = (commandState.selected + 1) % activeItems.length;
@@ -1358,7 +1364,7 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
 				return;
 			}
 
-			if (event.key === 'ArrowUp') {
+			if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
 				event.preventDefault();
 				if (activeItems.length > 0) {
 					commandState.selected =
@@ -1685,7 +1691,7 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
 		fetchKaomojis,
 		selectGif,
 		selectKaomoji,
-		applyKaomojiMoodSuggestion,
+		applyKaomojiMoodSuggestion
 	};
 };
 
