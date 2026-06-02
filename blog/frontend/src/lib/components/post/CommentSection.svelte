@@ -1,8 +1,8 @@
 <script>
 	import { user } from '$lib/client/user';
-	import CommentEditor from './CommentEditor.svelte';
-	import CommentFeed from './CommentFeed.svelte';
-	import { createCommentSectionRuntime, createEmptyState } from './comment-section-runtime.js';
+	import CommentEditor from './editor/CommentEditor.svelte';
+	import CommentFeed from './feed/CommentFeed.svelte';
+	import { createCommentSectionRuntime, createEmptyState } from '$lib/post/comment/comment-section-runtime.js';
 
 	let { postId, postAuthorUsername = null } = $props();
 	let last = -1;

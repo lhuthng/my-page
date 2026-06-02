@@ -24,7 +24,7 @@
 {/if}
 
 <style lang="postcss">
-	@reference "../../../app.css";
+	@reference "../../../../app.css";
 	div {
 		@apply grid gap-2;
 		grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));

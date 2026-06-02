@@ -4,7 +4,7 @@
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
 	import Heart from '$lib/components/svgs/Heart.svelte';
 	import Spade from '$lib/components/svgs/Spade.svelte';
-	import Comment from './Comment.svelte';
+	import Comment from '/Comment.svelte';
 	import CommentThread from './CommentThread.svelte';
 
 	let {
