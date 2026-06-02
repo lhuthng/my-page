@@ -21,7 +21,7 @@ Three independently deployed services living in one repo: a blog, a portfolio, a
 ```
 my-page/
 ├── .github/
-│   ├── workflows/deploy.yml   # CI/CD pipeline
+│   ├── workflows/deploy.yml   # GitHub Actions deploy pipeline
 │   └── nginx/                 # nginx config files for all services
 ├── blog/
 │   ├── backend/               # Rust/Axum REST + GraphQL API
@@ -63,7 +63,7 @@ The blog runs entirely on the Oracle VM. nginx handles TLS termination and proxi
 
 ## CI/CD
 
-Push to `master` triggers the [GitHub Actions pipeline](.github/workflows/deploy.yml). Path filters make sure only the relevant jobs run.
+Push to `master` triggers the [GitHub Actions workflow](.github/workflows/deploy.yml). It builds on GitHub-hosted runners, then deploys to the remote hosts. The workflow is not a "run the app inside the repo" setup; for the blog it pushes images to GHCR and the Oracle VM pulls them, while the VM stays a lightweight runtime host.
 
 | Changed path | What happens |
 |---|---|
@@ -93,17 +93,47 @@ See [`.github/README.md`](.github/README.md) for full infrastructure setup instr
 
 ### Blog
 
-Requires `.env` files — copy from the provided examples first:
+The blog is the part of the repo that has a local Docker deployment path. The `blog/Makefile` is just a thin wrapper around `docker compose`, so you can use whichever reads better.
+
+First, create the local config files and data directory:
+
+```bash
+cd blog
+make setup
+```
+
+That creates `blog/backend/data/` and copies the example env files if they do not already exist. Edit the generated `.env` files before starting the stack.
+
+To start the full blog stack locally with Docker:
+
+```bash
+cd blog
+docker compose up -d --build
+```
+
+Or use the Makefile equivalent:
+
+```bash
+cd blog
+make docker-up
+```
+
+Useful blog targets:
+
+```bash
+cd blog
+make docker-build   # rebuild images
+make docker-down    # stop containers
+make backend        # run the Rust backend directly
+make frontend       # run the SvelteKit frontend directly
+make migrate        # run migrations manually (override DB_URL if needed)
+```
+
+If you want to bootstrap the env files manually instead of using `make setup`, copy the examples first:
 
 ```bash
 cp blog/backend/example.env blog/backend/.env
 cp blog/frontend/example.env blog/frontend/.env
-```
-
-Then bring everything up with Docker Compose:
-
-```bash
-cd blog && docker compose up -d
 ```
 
 ### Portfolio
