@@ -22,6 +22,7 @@ pub struct ChangePostCoverCommand {
     pub medium_details: MediumDetails,
 }
 
+#[allow(dead_code)]
 pub struct ChangeSeriesCoverCommand {
     pub user_id: i64,
     pub series_id: i64,

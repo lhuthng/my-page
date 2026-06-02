@@ -17,13 +17,10 @@ use crate::{
         services::series::SeriesService,
     },
     domain::{
-        entities::{media::MediumDetails, secret::Claims, series::SeriesWithPosts},
+        entities::{media::MediumDetails, secret::Claims},
         errors::{media::MediaError, series::SeriesError},
     },
-    infrastructure::web::{
-        api::handlers::common::{MediumData, extract_medium},
-        server::AppState,
-    },
+    infrastructure::web::{api::handlers::common::extract_medium, server::AppState},
 };
 
 #[derive(Serialize, Deserialize)]

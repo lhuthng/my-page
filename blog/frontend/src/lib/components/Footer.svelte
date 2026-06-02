@@ -2,72 +2,67 @@
 </script>
 
 <footer class="w-full bg-dark py-2 text-white divide-white">
-  <div class="flex not-sm:flex-col w-cap justify-between">
-    <div class="lg:w-1/2 pt-4 space-y-2 sm:space-y-4 not-sm:text-center">
-      <h2 class="text-2xl">
-        <a href="/"
-          ><img class="inline h-10" src="/logo.svg" alt="logo-icon" /></a
-        > Huu Thang's Blog
-      </h2>
-      <p>Exploring the intersection of programming and creativity (probably)</p>
-    </div>
-    <div
-      class="flex grow justify-evenly h-full gap-12 px-0 lg:px-4 py-2 lg:py-4"
-    >
-      <div class="space-y-2 text-left sm:text-right">
-        <h3 class="text-xl">EXPLORE</h3>
-        <ul class="space-y-1 h-full list-inside list-['-'] pt-1">
-          <li><a href="/posts">Posts</a></li>
-          <li><a href="/projects">Projects</a></li>
-          <li><a href="/about">About</a></li>
-        </ul>
-      </div>
-      <div class="space-y-2 text-right">
-        <h3 class="text-xl">CONNECT</h3>
-        <ul class="space-y-1 h-full list-inside list-['-'] pt-1">
-          <li><a href="https://github.com/lhuthng">Github</a></li>
-          <li>
-            <a href="https://www.linkedin.com/in/huuthangle/">Linkedin</a>
-          </li>
-          <li>
-            <a href="https://www.facebook.com/lhuthng/">Facebook</a>
-          </li>
-          <li>
-            <a href="https://www.youtube.com/@memofie">Youtube</a>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </div>
-  <hr class="w-cap border-t-2 my-4" />
-  <div
-    class="flex not-sm:flex-col justify-between gap-2 w-cap not-sm:text-center"
-  >
-    <span>
-      &copy; 2026 Huu Thang &middot; Hand-craft with Svelte & Rust <span
-        class="text-nowrap"
-        >[Running on a VPS] &middot; All rights reserved</span
-      >.
-    </span>
-    <a class="underline" href="/privacy">Privacy</a>
-  </div>
+	<div class="flex not-sm:flex-col w-cap justify-between">
+		<div class="lg:w-1/2 pt-4 space-y-2 sm:space-y-4 not-sm:text-center">
+			<h2 class="text-2xl">
+				<a href="/"><img class="inline h-10" src="/logo.svg" alt="logo-icon" /></a>
+				Huu Thang's Blog
+			</h2>
+			<p>Exploring the intersection of programming and creativity (probably)</p>
+		</div>
+		<div class="flex grow justify-evenly h-full gap-12 px-0 lg:px-4 py-2 lg:py-4">
+			<div class="space-y-2 text-left sm:text-right">
+				<h3 class="text-xl">EXPLORE</h3>
+				<ul class="space-y-1 h-full list-inside list-['-'] pt-1">
+					<li><a href="/posts">Posts</a></li>
+					<li><a href="/projects">Projects</a></li>
+					<li><a href="/about">About</a></li>
+				</ul>
+			</div>
+			<div class="space-y-2 text-right">
+				<h3 class="text-xl">CONNECT</h3>
+				<ul class="space-y-1 h-full list-inside list-['-'] pt-1">
+					<li><a href="https://github.com/lhuthng">Github</a></li>
+					<li>
+						<a href="https://www.linkedin.com/in/huuthangle/">Linkedin</a>
+					</li>
+					<li>
+						<a href="https://www.facebook.com/lhuthng/">Facebook</a>
+					</li>
+					<li>
+						<a href="https://www.youtube.com/@memofie">Youtube</a>
+					</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+	<hr class="w-cap border-t-2 my-4" />
+	<div class="flex not-sm:flex-col justify-between gap-2 w-cap not-sm:text-center">
+		<span>
+			&copy; 2026 Huu Thang &middot; Hand-craft with Svelte & Rust <span class="text-nowrap">
+				[Running on a VPS] &middot; All rights reserved
+			</span>
+			.
+		</span>
+		<a class="underline" href="/privacy">Privacy</a>
+	</div>
 </footer>
 
 <style lang="postcss">
-  @reference "../../app.css";
+	@reference "../../app.css";
 
-  ul {
-    @apply relative;
-    &:after {
-      @apply absolute z-8 content-[''] right-4 top-1 bottom-3 lg:bottom-1 w-1.5 bg-white;
-    }
-  }
+	ul {
+		@apply relative;
+		&:after {
+			@apply absolute top-1 right-4 bottom-3 z-8 w-1.5 bg-white content-[''] lg:bottom-1;
+		}
+	}
 
-  ul > li {
-    @apply relative z-9 ml-auto drop-shadow-sm drop-shadow-dark w-fit bg-white text-dark pr-1 rounded-r-lg;
-  }
-  ul > li::before {
-    @apply absolute content-[''] bg-white right-full h-full w-3;
-    clip-path: polygon(100% 0%, 105% 0%, 105% 100%, 100% 100%, 0% 50%);
-  }
+	ul > li {
+		@apply relative z-9 ml-auto w-fit rounded-r-lg bg-white pr-1 text-dark drop-shadow-sm drop-shadow-dark;
+	}
+	ul > li::before {
+		@apply absolute right-full h-full w-3 bg-white content-[''];
+		clip-path: polygon(100% 0%, 105% 0%, 105% 100%, 100% 100%, 0% 50%);
+	}
 </style>

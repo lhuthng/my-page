@@ -25,8 +25,8 @@ use crate::{
     },
     infrastructure::{
         persistence::{
-            media::{HashData, hash_bytes},
             image_convert::convert_to_webp,
+            media::{HashData, hash_bytes},
         },
         web::server::MediaConfig,
     },
@@ -290,8 +290,8 @@ impl SeriesService for SeriesServiceImpl {
             .fetch_all(&mut *tx)
             .await?;
 
-        let mut tag_name_hash_map = HashMap::<i64, Vec<(String)>>::new();
-        let mut tag_slug_hash_map = HashMap::<i64, Vec<(String)>>::new();
+        let mut tag_name_hash_map = HashMap::<i64, Vec<String>>::new();
+        let mut tag_slug_hash_map = HashMap::<i64, Vec<String>>::new();
         for (id, name, slug) in all_post_tags {
             tag_name_hash_map.entry(id).or_default().push(name);
             tag_slug_hash_map.entry(id).or_default().push(slug);
@@ -327,29 +327,27 @@ impl SeriesService for SeriesServiceImpl {
                             likes,
                             comments_count,
                         )) = post_hash_map.get(&post_id)
-                        {
-                            if let Some((tag_names, tag_slugs)) = tag_name_hash_map
+                            && let Some((tag_names, tag_slugs)) = tag_name_hash_map
                                 .get(&post_id)
                                 .zip(tag_slug_hash_map.get(&post_id))
-                            {
-                                posts.push(PostSnapshot {
-                                    id: post_id,
-                                    title: title.clone(),
-                                    slug: slug.clone(),
-                                    tag_names: tag_names.clone(),
-                                    tag_slugs: tag_slugs.clone(),
-                                    excerpt: excerpt.clone(),
-                                    author_name: author_name.clone(),
-                                    author_slug: author_slug.clone(),
-                                    status: status.clone(),
-                                    url: url.clone(),
-                                    stats: PostStats {
-                                        views: views.clone(),
-                                        likes: likes.clone(),
-                                        comments: comments_count.clone(),
-                                    },
-                                });
-                            }
+                        {
+                            posts.push(PostSnapshot {
+                                id: post_id,
+                                title: title.clone(),
+                                slug: slug.clone(),
+                                tag_names: tag_names.clone(),
+                                tag_slugs: tag_slugs.clone(),
+                                excerpt: excerpt.clone(),
+                                author_name: author_name.clone(),
+                                author_slug: author_slug.clone(),
+                                status: status.clone(),
+                                url: url.clone(),
+                                stats: PostStats {
+                                    views: *views,
+                                    likes: *likes,
+                                    comments: *comments_count,
+                                },
+                            });
                         }
                     }
                     result.push(SeriesWithPosts {
@@ -385,16 +383,13 @@ impl SeriesService for SeriesServiceImpl {
                 &cover_image.filename,
             )?;
 
-            if !self
-                .is_cover_supported(&content_type, config)
-                .await?
-            {
+            if !self.is_cover_supported(&content_type, config).await? {
                 return Err(SeriesError::Media(MediaError::InvalidFileType));
             }
 
             let extension = MediaType::from_str(&content_type)?.get_extension();
 
-            let root = config.dir.join("srs").join(&cmd.user_id.to_string());
+            let root = config.dir.join("srs").join(cmd.user_id.to_string());
 
             let HashData {
                 mut hash,
@@ -426,11 +421,11 @@ impl SeriesService for SeriesServiceImpl {
             .bind(short_name)
             .bind(&filename)
             .bind(&content_type)
-            .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
+            .bind(file_path.to_str().ok_or(MediaError::ExposedInternalError(
                 "Failed to get file path".to_string(),
             ))?)
             .bind(size)
-            .bind(&cmd.user_id)
+            .bind(cmd.user_id)
             .fetch_one(&mut *tx)
             .await
             {
@@ -487,9 +482,9 @@ impl SeriesService for SeriesServiceImpl {
                 WHERE p.id = ? AND s.id = ? AND p.user_id = s.user_id AND p.user_id = ?
             )"#,
         )
-        .bind(&cmd.post_id)
-        .bind(&cmd.series_id)
-        .bind(&cmd.user_id)
+        .bind(cmd.post_id)
+        .bind(cmd.series_id)
+        .bind(cmd.user_id)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -505,7 +500,7 @@ impl SeriesService for SeriesServiceImpl {
             )
             "#,
         )
-        .bind(&cmd.post_id)
+        .bind(cmd.post_id)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -523,7 +518,7 @@ impl SeriesService for SeriesServiceImpl {
                     FROM series_post
                     WHERE series_id = ?"#,
                 )
-                .bind(&cmd.series_id)
+                .bind(cmd.series_id)
                 .fetch_one(&mut *tx)
                 .await?;
                 max + 1
@@ -537,7 +532,7 @@ impl SeriesService for SeriesServiceImpl {
             SET number = number + 1
             WHERE series_id = ? AND number >= ?"#,
         )
-        .bind(&cmd.series_id)
+        .bind(cmd.series_id)
         .bind(target)
         .execute(&mut *tx)
         .await?;
@@ -575,9 +570,9 @@ impl SeriesService for SeriesServiceImpl {
             WHERE sp.series_id = ? AND sp.post_id = ? AND s.user_id = ?
             "#,
         )
-        .bind(&cmd.series_id)
-        .bind(&cmd.post_id)
-        .bind(&cmd.user_id)
+        .bind(cmd.series_id)
+        .bind(cmd.post_id)
+        .bind(cmd.user_id)
         .fetch_optional(&mut *tx)
         .await?;
 
@@ -588,8 +583,8 @@ impl SeriesService for SeriesServiceImpl {
 
         // 3. DELETE THE POST FROM THE SERIES
         sqlx::query("DELETE FROM series_post WHERE series_id = ? AND post_id = ?")
-            .bind(&cmd.series_id)
-            .bind(&cmd.post_id)
+            .bind(cmd.series_id)
+            .bind(cmd.post_id)
             .execute(&mut *tx)
             .await?;
 
@@ -601,7 +596,7 @@ impl SeriesService for SeriesServiceImpl {
             WHERE series_id = ? AND number > ?
             "#,
         )
-        .bind(&cmd.series_id)
+        .bind(cmd.series_id)
         .bind(position)
         .execute(&mut *tx)
         .await?;

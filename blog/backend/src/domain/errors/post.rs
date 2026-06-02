@@ -29,9 +29,7 @@ impl IntoResponse for PostError {
                     PostError::PostNotFound => {
                         (StatusCode::NOT_FOUND, "Post not found".to_string())
                     }
-                    PostError::TagNotFound => {
-                        (StatusCode::NOT_FOUND, "Tag not found".to_string())
-                    }
+                    PostError::TagNotFound => (StatusCode::NOT_FOUND, "Tag not found".to_string()),
                     PostError::Forbidden => (
                         StatusCode::FORBIDDEN,
                         "You do not have permission to perform this action".to_string(),

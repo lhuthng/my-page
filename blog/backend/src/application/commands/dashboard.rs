@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub struct GetOverviewCommand {
     pub user_id: i64,
     pub role: String,

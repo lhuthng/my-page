@@ -1,8 +1,8 @@
-import { derived, writable } from "svelte/store";
+import { derived, writable } from 'svelte/store';
 
 const threshold = {
-  lg: 1024,
-  xl: 1280,
+	lg: 1024,
+	xl: 1280
 };
 export const width = writable();
 

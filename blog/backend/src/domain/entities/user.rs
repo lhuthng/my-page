@@ -18,7 +18,7 @@ impl UserRole {
         }
     }
     pub fn include(&self, other: &Self) -> bool {
-        return self.rank() >= other.rank();
+        self.rank() >= other.rank()
     }
 }
 

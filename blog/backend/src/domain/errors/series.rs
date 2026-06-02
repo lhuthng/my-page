@@ -7,6 +7,7 @@ use tracing::error;
 use crate::domain::errors::media::MediaError;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum SeriesError {
     Duplication,
     PermissionDenied,

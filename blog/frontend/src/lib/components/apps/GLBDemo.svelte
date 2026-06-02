@@ -1,126 +1,129 @@
 <script>
-  import { Canvas } from "@threlte/core";
-  import * as THREE from "three";
-  import GLBLoader from "./GLBLoader.svelte";
-  import { derived } from "svelte/store";
-  import { fly } from "svelte/transition";
+	import { Canvas } from '@threlte/core';
+	import * as THREE from 'three';
+	import GLBLoader from './GLBLoader.svelte';
+	import { derived } from 'svelte/store';
+	import { fly } from 'svelte/transition';
 
-  let { name, width = "100%", height = "500px", config, temp } = $props();
+	let { name, width = '100%', height = '500px', config, temp } = $props();
 
-  let toggleWireframe = $state();
-  let toggleOrbit = $state();
-  let isReady = $state(false);
+	let toggleWireframe = $state();
+	let toggleOrbit = $state();
+	let isReady = $state(false);
 
-  let wireframe = $state(false);
-  let animation = $state(false);
-  let info = $state(false);
-  let orbit = $state(false);
+	let wireframe = $state(false);
+	let animation = $state(false);
+	let info = $state(false);
+	let orbit = $state(false);
 
-  let cameraConfig = $derived.by(() => {
-    let camera = {
-      fov: "10",
-      position: "0,0,1",
-      target: "0,0,0",
-      autoRotate: "true",
-    };
+	let cameraConfig = $derived.by(() => {
+		let camera = {
+			fov: '10',
+			position: '0,0,1',
+			target: '0,0,0',
+			autoRotate: 'true'
+		};
 
-    if (config) {
-      camera = {
-        ...camera,
-        ...Object.fromEntries(config?.split("-")?.map((s) => s.split(":"))),
-      };
-    }
+		if (config) {
+			camera = {
+				...camera,
+				...Object.fromEntries(config?.split('-')?.map((s) => s.split(':')))
+			};
+		}
 
-    camera.position = camera.position.split(",").map(Number);
-    camera.target = camera.target.split(",").map(Number);
-    camera.autoRotate = camera.autoRotate === "true";
+		camera.position = camera.position.split(',').map(Number);
+		camera.target = camera.target.split(',').map(Number);
+		camera.autoRotate = camera.autoRotate === 'true';
 
-    return camera;
-  });
+		return camera;
+	});
 
-  $effect(() => {
-    orbit = cameraConfig.autoRotate;
-  });
+	$effect(() => {
+		orbit = cameraConfig.autoRotate;
+	});
 
-  $effect(() => {
-    toggleOrbit?.(orbit);
-  });
+	$effect(() => {
+		toggleOrbit?.(orbit);
+	});
 
-  $effect(() => {
-    toggleWireframe?.(wireframe);
-  });
+	$effect(() => {
+		toggleWireframe?.(wireframe);
+	});
 </script>
 
 <div
-  class="relative mx-auto rounded-lg overflow-hidden"
-  class:bg-accent-blue={!wireframe}
-  class:bg-black={wireframe}
-  style:max-width={width}
-  style:height
+	class="relative mx-auto rounded-lg overflow-hidden"
+	class:bg-accent-blue={!wireframe}
+	class:bg-black={wireframe}
+	style:max-width={width}
+	style:height
 >
-  <div
-    class="full opacity-0 transition-opacity duration-1000"
-    class:opacity-100={isReady}
-  >
-    <Canvas renderMode="on-demand" toneMapping={THREE.NoToneMapping}>
-      <GLBLoader
-        {name}
-        url={temp}
-        {cameraConfig}
-        bind:toggleWireframe
-        bind:toggleOrbit
-        bind:isReady
-      />
-    </Canvas>
-  </div>
+	<div class="full opacity-0 transition-opacity duration-1000" class:opacity-100={isReady}>
+		<Canvas renderMode="on-demand" toneMapping={THREE.NoToneMapping}>
+			<GLBLoader
+				{name}
+				url={temp}
+				{cameraConfig}
+				bind:toggleWireframe
+				bind:toggleOrbit
+				bind:isReady
+			/>
+		</Canvas>
+	</div>
 
-  <div
-    class="absolute top-0 right-0 w-full pointer-events-none has-focus:*:opacity-100! *:transition-opacity *:duration-200"
-  >
-    <button
-      class="absolute right-2 top-2 pointer-events-auto rounded-full w-6 h-6 bg-white opacity-40 mx-auto hover:opacity-70 select-none font-bold"
-    >
-      i</button
-    >
-    <div
-      class="opacity-0 pointer-events-none mt-10 bg-white rounded-lg mx-2 px-2 py-1"
-      class:opacity-100={info}
-    >
-      <ul class="min-w-60 list-disc select-none">
-        <li><strong>Left click/One finger + drag:</strong> Rotate</li>
-        <li>
-          <strong>Right click/Two finger + drag:</strong> Pan
-        </li>
-        <li>
-          <strong>Middle click + drag, Mouse wheel,</strong> or
-          <strong>pinch:</strong> Zoom in/out
-        </li>
-      </ul>
-    </div>
-  </div>
-  {#if isReady}
-    <div
-      in:fly={{ y: 10, duration: 1000 }}
-      class="absolute left-0 bottom-4 w-full flex gap-2 justify-center"
-    >
-      <div
-        class="w-fit duo-btn duration-0!"
-        class:duo-blue={!wireframe}
-        class:duo-white={wireframe}
-      >
-        <button class="duration-0!" onclick={() => (wireframe = !wireframe)}
-          >Wireframe {wireframe ? "on" : "off"}</button
-        >
-      </div>
-      <div
-        class="w-fit duo-btn duration-0!"
-        class:duo-blue={!wireframe}
-        class:duo-white={wireframe}
-      >
-        <button class="duration-0!" onclick={() => (orbit = !orbit)}
-          >Auto Rotate {orbit ? "on" : "off"}</button
-        >
-      </div>
-    </div>
-  {/if}
+	<div
+		class="absolute top-0 right-0 w-full pointer-events-none has-focus:*:opacity-100! *:transition-opacity *:duration-200"
+	>
+		<button
+			class="absolute right-2 top-2 pointer-events-auto rounded-full w-6 h-6 bg-white opacity-40 mx-auto hover:opacity-70 select-none font-bold"
+		>
+			i
+		</button>
+		<div
+			class="opacity-0 pointer-events-none mt-10 bg-white rounded-lg mx-2 px-2 py-1"
+			class:opacity-100={info}
+		>
+			<ul class="min-w-60 list-disc select-none">
+				<li>
+					<strong>Left click/One finger + drag:</strong>
+					Rotate
+				</li>
+				<li>
+					<strong>Right click/Two finger + drag:</strong>
+					Pan
+				</li>
+				<li>
+					<strong>Middle click + drag, Mouse wheel,</strong>
+					or
+					<strong>pinch:</strong>
+					Zoom in/out
+				</li>
+			</ul>
+		</div>
+	</div>
+	{#if isReady}
+		<div
+			in:fly={{ y: 10, duration: 1000 }}
+			class="absolute left-0 bottom-4 w-full flex gap-2 justify-center"
+		>
+			<div
+				class="w-fit duo-btn duration-0!"
+				class:duo-blue={!wireframe}
+				class:duo-white={wireframe}
+			>
+				<button class="duration-0!" onclick={() => (wireframe = !wireframe)}>
+					Wireframe {wireframe ? 'on' : 'off'}
+				</button>
+			</div>
+			<div
+				class="w-fit duo-btn duration-0!"
+				class:duo-blue={!wireframe}
+				class:duo-white={wireframe}
+			>
+				<button class="duration-0!" onclick={() => (orbit = !orbit)}>
+					Auto Rotate {orbit ? 'on' : 'off'}
+				</button>
+			</div>
+		</div>
+	{/if}
 </div>

@@ -76,12 +76,12 @@ impl MediaConfig {
             MediaType::ImageJpeg,
         ];
 
-        return Self {
+        Self {
             dir,
             allowed_file_types,
             allowed_avatar_types,
             allowed_cover_types,
-        };
+        }
     }
 }
 
@@ -174,5 +174,11 @@ impl<'a> HTTPServer<'a> {
         axum::serve(listener, router).await.unwrap();
 
         Ok(())
+    }
+}
+
+impl<'a> Default for HTTPServer<'a> {
+    fn default() -> Self {
+        Self::new()
     }
 }

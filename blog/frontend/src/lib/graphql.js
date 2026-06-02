@@ -8,10 +8,10 @@ import { GraphQLClient } from 'graphql-request';
  * @param {string}       token   - Raw bearer token string (accessToken.token from locals/parent).
  */
 export function getGqlClient(fetch, apiUrl, token) {
-  return new GraphQLClient(`${apiUrl}/graphql`, {
-    fetch,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+	return new GraphQLClient(`${apiUrl}/graphql`, {
+		fetch,
+		headers: {
+			Authorization: `Bearer ${token}`
+		}
+	});
 }

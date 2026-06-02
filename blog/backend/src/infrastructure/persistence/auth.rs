@@ -163,8 +163,8 @@ impl AuthService for AuthServiceImpl {
                     VALUES ($1, $2)
                     "#,
                 )
-                .bind(&user.id)
-                .bind(&user.username)
+                .bind(user.id)
+                .bind(user.username)
                 .execute(&mut *tx)
                 .await?;
 
@@ -199,7 +199,7 @@ impl AuthService for AuthServiceImpl {
             WHERE user_id = ?
             "#,
         )
-        .bind(&user_id)
+        .bind(user_id)
         .fetch_one(&self.pool)
         .await
         {

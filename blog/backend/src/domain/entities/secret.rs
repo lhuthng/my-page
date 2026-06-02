@@ -14,6 +14,6 @@ impl Claims {
             .checked_add_signed(Duration::hours(expire_hours))
             .expect("valid timestamp")
             .timestamp() as usize;
-        return Self { user_id, role, exp };
+        Self { user_id, role, exp }
     }
 }

@@ -82,11 +82,11 @@ async fn fetch_snapshots_with_tags(
     let tag_rows = query.fetch_all(pool).await?;
 
     for tag in tag_rows {
-        if let Some(&idx) = posts_map.get(&tag.post_id) {
-            if let Some(post) = snapshots.get_mut(idx) {
-                post.tag_names.push(tag.tag_name);
-                post.tag_slugs.push(tag.tag_slug);
-            }
+        if let Some(&idx) = posts_map.get(&tag.post_id)
+            && let Some(post) = snapshots.get_mut(idx)
+        {
+            post.tag_names.push(tag.tag_name);
+            post.tag_slugs.push(tag.tag_slug);
         }
     }
 

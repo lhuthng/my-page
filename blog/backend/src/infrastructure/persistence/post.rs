@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 use futures::TryFutureExt;
 use once_cell::sync::Lazy;
@@ -12,11 +12,11 @@ use crate::{
     application::{
         commands::post::{
             CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand, GetDetailedPostsCommand,
-            GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand,
-            GetPostsByTagCommand, GetRelatedPostsCommand, NewPostCommand,
-            PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
-            PushNewLikeCommand, PushNewViewCommand, SearchPostCommand, SearchTagsCommand,
-            SetFeaturedPostCommand, SetRelatedPostsCommand, UpdatePostCommand,
+            GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand, GetPostsByTagCommand,
+            GetRelatedPostsCommand, NewPostCommand, PostNewAnynymouseCommentCommand,
+            PostNewCommentCommand, PublishCommand, PushNewLikeCommand, PushNewViewCommand,
+            SearchPostCommand, SearchTagsCommand, SetFeaturedPostCommand, SetRelatedPostsCommand,
+            UpdatePostCommand,
         },
         services::post::PostService,
     },
@@ -114,6 +114,7 @@ pub struct PostSearchRow {
     pub title: String,
     pub slug: String,
     pub cover_image_url: Option<String>,
+    #[allow(dead_code)]
     pub score: i32,
 }
 
@@ -129,6 +130,7 @@ pub struct TagSummaryRow {
     pub name: String,
     pub slug: String,
     pub post_count: i64,
+    #[allow(dead_code)]
     pub score: i32,
 }
 
@@ -160,7 +162,10 @@ pub struct PostDetailsRow {
 }
 
 impl PostServiceImpl {
-    async fn hydrate_post_rows(&self, post_rows: Vec<PostRow>) -> Result<Vec<PostSnapshot>, PostError> {
+    async fn hydrate_post_rows(
+        &self,
+        post_rows: Vec<PostRow>,
+    ) -> Result<Vec<PostSnapshot>, PostError> {
         if post_rows.is_empty() {
             return Ok(vec![]);
         }
@@ -195,11 +200,11 @@ impl PostServiceImpl {
         let tag_rows = query.fetch_all(&self.pool).await?;
 
         for tag_row in tag_rows {
-            if let Some(index) = posts_map.get(&tag_row.post_id) {
-                if let Some(post) = snapshots.get_mut(*index) {
-                    post.tag_names.push(tag_row.tag_name);
-                    post.tag_slugs.push(tag_row.tag_slug);
-                }
+            if let Some(index) = posts_map.get(&tag_row.post_id)
+                && let Some(post) = snapshots.get_mut(*index)
+            {
+                post.tag_names.push(tag_row.tag_name);
+                post.tag_slugs.push(tag_row.tag_slug);
             }
         }
 
@@ -279,7 +284,7 @@ impl PostService for PostServiceImpl {
     }
     async fn get_categories(
         &self,
-        cmd: GetCategoriesCommand,
+        _cmd: GetCategoriesCommand,
     ) -> Result<Vec<CategoryResult>, PostError> {
         let results: Vec<CategoryResult> = sqlx::query_as::<_, (String, String)>(
             r#"
@@ -304,7 +309,7 @@ impl PostService for PostServiceImpl {
             RETURNING id
             "#,
         )
-        .bind(&cmd.user_id)
+        .bind(cmd.user_id)
         .bind(&cmd.title)
         .bind(&cmd.slug)
         .bind(&cmd.excerpt)
@@ -332,7 +337,7 @@ impl PostService for PostServiceImpl {
             );
 
             let mut query = sqlx::query_as::<_, (i64, String)>(&sequel);
-            for (short_name, _) in &cmd.media_usage {
+            for short_name in cmd.media_usage.keys() {
                 query = query.bind(short_name);
             }
 
@@ -596,7 +601,7 @@ impl PostService for PostServiceImpl {
                 cmd.draft
             );
 
-            query = query.bind(&cmd.post_id);
+            query = query.bind(cmd.post_id);
 
             query.execute(&mut *tx).await?;
         }
@@ -607,7 +612,7 @@ impl PostService for PostServiceImpl {
                 WHERE post_id = ?
                 "#,
             )
-            .bind(&cmd.post_id)
+            .bind(cmd.post_id)
             .execute(&mut *tx)
             .await?;
 
@@ -628,7 +633,7 @@ impl PostService for PostServiceImpl {
                 );
 
                 let mut query = sqlx::query_as::<_, (i64, String)>(&sequel);
-                for (short_name, _) in media_usage {
+                for short_name in media_usage.keys() {
                     query = query.bind(short_name);
                 }
 
@@ -650,7 +655,7 @@ impl PostService for PostServiceImpl {
                     let code = media_usage.get(&short_name).ok_or_else(|| {
                         PostError::UploadFailed(format!("Failed to map {}", short_name))
                     })?;
-                    query = query.bind(&cmd.post_id).bind(medium_id).bind(code);
+                    query = query.bind(cmd.post_id).bind(medium_id).bind(code);
                 }
 
                 query.execute(&mut *tx).await?;
@@ -663,7 +668,7 @@ impl PostService for PostServiceImpl {
                 WHERE post_id = ?
                 "#,
             )
-            .bind(&cmd.post_id)
+            .bind(cmd.post_id)
             .execute(&mut *tx)
             .await?;
 
@@ -716,7 +721,7 @@ impl PostService for PostServiceImpl {
                     WHERE post_id = ?
                     "#,
                 )
-                .bind(&cmd.post_id)
+                .bind(cmd.post_id)
                 .execute(&mut *tx)
                 .await?;
 
@@ -736,7 +741,7 @@ impl PostService for PostServiceImpl {
 
                 let mut query = sqlx::query(&sql);
                 for tag_id in tag_ids {
-                    query = query.bind(&cmd.post_id).bind(tag_id);
+                    query = query.bind(cmd.post_id).bind(tag_id);
                 }
 
                 query.execute(&mut *tx).await?;
@@ -754,7 +759,7 @@ impl PostService for PostServiceImpl {
                 WHERE user_id = ? AND slug = ?
                 "#,
             )
-            .bind(&id)
+            .bind(id)
             .bind(&cmd.slug)
             .fetch_optional(&self.pool)
             .await?;
@@ -799,7 +804,7 @@ impl PostService for PostServiceImpl {
             WHERE post_media_usages.post_id = ?
             "#,
         )
-        .bind(&post_id)
+        .bind(post_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -837,7 +842,7 @@ impl PostService for PostServiceImpl {
             WHERE post_id = ?
             "#,
         )
-        .bind(&post_id)
+        .bind(post_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -851,7 +856,7 @@ impl PostService for PostServiceImpl {
             LIMIT 1
             "#,
         )
-        .bind(&post_id)
+        .bind(post_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -870,8 +875,8 @@ impl PostService for PostServiceImpl {
                 LIMIT 1
                 "#,
             )
-            .bind(&id)
-            .bind(&number)
+            .bind(id)
+            .bind(number)
             .fetch_optional(&self.pool)
             .await?;
 
@@ -896,8 +901,8 @@ impl PostService for PostServiceImpl {
                 LIMIT 1
                 "#,
             )
-            .bind(&id)
-            .bind(&number)
+            .bind(id)
+            .bind(number)
             .fetch_optional(&self.pool)
             .await?;
 
@@ -945,8 +950,8 @@ impl PostService for PostServiceImpl {
             WHERE id = ? AND user_id = ?
             "#,
         )
-        .bind(&cmd.post_id)
-        .bind(&cmd.user_id)
+        .bind(cmd.post_id)
+        .bind(cmd.user_id)
         .fetch_optional(&mut *tx)
         .map_err(|e| PostError::InternalError(e.to_string()))
         .await?
@@ -1020,14 +1025,14 @@ impl PostService for PostServiceImpl {
             WHERE id = ?;
             "#,
         )
-        .bind(&cmd.post_id)
+        .bind(cmd.post_id)
         .fetch_one(&self.pool)
         .await?;
 
-        if let Some(user_id) = cmd.required_author_id {
-            if user_id != post_row.user_id {
-                return Err(PostError::Forbidden);
-            }
+        if let Some(user_id) = cmd.required_author_id
+            && user_id != post_row.user_id
+        {
+            return Err(PostError::Forbidden);
         }
 
         let tag_rows = sqlx::query_as::<_, TagRow>(
@@ -1038,7 +1043,7 @@ impl PostService for PostServiceImpl {
             WHERE post_id = ?
             "#,
         )
-        .bind(&post_row.post_id)
+        .bind(post_row.post_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -1051,7 +1056,7 @@ impl PostService for PostServiceImpl {
                 WHERE id = ?
                 "#,
             )
-            .bind(&cover_id)
+            .bind(cover_id)
             .fetch_optional(&self.pool)
             .await?;
         }
@@ -1067,7 +1072,7 @@ impl PostService for PostServiceImpl {
                 WHERE series.id = ?
                 "#,
             )
-            .bind(&series_id)
+            .bind(series_id)
             .fetch_one(&self.pool)
             .await?;
 
@@ -1083,7 +1088,7 @@ impl PostService for PostServiceImpl {
             WHERE post_media_usages.post_id = ?
             "#,
         )
-        .bind(&post_row.post_id)
+        .bind(post_row.post_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -1167,9 +1172,9 @@ impl PostService for PostServiceImpl {
             RETURNING id
             "#,
         )
-        .bind(&cmd.post_id)
-        .bind(&cmd.user_id)
-        .bind(&cmd.parent_id)
+        .bind(cmd.post_id)
+        .bind(cmd.user_id)
+        .bind(cmd.parent_id)
         .bind(&cmd.content)
         .fetch_one(&mut *tx)
         .await?;
@@ -1187,27 +1192,27 @@ impl PostService for PostServiceImpl {
             .await?
             .flatten();
 
-            if let Some(recipient_user_id) = recipient_user_id {
-                if recipient_user_id != cmd.user_id {
-                    sqlx::query(
-                        r#"
-                        INSERT INTO notifications (
-                            recipient_user_id,
-                            actor_user_id,
-                            post_id,
-                            comment_id,
-                            type
-                        )
-                        VALUES (?, ?, ?, ?, 'reply')
-                        "#,
+            if let Some(recipient_user_id) = recipient_user_id
+                && recipient_user_id != cmd.user_id
+            {
+                sqlx::query(
+                    r#"
+                    INSERT INTO notifications (
+                        recipient_user_id,
+                        actor_user_id,
+                        post_id,
+                        comment_id,
+                        type
                     )
-                    .bind(recipient_user_id)
-                    .bind(cmd.user_id)
-                    .bind(cmd.post_id)
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await?;
-                }
+                    VALUES (?, ?, ?, ?, 'reply')
+                    "#,
+                )
+                .bind(recipient_user_id)
+                .bind(cmd.user_id)
+                .bind(cmd.post_id)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
             }
         }
 
@@ -1275,8 +1280,8 @@ impl PostService for PostServiceImpl {
             RETURNING id
             "#,
         )
-        .bind(&cmd.post_id)
-        .bind(&cmd.parent_id)
+        .bind(cmd.post_id)
+        .bind(cmd.parent_id)
         .bind(&cmd.content)
         .fetch_one(&mut *tx)
         .await?;
@@ -1375,7 +1380,7 @@ impl PostService for PostServiceImpl {
                     i64,
                 ),
             >(&sequel)
-            .bind(&cmd.post_id)
+            .bind(cmd.post_id)
             .bind(parent_id);
 
             if let Some(before) = &cmd.before {
@@ -1393,7 +1398,17 @@ impl PostService for PostServiceImpl {
             let comments = comment_rows
                 .into_iter()
                 .map(
-                    |(id, parent_id, content, created_at, username, display_name, avatar_url, user_role, direct_reply_count)| {
+                    |(
+                        id,
+                        parent_id,
+                        content,
+                        created_at,
+                        username,
+                        display_name,
+                        avatar_url,
+                        user_role,
+                        direct_reply_count,
+                    )| {
                         Comment {
                             id,
                             parent_id,
@@ -1457,7 +1472,7 @@ impl PostService for PostServiceImpl {
                 i64,
             ),
         >(&sequel)
-        .bind(&cmd.post_id);
+        .bind(cmd.post_id);
 
         if let Some(before) = &cmd.before {
             query = query.bind(before)
@@ -1474,7 +1489,17 @@ impl PostService for PostServiceImpl {
         let comments = comment_rows
             .into_iter()
             .map(
-                |(id, parent_id, content, created_at, username, display_name, avatar_url, user_role, direct_reply_count)| {
+                |(
+                    id,
+                    parent_id,
+                    content,
+                    created_at,
+                    username,
+                    display_name,
+                    avatar_url,
+                    user_role,
+                    direct_reply_count,
+                )| {
                     Comment {
                         id,
                         parent_id,
@@ -1553,10 +1578,7 @@ impl PostService for PostServiceImpl {
             .collect())
     }
 
-    async fn set_related_posts(
-        &self,
-        cmd: SetRelatedPostsCommand,
-    ) -> Result<(), PostError> {
+    async fn set_related_posts(&self, cmd: SetRelatedPostsCommand) -> Result<(), PostError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query("DELETE FROM related_posts WHERE post_id = ?")
@@ -1580,10 +1602,7 @@ impl PostService for PostServiceImpl {
         Ok(())
     }
 
-    async fn set_post_featured(
-        &self,
-        cmd: SetFeaturedPostCommand,
-    ) -> Result<(), PostError> {
+    async fn set_post_featured(&self, cmd: SetFeaturedPostCommand) -> Result<(), PostError> {
         let is_featured_val = if cmd.is_featured { 1 } else { 0 };
         sqlx::query(
             r#"

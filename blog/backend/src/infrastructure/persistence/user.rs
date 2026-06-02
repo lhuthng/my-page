@@ -53,6 +53,7 @@ struct UserSearchRow {
     display_name: String,
     role: String,
     avatar_url: Option<String>,
+    #[allow(dead_code)]
     score: i32,
 }
 
@@ -87,7 +88,7 @@ impl UserService for UserServiceImpl {
 			WHERE user_id = ?
 			"#,
         )
-        .bind(&cmd.user_id)
+        .bind(cmd.user_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -101,16 +102,16 @@ impl UserService for UserServiceImpl {
     async fn change_details(&self, cmd: ChangeDetailsCommand) -> Result<(), UserError> {
         let mut tx = self.pool.begin().await?;
 
-        if cmd.bio == None && cmd.display_name == None {
+        if cmd.bio.is_none() && cmd.display_name.is_none() {
             return Ok(());
         }
 
         let mut values: Vec<&str> = vec![];
 
-        if let Some(_) = cmd.display_name {
+        if cmd.display_name.is_some() {
             values.push("display_name = ?");
         }
-        if let Some(_) = cmd.bio {
+        if cmd.bio.is_some() {
             values.push("bio = ?");
         }
 
@@ -133,7 +134,7 @@ impl UserService for UserServiceImpl {
             query = query.bind(bio);
         }
 
-        query.bind(&cmd.user_id).execute(&mut *tx).await?;
+        query.bind(cmd.user_id).execute(&mut *tx).await?;
 
         tx.commit().await?;
 
@@ -259,13 +260,13 @@ impl UserService for UserServiceImpl {
 
         let post_rows = sqlx::query_as::<_, PostRow>(&sql)
             .bind(&cmd.username)
-            .bind(&cmd.limit)
-            .bind(&cmd.offset)
+            .bind(cmd.limit)
+            .bind(cmd.offset)
             .fetch_all(&self.pool)
             .await
             .map_err(|e| UserError::InternalError(e.to_string()))?;
 
-        if post_rows.len() == 0 {
+        if post_rows.is_empty() {
             return Ok(vec![]);
         }
 
@@ -293,25 +294,28 @@ impl UserService for UserServiceImpl {
 
         for post_row in post_rows {
             posts_map.insert(post_row.post_id, posts.len());
-            query = query.bind(post_row.post_id.clone());
+            query = query.bind(post_row.post_id);
             posts.push(post_row.into_snapshot(vec![], vec![]));
         }
 
         let tag_rows = query.fetch_all(&self.pool).await?;
 
         for tag_row in tag_rows {
-            if let Some(index) = posts_map.get_mut(&tag_row.post_id) {
-                if let Some(post) = posts.get_mut(*index) {
-                    post.tag_names.push(tag_row.tag_name);
-                    post.tag_slugs.push(tag_row.tag_slug);
-                }
+            if let Some(index) = posts_map.get_mut(&tag_row.post_id)
+                && let Some(post) = posts.get_mut(*index)
+            {
+                post.tag_names.push(tag_row.tag_name);
+                post.tag_slugs.push(tag_row.tag_slug);
             }
         }
 
         Ok(posts)
     }
 
-    async fn get_latest_comments(&self, cmd: GetLatestCommentsCommand) -> Result<Vec<LatestComment>, UserError> {
+    async fn get_latest_comments(
+        &self,
+        cmd: GetLatestCommentsCommand,
+    ) -> Result<Vec<LatestComment>, UserError> {
         let rows = sqlx::query_as::<_, LatestCommentRow>(
             r#"
             SELECT c.id,
@@ -334,8 +338,8 @@ impl UserService for UserServiceImpl {
             "#,
         )
         .bind(&cmd.username)
-        .bind(&cmd.limit)
-        .bind(&cmd.offset)
+        .bind(cmd.limit)
+        .bind(cmd.offset)
         .fetch_all(&self.pool)
         .await?;
 

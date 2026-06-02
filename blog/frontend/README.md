@@ -31,11 +31,11 @@ Three distinct paths depending on what's being requested:
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `API_URL` | Backend URL for server-side calls. In Docker: `http://backend:3000`. Locally: `http://localhost:3000`. Never exposed to the browser. |
+| Variable         | Description                                                                                                                                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_URL`        | Backend URL for server-side calls. In Docker: `http://backend:3000`. Locally: `http://localhost:3000`. Never exposed to the browser.                                                                           |
 | `BACKEND_ORIGIN` | Public origin of the backend (e.g. `https://blog.huuthangle.site`). Tells `fixClientRoute()` to build direct browser-facing media URLs. Optional — omit it and media falls back to the `/api/media/...` proxy. |
-| `PORT` | Port the SvelteKit server listens on. Set to `8080` in `docker-compose.yml`. |
+| `PORT`           | Port the SvelteKit server listens on. Set to `8080` in `docker-compose.yml`.                                                                                                                                   |
 
 See `example.env` for a starting point.
 
