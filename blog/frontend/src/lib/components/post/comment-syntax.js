@@ -3,7 +3,7 @@ export const COMMENT_COMMANDS = {
     GIF: 'gif'
 };
 
-const commandPattern = /\/(kao|gif)(?:\s+(\S*))?$/;
+const commandPattern = /\/(kao|gif)\s+(\S*)$/;
 
 export function getActiveCommentCommand(value, caret) {
     if (typeof value !== 'string') return null;
@@ -24,7 +24,6 @@ export function getActiveCommentCommand(value, caret) {
     const relativeStart = match.index ?? 0;
     const start = lineStart + relativeStart;
 
-    // replaceEnd: extend to end of current word after caret (no paren needed)
     let replaceEnd = safeCaret;
     const afterCaret = value.slice(safeCaret);
     const nextBreak = afterCaret.search(/[\s\n]/);
