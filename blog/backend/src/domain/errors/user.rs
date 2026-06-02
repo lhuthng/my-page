@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use tracing::error;
 
+#[allow(dead_code)]
 pub enum UserError {
     NotFound,
     AlreadyExists,

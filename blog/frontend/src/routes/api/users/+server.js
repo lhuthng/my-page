@@ -1,22 +1,22 @@
-import { fixClientRoute, proxyFallback } from "$lib/server/proxy";
+import { fixClientRoute, proxyFallback } from '$lib/server/proxy';
 
 export async function GET({ request, params, fetch, url }) {
-    const res = await proxyFallback({
-        request,
-        params: { path: "users" },
-        search: url.search,
-    });
+	const res = await proxyFallback({
+		request,
+		params: { path: 'users' },
+		search: url.search
+	});
 
-    if (!res.ok) {
-        const text = await res.text();
-        return new Response(text, { status: res.status });
-    }
+	if (!res.ok) {
+		const text = await res.text();
+		return new Response(text, { status: res.status });
+	}
 
-    const { users } = await res.json();
+	const { users } = await res.json();
 
-    users.forEach((user) => {
-        user.avatar_url = fixClientRoute(user.avatar_url);
-    });
+	users.forEach((user) => {
+		user.avatar_url = fixClientRoute(user.avatar_url);
+	});
 
-    return new Response(JSON.stringify({ users }), { status: 200 });
+	return new Response(JSON.stringify({ users }), { status: 200 });
 }

@@ -52,7 +52,13 @@ pub trait PostService {
     async fn get_posts_by_tag(
         &self,
         cmd: commands::post::GetPostsByTagCommand,
-    ) -> Result<(entities::post::TagSummary, Vec<entities::post::PostSnapshot>), errors::post::PostError>;
+    ) -> Result<
+        (
+            entities::post::TagSummary,
+            Vec<entities::post::PostSnapshot>,
+        ),
+        errors::post::PostError,
+    >;
     async fn get_comments(
         &self,
         cmd: commands::post::GetCommentsCommand,

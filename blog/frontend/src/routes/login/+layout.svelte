@@ -1,9 +1,9 @@
 <script>
-  let { children } = $props();
+	let { children } = $props();
 </script>
 
 <svelte:head>
-  <meta name="robots" content="noindex, nofollow" />
+	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 {@render children?.()}

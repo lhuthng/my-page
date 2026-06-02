@@ -352,7 +352,7 @@ pub async fn change_details(
         description: payload.description,
     };
 
-    Ok(state.media_service.change_details(cmd).await?)
+    state.media_service.change_details(cmd).await
 }
 
 #[derive(Serialize, Deserialize)]
@@ -388,7 +388,7 @@ pub async fn add_alias(
         alias: payload.alias,
     };
 
-    Ok(state.media_service.add_alias(cmd).await?)
+    state.media_service.add_alias(cmd).await
 }
 
 #[derive(Deserialize)]
@@ -408,7 +408,7 @@ pub async fn change_alias(
         new_alias: payload.new_alias,
     };
 
-    Ok(state.media_service.change_alias(cmd).await?)
+    state.media_service.change_alias(cmd).await
 }
 
 #[axum::debug_handler]
@@ -418,5 +418,5 @@ pub async fn delete_alias(
 ) -> Result<(), MediaError> {
     let cmd = DeleteAliasCommand { short_name, alias };
 
-    Ok(state.media_service.delete_alias(cmd).await?)
+    state.media_service.delete_alias(cmd).await
 }

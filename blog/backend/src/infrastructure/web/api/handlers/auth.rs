@@ -101,9 +101,7 @@ pub async fn refresh_token(
         .value()
         .to_string();
 
-    let cmd = RefreshAccessTokenCommand {
-        refresh_token: refresh_token,
-    };
+    let cmd = RefreshAccessTokenCommand { refresh_token };
 
     match state
         .auth_service

@@ -14,6 +14,16 @@ frontend:
 ## Run pending migrations (sqlx-cli requires sqlite:// format; override DB_URL for non-default paths)
 DB_URL ?= sqlite://data/blog.db
 
+
+# Code quality
+fmt:
+	cd backend && cargo fmt
+	cd frontend && bun run format
+
+lint:
+	cd backend && cargo clippy -- -D warnings
+	cd frontend && bun run lint
+
 migrate:
 	cd $(BACKEND_DIR) && DATABASE_URL=$(DB_URL) sqlx migrate run
 

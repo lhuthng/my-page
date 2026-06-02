@@ -5,6 +5,7 @@ use axum::{
 use tracing::error;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum MailError {
     InvalidFileType,
     FileTooLarge,

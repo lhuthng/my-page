@@ -15,11 +15,7 @@
 
 {#if commandState.open}
 	<CommentAutocompletePopoverContainer open={commandState.open} top={popoverTop}>
-		<CommentCommandPopoverContent
-			{commandState}
-			{pickCommandItem}
-			{applyKaomojiSuggestion}
-		/>
+		<CommentCommandPopoverContent {commandState} {pickCommandItem} {applyKaomojiSuggestion} />
 	</CommentAutocompletePopoverContainer>
 {:else if mentionState.open}
 	<CommentAutocompletePopoverContainer open={mentionState.open} top={popoverTop} className="py-0">

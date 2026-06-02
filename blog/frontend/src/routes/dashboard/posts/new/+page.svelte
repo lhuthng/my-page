@@ -1,9 +1,9 @@
 <script>
-  import PostEditor from "$lib/components/post/PostEditor.svelte";
+	import PostEditor from '$lib/components/post/PostEditor.svelte';
 
-  const { data } = $props();
+	const { data } = $props();
 </script>
 
 <div class="w-full">
-  <PostEditor series={data.series} />
+	<PostEditor series={data.series} />
 </div>

@@ -16,6 +16,7 @@ pub struct GetUserCommand {
 }
 
 #[derive(serde::Deserialize)]
+#[allow(dead_code)]
 pub struct GetRoleCommand {}
 
 #[derive(serde::Deserialize)]

@@ -7,7 +7,6 @@ use sqlx::{SqlitePool, prelude::FromRow};
 use tokio::fs;
 
 use crate::{
-    infrastructure::persistence::image_convert::convert_to_webp,
     application::{
         commands::media::{
             AddAliasCommand, ChangeAliasCommand, ChangeAvatarCommand, ChangeMediaDetailsCommand,
@@ -21,6 +20,7 @@ use crate::{
         entities::media::{LinkResult, MediaDetailResult, MediaType, MediumDetails},
         errors::media::MediaError,
     },
+    infrastructure::persistence::image_convert::convert_to_webp,
     infrastructure::web::server::MediaConfig,
 };
 
@@ -76,7 +76,7 @@ pub async fn hash_bytes(
     extension: String,
     split: bool,
 ) -> Result<HashData, MediaError> {
-    let hash = format!("{:x}", Sha256::digest(&bytes));
+    let hash = format!("{:x}", Sha256::digest(bytes));
     if hash.len() < 4 {
         return Err(MediaError::InternalError("Hash too short.".to_string()));
     }
@@ -94,13 +94,13 @@ pub async fn hash_bytes(
     })
 }
 
-pub async fn clean_up_files(file_paths: &Vec<PathBuf>) -> Result<(), MediaError> {
-    let futures = file_paths.iter().map(|p| fs::remove_file(p));
+pub async fn clean_up_files(file_paths: &[PathBuf]) -> Result<(), MediaError> {
+    let futures = file_paths.iter().map(fs::remove_file);
     let mut errors: Vec<String> = Vec::new();
     let results = join_all(futures).await;
     for result in results {
         if let Some(e) = result.err() {
-            errors.push(format!("{}", e.to_string()));
+            errors.push(e.to_string());
         }
     }
     if !errors.is_empty() {
@@ -141,7 +141,8 @@ impl MediaService for MediaServiceImpl {
         if !self.is_supported(&cmd.content_type, config).await? {
             return Err(MediaError::InvalidFileType);
         }
-        let (bytes, content_type, file_name) = convert_to_webp(cmd.bytes, &cmd.content_type, &cmd.file_name)?;
+        let (bytes, content_type, file_name) =
+            convert_to_webp(cmd.bytes, &cmd.content_type, &cmd.file_name)?;
         let extension = MediaType::from_str(&content_type)?.get_extension();
 
         let HashData {
@@ -171,7 +172,7 @@ impl MediaService for MediaServiceImpl {
         .bind(&cmd.short_name)
         .bind(&file_name)
         .bind(&content_type)
-        .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
+        .bind(file_path.to_str().ok_or(MediaError::ExposedInternalError(
             "Failed to get file path".to_string(),
         ))?)
         .bind(size)
@@ -222,7 +223,7 @@ impl MediaService for MediaServiceImpl {
             WHERE users.id = ?
             "#,
         )
-        .bind(&cmd.user_id)
+        .bind(cmd.user_id)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -240,7 +241,7 @@ impl MediaService for MediaServiceImpl {
 
         let extension = MediaType::from_str(&content_type)?.get_extension();
 
-        let root = config.dir.join("avt").join(&cmd.user_id.to_string());
+        let root = config.dir.join("avt").join(cmd.user_id.to_string());
 
         let HashData {
             mut hash,
@@ -258,7 +259,7 @@ impl MediaService for MediaServiceImpl {
 
         let short_name = format!(".avt.{}", cmd.user_id);
 
-        hash = format!(".avt.{}.{}", &cmd.user_id, hash);
+        hash = format!(".avt.{}.{}", cmd.user_id, hash);
 
         match sqlx::query_as::<_, (i64,)>(
             r#"
@@ -272,11 +273,11 @@ impl MediaService for MediaServiceImpl {
         .bind(short_name)
         .bind(&filename)
         .bind(&content_type)
-        .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
+        .bind(file_path.to_str().ok_or(MediaError::ExposedInternalError(
             "Failed to get file path".to_string(),
         ))?)
         .bind(size)
-        .bind(&cmd.user_id)
+        .bind(cmd.user_id)
         .fetch_one(&mut *tx)
         .await
         {
@@ -289,7 +290,7 @@ impl MediaService for MediaServiceImpl {
                     "#,
                 )
                 .bind(image_id)
-                .bind(&cmd.user_id)
+                .bind(cmd.user_id)
                 .execute(&mut *tx)
                 .await?;
             }
@@ -307,7 +308,7 @@ impl MediaService for MediaServiceImpl {
         tx.commit().await?;
 
         if let (_, Some(hash), Some(file_type)) = hash_row {
-            let hash = match hash.split('.').skip(3).next() {
+            let hash = match hash.split('.').nth(3) {
                 Some(hash) => hash.to_string(),
                 None => {
                     return Err(MediaError::UploadFailed(
@@ -316,7 +317,7 @@ impl MediaService for MediaServiceImpl {
                 }
             };
 
-            let extension = match file_type.split('/').skip(1).next() {
+            let extension = match file_type.split('/').nth(1) {
                 Some(extension) => format!(".{}", extension),
                 None => {
                     return Err(MediaError::UploadFailed(
@@ -367,8 +368,8 @@ impl MediaService for MediaServiceImpl {
             )
             "#,
         )
-        .bind(&cmd.post_id)
-        .bind(&cmd.user_id)
+        .bind(cmd.post_id)
+        .bind(cmd.user_id)
         .fetch_one(&mut *tx)
         .await?;
         if !exist {
@@ -383,7 +384,7 @@ impl MediaService for MediaServiceImpl {
             WHERE posts.id = ?
             "#,
         )
-        .bind(&cmd.post_id)
+        .bind(cmd.post_id)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -401,7 +402,7 @@ impl MediaService for MediaServiceImpl {
 
         let extension = MediaType::from_str(&content_type)?.get_extension();
 
-        let root = config.dir.join("post").join(&cmd.user_id.to_string());
+        let root = config.dir.join("post").join(cmd.user_id.to_string());
 
         let HashData {
             mut hash,
@@ -419,7 +420,7 @@ impl MediaService for MediaServiceImpl {
 
         let short_name = format!(".post.{}", cmd.post_id);
 
-        hash = format!(".post.{}.{}", &cmd.post_id, hash);
+        hash = format!(".post.{}.{}", cmd.post_id, hash);
 
         match sqlx::query_as::<_, (i64,)>(
             r#"
@@ -433,11 +434,11 @@ impl MediaService for MediaServiceImpl {
         .bind(short_name)
         .bind(&filename)
         .bind(&content_type)
-        .bind(&file_path.to_str().ok_or(MediaError::ExposedInternalError(
+        .bind(file_path.to_str().ok_or(MediaError::ExposedInternalError(
             "Failed to get file path".to_string(),
         ))?)
         .bind(size)
-        .bind(&cmd.user_id)
+        .bind(cmd.user_id)
         .fetch_one(&mut *tx)
         .await
         {
@@ -450,7 +451,7 @@ impl MediaService for MediaServiceImpl {
                     "#,
                 )
                 .bind(image_id)
-                .bind(&cmd.post_id)
+                .bind(cmd.post_id)
                 .execute(&mut *tx)
                 .await?;
             }
@@ -468,7 +469,7 @@ impl MediaService for MediaServiceImpl {
         tx.commit().await?;
 
         if let (_, Some(hash), Some(file_type)) = hash_row {
-            let hash = match hash.split('.').skip(3).next() {
+            let hash = match hash.split('.').nth(3) {
                 Some(hash) => hash.to_string(),
                 None => {
                     return Err(MediaError::UploadFailed(
@@ -477,7 +478,7 @@ impl MediaService for MediaServiceImpl {
                 }
             };
 
-            let extension = match file_type.split('/').skip(1).next() {
+            let extension = match file_type.split('/').nth(1) {
                 Some(extension) => format!(".{}", extension),
                 None => {
                     return Err(MediaError::UploadFailed(
@@ -509,18 +510,15 @@ impl MediaService for MediaServiceImpl {
         let mut cmd = cmd;
         for i in 0..cmd.number_of_files {
             let bytes = cmd.bytes_list[i].clone();
-            let (new_bytes, new_content_type, new_filename) = convert_to_webp(
-                bytes,
-                &cmd.content_types[i],
-                &cmd.file_names[i],
-            )?;
+            let (new_bytes, new_content_type, new_filename) =
+                convert_to_webp(bytes, &cmd.content_types[i], &cmd.file_names[i])?;
             cmd.bytes_list[i] = new_bytes;
             cmd.content_types[i] = new_content_type;
             cmd.file_names[i] = new_filename;
         }
 
         for content_type in &cmd.content_types {
-            if !self.is_supported(&content_type, config).await? {
+            if !self.is_supported(content_type, config).await? {
                 println!("InvalidFileType?");
                 return Err(MediaError::InvalidFileType);
             }
@@ -596,19 +594,14 @@ impl MediaService for MediaServiceImpl {
         }
 
         if let Some(error) = got_error {
-            if let Err(e) = clean_up_files(&file_paths).await {
-                return Err(e);
-            }
-
+            clean_up_files(&file_paths).await?;
             return Err(error);
         }
 
         match tx.commit().await {
             Ok(()) => Ok(()),
             Err(e) => {
-                if let Err(e) = clean_up_files(&file_paths).await {
-                    return Err(e);
-                }
+                clean_up_files(&file_paths).await?;
                 return Err(MediaError::from(e));
             }
         }
@@ -659,7 +652,7 @@ impl MediaService for MediaServiceImpl {
             WHERE media_id = ?
             "#,
         )
-        .bind(&row.0)
+        .bind(row.0)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| MediaError::InternalError(e.to_string()))?;
@@ -698,8 +691,8 @@ impl MediaService for MediaServiceImpl {
             "#,
         )
         .bind(&cmd.term)
-        .bind(&cmd.size)
-        .bind(&cmd.skip)
+        .bind(cmd.size)
+        .bind(cmd.skip)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| MediaError::InternalError(e.to_string()))?;

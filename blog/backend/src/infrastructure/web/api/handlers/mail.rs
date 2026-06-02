@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{Json, response::IntoResponse};
 use lettre::{Message, SmtpTransport, Transport, transport::smtp::client::Tls};
 use serde::Deserialize;

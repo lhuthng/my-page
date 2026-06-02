@@ -4,6 +4,7 @@ pub struct CheckSlugCommand {
     pub post_slug: String,
 }
 
+#[allow(dead_code)]
 pub struct NewPostCommand {
     pub user_id: i64,
     pub title: String,
@@ -15,6 +16,7 @@ pub struct NewPostCommand {
     pub media_usage: HashMap<String, i64>,
 }
 
+#[allow(dead_code)]
 pub struct UpdatePostCommand {
     pub user_id: i64,
     pub post_id: i64,
@@ -104,6 +106,7 @@ pub struct GetRelatedPostsCommand {
     pub post_id: i64,
 }
 
+#[allow(dead_code)]
 pub struct SetRelatedPostsCommand {
     pub user_id: i64,
     pub post_id: i64,
@@ -114,4 +117,3 @@ pub struct SetFeaturedPostCommand {
     pub post_id: i64,
     pub is_featured: bool,
 }
-

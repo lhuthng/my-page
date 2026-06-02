@@ -1,280 +1,275 @@
-import App from "$lib/components/App.svelte";
-import { mount, unmount } from "svelte";
-import hljs from "highlight.js";
-import ImagePreviewer from "$lib/components/ImagePreviewer.svelte";
-import { mbody } from "$lib/client/misc";
-import { get } from "svelte/store";
+import App from '$lib/components/App.svelte';
+import { mount, unmount } from 'svelte';
+import hljs from 'highlight.js';
+import ImagePreviewer from '$lib/components/ImagePreviewer.svelte';
+import { mbody } from '$lib/client/misc';
+import { get } from 'svelte/store';
 
 export function pluginExtend(root) {
-  const appContainers = root.querySelectorAll(".app-container");
-  appContainers.forEach((container) => {
-    if (container.__mounted) return;
-    container.__mounted = true;
+	const appContainers = root.querySelectorAll('.app-container');
+	appContainers.forEach((container) => {
+		if (container.__mounted) return;
+		container.__mounted = true;
 
-    const { name, type, width, height, config, temp } = container.dataset;
+		const { name, type, width, height, config, temp } = container.dataset;
 
-    mount(App, {
-      target: container,
-      props: { name, type, width, height, config, temp },
-    });
-  });
+		mount(App, {
+			target: container,
+			props: { name, type, width, height, config, temp }
+		});
+	});
 
-  const revealContainers = root.querySelectorAll(".reveal");
-  revealContainers.forEach((container) => {
-    if (container.__mounted) return;
-    container.__mounted = true;
+	const revealContainers = root.querySelectorAll('.reveal');
+	revealContainers.forEach((container) => {
+		if (container.__mounted) return;
+		container.__mounted = true;
 
-    const button = container.querySelector(".reveal-tooltip");
-    const originalText = button.textContent;
+		const button = container.querySelector('.reveal-tooltip');
+		const originalText = button.textContent;
 
-    button.addEventListener("click", () => {
-      container.classList.toggle("toggled");
-      const isToggled = container.classList.contains("toggled");
-      button.textContent = isToggled ? "Click to hide" : originalText;
-    });
-  });
+		button.addEventListener('click', () => {
+			container.classList.toggle('toggled');
+			const isToggled = container.classList.contains('toggled');
+			button.textContent = isToggled ? 'Click to hide' : originalText;
+		});
+	});
 
-  const audioSyncContainers = root.querySelectorAll(".audio-sync-container");
-  audioSyncContainers.forEach((container) => {
-    if (container.__mounted) return;
-    container.__mounted = true;
+	const audioSyncContainers = root.querySelectorAll('.audio-sync-container');
+	audioSyncContainers.forEach((container) => {
+		if (container.__mounted) return;
+		container.__mounted = true;
 
-    const audios = container.querySelectorAll(".audio-container audio");
-    let isSyncing = false;
+		const audios = container.querySelectorAll('.audio-container audio');
+		let isSyncing = false;
 
-    const syncPlay = () => {
-      audios.forEach((audio) => {
-        audio.play();
-      });
-    };
+		const syncPlay = () => {
+			audios.forEach((audio) => {
+				audio.play();
+			});
+		};
 
-    const syncPause = () => {
-      if (isSyncing) return;
-      audios.forEach((audio) => {
-        audio.pause();
-      });
-    };
+		const syncPause = () => {
+			if (isSyncing) return;
+			audios.forEach((audio) => {
+				audio.pause();
+			});
+		};
 
-    const syncTime = (time) => {
-      audios.forEach((audio) => {
-        audio.currentTime = time;
-      });
-    };
+		const syncTime = (time) => {
+			audios.forEach((audio) => {
+				audio.currentTime = time;
+			});
+		};
 
-    audios.forEach((audio) => {
-      audio.addEventListener("play", syncPlay);
-      audio.addEventListener("pause", syncPause);
-    });
+		audios.forEach((audio) => {
+			audio.addEventListener('play', syncPlay);
+			audio.addEventListener('pause', syncPause);
+		});
 
-    const duoBtn = document.createElement("div");
-    duoBtn.className = "mx-auto w-fit duo-btn duo-dark";
-    const btn = document.createElement("button");
-    btn.textContent = "Sync Time";
-    duoBtn.append(btn);
-    container.appendChild(duoBtn);
-    btn.addEventListener("click", () => {
-      let avg = 0;
-      audios.forEach((audio) => (avg += audio.currentTime / audios.length));
-      syncTime(avg);
-    });
-  });
+		const duoBtn = document.createElement('div');
+		duoBtn.className = 'mx-auto w-fit duo-btn duo-dark';
+		const btn = document.createElement('button');
+		btn.textContent = 'Sync Time';
+		duoBtn.append(btn);
+		container.appendChild(duoBtn);
+		btn.addEventListener('click', () => {
+			let avg = 0;
+			audios.forEach((audio) => (avg += audio.currentTime / audios.length));
+			syncTime(avg);
+		});
+	});
 
-  const expandableImageContainers = root.querySelectorAll("img.expandable");
-  expandableImageContainers.forEach((container) => {
-    if (container.__mounted) return;
-    container.__mounted = true;
+	const expandableImageContainers = root.querySelectorAll('img.expandable');
+	expandableImageContainers.forEach((container) => {
+		if (container.__mounted) return;
+		container.__mounted = true;
 
-    let opened = false;
-    container.addEventListener("click", () => {
-      if (opened) return;
-      opened = true;
+		let opened = false;
+		container.addEventListener('click', () => {
+			if (opened) return;
+			opened = true;
 
-      let previewer = mount(ImagePreviewer, {
-        target: get(mbody),
-        props: {
-          visible: true,
-          origin: container,
-          onClose: () => {
-            unmount(previewer, { outro: true });
-            opened = false;
-          },
-        },
-      });
-    });
-  });
+			let previewer = mount(ImagePreviewer, {
+				target: get(mbody),
+				props: {
+					visible: true,
+					origin: container,
+					onClose: () => {
+						unmount(previewer, { outro: true });
+						opened = false;
+					}
+				}
+			});
+		});
+	});
 }
 
 export function slugify(text) {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
+	return text
+		.toLowerCase()
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.replace(/[^a-z0-9\s-]/g, '')
+		.trim()
+		.replace(/\s+/g, '-')
+		.replace(/-+/g, '-');
 }
 
 export function findHeaders(root) {
-  const headers = root.querySelectorAll("h1, h2, h3");
-  const next = { H1: "H2", H2: "H3", H3: "H4" };
-  const result = [];
-  let queue = [{ tagName: "H1", target: result }];
-  headers.forEach(({ id, tagName, textContent }) => {
-    let count = 0;
-    const max = 100;
+	const headers = root.querySelectorAll('h1, h2, h3');
+	const next = { H1: 'H2', H2: 'H3', H3: 'H4' };
+	const result = [];
+	let queue = [{ tagName: 'H1', target: result }];
+	headers.forEach(({ id, tagName, textContent }) => {
+		let count = 0;
+		const max = 100;
 
-    const peek = queue.at(-1);
-    if (tagName == peek.tagName) {
-      peek.target.push({ id, textContent });
-    } else if (tagName > peek.tagName) {
-      let nextName = peek.tagName;
-      count = 0;
-      do {
-        count++;
-        if (count > max) return;
-        nextName = next[nextName];
-        const children = [];
-        queue.at(-1).target.push(children);
-        queue.push({ tagName: nextName, target: children });
-      } while (tagName !== nextName);
-      queue.at(-1).target.push({ id, textContent });
-    } else {
-      while (tagName !== queue.at(-1).tagName) {
-        queue.pop();
-      }
-      queue.at(-1).target.push({ id, textContent });
-    }
-  });
-  return result;
+		const peek = queue.at(-1);
+		if (tagName == peek.tagName) {
+			peek.target.push({ id, textContent });
+		} else if (tagName > peek.tagName) {
+			let nextName = peek.tagName;
+			count = 0;
+			do {
+				count++;
+				if (count > max) return;
+				nextName = next[nextName];
+				const children = [];
+				queue.at(-1).target.push(children);
+				queue.push({ tagName: nextName, target: children });
+			} while (tagName !== nextName);
+			queue.at(-1).target.push({ id, textContent });
+		} else {
+			while (tagName !== queue.at(-1).tagName) {
+				queue.pop();
+			}
+			queue.at(-1).target.push({ id, textContent });
+		}
+	});
+	return result;
 }
 
 export function mediaWithShortcutPlugin(md, options) {
-  const mediaDictionary = options.mediaDictionary || {};
+	const mediaDictionary = options.mediaDictionary || {};
 
-  md.inline.ruler.before("emphasis", "extra", (state, silent) => {
-    const start = state.pos;
-    const src = state.src;
+	md.inline.ruler.before('emphasis', 'extra', (state, silent) => {
+		const start = state.pos;
+		const src = state.src;
 
-    if (src[start] !== "@") return false;
+		if (src[start] !== '@') return false;
 
-    let width, height;
-    let keyStart;
+		let width, height;
+		let keyStart;
 
-    if (src[start + 1] === "(") {
-      const closeParen = src.indexOf(")", start + 2);
-      if (closeParen === -1) return false;
+		if (src[start + 1] === '(') {
+			const closeParen = src.indexOf(')', start + 2);
+			if (closeParen === -1) return false;
 
-      const dim = src.slice(start + 2, closeParen).split("_");
-      if (dim.length === 2) {
-        width = dim[0].trim();
-        height = dim[1].trim();
-      }
-      keyStart = closeParen + 1;
-    } else {
-      keyStart = start + 1;
-    }
+			const dim = src.slice(start + 2, closeParen).split('_');
+			if (dim.length === 2) {
+				width = dim[0].trim();
+				height = dim[1].trim();
+			}
+			keyStart = closeParen + 1;
+		} else {
+			keyStart = start + 1;
+		}
 
-    if (src[keyStart] !== "[") return false;
+		if (src[keyStart] !== '[') return false;
 
-    const closeBracket = src.indexOf("]", keyStart);
-    if (closeBracket === -1) return false;
+		const closeBracket = src.indexOf(']', keyStart);
+		if (closeBracket === -1) return false;
 
-    let tag = undefined;
-    let value = undefined;
+		let tag = undefined;
+		let value = undefined;
 
-    const firstColon = src.indexOf(":", keyStart);
-    if (!(firstColon === -1 || firstColon > closeBracket)) {
-      tag = src.slice(keyStart + 1, firstColon).trim();
-      value = src.slice(firstColon + 1, closeBracket).trim();
-    } else {
-      value = src.slice(keyStart + 1, closeBracket).trim();
-    }
+		const firstColon = src.indexOf(':', keyStart);
+		if (!(firstColon === -1 || firstColon > closeBracket)) {
+			tag = src.slice(keyStart + 1, firstColon).trim();
+			value = src.slice(firstColon + 1, closeBracket).trim();
+		} else {
+			value = src.slice(keyStart + 1, closeBracket).trim();
+		}
 
-    if (tag === "" || value === "") return false;
+		if (tag === '' || value === '') return false;
 
-    if (silent) return false;
+		if (silent) return false;
 
-    const token = state.push("extra", "", 0);
-    token.meta = { width, height, tag, value };
+		const token = state.push('extra', '', 0);
+		token.meta = { width, height, tag, value };
 
-    state.pos = closeBracket + 1;
-    return true;
-  });
+		state.pos = closeBracket + 1;
+		return true;
+	});
 
-  // Renderer
-  md.renderer.rules.extra = (tokens, idx) => {
-    const { width, height, tag, value } = tokens[idx].meta;
-    const style = [];
-    if (width && !isNaN(parseInt(width, 10))) style.push(`width:${width}px`);
-    if (height && !isNaN(parseInt(height, 10)))
-      style.push(`height:${height}px`);
-    const styleAttr = style.length ? ` style="${style.join(";")}"` : "";
-    if (tag === undefined) {
-      return `<img src="https://${value}" ${styleAttr}/>`;
-    } else {
-      const src = mediaDictionary[value];
-      switch (src) {
-        case undefined:
-          return `<span class="missing-image">${value}</span>`;
-        case null:
-          return `<span class="loading-image">${value}</span>`;
-        default: {
-          switch (tag) {
-            case "img":
-              return `<img class="expandable" src="${src}" alt="${value}" ${styleAttr}/>`;
-            case "img-inl":
-              return `<img class="expandable inline-block align-bottom" src="${src}" alt="${value}" ${styleAttr}/>`;
-            case "img-left-float":
-              const floatStyle = style.length
-                ? `style="${style.join(";")}; float: left; margin-right: 5px; margin-bottom: 5px;"`
-                : 'style="float: left; margin-right: 5px; margin-bottom: 5px;"';
+	// Renderer
+	md.renderer.rules.extra = (tokens, idx) => {
+		const { width, height, tag, value } = tokens[idx].meta;
+		const style = [];
+		if (width && !isNaN(parseInt(width, 10))) style.push(`width:${width}px`);
+		if (height && !isNaN(parseInt(height, 10))) style.push(`height:${height}px`);
+		const styleAttr = style.length ? ` style="${style.join(';')}"` : '';
+		if (tag === undefined) {
+			return `<img src="https://${value}" ${styleAttr}/>`;
+		} else {
+			const src = mediaDictionary[value];
+			switch (src) {
+				case undefined:
+					return `<span class="missing-image">${value}</span>`;
+				case null:
+					return `<span class="loading-image">${value}</span>`;
+				default: {
+					switch (tag) {
+						case 'img':
+							return `<img class="expandable" src="${src}" alt="${value}" ${styleAttr}/>`;
+						case 'img-inl':
+							return `<img class="expandable inline-block align-bottom" src="${src}" alt="${value}" ${styleAttr}/>`;
+						case 'img-left-float':
+							const floatStyle = style.length
+								? `style="${style.join(';')}; float: left; margin-right: 5px; margin-bottom: 5px;"`
+								: 'style="float: left; margin-right: 5px; margin-bottom: 5px;"';
 
-              return `<img class="expandable" src="${src}" alt="${value}" ${floatStyle}/>`;
-            case "audio":
-              return `<div class="audio-container"><audio src="${src}" alt="${value}" controls></audio></div>`;
-            case "vid":
-              return `<div class="video-container"><video ${styleAttr} alt="${value}" src="${src}" controls></video></div>`;
-            default:
-              return `<span class="invalid-tag">${tag}-${value}</span>`;
-          }
-        }
-      }
-    }
-  };
+							return `<img class="expandable" src="${src}" alt="${value}" ${floatStyle}/>`;
+						case 'audio':
+							return `<div class="audio-container"><audio src="${src}" alt="${value}" controls></audio></div>`;
+						case 'vid':
+							return `<div class="video-container"><video ${styleAttr} alt="${value}" src="${src}" controls></video></div>`;
+						default:
+							return `<span class="invalid-tag">${tag}-${value}</span>`;
+					}
+				}
+			}
+		}
+	};
 }
 
 export function youtubeBlockPlugin(md) {
-  md.block.ruler.before(
-    "fence",
-    "youtube",
-    (state, startLine, endLine, silent) => {
-      const pos = state.bMarks[startLine] + state.tShift[startLine];
-      const max = state.eMarks[startLine];
-      const line = state.src.slice(pos, max).trim();
+	md.block.ruler.before('fence', 'youtube', (state, startLine, endLine, silent) => {
+		const pos = state.bMarks[startLine] + state.tShift[startLine];
+		const max = state.eMarks[startLine];
+		const line = state.src.slice(pos, max).trim();
 
-      if (!line.startsWith(":::youtube")) return false;
-      if (silent) return true;
+		if (!line.startsWith(':::youtube')) return false;
+		if (silent) return true;
 
-      const parts = line.split(/\s+/);
-      if (parts.length < 2) return false;
+		const parts = line.split(/\s+/);
+		if (parts.length < 2) return false;
 
-      const videoId = parts[1];
-      const width = parts[2] || "560";
-      const height = parts[3] || "315";
+		const videoId = parts[1];
+		const width = parts[2] || '560';
+		const height = parts[3] || '315';
 
-      const token = state.push("youtube_block", "", 0);
-      token.meta = { videoId, width, height };
+		const token = state.push('youtube_block', '', 0);
+		token.meta = { videoId, width, height };
 
-      state.line = startLine + 1;
-      return true;
-    },
-  );
+		state.line = startLine + 1;
+		return true;
+	});
 
-  md.renderer.rules.youtube_block = (tokens, idx) => {
-    const { videoId, width, height } = tokens[idx].meta;
+	md.renderer.rules.youtube_block = (tokens, idx) => {
+		const { videoId, width, height } = tokens[idx].meta;
 
-    return `
+		return `
       <div class="w-full rounded-lg overflow-hidden">
           <iframe
               width="100%"
@@ -286,7 +281,7 @@ export function youtubeBlockPlugin(md) {
           </iframe>
       </div>
     `;
-  };
+	};
 }
 
 /**
@@ -300,48 +295,44 @@ export function youtubeBlockPlugin(md) {
  * :::iframe /some/local/embed 800 450
  */
 export function iframeBlockPlugin(md) {
-  md.block.ruler.before(
-    "fence",
-    "iframe",
-    (state, startLine, endLine, silent) => {
-      const pos = state.bMarks[startLine] + state.tShift[startLine];
-      const max = state.eMarks[startLine];
-      const line = state.src.slice(pos, max).trim();
+	md.block.ruler.before('fence', 'iframe', (state, startLine, endLine, silent) => {
+		const pos = state.bMarks[startLine] + state.tShift[startLine];
+		const max = state.eMarks[startLine];
+		const line = state.src.slice(pos, max).trim();
 
-      if (!line.startsWith(":::iframe")) return false;
-      if (silent) return true;
+		if (!line.startsWith(':::iframe')) return false;
+		if (silent) return true;
 
-      const parts = line.split(/\s+/);
-      if (parts.length < 2) return false;
+		const parts = line.split(/\s+/);
+		if (parts.length < 2) return false;
 
-      // parts[1] is the iframe src, parts[2] and parts[3] are optional width/height
-      const src = parts[1];
-      const width = parts[2] || "100%";
-      const height = parts[3] || "315";
+		// parts[1] is the iframe src, parts[2] and parts[3] are optional width/height
+		const src = parts[1];
+		const width = parts[2] || '100%';
+		const height = parts[3] || '315';
 
-      const token = state.push("iframe_block", "", 0);
-      token.meta = { src, width, height };
+		const token = state.push('iframe_block', '', 0);
+		token.meta = { src, width, height };
 
-      state.line = startLine + 1;
-      return true;
-    },
-  );
+		state.line = startLine + 1;
+		return true;
+	});
 
-  md.renderer.rules.iframe_block = (tokens, idx) => {
-    const { src, width, height } = tokens[idx].meta;
+	md.renderer.rules.iframe_block = (tokens, idx) => {
+		const { src, width, height } = tokens[idx].meta;
 
-    // Basic security: only allow http/https sources
-    if (!src.startsWith("http://") && !src.startsWith("https://")) {
-      return `<p class="text-red-500">Invalid iframe source:</p>`;
-    }
+		// Basic security: only allow http/https sources
+		if (!src.startsWith('http://') && !src.startsWith('https://')) {
+			return `<p class="text-red-500">Invalid iframe source:</p>`;
+		}
 
-    // Ensure src is safely encoded for use in attribute (basic)
-    const escapedSrc = String(src).replace(/"/g, "&quot;");
+		// Ensure src is safely encoded for use in attribute (basic)
+		const escapedSrc = String(src).replace(/"/g, '&quot;');
 
-    // If width is numeric, keep as px; otherwise use as provided (e.g. "100%")
-    const widthAttr = /^\d+$/.test(String(width)) ? `${width}px` : width;
+		// If width is numeric, keep as px; otherwise use as provided (e.g. "100%")
+		const widthAttr = /^\d+$/.test(String(width)) ? `${width}px` : width;
 
-    return `
+		return `
       <div class="w-full rounded-lg custom-scrollbar overflow-hidden ">
         <iframe
           src="${escapedSrc}"
@@ -355,48 +346,48 @@ export function iframeBlockPlugin(md) {
         </iframe>
       </div>
     `;
-  };
+	};
 }
 
 export function appBlockPlugin(md, options) {
-  const mediaDictionary = options?.mediaDictionary || {};
+	const mediaDictionary = options?.mediaDictionary || {};
 
-  md.block.ruler.before("fence", "app", (state, startLine, endLine, silent) => {
-    const pos = state.bMarks[startLine] + state.tShift[startLine];
-    const max = state.eMarks[startLine];
-    const line = state.src.slice(pos, max).trim();
+	md.block.ruler.before('fence', 'app', (state, startLine, endLine, silent) => {
+		const pos = state.bMarks[startLine] + state.tShift[startLine];
+		const max = state.eMarks[startLine];
+		const line = state.src.slice(pos, max).trim();
 
-    if (!line.startsWith(":::app")) return false;
-    if (silent) return true;
+		if (!line.startsWith(':::app')) return false;
+		if (silent) return true;
 
-    const parts = line.split(/\s+/);
-    if (parts.length < 3) return false;
+		const parts = line.split(/\s+/);
+		if (parts.length < 3) return false;
 
-    const type = parts[1];
-    const name = parts[2];
-    const width = !parts[3] || parts[3] === "_" ? "100%" : parts[3];
-    const height = !parts[4] || parts[4] === "_" ? "400px" : parts[4];
-    const rest = parts.slice(5).join("-") || "";
-    const temp = mediaDictionary[name];
+		const type = parts[1];
+		const name = parts[2];
+		const width = !parts[3] || parts[3] === '_' ? '100%' : parts[3];
+		const height = !parts[4] || parts[4] === '_' ? '400px' : parts[4];
+		const rest = parts.slice(5).join('-') || '';
+		const temp = mediaDictionary[name];
 
-    const token = state.push("app_block", "", 0);
-    token.meta = { type, name, width, height, rest, temp };
+		const token = state.push('app_block', '', 0);
+		token.meta = { type, name, width, height, rest, temp };
 
-    state.line = startLine + 1;
-    return true;
-  });
+		state.line = startLine + 1;
+		return true;
+	});
 
-  md.renderer.rules.app_block = (tokens, idx) => {
-    const { type, name, width, height, rest, temp } = tokens[idx].meta;
+	md.renderer.rules.app_block = (tokens, idx) => {
+		const { type, name, width, height, rest, temp } = tokens[idx].meta;
 
-    let dataBlock =
-      `
+		let dataBlock =
+			`
       data-name=${name} data-type=${type} data-width=${width}px data-height=${height}px ` +
-      (rest ? `data-config=${rest} ` : "") +
-      (temp ? `data-temp=${temp} ` : "");
+			(rest ? `data-config=${rest} ` : '') +
+			(temp ? `data-temp=${temp} ` : '');
 
-    // Return an empty div with data attributes
-    return `
+		// Return an empty div with data attributes
+		return `
       <div class="w-full">
         <div
           class="app-container mx-auto"
@@ -405,191 +396,182 @@ export function appBlockPlugin(md, options) {
         </div>\n
       </div>
     `;
-  };
+	};
 }
 
 export function revealPlugin(md) {
-  function render(tokens, idx) {
-    const token = tokens[idx];
+	function render(tokens, idx) {
+		const token = tokens[idx];
 
-    if (token.nesting === 1) {
-      const title =
-        token.info.trim().replace(/^reveal\s*/, "") || "Click to reveal";
-      return (
-        `<div class="reveal">` +
-        `<button class="reveal-tooltip">${md.utils.escapeHtml(title)}</button>` +
-        `<div class="reveal-content">`
-      );
-    }
+		if (token.nesting === 1) {
+			const title = token.info.trim().replace(/^reveal\s*/, '') || 'Click to reveal';
+			return (
+				`<div class="reveal">` +
+				`<button class="reveal-tooltip">${md.utils.escapeHtml(title)}</button>` +
+				`<div class="reveal-content">`
+			);
+		}
 
-    return "</div></div>";
-  }
+		return '</div></div>';
+	}
 
-  md.block.ruler.before(
-    "fence",
-    "reveal",
-    (state, startLine, endLine, silent) => {
-      const startPos = state.bMarks[startLine] + state.tShift[startLine];
-      const maxPos = state.eMarks[startLine];
-      const line = state.src.slice(startPos, maxPos);
+	md.block.ruler.before('fence', 'reveal', (state, startLine, endLine, silent) => {
+		const startPos = state.bMarks[startLine] + state.tShift[startLine];
+		const maxPos = state.eMarks[startLine];
+		const line = state.src.slice(startPos, maxPos);
 
-      if (!line.startsWith(":::< reveal")) return false;
-      if (silent) return true;
+		if (!line.startsWith(':::< reveal')) return false;
+		if (silent) return true;
 
-      let nextLine = startLine + 1;
+		let nextLine = startLine + 1;
 
-      // search for closing "::::"
-      while (nextLine < endLine) {
-        const pos = state.bMarks[nextLine] + state.tShift[nextLine];
-        const max = state.eMarks[nextLine];
-        const l = state.src.slice(pos, max);
+		// search for closing "::::"
+		while (nextLine < endLine) {
+			const pos = state.bMarks[nextLine] + state.tShift[nextLine];
+			const max = state.eMarks[nextLine];
+			const l = state.src.slice(pos, max);
 
-        if (l.trim() === ":::>") break;
-        nextLine++;
-      }
+			if (l.trim() === ':::>') break;
+			nextLine++;
+		}
 
-      const tokenOpen = state.push("reveal_open", "div", 1);
-      tokenOpen.block = true;
-      tokenOpen.info = line.slice(4).trim(); // "reveal …"
-      tokenOpen.map = [startLine, nextLine];
+		const tokenOpen = state.push('reveal_open', 'div', 1);
+		tokenOpen.block = true;
+		tokenOpen.info = line.slice(4).trim(); // "reveal …"
+		tokenOpen.map = [startLine, nextLine];
 
-      state.md.block.tokenize(state, startLine + 1, nextLine);
+		state.md.block.tokenize(state, startLine + 1, nextLine);
 
-      const tokenClose = state.push("reveal_close", "div", -1);
-      tokenClose.block = true;
+		const tokenClose = state.push('reveal_close', 'div', -1);
+		tokenClose.block = true;
 
-      state.line = nextLine + 1;
-      return true;
-    },
-  );
+		state.line = nextLine + 1;
+		return true;
+	});
 
-  md.renderer.rules.reveal_open = render;
-  md.renderer.rules.reveal_close = render;
+	md.renderer.rules.reveal_open = render;
+	md.renderer.rules.reveal_close = render;
 }
 
 export function namedContainerPlugin(md) {
-  md.block.ruler.before(
-    "fence",
-    "named_container",
-    (state, startLine, endLine, silent) => {
-      const startPos = state.bMarks[startLine] + state.tShift[startLine];
-      const maxPos = state.eMarks[startLine];
-      const line = state.src.slice(startPos, maxPos).trim();
+	md.block.ruler.before('fence', 'named_container', (state, startLine, endLine, silent) => {
+		const startPos = state.bMarks[startLine] + state.tShift[startLine];
+		const maxPos = state.eMarks[startLine];
+		const line = state.src.slice(startPos, maxPos).trim();
 
-      if (!line.startsWith(":::container")) return false;
+		if (!line.startsWith(':::container')) return false;
 
-      const parts = line.trim().split(/\s+/);
-      const name = parts[1];
-      if (!name) return false; // must have a name
+		const parts = line.trim().split(/\s+/);
+		const name = parts[1];
+		if (!name) return false; // must have a name
 
-      if (silent) return true;
+		if (silent) return true;
 
-      let nextLine = startLine + 1;
-      while (nextLine < endLine) {
-        const pos = state.bMarks[nextLine] + state.tShift[nextLine];
-        const max = state.eMarks[nextLine];
-        const l = state.src.slice(pos, max).trim();
-        if (l === ":::") break;
-        nextLine++;
-      }
+		let nextLine = startLine + 1;
+		while (nextLine < endLine) {
+			const pos = state.bMarks[nextLine] + state.tShift[nextLine];
+			const max = state.eMarks[nextLine];
+			const l = state.src.slice(pos, max).trim();
+			if (l === ':::') break;
+			nextLine++;
+		}
 
-      // Open token
-      const tokenOpen = state.push("named_container_open", "div", 1);
-      tokenOpen.block = true;
-      tokenOpen.meta = { name };
-      tokenOpen.map = [startLine, nextLine];
+		// Open token
+		const tokenOpen = state.push('named_container_open', 'div', 1);
+		tokenOpen.block = true;
+		tokenOpen.meta = { name };
+		tokenOpen.map = [startLine, nextLine];
 
-      // Tokenize inner content
-      state.md.block.tokenize(state, startLine + 1, nextLine);
+		// Tokenize inner content
+		state.md.block.tokenize(state, startLine + 1, nextLine);
 
-      // Close token
-      const tokenClose = state.push("named_container_close", "div", -1);
-      tokenClose.block = true;
+		// Close token
+		const tokenClose = state.push('named_container_close', 'div', -1);
+		tokenClose.block = true;
 
-      state.line = nextLine + 1;
-      return true;
-    },
-  );
+		state.line = nextLine + 1;
+		return true;
+	});
 
-  md.renderer.rules.named_container_open = (tokens, idx) => {
-    const name = md.utils.escapeHtml(tokens[idx].meta.name);
-    return `<div class="${name}-container">\n`;
-  };
+	md.renderer.rules.named_container_open = (tokens, idx) => {
+		const name = md.utils.escapeHtml(tokens[idx].meta.name);
+		return `<div class="${name}-container">\n`;
+	};
 
-  md.renderer.rules.named_container_close = () => `</div>\n`;
+	md.renderer.rules.named_container_close = () => `</div>\n`;
 }
 
 export function codeHighlightPlugin(md) {
-  md.options.highlight = function (code, lang) {
-    let highlighted;
+	md.options.highlight = function (code, lang) {
+		let highlighted;
 
-    code = code.trimEnd();
+		code = code.trimEnd();
 
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        highlighted = hljs.highlight(code, { language: lang }).value;
-      } catch {}
-    }
+		if (lang && hljs.getLanguage(lang)) {
+			try {
+				highlighted = hljs.highlight(code, { language: lang }).value;
+			} catch {}
+		}
 
-    if (!highlighted) {
-      highlighted = md.utils.escapeHtml(code);
-    }
+		if (!highlighted) {
+			highlighted = md.utils.escapeHtml(code);
+		}
 
-    return `<pre class="hljs"><code>${highlighted
-      .split(/\n/)
-      .map((line) => `<span class="hljs-line">${line || ""}</span>`)
-      .join("\n")}</code></pre>`;
-  };
+		return `<pre class="hljs"><code>${highlighted
+			.split(/\n/)
+			.map((line) => `<span class="hljs-line">${line || ''}</span>`)
+			.join('\n')}</code></pre>`;
+	};
 }
 
 export function mentionProfilePlugin(md, options = {}) {
-  const mentionDictionary = options.mentionDictionary || {};
+	const mentionDictionary = options.mentionDictionary || {};
 
-  const normalizeAvatar = (url) => {
-    if (!url) return "/anonymous.gif";
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    if (url.startsWith("/api/") || url.startsWith("/")) return url;
-    return `/api/${String(url).replace(/^\.?\//, "")}`;
-  };
+	const normalizeAvatar = (url) => {
+		if (!url) return '/anonymous.gif';
+		if (url.startsWith('http://') || url.startsWith('https://')) return url;
+		if (url.startsWith('/api/') || url.startsWith('/')) return url;
+		return `/api/${String(url).replace(/^\.?\//, '')}`;
+	};
 
-  md.inline.ruler.before("emphasis", "mention_profile", (state, silent) => {
-    const src = state.src;
-    const start = state.pos;
+	md.inline.ruler.before('emphasis', 'mention_profile', (state, silent) => {
+		const src = state.src;
+		const start = state.pos;
 
-    if (src[start] !== "@") return false;
+		if (src[start] !== '@') return false;
 
-    const prev = start > 0 ? src[start - 1] : "";
-    if (prev && /[A-Za-z0-9_.-]/.test(prev)) return false;
+		const prev = start > 0 ? src[start - 1] : '';
+		if (prev && /[A-Za-z0-9_.-]/.test(prev)) return false;
 
-    let end = start + 1;
-    while (end < src.length && /[A-Za-z0-9_-]/.test(src[end])) {
-      end++;
-    }
+		let end = start + 1;
+		while (end < src.length && /[A-Za-z0-9_-]/.test(src[end])) {
+			end++;
+		}
 
-    const username = src.slice(start + 1, end);
-    if (username.length < 3) return false;
+		const username = src.slice(start + 1, end);
+		if (username.length < 3) return false;
 
-    if (silent) return false;
+		if (silent) return false;
 
-    const token = state.push("mention_profile", "", 0);
-    token.meta = { username };
-    state.pos = end;
-    return true;
-  });
+		const token = state.push('mention_profile', '', 0);
+		token.meta = { username };
+		state.pos = end;
+		return true;
+	});
 
-  md.renderer.rules.mention_profile = (tokens, idx) => {
-    const username = tokens[idx].meta.username;
-    const profile = mentionDictionary[username];
+	md.renderer.rules.mention_profile = (tokens, idx) => {
+		const username = tokens[idx].meta.username;
+		const profile = mentionDictionary[username];
 
-    if (!profile) {
-      return md.utils.escapeHtml(`@${username}`);
-    }
+		if (!profile) {
+			return md.utils.escapeHtml(`@${username}`);
+		}
 
-    const displayName = md.utils.escapeHtml(profile.display_name || username);
-    const safeUsername = md.utils.escapeHtml(username);
-    const safeAvatar = md.utils.escapeHtml(normalizeAvatar(profile.avatar_url));
+		const displayName = md.utils.escapeHtml(profile.display_name || username);
+		const safeUsername = md.utils.escapeHtml(username);
+		const safeAvatar = md.utils.escapeHtml(normalizeAvatar(profile.avatar_url));
 
-    return `
+		return `
       <a href="/profiles/${safeUsername}" class="mention-link">
         <span class="mention-chip">@${safeUsername}</span>
         <span class="mention-preview" aria-hidden="true">
@@ -598,42 +580,37 @@ export function mentionProfilePlugin(md, options = {}) {
         </span>
       </a>
     `;
-  };
+	};
 }
 
 export function kaomojiPlugin(md) {
-  md.inline.ruler.before("emphasis", "kaomoji", (state, silent) => {
-    const src = state.src;
-    const start = state.pos;
+	md.inline.ruler.before('emphasis', 'kaomoji', (state, silent) => {
+		const src = state.src;
+		const start = state.pos;
 
-    // Check if it starts with '@@['
-    if (
-      src[start] !== "@" ||
-      src[start + 1] !== "@" ||
-      src[start + 2] !== "["
-    ) {
-      return false;
-    }
+		// Check if it starts with '@@['
+		if (src[start] !== '@' || src[start + 1] !== '@' || src[start + 2] !== '[') {
+			return false;
+		}
 
-    // Find the closing ']@@'
-    const closeIndex = src.indexOf("]@@", start + 3);
-    if (closeIndex === -1) return false;
+		// Find the closing ']@@'
+		const closeIndex = src.indexOf(']@@', start + 3);
+		if (closeIndex === -1) return false;
 
-    if (silent) return false;
+		if (silent) return false;
 
-    const content = src.slice(start + 3, closeIndex);
+		const content = src.slice(start + 3, closeIndex);
 
-    const token = state.push("kaomoji", "", 0);
-    token.meta = { content };
+		const token = state.push('kaomoji', '', 0);
+		token.meta = { content };
 
-    state.pos = closeIndex + 3;
-    return true;
-  });
+		state.pos = closeIndex + 3;
+		return true;
+	});
 
-  md.renderer.rules.kaomoji = (tokens, idx) => {
-    const content = tokens[idx].meta.content;
-    const escaped = md.utils.escapeHtml(content);
-    return `<span class="kaomoji">${escaped}</span>`;
-  };
+	md.renderer.rules.kaomoji = (tokens, idx) => {
+		const content = tokens[idx].meta.content;
+		const escaped = md.utils.escapeHtml(content);
+		return `<span class="kaomoji">${escaped}</span>`;
+	};
 }
-

@@ -16,11 +16,10 @@ use crate::{
             post::{
                 CheckSlugCommand, GetCategoriesCommand, GetCommentsCommand,
                 GetDetailedPostsCommand, GetFeaturedPostsCommand, GetLatestPostsCommand,
-                GetPostCommand, GetPostsByTagCommand, GetRelatedPostsCommand,
-                NewPostCommand, PostNewAnynymouseCommentCommand, PostNewCommentCommand,
-                PublishCommand, PushNewLikeCommand, PushNewViewCommand,
-                SearchPostCommand, SearchTagsCommand, SetFeaturedPostCommand, SetRelatedPostsCommand,
-                UpdatePostCommand,
+                GetPostCommand, GetPostsByTagCommand, GetRelatedPostsCommand, NewPostCommand,
+                PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
+                PushNewLikeCommand, PushNewViewCommand, SearchPostCommand, SearchTagsCommand,
+                SetFeaturedPostCommand, SetRelatedPostsCommand, UpdatePostCommand,
             },
         },
         services::{media::MediaService, post::PostService},
@@ -220,7 +219,6 @@ pub async fn set_related_posts(
     Ok(())
 }
 
-
 pub async fn update_post(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
@@ -256,7 +254,7 @@ pub async fn update_post(
         } else if let Some(index_str) = field_name.strip_prefix("file_") {
             let index: usize = index_str
                 .parse()
-                .map_err(|_| PostError::UploadFailed(format!("Invalid file index")))?;
+                .map_err(|_| PostError::UploadFailed("Invalid file index".to_string()))?;
 
             if file_map.contains_key(&index) {
                 return Err(PostError::UploadFailed(format!(
@@ -497,11 +495,10 @@ pub async fn get_post_by_slug(
     };
     if let Some(claims) = opt_claims
         && let Some(with_draft) = query.with_draft
+        && with_draft
     {
-        if with_draft {
-            let id = claims.user_id.parse::<i64>().unwrap();
-            cmd.as_id = Some(id);
-        }
+        let id = claims.user_id.parse::<i64>().unwrap();
+        cmd.as_id = Some(id);
     }
 
     let post = state.post_service.get_post(cmd).await?;
@@ -531,30 +528,24 @@ pub async fn get_post_by_slug(
         content: post.content,
         draft: query
             .with_draft
-            .and_then(|with_draft| if with_draft { Some(post.draft) } else { None }),
+            .and_then(|with_draft| with_draft.then_some(post.draft)),
         medium_urls: post.medium_urls,
         published_at: post.published_at,
         updated_at: post.updated_at,
-        series: post.post_series.and_then(|series| {
-            Some(PostSeriesResponse {
-                title: series.series_title,
-                slug: series.series_slug,
-                cover_url: series.series_cover_url,
-                previous_post: series.previous_post.and_then(|post| {
-                    Some(SearchPostResult {
-                        title: post.title,
-                        slug: post.slug,
-                        cover_url: post.cover_url,
-                    })
-                }),
-                next_post: series.next_post.and_then(|post| {
-                    Some(SearchPostResult {
-                        title: post.title,
-                        slug: post.slug,
-                        cover_url: post.cover_url,
-                    })
-                }),
-            })
+        series: post.post_series.map(|series| PostSeriesResponse {
+            title: series.series_title,
+            slug: series.series_slug,
+            cover_url: series.series_cover_url,
+            previous_post: series.previous_post.map(|post| SearchPostResult {
+                title: post.title,
+                slug: post.slug,
+                cover_url: post.cover_url,
+            }),
+            next_post: series.next_post.map(|post| SearchPostResult {
+                title: post.title,
+                slug: post.slug,
+                cover_url: post.cover_url,
+            }),
         }),
         cover_url: post.cover_url,
         related_posts,
@@ -652,7 +643,7 @@ pub async fn new_post(
         } else if let Some(index_str) = field_name.strip_prefix("file_") {
             let index: usize = index_str
                 .parse()
-                .map_err(|_| PostError::UploadFailed(format!("Invalid file index")))?;
+                .map_err(|_| PostError::UploadFailed("Invalid file index".to_string()))?;
 
             if file_map.contains_key(&index) {
                 return Err(PostError::UploadFailed(format!(
@@ -1037,10 +1028,8 @@ pub async fn get_latest_posts(
     let default = "created";
     let sorted_by = query
         .sorted_by_updated
-        .and_then(|v| if v { Some("updated") } else { None })
-        .or(query
-            .sorted_by_created
-            .and_then(|v| if v { Some("created") } else { None }))
+        .and_then(|v| v.then_some("updated"))
+        .or(query.sorted_by_created.and_then(|v| v.then_some("created")))
         .unwrap_or(default)
         .to_string();
     let cmd = GetLatestPostsCommand {
@@ -1296,4 +1285,3 @@ pub async fn set_post_featured(
     state.post_service.set_post_featured(cmd).await?;
     Ok(())
 }
-

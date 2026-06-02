@@ -1,8 +1,8 @@
-import { env } from "$env/dynamic/private";
-import { error } from "@sveltejs/kit";
+import { env } from '$env/dynamic/private';
+import { error } from '@sveltejs/kit';
 
 export function route(path) {
-  return `${env.API_URL}/${path}`;
+	return `${env.API_URL}/${path}`;
 }
 
 /**
@@ -24,38 +24,38 @@ export function route(path) {
  * while still being readable at runtime.
  */
 export function fixClientRoute(path) {
-  if (path == undefined) return undefined;
-  const backendOrigin = env.BACKEND_ORIGIN;
-  if (backendOrigin) {
-    return `${backendOrigin.replace(/\/$/, "")}/${path}`;
-  }
-  return `/api/${path}`.replace("/./", "/");
+	if (path == undefined) return undefined;
+	const backendOrigin = env.BACKEND_ORIGIN;
+	if (backendOrigin) {
+		return `${backendOrigin.replace(/\/$/, '')}/${path}`;
+	}
+	return `/api/${path}`.replace('/./', '/');
 }
 
 export async function proxyFallback({ request, params, search, extraHeaders }) {
-  const url = `${env.API_URL}/${params.path}${search ?? ""}`;
+	const url = `${env.API_URL}/${params.path}${search ?? ''}`;
 
-  const proxyRequest = new Request(url, {
-    headers: { ...Object.fromEntries(request.headers), ...extraHeaders },
-    method: request.method,
-    body: request.body,
-    duplex: "half",
-    cache: request.cache,
-    credentials: request.credentials,
-    integrity: request.integrity,
-    keepalive: request.keepalive,
-    mode: request.mode,
-    redirect: request.redirect,
-    referrer: request.referrer,
-    referrerPolicy: request.referrerPolicy,
-  });
+	const proxyRequest = new Request(url, {
+		headers: { ...Object.fromEntries(request.headers), ...extraHeaders },
+		method: request.method,
+		body: request.body,
+		duplex: 'half',
+		cache: request.cache,
+		credentials: request.credentials,
+		integrity: request.integrity,
+		keepalive: request.keepalive,
+		mode: request.mode,
+		redirect: request.redirect,
+		referrer: request.referrer,
+		referrerPolicy: request.referrerPolicy
+	});
 
-  try {
-    const response = await fetch(proxyRequest);
+	try {
+		const response = await fetch(proxyRequest);
 
-    return response;
-  } catch (e) {
-    console.error("API Proxy Error:", e);
-    throw error(503, "Backend service unavailable.");
-  }
+		return response;
+	} catch (e) {
+		console.error('API Proxy Error:', e);
+		throw error(503, 'Backend service unavailable.');
+	}
 }
