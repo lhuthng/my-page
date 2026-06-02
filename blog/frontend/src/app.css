@@ -1,171 +1,171 @@
-@import url("https://fonts.googleapis.com/css2?family=Baloo+2:wght@400..800&family=Noto+Serif:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap");
-@import "katex/dist/katex.min.css";
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400..800&family=Noto+Serif:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
+@import 'katex/dist/katex.min.css';
+@import 'tailwindcss';
 
 html {
-  font-family: "Roboto", sans-serif;
-  font-optical-sizing: auto;
-  font-weight: 400;
-  font-style: normal;
-  font-variation-settings: "wdth" 100;
-  overflow-y: scroll;
-  scroll-behavior: smooth;
+	font-family: 'Roboto', sans-serif;
+	font-optical-sizing: auto;
+	font-weight: 400;
+	font-style: normal;
+	font-variation-settings: 'wdth' 100;
+	overflow-y: scroll;
+	scroll-behavior: smooth;
 	scrollbar-color: var(--color-white) var(--color-dark);
 	scrollbar-width: thin;
 }
 
 body {
-  max-width: 100vw;
+	max-width: 100vw;
 }
 
 @theme {
-  --color-dark: rgb(73, 92, 131);
-  --color-primary: rgb(122, 134, 182);
-  --color-secondary: rgb(168, 164, 206);
-  --color-background: rgb(200, 182, 226);
+	--color-dark: rgb(73, 92, 131);
+	--color-primary: rgb(122, 134, 182);
+	--color-secondary: rgb(168, 164, 206);
+	--color-background: rgb(200, 182, 226);
 
-  --color-primary-20: rgb(228, 231, 240);
+	--color-primary-20: rgb(228, 231, 240);
 
-  --color-accent-red: rgb(184, 104, 114);
-  --color-accent-red-light-1: rgb(204, 144, 152);
-  --color-accent-red-light-2: rgb(224, 184, 190);
-  --color-accent-green: rgb(104, 184, 126);
-  --color-accent-green-light-1: rgb(144, 204, 162);
-  --color-accent-green-light-2: rgb(184, 224, 194);
-  --color-accent-blue: rgb(120, 150, 200);
-  --color-accent-blue-light-1: rgb(150, 170, 215);
-  --color-accent-blue-light-2: rgb(180, 195, 225);
-  --color-accent-yellow: rgb(225, 200, 100);
-  --color-accent-yellow-light-1: rgb(235, 215, 130);
-  --color-accent-yellow-light-2: rgb(245, 230, 160);
-  --color-accent-orange: rgb(220, 145, 90);
-  --color-accent-orange-light-1: rgb(235, 175, 130);
-  --color-accent-orange-light-2: rgb(245, 205, 170);
+	--color-accent-red: rgb(184, 104, 114);
+	--color-accent-red-light-1: rgb(204, 144, 152);
+	--color-accent-red-light-2: rgb(224, 184, 190);
+	--color-accent-green: rgb(104, 184, 126);
+	--color-accent-green-light-1: rgb(144, 204, 162);
+	--color-accent-green-light-2: rgb(184, 224, 194);
+	--color-accent-blue: rgb(120, 150, 200);
+	--color-accent-blue-light-1: rgb(150, 170, 215);
+	--color-accent-blue-light-2: rgb(180, 195, 225);
+	--color-accent-yellow: rgb(225, 200, 100);
+	--color-accent-yellow-light-1: rgb(235, 215, 130);
+	--color-accent-yellow-light-2: rgb(245, 230, 160);
+	--color-accent-orange: rgb(220, 145, 90);
+	--color-accent-orange-light-1: rgb(235, 175, 130);
+	--color-accent-orange-light-2: rgb(245, 205, 170);
 
-  --breakpoint-xxs: 500px;
+	--breakpoint-xxs: 500px;
 }
 
 a {
-  @apply pointer-events-auto hover:underline;
+	@apply pointer-events-auto hover:underline;
 }
 
 input {
-  @apply focus:outline-none;
+	@apply focus:outline-none;
 }
 
 button {
-  @apply not-disabled:cursor-pointer;
+	@apply not-disabled:cursor-pointer;
 }
 
 .full {
-  @apply w-full h-full;
+	@apply h-full w-full;
 }
 
 .w-cap {
-  @apply w-full lg:w-7/8 max-w-360 not-lg:px-2 mx-auto;
+	@apply mx-auto w-full max-w-360 not-lg:px-2 lg:w-7/8;
 }
 
 .w-cap-2 {
-  @apply w-full lg:w-8/9 max-w-360 not-lg:px-2 mx-auto;
+	@apply mx-auto w-full max-w-360 not-lg:px-2 lg:w-8/9;
 }
 
 .max-w-cap-2 {
-  @apply max-w-[min(100%,90rem)] lg:max-w-[min(88.89%,90rem)] not-lg:px-2 mx-auto;
+	@apply mx-auto max-w-[min(100%,90rem)] not-lg:px-2 lg:max-w-[min(88.89%,90rem)];
 }
 
 .duo-btn {
-  @apply relative;
-  a,
-  button {
-    @apply relative block w-full text-nowrap z-11 border-2 rounded-2xl px-2 py-1 cursor-pointer transition-all duration-50 not-disabled:hover:brightness-105 not-disabled:active:brightness-105 not-disabled:active:translate-y-[0.2rem] text-white font-semibold;
-  }
-  a:disabled,
-  button:disabled {
-    @apply border-primary bg-secondary cursor-not-allowed translate-y-[0.2rem];
-  }
-  &:has(*:disabled)::before {
-    @apply bg-primary;
-  }
-  &::before {
-    @apply absolute content-[''] left-0 top-1/2 w-full h-[calc(50%+0.2rem)]  rounded-b-2xl z-10;
-  }
+	@apply relative;
+	a,
+	button {
+		@apply relative z-11 block w-full cursor-pointer rounded-2xl border-2 px-2 py-1 font-semibold text-nowrap text-white transition-all duration-50 not-disabled:hover:brightness-105 focus:outline-dark not-disabled:active:translate-y-[0.2rem] not-disabled:active:brightness-105;
+	}
+	a:disabled,
+	button:disabled {
+		@apply translate-y-[0.2rem] cursor-not-allowed border-primary bg-secondary;
+	}
+	&:has(*:disabled)::before {
+		@apply bg-primary;
+	}
+	&::before {
+		@apply absolute top-1/2 left-0 z-10 h-[calc(50%+0.2rem)] w-full rounded-b-2xl content-[''];
+	}
 }
 
 .duo-primary {
-  a,
-  button {
-    @apply border-primary bg-secondary;
-  }
+	a,
+	button {
+		@apply border-primary bg-secondary;
+	}
 
-  &::before {
-    @apply bg-primary;
-  }
+	&::before {
+		@apply bg-primary;
+	}
 }
 
 .duo-dark {
-  a,
-  button {
-    @apply border-dark bg-primary;
-  }
-  &::before {
-    @apply bg-dark;
-  }
+	a,
+	button {
+		@apply border-dark bg-primary;
+	}
+	&::before {
+		@apply bg-dark;
+	}
 }
 
 .duo-black {
-  a,
-  button {
-    @apply border-black bg-gray-800;
-  }
-  &::before {
-    @apply bg-black;
-  }
+	a,
+	button {
+		@apply border-black bg-gray-800;
+	}
+	&::before {
+		@apply bg-black;
+	}
 }
 
 .duo-white {
-  a,
-  button {
-    @apply border-gray-300 bg-white text-black;
-  }
-  &::before {
-    @apply bg-gray-300;
-  }
+	a,
+	button {
+		@apply border-gray-300 bg-white text-black;
+	}
+	&::before {
+		@apply bg-gray-300;
+	}
 }
 
 .duo-red {
-  a,
-  button {
-    @apply border-accent-red bg-accent-red-light-1;
-  }
-  &::before {
-    @apply bg-accent-red;
-  }
+	a,
+	button {
+		@apply border-accent-red bg-accent-red-light-1;
+	}
+	&::before {
+		@apply bg-accent-red;
+	}
 }
 
 .duo-green {
-  a,
-  button {
-    @apply border-accent-green bg-accent-green-light-1;
-  }
-  &::before {
-    @apply bg-accent-green;
-  }
+	a,
+	button {
+		@apply border-accent-green bg-accent-green-light-1;
+	}
+	&::before {
+		@apply bg-accent-green;
+	}
 }
 
 .duo-blue {
-  a,
-  button {
-    @apply border-accent-blue bg-accent-blue-light-1;
-  }
-  &::before {
-    @apply bg-accent-blue;
-  }
+	a,
+	button {
+		@apply border-accent-blue bg-accent-blue-light-1;
+	}
+	&::before {
+		@apply bg-accent-blue;
+	}
 }
 
 .custom-scrollbar {
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-primary) transparent;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-primary) transparent;
 	overscroll-behavior: auto;
 }
 
@@ -174,89 +174,89 @@ button {
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 10px;
+	width: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+	background: transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(73, 92, 131, 0.4);
-  border-radius: 10px;
-  border: 2px solid transparent;
-  background-clip: content-box;
+	background-color: rgba(73, 92, 131, 0.4);
+	border-radius: 10px;
+	border: 2px solid transparent;
+	background-clip: content-box;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(73, 92, 131, 0.6);
+	background-color: rgba(73, 92, 131, 0.6);
 }
 
 .tooltip-container {
-  @apply relative cursor-help;
+	@apply relative cursor-help;
 
-  &::after {
-    content: attr(data-tooltip);
+	&::after {
+		content: attr(data-tooltip);
 
-    @apply absolute top-1/2 left-full -translate-y-1/2 bg-dark text-white rounded-xl whitespace-nowrap z-10 p-2 invisible opacity-0 transition-all duration-400;
-  }
+		@apply invisible absolute top-1/2 left-full z-10 -translate-y-1/2 rounded-xl bg-dark p-2 whitespace-nowrap text-white opacity-0 transition-all duration-400;
+	}
 
-  &:hover::after {
-    @apply visible opacity-100 delay-100 translate-x-1;
-  }
+	&:hover::after {
+		@apply visible translate-x-1 opacity-100 delay-100;
+	}
 }
 
 .hljs {
-  @apply relative bg-dark text-white pl-8 pr-2 py-1 rounded-sm overflow-hidden text-sm;
-  counter-reset: line;
+	@apply relative overflow-hidden rounded-sm bg-dark py-1 pr-2 pl-8 text-sm text-white;
+	counter-reset: line;
 
-  & > code {
-    @apply relative;
-    &:after {
-      @apply absolute content-[''] right-[calc(100%+3px)] top-0 bottom-0 w-0.5 bg-white/40;
-    }
-  }
+	& > code {
+		@apply relative;
+		&:after {
+			@apply absolute top-0 right-[calc(100%+3px)] bottom-0 w-0.5 bg-white/40 content-[''];
+		}
+	}
 }
 
 .hljs-line {
-  @apply relative inline w-full hover:[&::after]:text-white;
+	@apply relative inline w-full hover:[&::after]:text-white;
 
-  &:first-child::after {
-    @apply rounded-tl-xs;
-  }
-  &:last-child::after {
-    @apply rounded-bl-xs;
-  }
+	&:first-child::after {
+		@apply rounded-tl-xs;
+	}
+	&:last-child::after {
+		@apply rounded-bl-xs;
+	}
 }
 
 .hljs-line::after {
-  @apply absolute -left-10 top-0 w-8 h-[calc(100%+4px)] text-right text-white/40 ml-1 pr-1 select-none;
-  counter-increment: line;
-  content: counter(line);
+	@apply absolute top-0 -left-10 ml-1 h-[calc(100%+4px)] w-8 pr-1 text-right text-white/40 select-none;
+	counter-increment: line;
+	content: counter(line);
 }
 
 .hljs-keyword {
-  @apply text-accent-yellow;
+	@apply text-accent-yellow;
 }
 .hljs-string {
-  @apply text-accent-green-light-2;
+	@apply text-accent-green-light-2;
 }
 .hljs-number {
-  @apply text-accent-red-light-1;
+	@apply text-accent-red-light-1;
 }
 .hljs-comment {
-  @apply text-accent-blue-light-2;
-  font-style: italic;
+	@apply text-accent-blue-light-2;
+	font-style: italic;
 }
 .hljs-function {
-  color: #fcd34d;
+	color: #fcd34d;
 }
 .hljs-title {
-  color: #c4b5fd;
+	color: #c4b5fd;
 }
 .hljs-built_in {
-  @apply text-accent-red-light-2;
+	@apply text-accent-red-light-2;
 }
 .hljs-attr {
-  color: #93c5fd;
+	color: #93c5fd;
 }
