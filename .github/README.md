@@ -1,29 +1,28 @@
-# CI/CD & Infrastructure
+# CI/CD and Infrastructure
 
-## Pipeline Overview
+## Pipeline overview
 
-Defined in `.github/workflows/deploy.yml`. Triggers on push to `master`, but only runs jobs relevant to what actually changed — a `dorny/paths-filter` step gates each job on its path.
+The deploy pipeline lives in `.github/workflows/deploy.yml`.
 
-You can also force a deploy regardless of changed paths by including `[deploy blog]` or `[deploy ws]` in your commit message.
+It runs on pushes to `master` and only reacts to changes inside `blog/**` or the workflow itself.
 
----
+You can force a blog deploy by adding `[deploy blog]` to the commit message.
 
-## Blog Deployment
+## Blog deployment
 
-Triggered by changes in `blog/`.
+The workflow has four jobs:
 
-### `build-push-backend` and `build-push-frontend`
+1. `filter`
+2. `build-push-backend`
+3. `build-push-frontend`
+4. `deploy-blog`
 
-These two jobs run in parallel on GitHub's servers. Each builds a Docker image for `linux/amd64` and pushes it to GHCR:
+The backend and frontend images are built on GitHub Actions and pushed to GHCR:
 
 - `ghcr.io/lhuthng/blog-backend:latest`
 - `ghcr.io/lhuthng/blog-frontend:latest`
 
-Both use `cache-from: type=gha` / `cache-to: type=gha,mode=max`, so unchanged Rust deps and npm packages are restored from GitHub Actions cache instead of being rebuilt.
-
-### `deploy-blog`
-
-Runs after both build jobs succeed. SSHes into the Oracle VM and runs:
+After both images are available, `deploy-blog` SSHes into the Oracle VM and runs:
 
 ```bash
 docker login ghcr.io
@@ -32,216 +31,64 @@ docker compose up -d --remove-orphans
 docker image prune -f
 ```
 
----
+The workflow then waits briefly, prints backend logs, and verifies that the backend container is still running.
 
-## Socket Server Deployment
-
-Triggered by changes in `socket-server/`.
-
-### `deploy-socket-server`
-
-Runs on GitHub's servers, cross-compiles the Go binary for `linux/amd64`, SCPs it to the Oracle VM, then SSHes in to replace the binary and restart the systemd service:
-
-```bash
-# on the VM
-sudo mv /tmp/socket-server/server-linux /usr/local/bin/socket-server
-sudo chmod +x /usr/local/bin/socket-server
-sudo systemctl restart socket-server
-```
-
-The server runs as a systemd unit (`socket-server.service`) with `Restart=on-failure`. nginx sits in front on ports 80/443 and proxies WebSocket connections to `localhost:5001`.
-
-Live at: `wss://wss.huuthangle.site/ws`
-
----
-
-## Required GitHub Secrets
+## Required secrets
 
 | Secret | Description |
-|---|---|
-| `VM_HOST` | Oracle Cloud VM public IP (blog server) |
-| `VM_USER` | SSH username (`ubuntu`) |
-| `VM_SSH_KEY` | Private SSH key contents for blog VM access |
-| `GHCR_TOKEN` | GitHub PAT with `read:packages` scope — used by the VM to pull images from GHCR |
-| `WS_VM_HOST` | Oracle Cloud VM public IP (socket server — `REDACTED_IP`) |
-| `WS_VM_USER` | SSH username (`ubuntu`) |
-| `WS_VM_SSH_KEY` | Private SSH key contents for socket server VM access |
+| --- | --- |
+| `VM_HOST` | Oracle VM public IP |
+| `VM_USER` | SSH username |
+| `VM_SSH_KEY` | Private SSH key for the VM |
+| `GHCR_TOKEN` | GitHub PAT with `read:packages` so the VM can pull images |
 
-`GITHUB_TOKEN` is used automatically by the build jobs to push images; no secret needed for that.
+`GITHUB_TOKEN` is used automatically inside GitHub Actions for pushing images to GHCR.
 
-`FLY_API_TOKEN` is no longer required — the socket server moved from Fly.io to Oracle Cloud.
+## VM notes
 
----
+This repo no longer keeps nginx `.conf` files. nginx is managed directly on the server.
 
-## Nginx Configs
-
-Reference configs live in `.github/nginx/`. These are kept in sync with what's deployed on the Oracle VM. To apply changes manually, copy to `/etc/nginx/sites-available/` and symlink to `sites-enabled/`.
-
-| File | Domain | Behavior |
-|---|---|---|
-| `blog.conf` | `blog.huuthangle.site` | `/media/*` → `backend:3001`, everything else → `frontend:5000` |
-| `root.conf` | `huuthangle.site` | 301 redirect to `blog.huuthangle.site` |
-| `ws.conf` | `wss.huuthangle.site` | WebSocket proxy (`/ws`) + health check (`/`) → `localhost:5001`; TLS via Let's Encrypt |
-| `portfolio.conf` | `portfolio.huuthangle.site` | Static files from `/var/www/portfolio` — legacy VPS config, kept for reference |
-
-`portfolio.conf` is no longer active — the portfolio is on Cloudflare Pages.
-
-Add a rate limiter in `/etc/nginx/nginx.conf`:
+Important nginx bits to keep:
 
 ```nginx
-http {
-    limit_req_zone $binary_remote_addr zone=blog:10m rate=5r/s;
-    # ... rest of config unchanged ...
+server {
+    server_name blog.huuthangle.site;
+
+    location /media/ {
+        proxy_pass http://127.0.0.1:3001/media/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 ```
 
-Then reference it in `blog.conf` as needed.
+Optional root redirect:
 
----
-
-## Oracle Cloud VM — First-Time Setup (Blog VM)
-
-See the full migration journal: `journal-logs/2026-04-10-oracle-cloud-migration.md`
-
-Quick reference:
-
-**1. Create the VM**
-
-Use `VM.Standard.E2.1.Micro` (free tier AMD) or `VM.Standard.A1.Flex` (free tier ARM, better) in the Oracle Cloud Console.
-
-**2. Open ports in OCI Security List**
-
-Add ingress rules for TCP ports 80 and 443.
-
-**3. SSH in and install dependencies**
-
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo apt install -y nginx rsync
-sudo snap install --classic certbot
-sudo ln -sf /snap/bin/certbot /usr/bin/certbot
+```nginx
+server {
+    server_name huuthangle.site;
+    return 301 https://blog.huuthangle.site$request_uri;
+}
 ```
 
-**4. Add swap** (critical on the AMD micro — Rust compilation will OOM without it)
+If you use rate limiting, the two lines that matter are:
 
-```bash
-sudo fallocate -l 4G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
+```nginx
+limit_req_zone $binary_remote_addr zone=blog:10m rate=5r/s;
+limit_req zone=blog burst=20 nodelay;
 ```
 
-**5. Fix iptables**
+For the current hosting setup and migration context, see:
 
-Oracle's default iptables has a blanket REJECT rule. Insert ACCEPT rules for ports 80 and 443 **before** it:
-
-```bash
-sudo iptables -I INPUT -p tcp --dport 80  -j ACCEPT
-sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
-sudo netfilter-persistent save
-```
-
-**6. Set up nginx**
-
-```bash
-sudo cp .github/nginx/blog.conf /etc/nginx/sites-available/blog
-sudo cp .github/nginx/root.conf /etc/nginx/sites-available/root
-sudo ln -s /etc/nginx/sites-available/blog /etc/nginx/sites-enabled/
-sudo ln -s /etc/nginx/sites-available/root /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-**7. TLS with certbot**
-
-Make sure DNS is pointed at the VM before running this.
-
-```bash
-sudo certbot --nginx -d blog.huuthangle.site -d huuthangle.site
-```
-
-**8. Clone the repo and start the stack**
-
-```bash
-git clone https://github.com/lhuthng/MyPage.git ~/MyPage
-cd ~/MyPage/blog
-docker compose up -d
-```
-
-From here, GitHub Actions handles all future deploys automatically.
-
----
-
-## Oracle Cloud VM — First-Time Setup (Socket Server VM)
-
-**1. Create the VM** — same Oracle Cloud Console steps as above.
-
-**2. Open ports in OCI Security List** — TCP 80 and 443.
-
-**3. SSH in and install nginx + certbot**
-
-```bash
-sudo apt update && sudo apt install -y nginx
-sudo snap install --classic certbot
-sudo ln -sf /snap/bin/certbot /usr/bin/certbot
-```
-
-**4. Fix iptables**
-
-```bash
-sudo iptables -I INPUT -p tcp --dport 80  -j ACCEPT
-sudo iptables -I INPUT -p tcp --dport 443 -j ACCEPT
-sudo iptables -I INPUT -p tcp --dport 5001 -j ACCEPT
-sudo netfilter-persistent save
-```
-
-**5. Deploy the binary and systemd service**
-
-```bash
-# cross-compile on your machine
-GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o server-linux .
-scp -i ~/.ssh/your-ssh-key.key server-linux ubuntu@<your-server-ip>:/tmp/socket-server
-ssh -i ~/.ssh/your-ssh-key.key ubuntu@<your-server-ip> "
-  sudo mv /tmp/socket-server /usr/local/bin/socket-server
-  sudo chmod +x /usr/local/bin/socket-server
-"
-```
-
-Create `/etc/systemd/system/socket-server.service`:
-
-```ini
-[Unit]
-Description=Go WebSocket relay server
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-ExecStart=/usr/local/bin/socket-server
-Restart=on-failure
-RestartSec=5
-Environment=PORT=5001
-Environment=MAX_ROOM_SIZE=4
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=socket-server
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now socket-server
-```
-
-**6. Set up nginx and TLS**
-
-```bash
-sudo cp .github/nginx/ws.conf /etc/nginx/sites-available/socket-server
-sudo ln -s /etc/nginx/sites-available/socket-server /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d wss.huuthangle.site
-```
-
-From here, GitHub Actions handles all future deploys automatically.
+- `journal-logs/2026-04-09-flyio-cloudflare-migration.md`
+- `journal-logs/2026-04-10-oracle-cloud-migration.md`

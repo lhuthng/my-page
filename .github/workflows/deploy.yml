@@ -6,14 +6,12 @@ on:
     paths:
       - ".github/workflows/**"
       - "blog/**"
-      - "socket-server/**"
 
 jobs:
   filter:
     runs-on: ubuntu-latest
     outputs:
       blog: ${{ steps.filter.outputs.blog }}
-      socket: ${{ steps.filter.outputs.socket }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -22,8 +20,6 @@ jobs:
           filters: |
             blog:
               - 'blog/**'
-            socket:
-              - 'socket-server/**'
 
   # ── Build backend image on GitHub's servers and push to GHCR ─────────────
   build-push-backend:
@@ -87,12 +83,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ── SSH into Oracle VM, pull new images, restart containers ───────────────
+  # SSH into Oracle VM, pull new images, restart containers
   # Required GitHub Secrets:
-  #   VM_HOST      — Oracle VM public IP (stored in secrets)
-  #   VM_USER      — ubuntu
-  #   VM_SSH_KEY   — private SSH key (stored in secrets)
-  #   GHCR_TOKEN   — GitHub PAT with read:packages scope (for VM to pull images)
+  #   VM_HOST      - Oracle VM public IP (stored in secrets)
+  #   VM_USER      - ubuntu
+  #   VM_SSH_KEY   - private SSH key (stored in secrets)
+  #   GHCR_TOKEN   - GitHub PAT with read:packages scope (for VM to pull images)
   deploy-blog:
     needs: [build-push-backend, build-push-frontend]
     runs-on: ubuntu-latest
@@ -133,65 +129,4 @@ jobs:
             echo "=== Container status ==="
             docker compose ps
             docker compose ps backend | grep -Eq "(running|Up)" || \
-              (echo "ERROR: backend is not running — check migration logs above" && exit 1)
-
-  # ── Cross-compile Go binary and deploy to Oracle VM ───────────────────────
-  # Required GitHub Secrets:
-  #   WS_VM_HOST    — WebSocket VM public IP (stored in secrets)
-  #   WS_VM_USER    — ubuntu
-  #   WS_VM_SSH_KEY — private SSH key contents for the WebSocket VM (stored in secrets)
-  deploy-socket-server:
-    needs: filter
-    if: needs.filter.outputs.socket == 'true' || contains(github.event.head_commit.message, '[deploy ws]')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: socket-server/go.mod
-          cache-dependency-path: socket-server/go.sum
-
-      - name: Build Linux binary
-        working-directory: socket-server
-        run: GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o server-linux .
-
-      - name: Deploy and restart service
-        env:
-          WS_VM_KEY: ${{ secrets.WS_VM_SSH_KEY }}
-          WS_VM_HOST: ${{ secrets.WS_VM_HOST }}
-          WS_VM_USER: ${{ secrets.WS_VM_USER }}
-        run: |
-          printf '%s\n' "$WS_VM_KEY" > /tmp/ws_vm_key
-          chmod 600 /tmp/ws_vm_key
-          scp -i /tmp/ws_vm_key -o StrictHostKeyChecking=no \
-            socket-server/server-linux \
-            "$WS_VM_USER@$WS_VM_HOST:/tmp/socket-server-linux"
-          ssh -i /tmp/ws_vm_key -o StrictHostKeyChecking=no \
-            "$WS_VM_USER@$WS_VM_HOST" bash -s << 'EOF'
-            set -euo pipefail
-            sudo mv /tmp/socket-server-linux /usr/local/bin/socket-server
-            sudo chmod +x /usr/local/bin/socket-server
-            sudo systemctl daemon-reload
-            sudo systemctl restart socket-server
-
-            # Give systemd a moment in case the unit crash-loops.
-            sleep 2
-
-            if ! sudo systemctl is-active --quiet socket-server; then
-              echo "=== socket-server failed to start ==="
-              sudo systemctl status socket-server --no-pager || true
-              echo "=== recent journal logs ==="
-              sudo journalctl -u socket-server -n 120 --no-pager || true
-              echo "=== loaded unit file ==="
-              sudo systemctl cat socket-server || true
-              echo "=== listeners on port 5001 ==="
-              sudo ss -ltnp '( sport = :5001 )' || true
-              exit 3
-            fi
-
-            echo "=== socket-server is active ==="
-            sudo systemctl status socket-server --no-pager
-          EOF
-          rm -f /tmp/ws_vm_key
+              (echo "ERROR: backend is not running - check migration logs above" && exit 1)
