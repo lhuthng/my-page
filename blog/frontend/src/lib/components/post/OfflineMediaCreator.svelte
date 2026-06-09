@@ -17,14 +17,31 @@
 		'audio/ogg',
 		'audio/wav',
 
-		'model/gltf-binary'
+		'model/gltf-binary',
+
+		'application/vnd.lottie+zip',
+		'application/zip',
+		'application/x-zip-compressed',
+		'application/x-zip',
+		'application/octet-stream',
+		'binary/octet-stream'
 	];
+
+	function isAllowedMedia(file) {
+		if (!file) return false;
+		if (allowedTypes.includes(file.type)) return true;
+		return file.name.toLowerCase().endsWith('.lottie');
+	}
+
 	function addMedia(files) {
 		const media = [];
 		for (let index = 0; index < files.length; index++) {
 			const file = files[index];
-			if (file && allowedTypes.includes(file.type)) {
+			if (isAllowedMedia(file)) {
 				let { name, type } = file;
+				if (name.toLowerCase().endsWith('.lottie')) {
+					name = name.slice(0, -'.lottie'.length);
+				}
 				let medium = {
 					name,
 					type,

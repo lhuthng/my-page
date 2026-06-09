@@ -180,6 +180,39 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/", get(handlers::post::search)),
         );
 
+    let project_routes = Router::new()
+        // optional-auth routes
+        .merge(
+            Router::new()
+                .route("/s/{project_slug}", get(handlers::project::get_project_by_slug))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::optional_user_guard,
+                )),
+        )
+        // mod-protected routes
+        .merge(
+            Router::new()
+                .route("/new", post(handlers::project::new_project))
+                .route("/all", get(handlers::project::get_all_projects))
+                .route("/id/{project_id}", post(handlers::project::publish_project))
+                .route("/id/{project_id}", get(handlers::project::get_project_details))
+                .route("/id/{project_id}", patch(handlers::project::update_project))
+                .route("/id/{project_id}/cover", patch(handlers::project::change_cover))
+                .layer(middleware::from_fn(middlewares::auth::mod_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                ))
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
+        )
+        // public routes
+        .merge(
+            Router::new()
+                .route("/latest", get(handlers::project::get_latest_projects))
+                .route("/check", get(handlers::project::check_project)),
+        );
+
     let tag_routes = Router::new()
         .route("/", get(handlers::post::search_tags))
         .route("/{tag_slug}", get(handlers::post::get_posts_by_tag));
@@ -244,6 +277,11 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/auth", auth_routes)
         .nest("/users", user_routes)
         .nest("/posts", post_routes)
+        .nest("/projects", project_routes)
+        .nest_service(
+            "/project-demos",
+            get_service(ServeDir::new(&state.project_demo_config.dir)),
+        )
         .nest("/tags", tag_routes)
         .nest("/series", series_routes)
         .nest("/mail", mail_routes)

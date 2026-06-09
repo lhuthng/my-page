@@ -27,7 +27,7 @@ export async function load({ fetch, params, setHeaders }) {
 		});
 		const data = await res.json();
 
-		let { content, author_avatar_url, cover_url, medium_urls, ...rest } = data;
+		let { content, author_avatar_url, cover_url, medium_urls, medium_short_names, ...rest } = data;
 
 		let edits = [...content.matchAll(mediaSyntax)].map((match) => ({
 			index: match.index + match[0].lastIndexOf(match[1]),
@@ -43,13 +43,16 @@ export async function load({ fetch, params, setHeaders }) {
 		const mediaDictionary = {};
 
 		medium_urls.forEach((url, index) => (mediaDictionary[index.toString()] = fixClientRoute(url)));
+		medium_short_names?.forEach((shortName, index) => {
+			if (shortName) mediaDictionary[shortName] = fixClientRoute(medium_urls[index]);
+		});
 
 		const md = new MarkdownIt()
 			.use(mkKatex)
 			.use(mediaWithShortcutPlugin, { mediaDictionary })
 			.use(iframeBlockPlugin)
 			.use(youtubeBlockPlugin)
-			.use(appBlockPlugin)
+			.use(appBlockPlugin, { mediaDictionary })
 			.use(revealPlugin)
 			.use(namedContainerPlugin)
 			.use(codeHighlightPlugin)

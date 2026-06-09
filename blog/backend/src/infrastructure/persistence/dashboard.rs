@@ -103,7 +103,7 @@ const TOP_POSTS_SQL: &str = r#"
     JOIN user_meta um ON um.user_id = p.user_id
     JOIN post_stats ps ON ps.post_id = p.id
     LEFT JOIN media m ON m.id = p.cover_image_id
-    WHERE p.status = 'published'
+    WHERE p.status = 'published' AND p.content_kind = 'post'
     ORDER BY ps.{ORDER_COL} DESC
     LIMIT 5
 "#;
@@ -113,12 +113,12 @@ impl DashboardService for DashboardServiceImpl {
     async fn get_overview(&self, _cmd: GetOverviewCommand) -> Result<DashboardOverview, UserError> {
         // --- Scalar counts ---
         let total_published: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE status = 'published'")
+            sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE status = 'published' AND content_kind = 'post'")
                 .fetch_one(&self.pool)
                 .await?;
 
         let total_drafts: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE status = 'draft'")
+            sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE status = 'draft' AND content_kind = 'post'")
                 .fetch_one(&self.pool)
                 .await?;
 
@@ -159,6 +159,7 @@ impl DashboardService for DashboardServiceImpl {
             JOIN user_meta um ON um.user_id = p.user_id
             JOIN post_stats ps ON ps.post_id = p.id
             LEFT JOIN media m ON m.id = p.cover_image_id
+            WHERE p.content_kind = 'post'
             ORDER BY p.created_at DESC
             LIMIT 5
             "#,
@@ -220,7 +221,7 @@ impl DashboardService for DashboardServiceImpl {
             r#"
             SELECT date(created_at) AS date, COUNT(*) AS count
             FROM posts
-            WHERE date(created_at) >= date('now', '-30 days')
+            WHERE content_kind = 'post' AND date(created_at) >= date('now', '-30 days')
             GROUP BY date(created_at)
             ORDER BY date ASC
             "#,
@@ -280,7 +281,7 @@ impl DashboardService for DashboardServiceImpl {
         let is_admin = cmd.role == "admin";
 
         // Build WHERE conditions
-        let mut where_parts: Vec<String> = vec!["1=1".to_string()];
+        let mut where_parts: Vec<String> = vec!["p.content_kind = 'post'".to_string()];
 
         if !is_admin {
             where_parts.push(format!("p.user_id = {}", cmd.user_id));

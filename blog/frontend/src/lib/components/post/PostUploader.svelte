@@ -210,7 +210,7 @@
 
 		for (let index = 0; index < keys.length; index++) {
 			const data = offlineMediaData[keys[index]];
-			formData.append(`file_${index + 1}`, data.file, data.name);
+			formData.append(`file_${index + 1}`, data.file, data.file.name);
 			formData.append(`short_name_${index + 1}`, keys[index]);
 		}
 

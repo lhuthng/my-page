@@ -14,6 +14,7 @@
 
 	const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 	const glbSyntax = /:::app\s+glb-demo\s+([^\s]+)\s*/g;
+	const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)\s*/g;
 
 	// temporary usage only
 	const ignored = ['.glb'];
@@ -76,6 +77,16 @@
 	let renderedText = $state('');
 
 	let forDraft = $derived(mode === 'create' || (mode === 'edit' && editor.view === 'private'));
+
+	const collectMediaKeys = (texts) => [
+		...new Set(
+			texts.flatMap((text) => [
+				...[...text.matchAll(mediaSyntax)].map((match) => match[1]),
+				...[...text.matchAll(glbSyntax)].map((match) => match[1]),
+				...[...text.matchAll(lottieAppSyntax)].map((match) => match[1])
+			])
+		)
+	];
 
 	if (mode === 'edit' && data !== undefined) {
 		let {
@@ -169,9 +180,7 @@
 			.split(' ')
 			.filter((tag) => tag !== '');
 
-		const keys = [...draft.matchAll(mediaSyntax)]
-			.map((match) => match[1])
-			.filter((key) => !isOnline(key));
+		const keys = collectMediaKeys([draft]).filter((key) => !isOnline(key));
 
 		const missing = keys.filter((key) => !isOffline(key));
 
@@ -203,7 +212,7 @@
 
 		for (let index = 0; index < keys.length; index++) {
 			const mediaItem = getNewMedia(keys[index]);
-			formData.append(`file_${index + 1}`, mediaItem.file, mediaItem.name);
+			formData.append(`file_${index + 1}`, mediaItem.file, mediaItem.file.name);
 			formData.append(`short_name_${index + 1}`, keys[index]);
 		}
 
@@ -239,39 +248,33 @@
 			number_of_files: 0
 		};
 		let offlineKeys = [];
-		if (editingData.draft !== data.draft) {
-			const keys = [
-				...[...editingData.content.matchAll(mediaSyntax)].map((m) => m[1]),
-				...[...editingData.content.matchAll(glbSyntax)].map((m) => m[1]),
-				...[...editingData.draft.matchAll(mediaSyntax)].map((m) => m[1]),
-				...[...editingData.draft.matchAll(glbSyntax)].map((m) => m[1])
-			];
+		const contentChanged = editingData.draft !== data.draft;
+		const keys = collectMediaKeys([editingData.content, editingData.draft]);
 
-			offlineKeys = keys.filter((key) => {
-				if (ignored.some((ext) => key.endsWith(ext))) {
-					return false;
-				}
-				return !isOnline(key);
-			});
-
-			console.log(keys, offlineKeys);
-
-			const missing = offlineKeys.filter((key) => !isOffline(key));
-
-			if (missing.length > 0) {
-				editor.isCritical = true;
-				editor.status = `[${missing}] is/are missing`;
-				console.error('Missing keys detected: ', missing);
-				return;
+		offlineKeys = keys.filter((key) => {
+			if (ignored.some((ext) => key.endsWith(ext))) {
+				return false;
 			}
+			return !isOnline(key);
+		});
 
-			postData.number_of_files = offlineKeys.length;
+		console.log(keys, offlineKeys);
 
-			for (let index = 0; index < offlineKeys.length; index++) {
-				const data = getNewMedia(offlineKeys[index]);
-				formData.append(`file_${index + 1}`, data.file, data.name);
-				formData.append(`short_name_${index + 1}`, offlineKeys[index]);
-			}
+		const missing = offlineKeys.filter((key) => !isOffline(key));
+
+		if (missing.length > 0) {
+			editor.isCritical = true;
+			editor.status = `[${missing}] is/are missing`;
+			console.error('Missing keys detected: ', missing);
+			return;
+		}
+
+		postData.number_of_files = offlineKeys.length;
+
+		for (let index = 0; index < offlineKeys.length; index++) {
+			const data = getNewMedia(offlineKeys[index]);
+			formData.append(`file_${index + 1}`, data.file, data.file.name);
+			formData.append(`short_name_${index + 1}`, offlineKeys[index]);
 		}
 
 		if (editingData.title !== data.title) {
@@ -294,7 +297,7 @@
 			postData.excerpt = editingData.excerpt;
 		}
 
-		if (editingData.draft !== data.draft) {
+		if (contentChanged || offlineKeys.length > 0) {
 			postData.draft = editingData.draft;
 			postData.content = editingData.content;
 		}

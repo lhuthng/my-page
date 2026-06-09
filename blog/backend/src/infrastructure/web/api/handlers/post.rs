@@ -21,8 +21,9 @@ use crate::{
                 PushNewLikeCommand, PushNewViewCommand, SearchPostCommand, SearchTagsCommand,
                 SetFeaturedPostCommand, SetRelatedPostsCommand, UpdatePostCommand,
             },
+            project::GetProjectsByTagCommand,
         },
-        services::{media::MediaService, post::PostService},
+        services::{media::MediaService, post::PostService, project::ProjectService},
     },
     domain::{
         entities::{
@@ -380,57 +381,10 @@ pub async fn update_post(
     {
         let mut content = content;
         let mut draft = draft;
-
-        let reg = Regex::new(r"@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]").unwrap();
-
-        let mut content_extraction = Vec::<ShortNameExtraction>::new();
-
-        for cap in reg.captures_iter(&content) {
-            if let Some(matched) = cap.get(1) {
-                content_extraction.push(ShortNameExtraction {
-                    short_name: matched.as_str().to_string(),
-                    start: matched.start(),
-                });
-            }
-        }
-        content_extraction.sort_by_key(|k| Reverse(k.start));
-
-        let mut draft_extraction = Vec::<ShortNameExtraction>::new();
-
-        for cap in reg.captures_iter(&draft) {
-            if let Some(matched) = cap.get(1) {
-                let short_name = matched.as_str().to_string();
-                let start = matched.start();
-                draft_extraction.push(ShortNameExtraction { short_name, start });
-            }
-        }
-        draft_extraction.sort_by_key(|k| Reverse(k.start));
-
         let mut media_usage = HashMap::<String, i64>::new();
 
-        for data in content_extraction {
-            let len = media_usage.len();
-
-            let index = media_usage
-                .entry(data.short_name.clone())
-                .or_insert_with(|| len as i64)
-                .to_string();
-
-            let len = data.short_name.len();
-            replace_range_unicode(&mut content, data.start, len, index.to_string());
-        }
-
-        for data in draft_extraction {
-            let len = media_usage.len();
-
-            let index = media_usage
-                .entry(data.short_name.clone())
-                .or_insert_with(|| len as i64)
-                .to_string();
-
-            let len = data.short_name.len();
-            replace_range_unicode(&mut draft, data.start, len, index.to_string());
-        }
+        replace_media_short_names(&mut content, &mut media_usage);
+        replace_media_short_names(&mut draft, &mut media_usage);
 
         cmd.content = Some(content);
         cmd.draft = Some(draft);
@@ -583,6 +537,38 @@ pub async fn get_categories(
 pub struct ShortNameExtraction {
     pub short_name: String,
     pub start: usize,
+}
+
+fn extract_media_short_names(content: &str) -> Vec<ShortNameExtraction> {
+    let syntaxes = [
+        Regex::new(r"@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]").unwrap(),
+        Regex::new(r":::app\s+lottie\s+([^\s]+)").unwrap(),
+    ];
+
+    let mut extraction = Vec::<ShortNameExtraction>::new();
+    for reg in syntaxes {
+        for cap in reg.captures_iter(content) {
+            if let Some(matched) = cap.get(1) {
+                extraction.push(ShortNameExtraction {
+                    short_name: matched.as_str().to_string(),
+                    start: matched.start(),
+                });
+            }
+        }
+    }
+    extraction.sort_by_key(|k| Reverse(k.start));
+    extraction
+}
+
+fn replace_media_short_names(content: &mut String, usage: &mut HashMap<String, i64>) {
+    for data in extract_media_short_names(content) {
+        let len = usage.len();
+        let index = usage
+            .entry(data.short_name.clone())
+            .or_insert_with(|| len as i64)
+            .to_string();
+        replace_range_unicode(content, data.start, data.short_name.len(), index);
+    }
 }
 
 #[derive(Deserialize)]
@@ -744,34 +730,8 @@ pub async fn new_post(
 
     let mut content = post_data.content;
 
-    // Replace short names with indices
-    let mut extraction = Vec::<ShortNameExtraction>::new();
-
-    let reg = Regex::new(r"@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]").unwrap();
-    for cap in reg.captures_iter(&content) {
-        if let Some(matched) = cap.get(1) {
-            extraction.push(ShortNameExtraction {
-                short_name: matched.as_str().to_string(),
-                start: matched.start(),
-            });
-        }
-    }
-
-    extraction.sort_by_key(|k| Reverse(k.start));
-
     let mut media_usage = HashMap::<String, i64>::new();
-
-    for data in extraction {
-        let len = media_usage.len();
-
-        let index = media_usage
-            .entry(data.short_name.clone())
-            .or_insert_with(|| len as i64)
-            .to_string();
-
-        let len = data.short_name.len();
-        replace_range_unicode(&mut content, data.start, len, index.to_string());
-    }
+    replace_media_short_names(&mut content, &mut media_usage);
 
     let cmd = NewPostCommand {
         user_id: uploader_id,
@@ -782,6 +742,7 @@ pub async fn new_post(
         content,
         cover_image: None,
         media_usage,
+        content_kind: "post".to_string(),
     };
 
     let post_id = state.post_service.new_post(cmd).await?;
@@ -832,6 +793,7 @@ pub struct SearchTagsResponse {
 pub struct TagPostsResponse {
     pub tag: SearchTagResult,
     pub posts: Vec<Post>,
+    pub projects: Vec<super::project::ProjectCard>,
 }
 
 #[axum::debug_handler]
@@ -918,6 +880,15 @@ pub async fn get_posts_by_tag(
             offset: query.offset.unwrap_or(0),
         })
         .await?;
+    let projects = state
+        .project_service
+        .get_project_snapshots_by_tag(GetProjectsByTagCommand {
+            slug: tag.slug.clone(),
+            limit: query.limit.unwrap_or(24),
+            offset: query.offset.unwrap_or(0),
+        })
+        .await
+        .unwrap_or_default();
 
     Ok(Json(TagPostsResponse {
         tag: SearchTagResult {
@@ -926,6 +897,7 @@ pub async fn get_posts_by_tag(
             post_count: tag.post_count,
         },
         posts: posts.into_iter().map(Into::into).collect(),
+        projects: projects.into_iter().map(Into::into).collect(),
     }))
 }
 
