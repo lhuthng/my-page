@@ -8,6 +8,7 @@
 	const baseTabs = [
 		{ label: 'Overview', path: '/dashboard' },
 		{ label: 'Posts', path: '/dashboard/posts' },
+		{ label: 'Projects', path: '/dashboard/projects' },
 		{ label: 'Series', path: '/dashboard/series' },
 		{ label: 'Users', path: '/dashboard/users' }
 	];

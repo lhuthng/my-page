@@ -12,10 +12,35 @@
 	let selection = $state();
 	let dragBox = $state();
 
+	const allowedTypes = [
+		'image/png',
+		'image/jpeg',
+		'image/gif',
+		'image/webp',
+		'video/mp4',
+		'video/webm',
+		'audio/mpeg',
+		'audio/ogg',
+		'audio/wav',
+		'model/gltf-binary',
+		'application/vnd.lottie+zip',
+		'application/zip',
+		'application/x-zip-compressed',
+		'application/x-zip',
+		'application/octet-stream',
+		'binary/octet-stream'
+	];
+
+	function isAllowedMedia(file) {
+		if (!file) return false;
+		if (allowedTypes.includes(file.type)) return true;
+		return file.name.toLowerCase().endsWith('.lottie');
+	}
+
 	function appendMedia(files) {
 		for (let index = 0; index < files.length; index++) {
 			const file = files[index];
-			if (file && file.type.startsWith('image/')) {
+			if (isAllowedMedia(file)) {
 				let name = file.name;
 				let medium = {
 					name: name,

@@ -36,3 +36,4 @@ uuid = { version = "1.18.1", features = ["serde", "v4"] }
 validator = { version = "0.20.0", features = ["derive"] }
 async-graphql = { version = "7", features = ["playground"] }
 async-graphql-axum = "7"
+zip = "0.6"

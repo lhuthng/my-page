@@ -50,8 +50,14 @@
 			.use(anchor, { slugify })
 	);
 
+	const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)/g;
+	const collectMediaKeys = (text) => [
+		...[...text.matchAll(mediaSyntax)].map((match) => match[1]),
+		...[...text.matchAll(lottieAppSyntax)].map((match) => match[1])
+	];
+
 	let debounce = useDebounce(async (_content) => {
-		const keys = [..._content.matchAll(mediaSyntax)].map((match) => match[1]);
+		const keys = collectMediaKeys(_content);
 		await searchMedia(keys);
 		content = _content;
 	}, delay);

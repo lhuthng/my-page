@@ -352,6 +352,11 @@ export function iframeBlockPlugin(md) {
 export function appBlockPlugin(md, options) {
 	const mediaDictionary = options?.mediaDictionary || {};
 
+	function normalizeCssSize(value, fallback) {
+		if (!value || value === '_') return fallback;
+		return /^\d+$/.test(value) ? `${value}px` : value;
+	}
+
 	md.block.ruler.before('fence', 'app', (state, startLine, endLine, silent) => {
 		const pos = state.bMarks[startLine] + state.tShift[startLine];
 		const max = state.eMarks[startLine];
@@ -365,8 +370,8 @@ export function appBlockPlugin(md, options) {
 
 		const type = parts[1];
 		const name = parts[2];
-		const width = !parts[3] || parts[3] === '_' ? '100%' : parts[3];
-		const height = !parts[4] || parts[4] === '_' ? '400px' : parts[4];
+		const width = normalizeCssSize(parts[3], '100%');
+		const height = normalizeCssSize(parts[4], '400px');
 		const rest = parts.slice(5).join('-') || '';
 		const temp = mediaDictionary[name];
 
@@ -382,9 +387,9 @@ export function appBlockPlugin(md, options) {
 
 		let dataBlock =
 			`
-      data-name=${name} data-type=${type} data-width=${width}px data-height=${height}px ` +
-			(rest ? `data-config=${rest} ` : '') +
-			(temp ? `data-temp=${temp} ` : '');
+      data-name="${md.utils.escapeHtml(name)}" data-type="${md.utils.escapeHtml(type)}" data-width="${md.utils.escapeHtml(width)}" data-height="${md.utils.escapeHtml(height)}" ` +
+			(rest ? `data-config="${md.utils.escapeHtml(rest)}" ` : '') +
+			(temp ? `data-temp="${md.utils.escapeHtml(temp)}" ` : '');
 
 		// Return an empty div with data attributes
 		return `
@@ -392,7 +397,7 @@ export function appBlockPlugin(md, options) {
         <div
           class="app-container mx-auto"
           ${dataBlock}
-          style="width: ${width}px; min-height: ${height}px;">
+          style="width: ${width}; min-height: ${height};">
         </div>\n
       </div>
     `;

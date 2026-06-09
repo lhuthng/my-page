@@ -23,6 +23,9 @@ export async function load({ fetch, params, setHeaders }) {
 	data?.posts?.forEach((post) => {
 		if (post.url) post.url = fixClientRoute(post.url);
 	});
+	data?.projects?.forEach((project) => {
+		if (project.url) project.url = fixClientRoute(project.url);
+	});
 
 	return data;
 }

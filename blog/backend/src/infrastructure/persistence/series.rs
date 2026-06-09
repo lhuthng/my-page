@@ -130,12 +130,12 @@ impl SeriesService for SeriesServiceImpl {
             SELECT sp.series_id, sp.post_id, sp.number
             FROM series_post sp
             JOIN posts ON posts.id = sp.post_id
-            WHERE posts.status = 'published'
+            WHERE posts.status = 'published' AND posts.content_kind = 'post'
               AND sp.series_id IN (
                   SELECT DISTINCT sp2.series_id
                   FROM series_post sp2
                   JOIN posts p2 ON p2.id = sp2.post_id
-                  WHERE p2.status = 'published'
+                  WHERE p2.status = 'published' AND p2.content_kind = 'post'
                   ORDER BY sp2.series_id DESC
                   LIMIT ?
                   OFFSET ?
@@ -479,7 +479,7 @@ impl SeriesService for SeriesServiceImpl {
             r#"
             SELECT EXISTS (
                 SELECT 1 FROM posts p, series s
-                WHERE p.id = ? AND s.id = ? AND p.user_id = s.user_id AND p.user_id = ?
+                WHERE p.id = ? AND s.id = ? AND p.user_id = s.user_id AND p.user_id = ? AND p.content_kind = 'post'
             )"#,
         )
         .bind(cmd.post_id)

@@ -14,6 +14,7 @@ pub struct NewPostCommand {
     pub tags: Vec<String>,
     pub cover_image: Option<String>,
     pub media_usage: HashMap<String, i64>,
+    pub content_kind: String,
 }
 
 #[allow(dead_code)]

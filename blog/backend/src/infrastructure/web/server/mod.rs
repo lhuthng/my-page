@@ -22,13 +22,22 @@ pub struct MediaConfig {
     pub allowed_cover_types: Vec<MediaType>,
 }
 
+pub struct ProjectDemoConfig {
+    pub dir: PathBuf,
+    pub max_archive_size: u64,
+    pub max_extracted_size: u64,
+    pub max_files: usize,
+}
+
 pub struct AppState {
     pub config: AppConfig,
     pub media_config: MediaConfig,
+    pub project_demo_config: ProjectDemoConfig,
     pub auth_service: persistence::auth::AuthServiceImpl,
     pub user_service: persistence::user::UserServiceImpl,
     pub media_service: persistence::media::MediaServiceImpl,
     pub post_service: persistence::post::PostServiceImpl,
+    pub project_service: persistence::project::ProjectServiceImpl,
     pub series_service: persistence::series::SeriesServiceImpl,
     pub dashboard_service: persistence::dashboard::DashboardServiceImpl,
     pub graphql_schema: crate::infrastructure::web::graphql::schema::BlogSchema,
@@ -60,6 +69,7 @@ impl MediaConfig {
             MediaType::AudioOgg,
             MediaType::AudioMp3,
             MediaType::ModelGlb,
+            MediaType::Lottie,
         ];
 
         let allowed_avatar_types = vec![
@@ -81,6 +91,37 @@ impl MediaConfig {
             allowed_file_types,
             allowed_avatar_types,
             allowed_cover_types,
+        }
+    }
+}
+
+impl ProjectDemoConfig {
+    pub fn from_env() -> Self {
+        let demo_path =
+            env::var("PROJECT_DEMO_PATH").unwrap_or_else(|_| "./project-demos".to_string());
+        let dir = PathBuf::from(&demo_path);
+        if !dir.exists() {
+            std::fs::create_dir_all(&dir).expect("Failed to create project demo directory");
+        }
+
+        let max_archive_size = env::var("PROJECT_DEMO_MAX_ARCHIVE_BYTES")
+            .unwrap_or_else(|_| (100 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_DEMO_MAX_ARCHIVE_BYTES must be an integer");
+        let max_extracted_size = env::var("PROJECT_DEMO_MAX_EXTRACTED_BYTES")
+            .unwrap_or_else(|_| (200 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_DEMO_MAX_EXTRACTED_BYTES must be an integer");
+        let max_files = env::var("PROJECT_DEMO_MAX_FILES")
+            .unwrap_or_else(|_| "2000".to_string())
+            .parse::<usize>()
+            .expect("PROJECT_DEMO_MAX_FILES must be an integer");
+
+        Self {
+            dir,
+            max_archive_size,
+            max_extracted_size,
+            max_files,
         }
     }
 }
@@ -155,10 +196,12 @@ impl<'a> HTTPServer<'a> {
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
             media_config: MediaConfig::from_env(),
+            project_demo_config: ProjectDemoConfig::from_env(),
             auth_service: persistence::auth::AuthServiceImpl::new(pool.clone()),
             user_service: persistence::user::UserServiceImpl::new(pool.clone()),
             media_service: persistence::media::MediaServiceImpl::new(pool.clone()),
             post_service: persistence::post::PostServiceImpl::new(pool.clone()),
+            project_service: persistence::project::ProjectServiceImpl::new(pool.clone()),
             series_service: persistence::series::SeriesServiceImpl::new(pool.clone()),
             dashboard_service: persistence::dashboard::DashboardServiceImpl::new(pool.clone()),
             graphql_schema,

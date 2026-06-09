@@ -1,5 +1,10 @@
 <script>
 	let { size, file, isSelected, ok, onclick, ondblclick } = $props();
+
+	const isImage = file.type?.startsWith('image/');
+	const isModel = file.type?.startsWith('model/');
+	const isLottie =
+		file.type === 'application/vnd.lottie+zip' || file.name?.toLowerCase().endsWith('.lottie');
 </script>
 
 <button
@@ -15,13 +20,39 @@
 	>
 		<div class="flex" style:height={`${size}px`} style:width={`${size}px`}>
 			<div class="m-auto relative">
-				<img
-					class="m-auto object-contain rounded-sm overflow-hidden"
-					style:max-height={`${size}px`}
-					style:max-width={`${size}px`}
-					src={file.url}
-					alt={file.name}
-				/>
+				{#if isImage}
+					<img
+						class="m-auto object-contain rounded-sm overflow-hidden"
+						style:max-height={`${size}px`}
+						style:max-width={`${size}px`}
+						src={file.url}
+						alt={file.name}
+					/>
+				{:else if isModel}
+					<div
+						class="grid place-items-center rounded-sm bg-primary/10 text-primary"
+						style:height={`${size}px`}
+						style:width={`${size}px`}
+					>
+						<span class="text-xs font-semibold">GLB</span>
+					</div>
+				{:else if isLottie}
+					<div
+						class="grid place-items-center rounded-sm bg-primary/10 text-primary"
+						style:height={`${size}px`}
+						style:width={`${size}px`}
+					>
+						<span class="text-xs font-semibold">LOTTIE</span>
+					</div>
+				{:else}
+					<div
+						class="grid place-items-center rounded-sm bg-primary/10 text-primary"
+						style:height={`${size}px`}
+						style:width={`${size}px`}
+					>
+						<span class="text-xs font-semibold">FILE</span>
+					</div>
+				{/if}
 				{#if ok === true}
 					<svg
 						class="absolute right-1 bottom-1 w-4 h-4"

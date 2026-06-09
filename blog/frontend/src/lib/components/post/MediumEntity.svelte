@@ -38,6 +38,9 @@
 			}
 		}
 	});
+
+	const isLottie =
+		type === 'application/vnd.lottie+zip' || shortName?.toLowerCase().endsWith('.lottie');
 </script>
 
 <li
@@ -110,6 +113,12 @@
 				<path d="M20.5 6.5V17.5L12 22" />
 				<path d="M12 11 20.5 6.5" />
 			</svg>
+		{:else if isLottie}
+			<div
+				class="grid place-items-center m-auto w-8 h-8 lg:w-10 lg:h-10 rounded-sm bg-primary/15 text-primary text-[9px] lg:text-[10px] font-semibold"
+			>
+				<span>LOTTIE</span>
+			</div>
 		{/if}
 	</div>
 	{#if changeName}

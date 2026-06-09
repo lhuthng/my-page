@@ -221,6 +221,8 @@ impl PostServiceImpl {
     ) -> Result<Vec<PostSnapshot>, PostError> {
         let mut placeholder: Vec<String> = vec![];
 
+        placeholder.push("content_kind = 'post'".to_string());
+
         if is_public {
             placeholder.push("status = 'published'".to_string());
         }
@@ -304,8 +306,8 @@ impl PostService for PostServiceImpl {
         let mut tx = self.pool.begin().await?;
         let post_id: i64 = sqlx::query_scalar(
             r#"
-            INSERT INTO posts (user_id, title, slug, excerpt, draft, status)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO posts (user_id, title, slug, excerpt, draft, status, content_kind)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
@@ -315,6 +317,7 @@ impl PostService for PostServiceImpl {
         .bind(&cmd.excerpt)
         .bind(&cmd.content)
         .bind("draft".to_string())
+        .bind(&cmd.content_kind)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -425,9 +428,11 @@ impl PostService for PostServiceImpl {
                 END AS score
             FROM posts AS p
             LEFT JOIN media AS m ON m.id = p.cover_image_id
-            WHERE
-                LOWER(p.title) LIKE '%' || LOWER(?1) || '%'
-                OR LOWER(p.slug) LIKE '%' || LOWER(?1) || '%'
+            WHERE p.content_kind = 'post'
+                AND (
+                    LOWER(p.title) LIKE '%' || LOWER(?1) || '%'
+                    OR LOWER(p.slug) LIKE '%' || LOWER(?1) || '%'
+                )
             ORDER BY score DESC, p.created_at DESC
             LIMIT ?2 OFFSET ?3;
             "#,
@@ -539,6 +544,7 @@ impl PostService for PostServiceImpl {
                 JOIN post_stats ps ON ps.post_id = p.id
                 LEFT JOIN media m ON m.id = p.cover_image_id
             WHERE p.status = 'published'
+                AND p.content_kind = 'post'
                 AND EXISTS (
                     SELECT 1
                     FROM post_tags pt
@@ -789,7 +795,7 @@ impl PostService for PostServiceImpl {
             JOIN user_meta ON user_meta.user_id = users.id
             LEFT JOIN media m1 ON m1.id = posts.cover_image_id
             LEFT JOIN media m2 ON m2.id = user_meta.avatar_image_id
-            WHERE posts.slug = ? AND status = 'published'
+            WHERE posts.slug = ? AND status = 'published' AND posts.content_kind = 'post'
             "#,
         )
         .bind(&cmd.slug)
@@ -870,7 +876,7 @@ impl PostService for PostServiceImpl {
                 JOIN series s ON s.id = sp.series_id
                 JOIN posts p ON p.id = sp.post_id
                 LEFT JOIN media m ON m.id = p.cover_image_id
-                WHERE s.id = ? AND sp.number < ?
+                WHERE s.id = ? AND sp.number < ? AND p.content_kind = 'post'
                 ORDER BY sp.number DESC
                 LIMIT 1
                 "#,
@@ -896,7 +902,7 @@ impl PostService for PostServiceImpl {
                 JOIN series s ON s.id = sp.series_id
                 JOIN posts p ON p.id = sp.post_id
                 LEFT JOIN media m ON m.id = p.cover_image_id
-                WHERE s.id = ? AND sp.number > ?
+                WHERE s.id = ? AND sp.number > ? AND p.content_kind = 'post'
                 ORDER BY sp.number ASC
                 LIMIT 1
                 "#,

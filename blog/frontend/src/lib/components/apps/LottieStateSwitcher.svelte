@@ -2,13 +2,13 @@
 	import { DotLottieSvelte } from '@lottiefiles/dotlottie-svelte';
 	import { onDestroy } from 'svelte';
 
-	let { name, states: state_entries, width, height } = $props();
+	let { name, states: state_entries, width, height, src } = $props();
 
 	let states = $state(Object.fromEntries(state_entries));
 	let dotLottie = $state();
 	let isPlaying = $state(false);
 
-	let selection = $state(state_entries[0][0]);
+	let selection = $state(state_entries[0]?.[0] ?? '');
 
 	function goto(state) {
 		if (!dotLottie) return;
@@ -50,15 +50,21 @@
 
 <div class="flex flex-col mx-auto max-w-80 p-4 rounded-xl bg-accent-blue/60">
 	<div class="h-80">
-		<DotLottieSvelte
-			loop={false}
-			autoplay={false}
-			src={`/lotties/${name}.lottie`}
-			dotLottieRefCallback={(ref) => {
-				dotLottie = ref;
-				setupListeners(dotLottie);
-			}}
-		/>
+		{#if src}
+			<DotLottieSvelte
+				loop={false}
+				autoplay={false}
+				{src}
+				dotLottieRefCallback={(ref) => {
+					dotLottie = ref;
+					setupListeners(dotLottie);
+				}}
+			/>
+		{:else}
+			<div class="grid h-full place-items-center text-center text-dark/70">
+				<p>Something went sideways with this animation.</p>
+			</div>
+		{/if}
 	</div>
 
 	<div class="flex gap-4 *:w-20 justify-center not-lg:items-center">

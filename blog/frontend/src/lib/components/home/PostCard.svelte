@@ -15,14 +15,14 @@
 		tags,
 		previewMode,
 		stats,
+		routePrefix = '/posts',
+		dashboardPrefix = '/dashboard/posts/id',
 		children
 	} = $props();
 
 	let toggled = $state(false);
 
-	let link = $derived(dashboardMode ? `/dashboard/posts/${id}` : `/posts/${slug}`);
-
-	let postLink = $derived(`/posts/${slug}`);
+	let link = $derived(dashboardMode ? `${dashboardPrefix}/${id}` : `${routePrefix}/${slug}`);
 </script>
 
 <div class="bg-white rounded-lg drop-shadow-sm">
@@ -32,7 +32,7 @@
 		{#if !dashboardMode}
 			<a
 				class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34 cursor-pointer rounded-lg origin-center hover:scale-105 transition-transform duration-100 overflow-hidden"
-				href={status === 'draft' ? `/dashboard/posts/id/${id}` : link}
+				href={status === 'draft' ? `${dashboardPrefix}/${id}` : link}
 			>
 				<img
 					class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover bg-white border-3 border-dark rounded-lg"
@@ -84,7 +84,7 @@
 						<a
 							class="w-fit pr-2"
 							href={status === 'draft'
-								? `/dashboard/posts/id/${id}`
+								? `${dashboardPrefix}/${id}`
 								: !dashboardMode
 									? link
 									: undefined}
@@ -140,13 +140,13 @@
 						<a
 							class="block text-right"
 							href={status === 'draft'
-								? `/dashboard/posts/id/${id}`
+								? `${dashboardPrefix}/${id}`
 								: !dashboardMode
 									? link
 									: undefined}
 						>
 							<span class="select-none">>{' '}</span>
-							to post
+							to page
 						</a>
 					</div>
 				</div>

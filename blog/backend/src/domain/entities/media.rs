@@ -16,6 +16,7 @@ pub enum MediaType {
     AudioOgg,
     AudioWav,
     ModelGlb,
+    Lottie,
 }
 
 impl MediaType {
@@ -31,6 +32,48 @@ impl MediaType {
             MediaType::AudioOgg => ".ogg",
             MediaType::AudioWav => ".wav",
             MediaType::ModelGlb => ".glb",
+            MediaType::Lottie => ".lottie",
+        }
+    }
+
+    pub fn get_content_type(&self) -> &'static str {
+        match self {
+            MediaType::ImagePng => "image/png",
+            MediaType::ImageJpeg => "image/jpeg",
+            MediaType::ImageGif => "image/gif",
+            MediaType::ImageWebp => "image/webp",
+            MediaType::VideoMp4 => "video/mp4",
+            MediaType::VideoWebm => "video/webm",
+            MediaType::AudioMp3 => "audio/mpeg",
+            MediaType::AudioOgg => "audio/ogg",
+            MediaType::AudioWav => "audio/wav",
+            MediaType::ModelGlb => "model/gltf-binary",
+            MediaType::Lottie => "application/vnd.lottie+zip",
+        }
+    }
+
+    pub fn from_upload(content_type: &str, filename: &str) -> Result<Self, MediaError> {
+        match Self::from_str(content_type) {
+            Ok(media_type) => Ok(media_type),
+            Err(_) => {
+                let lower_filename = filename.to_ascii_lowercase();
+                let lower_content_type = content_type.to_ascii_lowercase();
+                let is_lottie = lower_filename.ends_with(".lottie")
+                    && matches!(
+                        lower_content_type.as_str(),
+                        "application/zip"
+                            | "application/octet-stream"
+                            | "application/x-zip-compressed"
+                            | "application/x-zip"
+                            | "binary/octet-stream"
+                    );
+
+                if is_lottie {
+                    Ok(Self::Lottie)
+                } else {
+                    Err(MediaError::InvalidFileType)
+                }
+            }
         }
     }
 }
@@ -49,6 +92,7 @@ impl FromStr for MediaType {
             "audio/ogg" => Ok(Self::AudioOgg),
             "audio/wav" => Ok(Self::AudioWav),
             "model/gltf-binary" => Ok(Self::ModelGlb),
+            "application/vnd.lottie+zip" => Ok(Self::Lottie),
             _ => Err(MediaError::InvalidFileType),
         }
     }

@@ -23,6 +23,7 @@
 		author,
 		series,
 		liked: initialLiked,
+		editHref,
 		relatedPosts = []
 	} = $props();
 
@@ -89,7 +90,7 @@
 				</div>
 				{#if id && $user?.username === author.username}
 					<div class="h-fit duo-btn duo-green">
-						<a href={`/dashboard/posts/id/${id}`}>Edit</a>
+						<a href={editHref ?? `/dashboard/posts/id/${id}`}>Edit</a>
 					</div>
 				{/if}
 			</div>

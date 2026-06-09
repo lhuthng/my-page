@@ -6,8 +6,9 @@
 
 	const tag = data.tag;
 	const posts = data.posts ?? [];
+	const projects = data.projects ?? [];
 
-	const postLabel = $derived(tag.post_count === 1 ? 'post' : 'posts');
+	const postLabel = $derived(tag.post_count === 1 ? 'item' : 'items');
 </script>
 
 <svelte:head>
@@ -34,9 +35,9 @@
 		</div>
 	</div>
 
-	{#if posts.length === 0}
+	{#if posts.length === 0 && projects.length === 0}
 		<div class="rounded-xl bg-background/30 px-4 py-6 text-dark/60">
-			No published posts carry this tag yet.
+			No published posts or projects carry this tag yet.
 		</div>
 	{:else}
 		<ul class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4">
@@ -53,6 +54,26 @@
 						tags={tag_slugs}
 						src={url}
 						{stats}
+					/>
+				</li>
+			{/each}
+			{#each projects as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, status }, index (slug)}
+				<li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
+					<PostCard
+						{id}
+						{title}
+						{slug}
+						{excerpt}
+						{status}
+						author={{
+							name: author_name,
+							slug: author_slug
+						}}
+						tags={tag_slugs}
+						src={url}
+						{stats}
+						routePrefix="/projects"
+						dashboardPrefix="/dashboard/projects/id"
 					/>
 				</li>
 			{/each}

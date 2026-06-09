@@ -10,3 +10,4 @@ data/*
 .sqlx
 media/*
 api_test/*
+project-demos/*

@@ -114,9 +114,10 @@ impl MediaServiceImpl {
     async fn is_supported(
         &self,
         file_type: &str,
+        filename: &str,
         config: &MediaConfig,
     ) -> Result<bool, MediaError> {
-        let media_type = MediaType::from_str(file_type)?;
+        let media_type = MediaType::from_upload(file_type, filename)?;
 
         Ok(config.allowed_file_types.contains(&media_type))
     }
@@ -138,12 +139,14 @@ impl MediaService for MediaServiceImpl {
         cmd: UploadMediumCommand,
         config: &MediaConfig,
     ) -> Result<(), MediaError> {
-        if !self.is_supported(&cmd.content_type, config).await? {
-            return Err(MediaError::InvalidFileType);
-        }
         let (bytes, content_type, file_name) =
             convert_to_webp(cmd.bytes, &cmd.content_type, &cmd.file_name)?;
-        let extension = MediaType::from_str(&content_type)?.get_extension();
+        if !self.is_supported(&content_type, &file_name, config).await? {
+            return Err(MediaError::InvalidFileType);
+        }
+        let media_type = MediaType::from_upload(&content_type, &file_name)?;
+        let content_type = media_type.get_content_type().to_string();
+        let extension = media_type.get_extension();
 
         let HashData {
             hash,
@@ -513,12 +516,16 @@ impl MediaService for MediaServiceImpl {
             let (new_bytes, new_content_type, new_filename) =
                 convert_to_webp(bytes, &cmd.content_types[i], &cmd.file_names[i])?;
             cmd.bytes_list[i] = new_bytes;
-            cmd.content_types[i] = new_content_type;
+            let media_type = MediaType::from_upload(&new_content_type, &new_filename)?;
+            cmd.content_types[i] = media_type.get_content_type().to_string();
             cmd.file_names[i] = new_filename;
         }
 
-        for content_type in &cmd.content_types {
-            if !self.is_supported(content_type, config).await? {
+        for i in 0..cmd.number_of_files {
+            if !self
+                .is_supported(&cmd.content_types[i], &cmd.file_names[i], config)
+                .await?
+            {
                 println!("InvalidFileType?");
                 return Err(MediaError::InvalidFileType);
             }
