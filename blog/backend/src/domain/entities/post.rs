@@ -29,6 +29,12 @@ pub struct PostSnapshot {
 }
 
 #[derive(Debug, Clone)]
+pub struct PostSnapshotPage {
+    pub posts: Vec<PostSnapshot>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct PostDetails {
     pub id: i64,
     pub title: String,

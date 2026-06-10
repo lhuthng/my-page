@@ -36,7 +36,7 @@ pub trait PostService {
     async fn get_latest_post_snapshots(
         &self,
         cmd: commands::post::GetLatestPostsCommand,
-    ) -> Result<Vec<entities::post::PostSnapshot>, errors::post::PostError>;
+    ) -> Result<entities::post::PostSnapshotPage, errors::post::PostError>;
     async fn get_post_details(
         &self,
         cmd: commands::post::GetDetailedPostsCommand,

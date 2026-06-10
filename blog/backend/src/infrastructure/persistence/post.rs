@@ -23,7 +23,7 @@ use crate::{
     domain::{
         entities::post::{
             CategoryResult, Comment, CommentPage, Post, PostDetails, PostSeries, PostSnapshot,
-            PostStats, PostSummary, TagSummary,
+            PostSnapshotPage, PostStats, PostSummary, TagSummary,
         },
         errors::post::PostError,
     },
@@ -1003,11 +1003,18 @@ impl PostService for PostServiceImpl {
     async fn get_latest_post_snapshots(
         &self,
         cmd: GetLatestPostsCommand,
-    ) -> Result<Vec<PostSnapshot>, PostError> {
-        let latest_posts = self
-            .get_posts(true, None, cmd.limit, cmd.offset, cmd.sorted_by)
+    ) -> Result<PostSnapshotPage, PostError> {
+        let mut latest_posts = self
+            .get_posts(true, None, cmd.limit + 1, cmd.offset, cmd.sorted_by)
             .await?;
-        Ok(latest_posts)
+        let has_more = latest_posts.len() as i64 > cmd.limit;
+        if has_more {
+            latest_posts.truncate(cmd.limit as usize);
+        }
+        Ok(PostSnapshotPage {
+            posts: latest_posts,
+            has_more,
+        })
     }
     async fn get_post_details(
         &self,

@@ -35,6 +35,12 @@ pub struct ProjectSnapshot {
 }
 
 #[derive(Debug, Clone)]
+pub struct ProjectSnapshotPage {
+    pub projects: Vec<ProjectSnapshot>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct Project {
     pub id: i64,
     pub post_id: i64,

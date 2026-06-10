@@ -837,6 +837,7 @@ impl From<ProjectSnapshot> for ProjectCard {
 #[derive(Serialize)]
 pub struct LatestProjectsResponse {
     pub projects: Vec<ProjectCard>,
+    pub has_more: bool,
 }
 
 pub async fn get_latest_projects(
@@ -853,7 +854,8 @@ pub async fn get_latest_projects(
         })
         .await?;
     Ok(Json(LatestProjectsResponse {
-        projects: projects.into_iter().map(Into::into).collect(),
+        projects: projects.projects.into_iter().map(Into::into).collect(),
+        has_more: projects.has_more,
     }))
 }
 
@@ -876,7 +878,8 @@ pub async fn get_all_projects(
         })
         .await?;
     Ok(Json(LatestProjectsResponse {
-        projects: projects.into_iter().map(Into::into).collect(),
+        projects: projects.projects.into_iter().map(Into::into).collect(),
+        has_more: projects.has_more,
     }))
 }
 
