@@ -965,6 +965,7 @@ impl From<PostSnapshot> for Post {
 #[derive(Serialize)]
 pub struct GetFeaturedPostsResponse {
     pub featured_posts: Vec<Post>,
+    pub has_more: bool,
 }
 
 #[axum::debug_handler]
@@ -977,6 +978,7 @@ pub async fn get_featured_posts(
 
     let wrapped_featured_posts = GetFeaturedPostsResponse {
         featured_posts: featured_posts.into_iter().map(|post| post.into()).collect(),
+        has_more: false,
     };
 
     Ok(Json(wrapped_featured_posts))
@@ -1012,7 +1014,12 @@ pub async fn get_latest_posts(
     let featured_posts = state.post_service.get_latest_post_snapshots(cmd).await?;
 
     let wrapped_featured_posts = GetFeaturedPostsResponse {
-        featured_posts: featured_posts.into_iter().map(|post| post.into()).collect(),
+        featured_posts: featured_posts
+            .posts
+            .into_iter()
+            .map(|post| post.into())
+            .collect(),
+        has_more: featured_posts.has_more,
     };
 
     Ok(Json(wrapped_featured_posts))

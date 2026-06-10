@@ -14,7 +14,7 @@ use crate::{
     domain::{
         entities::{
             post::PostStats,
-            project::{Project, ProjectDemo, ProjectLink, ProjectSnapshot},
+            project::{Project, ProjectDemo, ProjectLink, ProjectSnapshot, ProjectSnapshotPage},
         },
         errors::project::ProjectError,
     },
@@ -529,7 +529,7 @@ impl ProjectService for ProjectServiceImpl {
     async fn get_latest_project_snapshots(
         &self,
         cmd: GetLatestProjectsCommand,
-    ) -> Result<Vec<ProjectSnapshot>, ProjectError> {
+    ) -> Result<ProjectSnapshotPage, ProjectError> {
         let mut where_parts = Vec::<String>::new();
         if cmd.public_only {
             where_parts.push("posts.status = 'published'".to_string());
@@ -577,9 +577,19 @@ impl ProjectService for ProjectServiceImpl {
         if let Some(user_id) = cmd.required_author_id {
             query = query.bind(user_id);
         }
-        let rows = query.bind(cmd.limit).bind(cmd.offset).fetch_all(&self.pool).await?;
+        let rows = query
+            .bind(cmd.limit + 1)
+            .bind(cmd.offset)
+            .fetch_all(&self.pool)
+            .await?;
 
-        self.hydrate_project_rows(rows).await
+        let mut projects = self.hydrate_project_rows(rows).await?;
+        let has_more = projects.len() as i64 > cmd.limit;
+        if has_more {
+            projects.truncate(cmd.limit as usize);
+        }
+
+        Ok(ProjectSnapshotPage { projects, has_more })
     }
 
     async fn get_project_snapshots_by_tag(
