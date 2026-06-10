@@ -39,8 +39,6 @@ export async function load({ fetch, params, setHeaders }) {
 		...rest
 	} = data;
 
-	console.log(data);
-
 	author_avatar_url = fixClientRoute(author_avatar_url);
 	cover_url = fixClientRoute(cover_url);
 	demo_url = fixClientRoute(demo_url);
