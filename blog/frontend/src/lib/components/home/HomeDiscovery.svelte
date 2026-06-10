@@ -152,7 +152,7 @@
 				<button
 					onclick={() => {
 						tab.index = 2;
-						skipIntro = fresh?.[order]?.status === 'fetched';
+						skipIntro = false;
 					}}
 				>
 					Fresh

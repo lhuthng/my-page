@@ -1,7 +1,7 @@
 import { fixClientRoute, route } from '$lib/server/proxy.js';
 
 export async function load({ fetch, setHeaders }) {
-	const firstOffset = 10;
+	const firstOffset = 5;
 	const res = await fetch(route(`projects/latest?limit=${firstOffset}`), {
 		method: 'GET'
 	});
