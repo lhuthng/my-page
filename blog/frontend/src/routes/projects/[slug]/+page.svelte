@@ -83,12 +83,20 @@
 	/>
 
 	{#if links?.length > 0}
-		<section class="flex flex-wrap gap-2 bg-white rounded-xl p-4">
-			{#each links as link}
-				<div class="duo-btn duo-blue">
-					<a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
-				</div>
-			{/each}
+		<section class="flex flex-col gap-2 bg-white rounded-xl p-4">
+			<div class="flex items-center gap-3 mb-3">
+				<h2 class="text-xl lg:text-2xl">Sources</h2>
+				<hr class="grow border" />
+			</div>
+			<ul class="flex flex-wrap">
+				{#each links as link}
+					<li class="duo-btn duo-blue">
+						<a class="no-underline!" href={link.url} target="_blank" rel="noopener noreferrer">
+							{link.label}
+						</a>
+					</li>
+				{/each}
+			</ul>
 		</section>
 	{/if}
 
