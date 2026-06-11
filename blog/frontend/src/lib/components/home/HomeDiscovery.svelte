@@ -137,7 +137,7 @@
 
 <div class="space-y-4 pt-4">
 	<div class="flex not-sm:flex-col min-h-10 items-center justify-between">
-		<ul id="home-tab" class="text-xl font-medium h-8">
+		<ul id="home-tab" class="text-lg sm:text-xl font-medium h-8">
 			<li class:left={true} class:selected={tab.index === 1}>
 				<button
 					onclick={() => {
@@ -162,11 +162,10 @@
 
 		{#if tab.index === 2}
 			<select
-				class="focus:outline-none border-2 border-dark p-1 rounded-lg hover:bg-dark hover:text-white transition-colors duration-200 not-sm:mt-2 sm:ml-auto w-fit cursor-pointer"
+				class="focus:outline-none border-2 border-dark p-1 rounded-lg hover:bg-dark hover:text-white transition-colors duration-200 not-sm:mt-2 sm:ml-auto w-fit cursor-pointer text-base sm:text-lg"
 				name="post-filter"
 				bind:value={_order}
 				in:fly={{ y: -10, duration: 200 }}
-				out:fly={{ y: -10, duration: 200 }}
 				onchange={async (e) => {
 					const value = e.target.value;
 
