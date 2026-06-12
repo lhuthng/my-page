@@ -105,9 +105,7 @@ jobs:
           envs: GHCR_TOKEN,GHCR_USER
           script: |
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            cd ~/MyPage
-            git pull
-            cd blog
+            cd ~/MyPage/blog
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f
