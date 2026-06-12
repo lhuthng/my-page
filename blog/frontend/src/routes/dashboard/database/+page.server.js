@@ -119,7 +119,7 @@ function buildVariables(table, { limit, offset, search, status, role, includeDel
 		case 'media':
 			return { ...base, search: search || null };
 		default:
-			// series, tags, categories — no extra filters
+			// series, tags, categories - no extra filters
 			return base;
 	}
 }
@@ -176,7 +176,7 @@ export async function load(event) {
 			status,
 			role: role_filter,
 			includeDeleted,
-			// GraphQL returns { users: { items, total } } etc. — key matches table name
+			// GraphQL returns { users: { items, total } } etc. - key matches table name
 			tableData: tableResult[table] ?? { items: [], total: 0 }
 		};
 	} catch (e) {

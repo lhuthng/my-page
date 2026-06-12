@@ -229,7 +229,7 @@ pub async fn get_media(
         //
         // IMPORTANT: parts[2] is the post_id for ".post.*" entries, NOT the
         // user_id used as the on-disk subdirectory.  Always use uploader_id
-        // (fetched from the DB) as the directory name — it is the user_id for
+        // (fetched from the DB) as the directory name - it is the user_id for
         // post covers, avatars, and series covers.
         let parts: Vec<&str> = link.hash.splitn(4, '.').collect();
         if parts.len() < 4 {
@@ -255,7 +255,7 @@ pub async fn get_media(
         (path, link.hash.clone())
     };
 
-    // Open the file for streaming — avoids loading the entire file into RAM,
+    // Open the file for streaming - avoids loading the entire file into RAM,
     // which previously caused OOM kills on the 256 MB machine when many
     // images were requested concurrently.
     //
@@ -275,7 +275,7 @@ pub async fn get_media(
 
     let body = Body::from_stream(ReaderStream::new(file));
 
-    // Use the plain SHA-256 as the ETag — stable content identifier
+    // Use the plain SHA-256 as the ETag - stable content identifier
     // regardless of the storage layout.
     let etag = format!("\"{}\"", content_hash);
 

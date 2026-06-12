@@ -120,7 +120,7 @@
 		{#if overview.growth?.length}
 			{@const maxVal = Math.max(...overview.growth.flatMap((g) => [g.new_posts, g.new_users]), 1)}
 			<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
-				<h2 class="text-2xl font-semibold">Activity — Last 30 Days</h2>
+				<h2 class="text-2xl font-semibold">Activity - Last 30 Days</h2>
 				<div class="flex gap-4 text-sm text-dark/60">
 					<span class="flex items-center gap-1.5">
 						<span class="inline-block w-3 h-3 rounded-sm bg-accent-blue"></span>

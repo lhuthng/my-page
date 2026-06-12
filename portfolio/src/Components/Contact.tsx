@@ -1,7 +1,7 @@
 import Me from "@/Components/SVGR/Me";
 import gsap from "gsap";
 import { useEffect, useReducer, useRef, useState } from "react";
-import { useBoundedEase } from "@/Utils/Hooks/ease";
+import { createBoundedEase } from "@/Utils/Hooks/ease";
 import Vect from "@/Utils/vector";
 import "@/Styles/Contact.css";
 
@@ -105,10 +105,16 @@ export default function Contact() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const lookAtMouse = useRef<(event: MouseEvent) => void>(null);
   const stopLookingAtMouse = useRef<() => void>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
-  const messageRef = useRef<HTMLTextAreaElement>(null);
-  const [getStatus, setStatus] = useState<String | null>(null);
-  const [getOk, setOk] = useState<boolean>(true);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [ok, setOk] = useState(true);
+  const [pending, setPending] = useState(false);
+  const contactEndpoint =
+    typeof window !== "undefined" && window.location.hostname === "localhost"
+      ? "http://localhost:5173/api/mail/contact-form"
+      : "https://blog.huuthangle.site/api/mail/contact-form";
 
   useEffect(() => {
     const melement = document.querySelector("#me-svg");
@@ -133,7 +139,7 @@ export default function Contact() {
       });
     });
 
-    const boundedEase = useBoundedEase(4, 100, 2);
+    const boundedEase = createBoundedEase(4, 100, 2);
 
     lookAtMouse.current = (event: MouseEvent) => {
       const delta = findLocal(
@@ -217,50 +223,85 @@ export default function Contact() {
           <div className="w-full md:w-[60%] text-blackboard text-lg space-y-2">
             <p>
               - Got a project in mind, a question about my work, or just want to
-              connect? Drop me a message — I read every one and I'll get back to
+              connect? Drop me a message - I read every one and I'll get back to
               you.
             </p>
             <form
               className="bg-white-chalk-dark/35 py-3 px-4 rounded-lg"
               onSubmit={async (e) => {
                 e.preventDefault();
+                setPending(true);
+                setStatus(null);
+                let timeoutId: number | undefined;
 
-                if (!emailRef.current || !messageRef.current) {
-                  console.log("Nah");
-                  return;
-                }
-
-                const email = emailRef.current.value,
-                  message = messageRef.current.value;
-
-                const res = await fetch(
-                  "https://blog.huuthangle.site/api/mail/contact-form",
-                  {
+                try {
+                  const controller = new AbortController();
+                  timeoutId = window.setTimeout(() => controller.abort(), 15000);
+                  const res = await fetch(contactEndpoint, {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
                     },
+                    signal: controller.signal,
                     body: JSON.stringify({
-                      name: "portfolio",
+                      name,
                       email,
                       content: message,
                     }),
-                  },
-                );
+                  });
 
-                setOk(res.ok);
-                setStatus(await res.text());
+                  const payload = await res.json().catch(async () => ({
+                    message: await res.text(),
+                  }));
+
+                  setOk(res.ok);
+                  setStatus(payload.message ?? "Request completed.");
+
+                  if (res.ok) {
+                    setName("");
+                    setEmail("");
+                    setMessage("");
+                  }
+                } catch (error) {
+                  setOk(false);
+                  setStatus(
+                    error instanceof DOMException && error.name === "AbortError"
+                      ? "The server took too long to respond. Please try again soon."
+                      : "I couldn't send the message right now. Please try again soon.",
+                  );
+                } finally {
+                  if (timeoutId !== undefined) {
+                    window.clearTimeout(timeoutId);
+                  }
+                  setPending(false);
+                }
               }}
             >
               <div className="flex gap-2">
+                <label htmlFor="name">Name: </label>
+                <input
+                  className="px-2 flex-1 border-b-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100"
+                  type="text"
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="What should I call you?"
+                  autoComplete="name"
+                  minLength={3}
+                  maxLength={48}
+                  required
+                />
+              </div>
+              <div className="flex gap-2">
                 <label htmlFor="email">Email: </label>
                 <input
-                  ref={emailRef}
                   className="px-2 flex-1 border-b-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100"
                   type="email"
                   id="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="Your contact point"
-                  autoComplete="off"
+                  autoComplete="email"
                   required
                 />
               </div>
@@ -268,9 +309,10 @@ export default function Contact() {
                 <label htmlFor="message">Message:</label>
                 <br />
                 <textarea
-                  ref={messageRef}
                   className="scrollbar-custom scroll-thumb-orange px-2 w-full h-22 lg:h-15 border-l-2 border-white-chalk-dark/35 focus:outline-hidden focus:border-orange-chalk focus:bg-white-chalk-dark/30 transition-all duration-100 resize-none"
                   id="message"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
                   rows={2}
                   minLength={5}
                   maxLength={512}
@@ -285,16 +327,17 @@ export default function Contact() {
               </div>
               <div className="flex flex-col items-end">
                 <button
-                  className="relative submit-button border-2 px-2 py-1 border-white-chalk-dark hover:border-orange-chalk hover:font-bold hover:-translate-x-1 hover:-translate-y-1 active:border-orange-chalk active:font-bold active:translate-0 transition-all duration-100 cursor-pointer whitespace-nowrap"
+                  className="relative submit-button border-2 px-2 py-1 border-white-chalk-dark hover:border-orange-chalk hover:font-bold hover:-translate-x-1 hover:-translate-y-1 active:border-orange-chalk active:font-bold active:translate-0 transition-all duration-100 cursor-pointer whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60 disabled:transform-none"
                   type="submit"
+                  disabled={pending}
                 >
-                  Send Message
+                  {pending ? "Sending..." : "Send Message"}
                 </button>
-                {getStatus !== null && (
+                {status !== null && (
                   <span
-                    className={`text-right ${getOk ? "text-green-600" : "text-red-600"} `}
+                    className={`max-w-md pt-2 text-right text-sm ${ok ? "text-green-700" : "text-red-600"} `}
                   >
-                    {getStatus}
+                    {status}
                   </span>
                 )}
               </div>

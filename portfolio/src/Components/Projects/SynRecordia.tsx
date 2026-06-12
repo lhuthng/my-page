@@ -108,7 +108,7 @@ export default function SynRecordia({ active, onClick }: ProjectProps) {
             />
           ))}
 
-          {/* Scrolling track — 200% wide, moves -50% for a seamless loop */}
+          {/* Scrolling track - 200% wide, moves -50% for a seamless loop */}
           <div
             className="absolute top-0 h-full"
             style={{
@@ -157,7 +157,7 @@ export default function SynRecordia({ active, onClick }: ProjectProps) {
           <p>
             A browser-based, Synthesia-inspired music visualizer and sampler
             that syncs sampled audio with a live-scrolling piano-roll and
-            animated fingering graphics — fully client-side.
+            animated fingering graphics - fully client-side.
           </p>
           <p>
             <strong>Stack:</strong> React, Tone.js, PIXI.js, Web Audio API
@@ -167,13 +167,13 @@ export default function SynRecordia({ active, onClick }: ProjectProps) {
       details={
         <div className="bg-white-chalk w-full h-full not-md:border-t-2 md:border-l-2 border-navi-chalk text-black space-y-4 p-4">
           <p className="italic font-medium">
-            "What if you could see and hear the music at the same time — every
+            "What if you could see and hear the music at the same time - every
             note, every fingering, perfectly in sync?"
           </p>
           <p>
             Born from a desire to learn recorder visually, SynRecordia
             reimagines how you interact with sheet music. Sampled instruments,
-            smooth piano-roll scrolling, and real-time playback controls — all
+            smooth piano-roll scrolling, and real-time playback controls - all
             running in the browser without a backend.
           </p>
           <div className="space-y-4">
@@ -196,7 +196,7 @@ export default function SynRecordia({ active, onClick }: ProjectProps) {
               <li>
                 <strong>Real-time Controls:</strong> Play / Pause / Restart,
                 tempo (BPM) control, loop mode, and mouse / touch / wheel
-                scrubbing — all scheduled via <strong>Tone.js</strong> for
+                scrubbing - all scheduled via <strong>Tone.js</strong> for
                 sample-accurate timing.
               </li>
               <li>

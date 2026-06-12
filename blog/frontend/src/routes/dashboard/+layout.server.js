@@ -48,7 +48,7 @@ export async function load(event) {
 		accessToken = { type, token };
 	}
 
-	// Read the role directly from the JWT payload — no extra API round-trip.
+	// Read the role directly from the JWT payload - no extra API round-trip.
 	// The backend re-validates the token on every protected endpoint anyway.
 	const claims = parseJwtClaims(accessToken.token);
 	const role = claims?.role ?? null;

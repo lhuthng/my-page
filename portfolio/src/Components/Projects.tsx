@@ -34,7 +34,7 @@ export default function Projects() {
           ))}
           <li className="col-span-full w-full flex items-center justify-center bg-white rounded-2xl text-black p-4">
             <p>
-              This is just the highlight reel — more projects, write-ups, and
+              This is just the highlight reel - more projects, write-ups, and
               experiments live on{" "}
               <a
                 className="inline-block hover:font-semibold text-blue-500"

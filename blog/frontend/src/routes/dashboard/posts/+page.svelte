@@ -55,7 +55,7 @@
 </script>
 
 <svelte:head>
-	<title>Posts — Dashboard | Huu Thang's Blog</title>
+	<title>Posts - Dashboard | Huu Thang's Blog</title>
 </svelte:head>
 
 <section class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8">

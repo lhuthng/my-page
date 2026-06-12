@@ -6,7 +6,7 @@ Rust 2024 edition · Axum 0.8 · SQLite via sqlx 0.8 · Port 3000
 
 ```
 src/
-├── domain/          # Core types and traits — no external dependencies
+├── domain/          # Core types and traits - no external dependencies
 ├── application/     # Use cases, service logic
 └── infrastructure/  # DB, HTTP handlers, auth, email, media
 ```
@@ -22,19 +22,19 @@ Copy `example.env` to `.env` and fill in values.
 | Variable | Description | Default |
 |---|---|---|
 | `DATABASE_URL` | SQLite path or PostgreSQL URL | `sqlite:data/blog.db` |
-| `JWT_SECRET` | Secret for signing JWTs | — |
+| `JWT_SECRET` | Secret for signing JWTs | - |
 | `ACCESS_JWT_EXP_HOURS` | Access token lifetime (hours) | `24` |
 | `REFRESH_JWT_EXP_HOURS` | Refresh token lifetime (hours) | `360` |
 | `MEDIA_PATH` | Directory for uploaded files | `./media` |
 | `ALLOWED_ORIGIN` | Origin allowed to call `/mail/contact-form` | `https://portfolio.huuthangle.site` |
-| `SMTP_HOST` | SMTP server hostname | — |
-| `SMTP_PORT` | SMTP server port | — |
-| `SMTP_USERNAME` | SMTP login username | — |
-| `SMTP_PASSWORD` | SMTP login password | — |
-| `SMTP_FROM` | Sender address | — |
-| `SMTP_TO` | Recipient address for contact form | — |
+| `SMTP_HOST` | SMTP server hostname | - |
+| `SMTP_PORT` | SMTP server port | - |
+| `SMTP_USERNAME` | SMTP login username | - |
+| `SMTP_PASSWORD` | SMTP login password | - |
+| `SMTP_FROM` | Sender address | - |
+| `SMTP_TO` | Recipient address for contact form | - |
 
-Email (via `lettre`) is optional — the server starts fine without SMTP configured.
+Email (via `lettre`) is optional - the server starts fine without SMTP configured.
 
 ---
 
@@ -42,7 +42,7 @@ Email (via `lettre`) is optional — the server starts fine without SMTP configu
 
 **Auth levels:** public · optional auth · protected (any logged-in user) · mod protected · admin protected
 
-### Auth — `/auth`
+### Auth - `/auth`
 
 | Method | Path | Description |
 |---|---|---|
@@ -50,7 +50,7 @@ Email (via `lettre`) is optional — the server starts fine without SMTP configu
 | `POST` | `/auth/register` | Create a new account |
 | `POST` | `/auth/refresh` | Exchange refresh token for new access token |
 
-### Users — `/users`
+### Users - `/users`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -62,7 +62,7 @@ Email (via `lettre`) is optional — the server starts fine without SMTP configu
 | `PATCH` | `/users/me/avatar` | Protected | Upload avatar (20 MB limit) |
 | `GET` | `/users/me/check-mod` | Protected | Check if current user is a moderator |
 
-### Posts — `/posts`
+### Posts - `/posts`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -82,7 +82,7 @@ Email (via `lettre`) is optional — the server starts fine without SMTP configu
 | `PATCH` | `/posts/id/:id` | Mod | Edit post content/metadata |
 | `PATCH` | `/posts/id/:id/cover` | Mod | Upload cover image (100 MB limit) |
 
-### Series — `/series`
+### Series - `/series`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -93,7 +93,7 @@ Email (via `lettre`) is optional — the server starts fine without SMTP configu
 | `DELETE` | `/series/id/:id` | Mod | Remove a post from a series |
 | `GET` | `/series/id/:id/posts` | Mod | List posts in a series |
 
-### Media — `/media`
+### Media - `/media`
 
 Static files are also served directly from `MEDIA_PATH` via `tower-http ServeDir` as a fallback.
 
@@ -110,7 +110,7 @@ Static files are also served directly from `MEDIA_PATH` via `tower-http ServeDir
 | `PATCH` | `/media/d/:name/aliases/:alias` | Mod | Update an alias |
 | `DELETE` | `/media/d/:name/aliases/:alias` | Mod | Delete an alias |
 
-### Dashboard — `/dashboard` (mod protected)
+### Dashboard - `/dashboard` (mod protected)
 
 | Method | Path | Description |
 |---|---|---|
@@ -118,13 +118,13 @@ Static files are also served directly from `MEDIA_PATH` via `tower-http ServeDir
 | `GET` | `/dashboard/posts` | Post management data |
 | `GET` | `/dashboard/users` | User management data |
 
-### Mail — `/mail`
+### Mail - `/mail`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/mail/contact-form` | CORS-restricted | Send contact form email — only accepts requests from `ALLOWED_ORIGIN` |
+| `POST` | `/mail/contact-form` | CORS-restricted | Send contact form email - only accepts requests from `ALLOWED_ORIGIN` |
 
-### GraphQL — `/graphql` (admin protected)
+### GraphQL - `/graphql` (admin protected)
 
 | Method | Path | Description |
 |---|---|---|
@@ -159,7 +159,7 @@ mkdir -p ~/.config/rclone/
 nano ~/.config/rclone/rclone.conf
 ```
 
-Configure your remote in `rclone.conf` — any backend rclone supports works (R2, S3, etc.). The remote name in the script is `r2-backup` and the bucket is `blog-backup`.
+Configure your remote in `rclone.conf` - any backend rclone supports works (R2, S3, etc.). The remote name in the script is `r2-backup` and the bucket is `blog-backup`.
 
 **Optional: run daily at midnight via cron:**
 

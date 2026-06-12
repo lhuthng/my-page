@@ -7,13 +7,13 @@ export default function FirstEncounter() {
     <section className="flex flex-col min-h-full justify-evenly text-bg-white-chalk">
       <h1 className="block sm:hidden text-2xl text-center">First Encounter</h1>
       <span>
-        So... it started in middle school — a dusty computer lab and{" "}
+        So... it started in middle school - a dusty computer lab and{" "}
         <code className="font-courier-prime text-yellow-chalk bg-navi-chalk">
           Pascal
         </code>
         . Not the most glamorous origin story, but the moment my first program
         ran correctly, something clicked. Logic, creativity, a dash of
-        stubbornness — it turned out coding had all of them.
+        stubbornness - it turned out coding had all of them.
       </span>
       <figure className="mx-auto my-2 sm:my-6 space-y-2">
         <img className="max-h-80 rounded-2xl" src={monkee}></img>
@@ -22,7 +22,7 @@ export default function FirstEncounter() {
         </figcaption>
       </figure>
       <span>
-        That early spark pulled me into competitive programming — years of
+        That early spark pulled me into competitive programming - years of
         hunting edge cases, optimizing algorithms under contest pressure, and
         occasionally staring at a wrong-answer verdict for way too long. Every
         trophy{" "}

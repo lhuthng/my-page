@@ -15,7 +15,7 @@ export async function GET({ request, params }) {
 		extraHeaders: conditionalHeaders
 	});
 
-	// 304 Not Modified — no body, just forward the status so the browser
+	// 304 Not Modified - no body, just forward the status so the browser
 	// knows its cached copy is still valid.
 	if (res.status === 304) {
 		return new Response(null, {
@@ -32,7 +32,7 @@ export async function GET({ request, params }) {
 		return new Response(text, { status: res.status });
 	}
 
-	// Build response headers — stream the body directly (res.body is a
+	// Build response headers - stream the body directly (res.body is a
 	// ReadableStream) so we never buffer the whole file in the Node process.
 	const responseHeaders = {
 		'Content-Type': res.headers.get('Content-Type') ?? 'application/octet-stream',

@@ -45,6 +45,18 @@ body {
 	--breakpoint-xxs: 500px;
 }
 
+@utility animate-fade-in {
+	animation: fade-in 0.3s ease-in-out var(--delay, 0ms) both;
+}
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
 a {
 	@apply pointer-events-auto hover:underline;
 }

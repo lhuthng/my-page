@@ -4,7 +4,7 @@ export default function MSAdventure() {
       <h1 className="block sm:hidden text-2xl text-center">M.Sc Adventure</h1>
       <span>
         After a year in industry, I felt the pull back toward the deeper end of
-        computer science. The Master's program gave me space to slow down — and
+        computer science. The Master's program gave me space to slow down - and
         go further into the math, the theory, and the kinds of problems that
         don't always have a Stack Overflow answer.
       </span>

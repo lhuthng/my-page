@@ -12,6 +12,33 @@ pub struct AuthTokens {
 }
 
 #[derive(Debug, Clone)]
+pub struct VerificationMailPayload {
+    pub username: String,
+    pub email: String,
+    pub token: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct RegisterResult {
+    pub verification_mail: VerificationMailPayload,
+}
+
+#[derive(Debug, Clone)]
+pub enum LoginResult {
+    Authenticated(AuthTokens),
+    VerificationRequired {
+        verification_mail: Option<VerificationMailPayload>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum ResendVerificationResult {
+    VerificationMailQueued(VerificationMailPayload),
+    AlreadyVerified,
+    UserNotFound,
+}
+
+#[derive(Debug, Clone)]
 pub struct AuthConfig {
     pub algorithm: Algorithm,
     pub header: Header,

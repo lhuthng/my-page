@@ -7,6 +7,8 @@ pub enum AuthError {
     InvalidCredentials,
     InvalidToken,
     ExpiredToken,
+    EmailNotVerified { email_sent: bool },
+    ResendTooSoon,
     Validation(String),
     InternalError(String),
 }
@@ -28,6 +30,20 @@ impl IntoResponse for AuthError {
             }
             AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid tokens".to_string()),
             AuthError::ExpiredToken => (StatusCode::UNAUTHORIZED, "Expired tokens".to_string()),
+            AuthError::EmailNotVerified { email_sent } => (
+                StatusCode::FORBIDDEN,
+                if email_sent {
+                    "Email not verified. A fresh verification link has been sent.".to_string()
+                } else {
+                    "Email not verified. Check your inbox or request a new verification link."
+                        .to_string()
+                },
+            ),
+            AuthError::ResendTooSoon => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Please wait at least one minute before requesting another verification email."
+                    .to_string(),
+            ),
             AuthError::Validation(msg) => (StatusCode::BAD_REQUEST, msg.to_string()),
             AuthError::InternalError(msg) => {
                 error!("Internal error: {}", msg);

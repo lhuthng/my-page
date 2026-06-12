@@ -47,7 +47,7 @@ let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:data/blog.db".t
 - Added `sqlx::migrate!().run(&pool).await?` after pool creation
 - Embeds all migration files from `migrations/` into the binary at compile time
 - Replaces the manual `sqlx migrate run` CLI step from the old deploy script
-- Also switched from `SqlitePool::connect()` to `SqlitePool::connect_with()` with `.create_if_missing(true)` — fixes a `SQLITE_CANTOPEN` (error 14) crash on fresh Fly.io volumes where the DB file does not yet exist
+- Also switched from `SqlitePool::connect()` to `SqlitePool::connect_with()` with `.create_if_missing(true)` - fixes a `SQLITE_CANTOPEN` (error 14) crash on fresh Fly.io volumes where the DB file does not yet exist
 
 ### `blog/backend/src/infrastructure/web/api/router.rs`
 - CORS allowed origin now reads from `ALLOWED_ORIGIN` env var
@@ -65,7 +65,7 @@ let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:data/blog.db".t
 - Mounts a persistent volume `blog_data` at `/app/data`
 - Both the SQLite DB (`/app/data/blog.db`) and media files (`/app/data/media`) live on the same volume
 - `MEDIA_PATH=/app/data/media` set in `[env]`
-- `min_machines_running = 1` — always-on, no cold starts
+- `min_machines_running = 1` - always-on, no cold starts
 
 ### `blog/frontend/fly.toml`
 - `PORT=8080` set in `[env]` (read by `svelte-adapter-bun`)
@@ -77,7 +77,7 @@ let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:data/blog.db".t
 - Simple `node:20-alpine` image, copies `server.js` and `package*.json`, runs `node server.js`
 
 ### `socket-server/fly.toml`
-- Fly.io's HTTP proxy handles WebSocket `Upgrade` headers natively — no special config needed
+- Fly.io's HTTP proxy handles WebSocket `Upgrade` headers natively - no special config needed
 
 ### `.github/workflows/deploy.yml` (replaced)
 - Removed all `appleboy/ssh-action` VPS SSH steps
@@ -178,13 +178,13 @@ fly scale count 1 --app my-blog-frontend --yes
 
 ### 4. `blog.huuthangle.site` DNS not resolving to Fly.io (cert not verified)
 
-**Symptom:** `fly certs check blog.huuthangle.site` reported "Not verified — DNS records do not match".
+**Symptom:** `fly certs check blog.huuthangle.site` reported "Not verified - DNS records do not match".
 
 **Root cause:** The A/AAAA records in Cloudflare DNS were set with the **orange cloud (proxied)** mode. Cloudflare intercepts requests before they reach Fly.io, preventing Let's Encrypt from completing the HTTP-01 or DNS-01 challenge.
 
-**Fix (Option A — simplest):** In Cloudflare DNS, switch the A and AAAA records for `blog.huuthangle.site` to **DNS only** (grey cloud). Fly.io then handles TLS directly.
+**Fix (Option A - simplest):** In Cloudflare DNS, switch the A and AAAA records for `blog.huuthangle.site` to **DNS only** (grey cloud). Fly.io then handles TLS directly.
 
-**Fix (Option B — keep Cloudflare proxy):** Add the following DNS records and set SSL mode to **Full** in Cloudflare:
+**Fix (Option B - keep Cloudflare proxy):** Add the following DNS records and set SSL mode to **Full** in Cloudflare:
 ```
 TXT   _fly-ownership.blog.huuthangle.site  →  app-123r8qo
 CNAME _acme-challenge.blog.huuthangle.site →  blog.huuthangle.site.123r8qo.flydns.net
@@ -252,5 +252,5 @@ fly ssh console --app my-blog-backend -C "sqlite3 /app/data/blog.db 'SELECT COUN
 - [ ] Add `socket-server` to `fly certs` + DNS for `ws.huuthangle.site`
 - [ ] Decommission the old VPS once all services are confirmed live
 - [ ] Consider adding [Litestream](https://litestream.io/) for continuous SQLite replication to Cloudflare R2 as a backup strategy
-- [ ] Update the footer text in `blog/frontend` — it still says "Running on a VPS"
+- [ ] Update the footer text in `blog/frontend` - it still says "Running on a VPS"
 ```

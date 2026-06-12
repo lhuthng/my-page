@@ -7,7 +7,7 @@ primary_region = "sin"
 [env]
   PORT = "8080"
   # API_URL is set via `fly secrets set API_URL=http://<your-backend-app-name>.internal:3000`
-  # Public origin of the backend — used by the server to rewrite media paths so
+  # Public origin of the backend - used by the server to rewrite media paths so
   # the browser fetches images directly from the backend instead of going through
   # the SvelteKit proxy (one fewer hop, no frontend memory pressure, and the
   # backend's Cache-Control / ETag headers reach the browser untouched).

@@ -26,6 +26,14 @@
 	let username = $derived($user?.username);
 	let role = $derived($user?.role);
 	let avatarUrl = $derived($user?.avatarUrl ?? '/missing.png');
+	let loginHref = $derived.by(() => {
+		const redirectTo = encodeURIComponent(`${$page.url.pathname}${$page.url.search}`);
+		return `/login?redirectTo=${redirectTo}`;
+	});
+	let registerHref = $derived.by(() => {
+		const redirectTo = encodeURIComponent(`${$page.url.pathname}${$page.url.search}`);
+		return `/login?register=true&redirectTo=${redirectTo}`;
+	});
 	let mainSearchContainer = $state();
 	let menuSearchContainer = $state();
 	let menuToggled = $state(false);
@@ -272,7 +280,7 @@
 				{:else}
 					<span>wanna</span>
 					<div class="duo-btn duo-primary">
-						<a class="no-underline!" href="/login">
+						<a class="no-underline!" href={loginHref}>
 							<span>Log In{' '}</span>
 							<svg class="inline fill-white h-6" viewBox="0 0 24 24">
 								<path
@@ -283,7 +291,7 @@
 					</div>
 					<span class="text-dark">or</span>
 					<div class="duo-btn duo-primary">
-						<a class="no-underline!" href="/login?register=true">
+						<a class="no-underline!" href={registerHref}>
 							<svg class="inline fill-white h-6" viewBox="0 0 24 24">
 								<path
 									fill-rule="evenodd"
@@ -381,7 +389,7 @@
 				<div class="relative flex h-9 items-center">
 					<div class="absolute right-full pr-2">
 						<div class="duo-btn w-fit duo-primary">
-							<a class="no-underline!" href="/login" onclick={() => (menuToggled = false)}>
+							<a class="no-underline!" href={loginHref} onclick={() => (menuToggled = false)}>
 								<span>log in</span>
 								<svg class="inline fill-white h-5" viewBox="0 0 24 24">
 									<path
@@ -396,7 +404,7 @@
 						<div class="duo-btn w-fit duo-primary">
 							<a
 								class="no-underline!"
-								href="/login?register=true"
+								href={registerHref}
 								onclick={() => (menuToggled = false)}
 							>
 								<svg class="inline fill-white h-5" viewBox="0 0 24 24">

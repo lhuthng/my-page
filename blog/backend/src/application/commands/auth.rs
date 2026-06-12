@@ -15,3 +15,13 @@ pub struct RegisterCommand {
 pub struct RefreshAccessTokenCommand {
     pub refresh_token: String,
 }
+
+#[derive(serde::Deserialize)]
+pub struct VerifyEmailCommand {
+    pub token: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ResendVerificationCommand {
+    pub identifier: String,
+}

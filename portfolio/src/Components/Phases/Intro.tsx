@@ -35,7 +35,7 @@ export default function Intro({
       <h1 className="text-2xl sm:text-3xl text-center">Me in a nutshell</h1>
       <p>
         I'm a full-stack developer who loves building things end-to-end. System
-        design is where I spend the most mental energy — clean architecture,
+        design is where I spend the most mental energy - clean architecture,
         scalable backends, services that hold up under real conditions. Whether
         it's a React frontend or a distributed Rust backend, I like owning the
         full picture.

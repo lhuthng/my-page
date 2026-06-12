@@ -11,14 +11,14 @@ export function route(path) {
  *
  * When BACKEND_ORIGIN is set (e.g. "https://my-blog-backend.fly.dev"),
  * the browser fetches the image straight from the backend, skipping the
- * SvelteKit proxy entirely — one fewer network hop, no memory pressure on
+ * SvelteKit proxy entirely - one fewer network hop, no memory pressure on
  * the frontend machine, and proper Cache-Control headers reach the browser
  * without being rewritten.
  *
  * When BACKEND_ORIGIN is not set (local dev or not yet configured), it
  * falls back to the existing /api/... proxy route so nothing breaks.
  *
- * NOTE: do NOT prefix this variable with PUBLIC_ — $env/dynamic/private
+ * NOTE: do NOT prefix this variable with PUBLIC_ - $env/dynamic/private
  * intentionally excludes PUBLIC_-prefixed variables (those belong to
  * $env/dynamic/public). Using a non-prefixed name keeps it server-only
  * while still being readable at runtime.

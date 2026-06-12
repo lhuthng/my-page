@@ -14,7 +14,7 @@ export default function Now() {
           I'm finishing up my Master's and looking for what's next. After
           working across frontend, backend, data pipelines, and self-hosted
           infrastructure, I want to find a place where that breadth actually
-          matters. Open to opportunities — and always open to a good
+          matters. Open to opportunities - and always open to a good
           conversation.
         </p>
         <span className="absolute w-full sm:w-160 h-auto sm:h-100 left-1/2 -translate-x-1/2 bottom-0 overflow-hidden">

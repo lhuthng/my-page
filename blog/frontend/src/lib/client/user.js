@@ -100,3 +100,28 @@ export async function register(username, password, email) {
 		success: await res.json()
 	};
 }
+
+export async function resendVerification(identifier, captchaToken) {
+	const res = await fetch('/api/auth/resend-verification', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({
+			identifier,
+			captchaToken
+		})
+	});
+
+	let payload;
+	try {
+		payload = await res.json();
+	} catch {
+		payload = { message: await res.text() };
+	}
+
+	return {
+		status: res.ok,
+		message: payload.message ?? 'Request failed.'
+	};
+}

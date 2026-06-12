@@ -1,6 +1,6 @@
 # Portfolio
 
-Source for [portfolio.huuthangle.site](https://portfolio.huuthangle.site) — a static React site built with Bun and deployed to Cloudflare Pages.
+Source for [portfolio.huuthangle.site](https://portfolio.huuthangle.site) - a static React site built with Bun and deployed to Cloudflare Pages.
 
 ---
 
@@ -26,7 +26,7 @@ bun install
 bun dev
 ```
 
-`bun dev` runs `bun --hot src/index.tsx`, which starts a dev server with hot module reloading. No config file needed — Bun picks up `tsconfig.json` automatically.
+`bun dev` runs `bun --hot src/index.tsx`, which starts a dev server with hot module reloading. No config file needed - Bun picks up `tsconfig.json` automatically.
 
 ---
 
@@ -50,7 +50,7 @@ Run `bun run build.ts --help` to see all options.
 
 ## Deployment
 
-Hosted on **Cloudflare Pages**. Any push to `master` that touches `portfolio/**` triggers an automatic build and deploy — no workflow step or extra configuration required.
+Hosted on **Cloudflare Pages**. Any push to `master` that touches `portfolio/**` triggers an automatic build and deploy - no workflow step or extra configuration required.
 
 The Cloudflare Pages project is configured with:
 - **Build command:** `bun run build`

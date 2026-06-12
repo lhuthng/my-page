@@ -83,7 +83,13 @@
 			if (portionSelection === selection) lock(selection);
 		}}
 	>
-		<img draggable="false" {src} {alt} />
+		<img
+			class="animate-fade-in"
+			style:--delay={(2 - selection) * 100 + 'ms'}
+			draggable="false"
+			{src}
+			{alt}
+		/>
 	</button>
 {/snippet}
 
@@ -101,7 +107,7 @@
 		<p>
 			I’m Thắng, and this site serves as my digital garden. It is a personal archive where I
 			document my work experiences, my evolving hobbies, and the various experiments I run in my
-			spare time. Everything you see here is a reflection of my curiosity—whether it’s a deep dive
+			spare time. Everything you see here is a reflection of my curiosity-whether it’s a deep dive
 			into a technical challenge or a small creative spark.
 		</p>
 		<p>
