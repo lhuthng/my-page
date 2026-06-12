@@ -5,6 +5,7 @@ services:
     volumes:
       - ./backend/data:/app/data
       - ./backend/media:/app/media
+      - ./backend/project-demos:/app/project-demos
     container_name: rust-backend
     extra_hosts:
       - "host.docker.internal:host-gateway"

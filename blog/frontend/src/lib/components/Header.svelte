@@ -402,11 +402,7 @@
 					<span class="text-dark">or</span>
 					<div class="absolute left-full pl-2">
 						<div class="duo-btn w-fit duo-primary">
-							<a
-								class="no-underline!"
-								href={registerHref}
-								onclick={() => (menuToggled = false)}
-							>
+							<a class="no-underline!" href={registerHref} onclick={() => (menuToggled = false)}>
 								<svg class="inline fill-white h-5" viewBox="0 0 24 24">
 									<path
 										fill-rule="evenodd"
