@@ -1,5 +1,6 @@
 <script>
 	import { isMod } from '$lib/client/user';
+	import { env as publicEnv } from '$env/dynamic/public';
 	import AboutButton from './buttons/AboutButton.svelte';
 	import BlogButton from './buttons/BlogButton.svelte';
 	import DashboardButton from './buttons/DashboardButton.svelte';
@@ -56,7 +57,7 @@
 			<span class="font-normal">more:</span>
 			<ul class="list-disc list-inside">
 				<li>
-					<a href="https://portfolio.huuthang.site">Portfolio</a>
+					<a href={publicEnv.PUBLIC_PORTFORLIO_URL ?? '/'}>Portfolio</a>
 				</li>
 				<li><a href="/">About</a></li>
 			</ul>
