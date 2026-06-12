@@ -293,6 +293,12 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             middlewares::auth::user_guard,
         ));
 
+    let demos_dir_name = state.project_demo_config.dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .expect("PROJECT_DEMOS_PATH must have a valid directory name");
+    let project_demos_path = format!("/{}", demos_dir_name);
+
     Router::new()
         .nest("/media", media_routes)
         .nest("/auth", auth_routes)
@@ -300,7 +306,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/posts", post_routes)
         .nest("/projects", project_routes)
         .nest_service(
-            "/project-demos",
+            &project_demos_path,
             get_service(ServeDir::new(&state.project_demo_config.dir)),
         )
         .nest("/tags", tag_routes)

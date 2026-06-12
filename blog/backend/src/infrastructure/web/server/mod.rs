@@ -119,7 +119,8 @@ impl MediaConfig {
 
 impl ProjectDemoConfig {
     pub fn from_env() -> Self {
-        let demo_path = env::var("PROJECT_DEMOS_PATH").expect("MEDIA_PATH must be set");
+        let demo_path =
+            env::var("PROJECT_DEMOS_PATH").expect("PROJECT_DEMOS_PATH must be set");
         let dir = PathBuf::from(&demo_path);
         if !dir.exists() {
             std::fs::create_dir_all(&dir).expect("Failed to create project demo directory");

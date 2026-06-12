@@ -544,6 +544,7 @@ pub async fn new_project(
             demo_height: data.demo_height,
             demo_config: data.demo_config,
             demo_url: data.demo_url,
+            demo_url_dir: state.project_demo_config.dir.to_str().unwrap_or("").to_string(),
             links: normalize_links(data.links),
         })
         .await?;
@@ -627,7 +628,10 @@ pub async fn update_project(
 
     let mut demo_url = data.demo_url;
     if parsed.demo_zip.is_some() {
-        demo_url = Some(format!("project-demos/{}/index.html", project_id));
+        let local_demo_url = state.project_demo_config.dir
+            .join(project_id.to_string())
+            .join("index.html");
+        demo_url = Some(local_demo_url.to_str().unwrap_or("").to_string());
     }
 
     state

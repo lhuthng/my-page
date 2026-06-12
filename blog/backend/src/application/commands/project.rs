@@ -8,6 +8,7 @@ pub struct NewProjectCommand {
     pub demo_height: Option<String>,
     pub demo_config: Option<String>,
     pub demo_url: Option<String>,
+    pub demo_url_dir: String,
     pub links: Vec<ProjectLink>,
 }
 
