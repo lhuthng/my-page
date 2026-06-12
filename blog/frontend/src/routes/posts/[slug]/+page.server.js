@@ -70,7 +70,7 @@ export async function load({ fetch, params, setHeaders }) {
 			fixPost(series.next_post);
 		}
 
-		// Fetch related posts (non-fatal — empty array on failure)
+		// Fetch related posts (non-fatal - empty array on failure)
 		let relatedPosts = [];
 		try {
 			const relRes = await fetch(route(`posts/id/${rest.id}/related`));

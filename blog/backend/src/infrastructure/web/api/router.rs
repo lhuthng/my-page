@@ -8,7 +8,10 @@ use axum::{
 };
 use http::{HeaderValue, Method, header::CONTENT_TYPE};
 use tower_http::trace::TraceLayer;
-use tower_http::{cors::CorsLayer, services::ServeDir};
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    services::ServeDir,
+};
 
 use crate::domain::entities::secret::Claims;
 use crate::infrastructure::web::graphql::schema::BlogSchema;
@@ -37,16 +40,34 @@ async fn graphql_playground() -> impl axum::response::IntoResponse {
 
 // This MUST retuns Router<()> instead of Router<AppState>
 pub fn build_router(state: Arc<AppState>) -> Router<()> {
-    let cors_origin = std::env::var("ALLOWED_ORIGIN")
-        .unwrap_or_else(|_| "https://portfolio.huuthangle.site".to_string());
+    let cors_origins = std::env::var("ALLOWED_ORIGINS")
+        .or_else(|_| std::env::var("ALLOWED_ORIGIN"))
+        .unwrap_or_else(|_| {
+            if cfg!(debug_assertions) {
+                "http://localhost:3004,http://localhost:5000,http://localhost:3000,https://portfolio.huuthangle.site".to_string()
+            } else {
+                "https://portfolio.huuthangle.site".to_string()
+            }
+        });
+    let cors_origins = cors_origins
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .map(|origin| origin.parse::<HeaderValue>().unwrap())
+        .collect::<Vec<_>>();
     let cors = CorsLayer::new()
-        .allow_origin(cors_origin.parse::<HeaderValue>().unwrap())
+        .allow_origin(AllowOrigin::list(cors_origins))
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([CONTENT_TYPE]);
 
     let auth_routes = Router::new()
         .route("/login", post(handlers::auth::login))
         .route("/register", post(handlers::auth::register))
+        .route("/verify-email", get(handlers::auth::verify_email))
+        .route(
+            "/resend-verification",
+            post(handlers::auth::resend_verification),
+        )
         .route("/refresh", post(handlers::auth::refresh_token));
 
     let user_routes = Router::new()

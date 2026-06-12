@@ -70,7 +70,7 @@
 	let hasMore = $derived(userData.users.length < userData.total);
 
 	function formatDate(str) {
-		if (!str) return '—';
+		if (!str) return '-';
 		return new Date(str.replace(' ', 'T')).toLocaleDateString('en-US', {
 			year: 'numeric',
 			month: 'short',
@@ -80,11 +80,11 @@
 </script>
 
 <svelte:head>
-	<title>Users — Dashboard | Huu Thang's Blog</title>
+	<title>Users - Dashboard | Huu Thang's Blog</title>
 </svelte:head>
 
 <section class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8">
-	<!-- Role summary cards — override *: so individual cards style themselves -->
+	<!-- Role summary cards - override *: so individual cards style themselves -->
 	<div class="grid grid-cols-3 gap-4 bg-transparent! p-0!">
 		{#each [['Admins', userData.role_counts.admin, Heart, 'fill-accent-red', 'border-accent-red'], ['Moderators', userData.role_counts.moderator, Diamond, 'fill-accent-blue', 'border-accent-blue'], ['Users', userData.role_counts.user, Club, 'fill-dark/60', 'border-dark/30']] as [label, count, Icon, iconClass, borderClass]}
 			<div class="bg-white rounded-xl p-4 flex items-center gap-3 border-l-4 {borderClass}">

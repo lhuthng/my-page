@@ -53,7 +53,7 @@
 </script>
 
 <svelte:head>
-	<title>Series — Dashboard | Huu Thang's Blog</title>
+	<title>Series - Dashboard | Huu Thang's Blog</title>
 </svelte:head>
 
 <section class="flex flex-col gap-4 pb-8">

@@ -97,7 +97,7 @@ export default function ThisPortfolio({ active, onClick }: ProjectProps) {
                   >
                     blog.huuthangle.site
                   </a>{" "}
-                  — Personal Blog (Svelte 5 + Rust backend)
+                  - Personal Blog (Svelte 5 + Rust backend)
                 </li>
               </ul>
             </div>

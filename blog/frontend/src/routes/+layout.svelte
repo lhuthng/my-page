@@ -19,6 +19,8 @@
 	let mDiv = $state();
 	let scrollTarget = $state();
 
+	const ignoreRoutes = ['login', 'verify-email'];
+
 	$effect(() => {
 		width.set(innerWidth.current);
 	});
@@ -41,7 +43,7 @@
 	<Header />
 	<main class="grow" bind:this={scrollTarget}>
 		<div class="relative flex gap-2 lg:gap-4 w-cap">
-			{#if route !== 'login'}
+			{#if !ignoreRoutes.includes(route)}
 				<NavigationSideBar {route} />
 			{/if}
 			<div class="w-full not-lg:overflow-x-hidden">

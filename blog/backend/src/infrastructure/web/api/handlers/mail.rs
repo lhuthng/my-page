@@ -1,9 +1,18 @@
-use axum::{Json, response::IntoResponse};
-use lettre::{Message, SmtpTransport, Transport, transport::smtp::client::Tls};
-use serde::Deserialize;
+use std::sync::Arc;
+
+use axum::{
+    Json,
+    extract::State,
+    response::IntoResponse,
+};
+use serde::{Deserialize, Serialize};
+use tokio::time::{Duration, timeout};
 use validator::Validate;
 
-use crate::domain::{entities::mail::ContactFormCredential, errors::mail::MailError};
+use crate::{
+    domain::{entities::mail::ContactFormCredential, errors::mail::MailError},
+    infrastructure::{mail::send_contact_emails, web::server::AppState},
+};
 
 #[derive(Deserialize)]
 pub struct ReceiveContactForm {
@@ -12,8 +21,14 @@ pub struct ReceiveContactForm {
     pub content: String,
 }
 
+#[derive(Serialize)]
+pub struct ContactFormResponse {
+    message: String,
+}
+
 #[axum::debug_handler]
 pub async fn receive_contact_form(
+    State(state): State<Arc<AppState>>,
     Json(payload): Json<ReceiveContactForm>,
 ) -> Result<impl IntoResponse, MailError> {
     let ReceiveContactForm {
@@ -31,53 +46,23 @@ pub async fn receive_contact_form(
     if let Err(err) = cred.validate() {
         return Err(MailError::UploadFailed(err.to_string()));
     }
-    let ContactFormCredential {
-        mut name,
-        email,
-        content,
-    } = cred;
+    let mail_config = state
+        .config
+        .mail
+        .as_ref()
+        .ok_or_else(|| MailError::InternalError("SMTP is not configured on the server".to_string()))?;
 
-    if name == "portfolio" {
-        name = "there".to_string();
-    }
+    let send_result = timeout(Duration::from_secs(15), send_contact_emails(mail_config, &cred))
+    .await
+    .map_err(|_| {
+        MailError::InternalError(
+            "Sending email timed out. Please try again in a moment.".to_string(),
+        )
+    })?;
 
-    // 2. Prepare emails
-    //
-    let message_id = format!("<{}@huuthangle.site>", uuid::Uuid::new_v4());
-    let confirmation_email = Message::builder()
-        .from("Thắng <contact@huuthangle.site>".parse().unwrap())
-        .to(email.parse().unwrap())
-        .subject("Thanks for contacting !")
-        .message_id(Some(message_id))
-        .body(format!(
-            "Hi {},\n\nThanks for your message!\n\n- huuthangle.site",
-            name
-        ))
-        .unwrap();
+    send_result.map_err(MailError::InternalError)?;
 
-    let message_id = format!("<{}@huuthangle.site>", uuid::Uuid::new_v4());
-    let notification_email = Message::builder()
-        .from("System <contact@huuthangle.site>".parse().unwrap())
-        .to("huuthang.l@outlook.com".parse().unwrap())
-        .subject("New Contact Form Submission")
-        .message_id(Some(message_id))
-        .body(format!(
-            "Name: {}\nEmail: {}\nContent:\n{}",
-            name, email, content
-        ))
-        .unwrap();
-    let mailer = SmtpTransport::relay("host.docker.internal")
-        .unwrap()
-        .port(25) // Standard Postfix port
-        .timeout(Some(std::time::Duration::from_secs(5)))
-        .tls(Tls::None)
-        .build();
-    // 4. Send emails
-    mailer
-        .send(&confirmation_email)
-        .map_err(|e| e.to_string())?;
-    mailer
-        .send(&notification_email)
-        .map_err(|e| e.to_string())?;
-    Ok("Emails sent successfully")
+    Ok(Json(ContactFormResponse {
+        message: "Message sent. Check your inbox for the confirmation email.".to_string(),
+    }))
 }

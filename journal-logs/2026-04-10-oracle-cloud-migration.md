@@ -6,7 +6,7 @@
 
 ## Context
 
-Fly.io quietly ended their free tier. The three apps that were running free (`my-blog-backend`, `my-blog-frontend`, `my-ws-server`) started accruing charges. The goal was to migrate `my-blog-backend` and `my-blog-frontend` to a permanently free alternative with zero monthly cost — without changing domain names or breaking functionality.
+Fly.io quietly ended their free tier. The three apps that were running free (`my-blog-backend`, `my-blog-frontend`, `my-ws-server`) started accruing charges. The goal was to migrate `my-blog-backend` and `my-blog-frontend` to a permanently free alternative with zero monthly cost - without changing domain names or breaking functionality.
 
 `my-ws-server` (the WebSocket proxy) was left on Fly.io as-is since it was out of scope.
 
@@ -31,7 +31,7 @@ Fly.io quietly ended their free tier. The three apps that were running free (`my
 
 ### Intended vs Actual VM
 
-The plan was to use **VM.Standard.A1.Flex** (ARM, 4 OCPU / 24GB RAM — always free). The instance was created as **VM.Standard.E2.1.Micro** (AMD x86, 1 OCPU / 1GB RAM) by mistake. A1.Flex was unavailable in the region at the time of migration, so the AMD micro was kept.
+The plan was to use **VM.Standard.A1.Flex** (ARM, 4 OCPU / 24GB RAM - always free). The instance was created as **VM.Standard.E2.1.Micro** (AMD x86, 1 OCPU / 1GB RAM) by mistake. A1.Flex was unavailable in the region at the time of migration, so the AMD micro was kept.
 
 This had significant consequences (see Issues section).
 
@@ -58,10 +58,10 @@ Browser request
                                                    rust-backend
 ```
 
-- **Port 5000** — SvelteKit frontend, bound to `127.0.0.1` (nginx only)
-- **Port 3001** — Rust backend, bound to `127.0.0.1` (nginx only, for media)
-- **Port 3000** — Rust backend inside Docker network (SvelteKit server-side calls only)
-- **Port 80/443** — nginx, public
+- **Port 5000** - SvelteKit frontend, bound to `127.0.0.1` (nginx only)
+- **Port 3001** - Rust backend, bound to `127.0.0.1` (nginx only, for media)
+- **Port 3000** - Rust backend inside Docker network (SvelteKit server-side calls only)
+- **Port 80/443** - nginx, public
 
 ---
 
@@ -71,11 +71,11 @@ Browser request
 
 Old workflow used `flyctl deploy --remote-only` for all services. New workflow:
 
-- `build-push-backend` — runs on GitHub's `ubuntu-latest` (7GB RAM), builds the Rust Docker image for `linux/amd64`, pushes to `ghcr.io/lhuthng/blog-backend:latest`
-- `build-push-frontend` — same for the SvelteKit image, pushes to `ghcr.io/lhuthng/blog-frontend:latest`
-- Both jobs run **in parallel** and use `cache-from/cache-to: type=gha` — unchanged Rust dependencies are restored from cache in seconds on subsequent pushes
-- `deploy-blog` — runs after both build jobs succeed; uses `appleboy/ssh-action` to SSH into the Oracle VM, runs `docker compose pull && docker compose up -d --remove-orphans`
-- `deploy-socket-server` — unchanged, still uses `flyctl deploy` for `my-ws-server`
+- `build-push-backend` - runs on GitHub's `ubuntu-latest` (7GB RAM), builds the Rust Docker image for `linux/amd64`, pushes to `ghcr.io/lhuthng/blog-backend:latest`
+- `build-push-frontend` - same for the SvelteKit image, pushes to `ghcr.io/lhuthng/blog-frontend:latest`
+- Both jobs run **in parallel** and use `cache-from/cache-to: type=gha` - unchanged Rust dependencies are restored from cache in seconds on subsequent pushes
+- `deploy-blog` - runs after both build jobs succeed; uses `appleboy/ssh-action` to SSH into the Oracle VM, runs `docker compose pull && docker compose up -d --remove-orphans`
+- `deploy-socket-server` - unchanged, still uses `flyctl deploy` for `my-ws-server`
 
 New GitHub secrets required:
 
@@ -89,18 +89,18 @@ New GitHub secrets required:
 
 ### `blog/docker-compose.yml`
 
-- Added `image: ghcr.io/lhuthng/blog-backend:latest` and `image: ghcr.io/lhuthng/blog-frontend:latest` — `docker compose pull` now fetches pre-built images from GHCR instead of building locally
-- Added `ports: ["127.0.0.1:3001:3000"]` to the backend service — exposes the backend on a host-local port so nginx can proxy `/media/` directly without going through SvelteKit
+- Added `image: ghcr.io/lhuthng/blog-backend:latest` and `image: ghcr.io/lhuthng/blog-frontend:latest` - `docker compose pull` now fetches pre-built images from GHCR instead of building locally
+- Added `ports: ["127.0.0.1:3001:3000"]` to the backend service - exposes the backend on a host-local port so nginx can proxy `/media/` directly without going through SvelteKit
 
 ### `.github/nginx/blog.conf`
 
 - Fixed long-standing `server_name` typo in the 443 block (`blog.huuthang.site` → `blog.huuthangle.site`)
-- Added `location /media/` block that proxies directly to `http://localhost:3001/media/` — browser fetches media straight from the backend via nginx, no SvelteKit memory overhead
+- Added `location /media/` block that proxies directly to `http://localhost:3001/media/` - browser fetches media straight from the backend via nginx, no SvelteKit memory overhead
 - Removed hardcoded Fly.io-era SSL cert paths (now managed by Certbot on the VM)
 
 ### `blog/backend/Dockerfile` (VM-only temporary change)
 
-During the first attempted build on the VM, added `CARGO_BUILD_JOBS=1` to `cargo chef cook` and `cargo build` steps to limit memory usage. This change was **never committed** — it was applied directly on the VM and became irrelevant once the CI/CD pipeline took over building.
+During the first attempted build on the VM, added `CARGO_BUILD_JOBS=1` to `cargo chef cook` and `cargo build` steps to limit memory usage. This change was **never committed** - it was applied directly on the VM and became irrelevant once the CI/CD pipeline took over building.
 
 ---
 
@@ -137,7 +137,7 @@ sudo apt install docker-compose-plugin -y
 # nginx + Certbot
 sudo apt install nginx certbot python3-certbot-nginx git rsync -y
 
-# 4GB swap (critical — see Issues)
+# 4GB swap (critical - see Issues)
 sudo fallocate -l 4G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
@@ -149,7 +149,7 @@ sudo iptables -I INPUT 5 -m state --state NEW -p tcp --dport 80 -j ACCEPT
 sudo iptables -I INPUT 5 -m state --state NEW -p tcp --dport 443 -j ACCEPT
 sudo netfilter-persistent save
 
-# Code (private repo — git clone over HTTPS fails without token)
+# Code (private repo - git clone over HTTPS fails without token)
 rsync -avz -e "ssh -i <key>" \
   --exclude='blog/backend/target' --exclude='blog/frontend/node_modules' \
   --exclude='blog/frontend/build' --exclude='.git' \
@@ -164,7 +164,7 @@ sudo certbot --nginx -d blog.huuthangle.site -d huuthangle.site \
 
 ## Issues Encountered & Resolved
 
-### 1. Wrong VM shape created — no A1.Flex available
+### 1. Wrong VM shape created - no A1.Flex available
 
 **Symptom:** `free -h` on the VM showed 954MB RAM. `nproc` showed 2. `uname -m` showed `x86_64`.
 
@@ -180,9 +180,9 @@ sudo certbot --nginx -d blog.huuthangle.site -d huuthangle.site \
 
 **Root cause:** `docker compose build` with a Rust project of this size (`axum`, `sqlx`, `async-graphql`, `tokio`, etc.) requires several GB of RAM. The VM had 1GB RAM and no swap, so the OOM killer took out critical processes, freezing the entire machine.
 
-**First fix attempt:** Added 4GB swap + `CARGO_BUILD_JOBS=1` in the Dockerfile — correct approach but abandoned in favour of a better solution (see below).
+**First fix attempt:** Added 4GB swap + `CARGO_BUILD_JOBS=1` in the Dockerfile - correct approach but abandoned in favour of a better solution (see below).
 
-**Final fix:** Killed the on-VM build entirely. Moved all image building to GitHub Actions (`ubuntu-latest` runner has ~7GB RAM and 2 fast CPUs). The VM now only runs `docker compose pull` — it never compiles anything.
+**Final fix:** Killed the on-VM build entirely. Moved all image building to GitHub Actions (`ubuntu-latest` runner has ~7GB RAM and 2 fast CPUs). The VM now only runs `docker compose pull` - it never compiles anything.
 
 ```bash
 # Kill the runaway build
@@ -196,7 +196,7 @@ sudo kill -9 <rustc-pid>
 
 **Symptom:** `curl http://blog.huuthangle.site/` returned `Connection refused`. Certbot could not complete the HTTP-01 ACME challenge.
 
-**Root cause:** Oracle Cloud's Ubuntu image ships with a default iptables INPUT chain that has a catch-all `REJECT` rule. The script originally ran `sudo iptables -I INPUT 6 ...` to insert ACCEPT rules for ports 80 and 443, but the REJECT rule was at position 5 — so all traffic matched REJECT before reaching the ACCEPT rules.
+**Root cause:** Oracle Cloud's Ubuntu image ships with a default iptables INPUT chain that has a catch-all `REJECT` rule. The script originally ran `sudo iptables -I INPUT 6 ...` to insert ACCEPT rules for ports 80 and 443, but the REJECT rule was at position 5 - so all traffic matched REJECT before reaching the ACCEPT rules.
 
 ```
 # Broken state (REJECT fires first):
@@ -247,7 +247,7 @@ fixClientRoute("media/i/my-slug")
 // → "https://blog.huuthangle.site/media/i/my-slug"
 ```
 
-On Fly.io this worked because `BACKEND_ORIGIN` pointed to the backend's own public domain (`my-blog-backend.fly.dev`). On Oracle Cloud, the backend has no public domain — nginx only routes traffic to the SvelteKit frontend at port 5000. There was no nginx rule for `/media/`, so these URLs hit SvelteKit and got 404s.
+On Fly.io this worked because `BACKEND_ORIGIN` pointed to the backend's own public domain (`my-blog-backend.fly.dev`). On Oracle Cloud, the backend has no public domain - nginx only routes traffic to the SvelteKit frontend at port 5000. There was no nginx rule for `/media/`, so these URLs hit SvelteKit and got 404s.
 
 **Fix:** Expose the backend on an internal host port and add a dedicated nginx location block:
 
@@ -265,7 +265,7 @@ location /media/ {
 }
 ```
 
-`BACKEND_ORIGIN` stays as `https://blog.huuthangle.site`. The browser now fetches `https://blog.huuthangle.site/media/...`, nginx proxies it straight to the Rust backend on port 3001 — skipping SvelteKit entirely. This is important on a 1GB RAM machine where avoiding unnecessary memory allocation in the frontend container matters.
+`BACKEND_ORIGIN` stays as `https://blog.huuthangle.site`. The browser now fetches `https://blog.huuthangle.site/media/...`, nginx proxies it straight to the Rust backend on port 3001 - skipping SvelteKit entirely. This is important on a 1GB RAM machine where avoiding unnecessary memory allocation in the frontend container matters.
 
 ---
 
@@ -298,8 +298,8 @@ DNS-only (grey cloud) is required because TLS is terminated directly on the VM b
 
 ## Remaining TODOs
 
-- [ ] Try creating `VM.Standard.A1.Flex` (ARM, 4 OCPU / 24GB) again when availability allows — migrate to it for better compile headroom and more memory for containers
-- [ ] Update the footer text in `blog/frontend` — it still references Fly.io
+- [ ] Try creating `VM.Standard.A1.Flex` (ARM, 4 OCPU / 24GB) again when availability allows - migrate to it for better compile headroom and more memory for containers
+- [ ] Update the footer text in `blog/frontend` - it still references Fly.io
 - [ ] Consider [Litestream](https://litestream.io/) for continuous SQLite replication to object storage as a backup strategy
 - [ ] Automate the nginx config update step in CI (currently a manual scp if changed)
 - [ ] Verify `docker compose up -d` restart policy is set so containers come back after VM reboots

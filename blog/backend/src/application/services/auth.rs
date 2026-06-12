@@ -9,14 +9,22 @@ pub trait AuthService {
         &self,
         cmd: commands::auth::LoginCommand,
         config: entities::auth::AuthConfig,
-    ) -> Result<entities::auth::AuthTokens, errors::auth::AuthError>;
+    ) -> Result<entities::auth::LoginResult, errors::auth::AuthError>;
     async fn register(
         &self,
         reg_creds: entities::auth::RegisterCredentials,
-    ) -> Result<(), errors::auth::AuthError>;
+    ) -> Result<entities::auth::RegisterResult, errors::auth::AuthError>;
     async fn refresh_access_token(
         &self,
         cmd: commands::auth::RefreshAccessTokenCommand,
         config: entities::auth::AuthConfig,
     ) -> Result<entities::auth::AuthTokens, errors::auth::AuthError>;
+    async fn verify_email(
+        &self,
+        cmd: commands::auth::VerifyEmailCommand,
+    ) -> Result<(), errors::auth::AuthError>;
+    async fn resend_verification(
+        &self,
+        cmd: commands::auth::ResendVerificationCommand,
+    ) -> Result<entities::auth::ResendVerificationResult, errors::auth::AuthError>;
 }

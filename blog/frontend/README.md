@@ -4,7 +4,7 @@ SvelteKit frontend for the blog, using [`svelte-adapter-bun`](https://github.com
 
 ## Overview
 
-The app is fully server-side rendered. There is no static export — it runs as a persistent Bun process. In production it's containerized (`FROM oven/bun:1`) and sits behind nginx on the same VM as the backend.
+The app is fully server-side rendered. There is no static export - it runs as a persistent Bun process. In production it's containerized (`FROM oven/bun:1`) and sits behind nginx on the same VM as the backend.
 
 ## Request Flow
 
@@ -34,7 +34,7 @@ Three distinct paths depending on what's being requested:
 | Variable         | Description                                                                                                                                                                                                    |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `API_URL`        | Backend URL for server-side calls. In Docker: `http://backend:3000`. Locally: `http://localhost:3000`. Never exposed to the browser.                                                                           |
-| `BACKEND_ORIGIN` | Public origin of the backend (e.g. `https://blog.huuthangle.site`). Tells `fixClientRoute()` to build direct browser-facing media URLs. Optional — omit it and media falls back to the `/api/media/...` proxy. |
+| `BACKEND_ORIGIN` | Public origin of the backend (e.g. `https://blog.huuthangle.site`). Tells `fixClientRoute()` to build direct browser-facing media URLs. Optional - omit it and media falls back to the `/api/media/...` proxy. |
 | `PORT`           | Port the SvelteKit server listens on. Set to `8080` in `docker-compose.yml`.                                                                                                                                   |
 
 See `example.env` for a starting point.
@@ -62,4 +62,4 @@ Frontend will be available at `http://localhost:5000`.
 bun run build
 ```
 
-Output goes to `build/`. The entry point is `build/index.js` — run it directly with `bun run build/index.js`. The Docker image does exactly this via its `ENTRYPOINT`.
+Output goes to `build/`. The entry point is `build/index.js` - run it directly with `bun run build/index.js`. The Docker image does exactly this via its `ENTRYPOINT`.

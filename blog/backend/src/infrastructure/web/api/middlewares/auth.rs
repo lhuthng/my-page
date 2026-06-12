@@ -15,6 +15,17 @@ use crate::{
     infrastructure::web::{api::secrets::decode_from_jwt_token, server::AppState},
 };
 
+async fn is_verified_user(state: &Arc<AppState>, user_id: &str) -> Result<bool, AuthError> {
+    let verified_at: Option<String> =
+        sqlx::query_scalar("SELECT email_verified_at FROM users WHERE id = ?")
+            .bind(user_id)
+            .fetch_optional(&state.auth_service.pool)
+            .await?
+            .flatten();
+
+    Ok(verified_at.is_some())
+}
+
 #[axum::debug_middleware]
 pub async fn user_guard(
     State(state): State<Arc<AppState>>,
@@ -37,6 +48,10 @@ pub async fn user_guard(
 
     if Utc::now().timestamp() as usize > claims.exp {
         return Err(AuthError::ExpiredToken);
+    }
+
+    if !is_verified_user(&state, &claims.user_id).await? {
+        return Err(AuthError::EmailNotVerified { email_sent: false });
     }
 
     request.extensions_mut().insert(claims);
@@ -65,6 +80,9 @@ pub async fn optional_user_guard(
 
             if Utc::now().timestamp() as usize > claims.exp {
                 return Err(AuthError::ExpiredToken);
+            }
+            if !is_verified_user(&state, &claims.user_id).await? {
+                return Err(AuthError::EmailNotVerified { email_sent: false });
             }
             opt_claims = Some(claims)
         } else {

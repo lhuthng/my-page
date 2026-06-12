@@ -27,7 +27,7 @@
 	];
 
 	// -------------------------------------------------------------------------
-	// Local UI state — synced back from server data after each navigation
+	// Local UI state - synced back from server data after each navigation
 	// -------------------------------------------------------------------------
 	let searchInput = $state(data.search || '');
 	let statusFilter = $state(data.status || '');
@@ -71,7 +71,7 @@
 		goto(`/dashboard/database?${sp.toString()}`);
 	}
 
-	/** Switch to a different table — resets all filters to a clean state. */
+	/** Switch to a different table - resets all filters to a clean state. */
 	function switchTable(id) {
 		searchInput = '';
 		statusFilter = '';
@@ -99,7 +99,7 @@
 	}
 
 	function fmtDate(iso) {
-		return iso ? iso.slice(0, 10) : '—';
+		return iso ? iso.slice(0, 10) : '-';
 	}
 </script>
 
@@ -109,7 +109,7 @@
 
 <div class="flex gap-4 items-start">
 	<!-- -----------------------------------------------------------------------
-       Left sidebar — table selector
+       Left sidebar - table selector
   -------- -->
 	<aside
 		class="w-48 shrink-0 bg-white rounded-xl p-2 flex flex-col gap-0.5 self-start sticky top-4"
@@ -141,7 +141,7 @@
 		<div class="bg-white rounded-xl p-4 flex flex-wrap items-center gap-3">
 			<h2 class="text-xl font-semibold capitalize mr-auto">{table}</h2>
 
-			<!-- Search — users, posts, media -->
+			<!-- Search - users, posts, media -->
 			{#if ['users', 'posts', 'media'].includes(table)}
 				<form
 					onsubmit={(e) => {
@@ -166,7 +166,7 @@
 				</form>
 			{/if}
 
-			<!-- Status filter — posts only -->
+			<!-- Status filter - posts only -->
 			{#if table === 'posts'}
 				<select
 					bind:value={statusFilter}
@@ -181,7 +181,7 @@
 				</select>
 			{/if}
 
-			<!-- Role filter — users only -->
+			<!-- Role filter - users only -->
 			{#if table === 'users'}
 				<select
 					bind:value={roleFilter}
@@ -196,7 +196,7 @@
 				</select>
 			{/if}
 
-			<!-- Include-deleted toggle — comments only -->
+			<!-- Include-deleted toggle - comments only -->
 			{#if table === 'comments'}
 				<label class="flex items-center gap-2 text-sm cursor-pointer select-none">
 					<input
@@ -312,7 +312,7 @@
 											{row.title}
 										</td>
 										<td class="px-4 py-2.5 text-dark/60 whitespace-nowrap">
-											{row.authorName ?? '—'}
+											{row.authorName ?? '-'}
 										</td>
 										<td class="px-4 py-2.5">
 											<span
@@ -330,10 +330,10 @@
 											class="px-4 py-2.5 text-dark/45 text-xs max-w-40 truncate"
 											title={row.seriesTitle ?? ''}
 										>
-											{row.seriesTitle ?? '—'}
+											{row.seriesTitle ?? '-'}
 										</td>
 										<td class="px-4 py-2.5 text-dark/60 tabular-nums">{row.viewCount}</td>
-										<td class="px-4 py-2.5 text-center">{row.isFeatured ? '⭐' : '—'}</td>
+										<td class="px-4 py-2.5 text-center">{row.isFeatured ? '⭐' : '-'}</td>
 										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">
 											{fmtDate(row.createdAt)}
 										</td>
@@ -416,7 +416,7 @@
 											class="px-4 py-2.5 text-dark/45 text-xs max-w-[16rem] truncate"
 											title={row.description ?? ''}
 										>
-											{row.description ?? '—'}
+											{row.description ?? '-'}
 										</td>
 										<td class="px-4 py-2.5 text-dark/60 tabular-nums">{row.postCount}</td>
 									{/if}

@@ -10,7 +10,7 @@ export default function BSJourney() {
         <span>
           Competitive programming gave me the spark, and university gave me the
           depth. My B.Sc in Computer Science took me from contest solutions to
-          real software — algorithms, systems, theory, and everything in
+          real software - algorithms, systems, theory, and everything in
           between. A DAAD scholarship also brought me to Germany for a semester,
           which turned out to be one of the more eye-opening parts of my
           education.
@@ -22,7 +22,7 @@ export default function BSJourney() {
             animationData={nerd}
             loop={true}
           />{" "}
-          weren't just about learning concepts — they were about learning how to
+          weren't just about learning concepts - they were about learning how to
           build. Team projects, coursework, and late-night debugging sessions
           turned theory into something I could actually ship.
         </span>

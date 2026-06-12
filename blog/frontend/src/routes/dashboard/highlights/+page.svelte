@@ -89,7 +89,7 @@
 </script>
 
 <svelte:head>
-	<title>Homepage Highlights — Dashboard | Huu Thang's Blog</title>
+	<title>Homepage Highlights - Dashboard | Huu Thang's Blog</title>
 </svelte:head>
 
 <div class="flex flex-col gap-4 pb-8">

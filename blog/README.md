@@ -1,6 +1,6 @@
 # Blog
 
-A full-stack personal blog — SvelteKit frontend and Rust/Axum backend, both running as Docker containers on the same Oracle Cloud VM, sitting behind nginx.
+A full-stack personal blog - SvelteKit frontend and Rust/Axum backend, both running as Docker containers on the same Oracle Cloud VM, sitting behind nginx.
 
 ## Architecture
 
@@ -11,7 +11,7 @@ Browser
                                                       └── server-side calls → http://backend:3000 (Docker internal)
 ```
 
-nginx handles TLS termination and routes traffic to two upstream targets: port `5000` for the SvelteKit frontend and port `3001` exclusively for media files served by the Rust backend. Server-side data fetching inside SvelteKit goes over the Docker bridge network directly to `http://backend:3000` — never through nginx.
+nginx handles TLS termination and routes traffic to two upstream targets: port `5000` for the SvelteKit frontend and port `3001` exclusively for media files served by the Rust backend. Server-side data fetching inside SvelteKit goes over the Docker bridge network directly to `http://backend:3000` - never through nginx.
 
 ## Docker Services
 
@@ -61,7 +61,7 @@ Frontend is available at `http://localhost:5000`.
 
 | Variable | Description |
 |---|---|
-| `API_URL` | Backend URL for server-side calls — Docker internal: `http://backend:3000` |
+| `API_URL` | Backend URL for server-side calls - Docker internal: `http://backend:3000` |
 | `BACKEND_ORIGIN` | Public backend origin for browser media URLs (e.g. `https://blog.huuthangle.site`) |
 | `PORT` | Port the SvelteKit server listens on (`8080`) |
 
