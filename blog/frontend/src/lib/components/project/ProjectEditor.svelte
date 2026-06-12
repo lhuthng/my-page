@@ -51,6 +51,7 @@
 		demoType: 'html5',
 		demoWidth: '100%',
 		demoHeight: '520px',
+		demoUrl: '',
 		links: [{ label: 'GitHub', url: '' }],
 		author: {
 			username: $user?.username,
@@ -92,6 +93,7 @@
 		editingData.demoType = data.demoType ?? 'html5';
 		editingData.demoWidth = data.demoWidth ?? '100%';
 		editingData.demoHeight = data.demoHeight ?? '520px';
+		editingData.demoUrl = data.rawDemoUrl ?? '';
 		editingData.links = data.links?.length ? data.links : [{ label: 'GitHub', url: '' }];
 		editor.view = 'public';
 	}
@@ -163,9 +165,9 @@
 	};
 
 	const newProject = async () => {
-		if (!editor.demoZip) {
+		if (!editor.demoZip && !editingData.demoUrl) {
 			editor.isCritical = true;
-			editor.status = 'Demo zip is required';
+			editor.status = 'Demo zip or Demo URL is required';
 			return;
 		}
 
@@ -191,13 +193,16 @@
 						number_of_files: offlineKeys.length,
 						demo_type: editingData.demoType,
 						demo_width: editingData.demoWidth,
-						demo_height: editingData.demoHeight
+						demo_height: editingData.demoHeight,
+						demo_url: editingData.demoUrl
 					})
 				],
 				{ type: 'application/json' }
 			)
 		);
-		formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
+		if (editor.demoZip) {
+			formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
+		}
 		appendInlineFiles(formData, offlineKeys);
 
 		const res = await fetch('/api/projects/new', {
@@ -237,6 +242,7 @@
 			projectData.demo_width = editingData.demoWidth;
 		if (editingData.demoHeight !== (data.demoHeight ?? '520px'))
 			projectData.demo_height = editingData.demoHeight;
+		if (editingData.demoUrl !== (data.rawDemoUrl ?? '')) projectData.demo_url = editingData.demoUrl;
 
 		const tags = editingData.tags
 			.trim()
@@ -573,6 +579,16 @@
 										readonly={!isOwner}
 									/>
 								</div>
+							</div>
+							<div class="flex flex-col">
+								<label for="demo-url">Demo URL (optional):</label>
+								<input
+									id="demo-url"
+									class="px-1 min-w-0 bg-white rounded-sm"
+									bind:value={editingData.demoUrl}
+									placeholder="https://example.github.io/my-demo/"
+									readonly={!isOwner}
+								/>
 							</div>
 							<div
 								class="p-2 rounded-lg bg-white/70 border-2 border-dashed border-dark/30"

@@ -25,6 +25,7 @@ export function route(path) {
  */
 export function fixClientRoute(path) {
 	if (path == undefined) return undefined;
+	if (path.includes('://')) return path;
 	const backendOrigin = env.BACKEND_ORIGIN;
 	if (backendOrigin) {
 		return `${backendOrigin.replace(/\/$/, '')}/${path}`;

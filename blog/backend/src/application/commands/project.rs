@@ -7,6 +7,7 @@ pub struct NewProjectCommand {
     pub demo_width: Option<String>,
     pub demo_height: Option<String>,
     pub demo_config: Option<String>,
+    pub demo_url: Option<String>,
     pub links: Vec<ProjectLink>,
 }
 
@@ -18,6 +19,7 @@ pub struct UpdateProjectCommand {
     pub demo_width: Option<String>,
     pub demo_height: Option<String>,
     pub demo_config: Option<String>,
+    pub demo_url: Option<String>,
     pub links: Option<Vec<ProjectLink>>,
 }
 

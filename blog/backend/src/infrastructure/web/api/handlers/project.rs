@@ -80,6 +80,7 @@ struct ProjectData {
     demo_width: Option<String>,
     demo_height: Option<String>,
     demo_config: Option<String>,
+    demo_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -96,6 +97,7 @@ struct ProjectPatchData {
     demo_width: Option<String>,
     demo_height: Option<String>,
     demo_config: Option<String>,
+    demo_url: Option<String>,
 }
 
 struct FileData {
@@ -498,9 +500,12 @@ pub async fn new_project(
             "Only html5 demos are supported right now.".to_string(),
         ));
     }
-    let demo_zip = parsed.demo_zip.ok_or(ProjectError::InvalidDemo(
-        "Project demo zip is required.".to_string(),
-    ))?;
+    let demo_zip = parsed.demo_zip;
+    if demo_zip.is_none() && data.demo_url.is_none() {
+        return Err(ProjectError::InvalidDemo(
+            "Either project demo zip or demo URL is required.".to_string(),
+        ));
+    }
 
     upload_inline_media(
         &state,
@@ -538,12 +543,15 @@ pub async fn new_project(
             demo_width: data.demo_width,
             demo_height: data.demo_height,
             demo_config: data.demo_config,
+            demo_url: data.demo_url,
             links: normalize_links(data.links),
         })
         .await?;
 
-    if let Err(err) = extract_demo_zip(&state.project_demo_config, project_id, demo_zip) {
-        return Err(err);
+    if let Some(zip) = demo_zip {
+        if let Err(err) = extract_demo_zip(&state.project_demo_config, project_id, zip) {
+            return Err(err);
+        }
     }
 
     Ok(Json(serde_json::json!({ "id": project_id, "post_id": post_id })))
@@ -617,6 +625,11 @@ pub async fn update_project(
         })
         .await?;
 
+    let mut demo_url = data.demo_url;
+    if parsed.demo_zip.is_some() {
+        demo_url = Some(format!("project-demos/{}/index.html", project_id));
+    }
+
     state
         .project_service
         .update_project(UpdateProjectCommand {
@@ -627,6 +640,7 @@ pub async fn update_project(
             demo_width: data.demo_width,
             demo_height: data.demo_height,
             demo_config: data.demo_config,
+            demo_url,
             links: data.links.map(normalize_links),
         })
         .await?;
@@ -688,6 +702,8 @@ pub struct ProjectResponse {
     pub demo_type: String,
     pub demo_url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_demo_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub demo_width: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub demo_height: Option<String>,
@@ -698,12 +714,15 @@ pub struct ProjectResponse {
 }
 
 fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
+    let demo_url = project.demo.demo_url.clone().unwrap_or_default();
+    let raw_demo_url = if demo_url.contains("://") {
+        Some(demo_url.clone())
+    } else {
+        None
+    };
+
     ProjectResponse {
-        demo_url: format!(
-            "project-demos/{}/{}",
-            project.id,
-            project.demo.entry_path.trim_start_matches('/')
-        ),
+        demo_url,
         id: project.id,
         post_id: project.post_id,
         title: project.title,
@@ -721,6 +740,7 @@ fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
         published_at: project.published_at,
         updated_at: project.updated_at,
         demo_type: project.demo.demo_type,
+        raw_demo_url,
         demo_width: project.demo.width,
         demo_height: project.demo.height,
         demo_config: project.demo.config,

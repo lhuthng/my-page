@@ -69,6 +69,7 @@ struct ProjectContentRow {
     demo_width: Option<String>,
     demo_height: Option<String>,
     demo_config: Option<String>,
+    demo_url: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
@@ -238,6 +239,7 @@ impl ProjectServiceImpl {
                 width: row.demo_width,
                 height: row.demo_height,
                 config: row.demo_config,
+                demo_url: row.demo_url,
             },
             links: self.links_for_project(row.project_id).await?,
             is_owner: viewing_user_id == Some(row.user_id),
@@ -249,6 +251,7 @@ impl ProjectServiceImpl {
 impl ProjectService for ProjectServiceImpl {
     async fn new_project(&self, cmd: NewProjectCommand) -> Result<i64, ProjectError> {
         let mut tx = self.pool.begin().await?;
+        let initial_demo_url = cmd.demo_url.clone();
 
         let project_id: i64 = sqlx::query_scalar(
             r#"
@@ -258,9 +261,10 @@ impl ProjectService for ProjectServiceImpl {
                 demo_entry_path,
                 demo_width,
                 demo_height,
-                demo_config
+                demo_config,
+                demo_url
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
@@ -270,8 +274,18 @@ impl ProjectService for ProjectServiceImpl {
         .bind(cmd.demo_width)
         .bind(cmd.demo_height)
         .bind(cmd.demo_config)
+        .bind(&initial_demo_url)
         .fetch_one(&mut *tx)
         .await?;
+
+        if initial_demo_url.is_none() || initial_demo_url.as_deref().unwrap_or("").trim().is_empty() {
+            let local_demo_url = format!("project-demos/{}/index.html", project_id);
+            sqlx::query("UPDATE projects SET demo_url = ? WHERE id = ?")
+                .bind(local_demo_url)
+                .bind(project_id)
+                .execute(&mut *tx)
+                .await?;
+        }
 
         if !cmd.links.is_empty() {
             let values = cmd
@@ -336,6 +350,9 @@ impl ProjectService for ProjectServiceImpl {
         if cmd.demo_config.is_some() {
             fields.push("demo_config = ?");
         }
+        if cmd.demo_url.is_some() {
+            fields.push("demo_url = ?");
+        }
 
         if !fields.is_empty() {
             fields.push("updated_at = CURRENT_TIMESTAMP");
@@ -354,6 +371,9 @@ impl ProjectService for ProjectServiceImpl {
                 query = query.bind(value);
             }
             if let Some(value) = cmd.demo_config {
+                query = query.bind(value);
+            }
+            if let Some(value) = cmd.demo_url {
                 query = query.bind(value);
             }
             query.bind(cmd.project_id).execute(&mut *tx).await?;
@@ -434,7 +454,8 @@ impl ProjectService for ProjectServiceImpl {
                 projects.demo_entry_path,
                 projects.demo_width,
                 projects.demo_height,
-                projects.demo_config
+                projects.demo_config,
+                projects.demo_url
             FROM projects
             JOIN posts ON posts.id = projects.post_id
             JOIN users ON users.id = posts.user_id
@@ -477,7 +498,8 @@ impl ProjectService for ProjectServiceImpl {
                 projects.demo_entry_path,
                 projects.demo_width,
                 projects.demo_height,
-                projects.demo_config
+                projects.demo_config,
+                projects.demo_url
             FROM projects
             JOIN posts ON posts.id = projects.post_id
             JOIN users ON users.id = posts.user_id
@@ -501,10 +523,7 @@ impl ProjectService for ProjectServiceImpl {
         self.project_from_row(row, Some(cmd.viewing_user_id)).await
     }
 
-    async fn get_project_post_id(
-        &self,
-        cmd: GetProjectPostIdCommand,
-    ) -> Result<i64, ProjectError> {
+    async fn get_project_post_id(&self, cmd: GetProjectPostIdCommand) -> Result<i64, ProjectError> {
         let row: Option<(i64, i64)> = sqlx::query_as(
             r#"
             SELECT posts.id, posts.user_id

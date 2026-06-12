@@ -20,7 +20,11 @@
 			}
 
 			const data = await res.json();
-			src = data.demo_url?.startsWith('/api/') ? data.demo_url : `/api/${data.demo_url}`;
+			if (data.demo_url?.includes('://')) {
+				src = data.demo_url;
+			} else {
+				src = data.demo_url?.startsWith('/api/') ? data.demo_url : `/api/${data.demo_url}`;
+			}
 			if (!data.demo_url) {
 				errorMessage = 'Project demo is missing.';
 			}

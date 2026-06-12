@@ -18,6 +18,7 @@
 		demo_type: demoType,
 		demo_width: demoWidth,
 		demo_height: demoHeight,
+		raw_demo_url: rawDemoUrl,
 		links,
 		is_owner: isOwner = true
 	} = data;
@@ -41,6 +42,7 @@
 		demoType,
 		demoWidth,
 		demoHeight,
+		rawDemoUrl,
 		links
 	}}
 />

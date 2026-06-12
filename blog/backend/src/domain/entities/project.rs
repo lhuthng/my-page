@@ -15,6 +15,7 @@ pub struct ProjectDemo {
     pub width: Option<String>,
     pub height: Option<String>,
     pub config: Option<String>,
+    pub demo_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

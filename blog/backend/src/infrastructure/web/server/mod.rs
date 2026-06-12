@@ -119,8 +119,7 @@ impl MediaConfig {
 
 impl ProjectDemoConfig {
     pub fn from_env() -> Self {
-        let demo_path =
-            env::var("PROJECT_DEMO_PATH").unwrap_or_else(|_| "./project-demos".to_string());
+        let demo_path = env::var("PROJECT_DEMOS_PATH").expect("MEDIA_PATH must be set");
         let dir = PathBuf::from(&demo_path);
         if !dir.exists() {
             std::fs::create_dir_all(&dir).expect("Failed to create project demo directory");
@@ -158,9 +157,17 @@ impl AppConfig {
         let from = env::var("SMTP_FROM").ok();
         let to = env::var("SMTP_TO").ok();
 
-        let any_set = [&brevo_api_key, &host, &port, &username, &password, &from, &to]
-            .into_iter()
-            .any(|value| value.is_some());
+        let any_set = [
+            &brevo_api_key,
+            &host,
+            &port,
+            &username,
+            &password,
+            &from,
+            &to,
+        ]
+        .into_iter()
+        .any(|value| value.is_some());
 
         if !any_set {
             return None;
