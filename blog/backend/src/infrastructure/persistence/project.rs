@@ -279,9 +279,13 @@ impl ProjectService for ProjectServiceImpl {
         .await?;
 
         if initial_demo_url.is_none() || initial_demo_url.as_deref().unwrap_or("").trim().is_empty() {
-            let local_demo_url = format!("project-demos/{}/index.html", project_id);
+            let local_demo_url = std::path::PathBuf::from(cmd.demo_url_dir)
+                .join(project_id.to_string())
+                .join("index.html");
+            let local_demo_url_str = local_demo_url.to_str().unwrap_or("").to_string();
+
             sqlx::query("UPDATE projects SET demo_url = ? WHERE id = ?")
-                .bind(local_demo_url)
+                .bind(local_demo_url_str)
                 .bind(project_id)
                 .execute(&mut *tx)
                 .await?;
