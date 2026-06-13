@@ -25,6 +25,7 @@
 		demo_url,
 		demo_width,
 		demo_height,
+		demo_type,
 		links
 	} = $derived(data);
 
@@ -77,6 +78,7 @@
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
 	<ProjectDemo
 		{title}
+		demoType={demo_type}
 		demoUrl={demo_url}
 		width={demo_width ?? '100%'}
 		height={demo_height ?? '520px'}

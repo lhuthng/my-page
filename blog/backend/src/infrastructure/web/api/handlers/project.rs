@@ -76,7 +76,7 @@ struct ProjectData {
     tags: Vec<String>,
     links: Vec<ProjectLink>,
     number_of_files: usize,
-    demo_type: Option<String>,
+    demo_type: String,
     demo_width: Option<String>,
     demo_height: Option<String>,
     demo_config: Option<String>,
@@ -495,16 +495,30 @@ pub async fn new_project(
     let parsed = parse_project_multipart::<ProjectData>(multipart, "project_data").await?;
     let mut data = parsed.data;
 
-    if data.demo_type.as_deref().unwrap_or("html5") != "html5" {
-        return Err(ProjectError::InvalidDemo(
-            "Only html5 demos are supported right now.".to_string(),
-        ));
-    }
     let demo_zip = parsed.demo_zip;
-    if demo_zip.is_none() && data.demo_url.is_none() {
-        return Err(ProjectError::InvalidDemo(
-            "Either project demo zip or demo URL is required.".to_string(),
-        ));
+    match data.demo_type.as_str() {
+        "html5" | "webgl" => {
+            if demo_zip.is_none() && data.demo_url.is_none() {
+                return Err(ProjectError::InvalidDemo(format!(
+                    "Either project demo zip or demo URL is required for {} projects.",
+                    data.demo_type
+                )));
+            }
+        }
+        "embed" | "download" | "video" => {
+            if data.demo_url.is_none() {
+                return Err(ProjectError::InvalidDemo(format!(
+                    "Demo URL is required for {} projects.",
+                    data.demo_type
+                )));
+            }
+        }
+        _ => {
+            return Err(ProjectError::InvalidDemo(format!(
+                "Unsupported demo type: {}",
+                data.demo_type
+            )));
+        }
     }
 
     upload_inline_media(
@@ -538,7 +552,7 @@ pub async fn new_project(
         .project_service
         .new_project(NewProjectCommand {
             post_id,
-            demo_type: "html5".to_string(),
+            demo_type: data.demo_type,
             demo_entry_path: "index.html".to_string(),
             demo_width: data.demo_width,
             demo_height: data.demo_height,
@@ -572,10 +586,16 @@ pub async fn update_project(
     let parsed = parse_project_multipart::<ProjectPatchData>(multipart, "project_data").await?;
     let mut data = parsed.data;
 
-    if data.demo_type.as_deref().is_some_and(|demo_type| demo_type != "html5") {
-        return Err(ProjectError::InvalidDemo(
-            "Only html5 demos are supported right now.".to_string(),
-        ));
+    if let Some(ref demo_type) = data.demo_type {
+        match demo_type.as_str() {
+            "html5" | "webgl" | "embed" | "download" | "video" => {}
+            _ => {
+                return Err(ProjectError::InvalidDemo(format!(
+                    "Unsupported demo type: {}",
+                    demo_type
+                )));
+            }
+        }
     }
 
     let post_id = state
