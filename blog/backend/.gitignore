@@ -2,10 +2,6 @@
 target/
 .DS_Store
 
-# Build artifacts for C/C++ dependencies
-# (If your project uses C/C++ crates like "cc" or "bindgen")
-# out/
-
 data/*
 .sqlx
 media/*

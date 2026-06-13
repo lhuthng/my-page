@@ -252,6 +252,7 @@ impl ProjectService for ProjectServiceImpl {
     async fn new_project(&self, cmd: NewProjectCommand) -> Result<i64, ProjectError> {
         let mut tx = self.pool.begin().await?;
         let initial_demo_url = cmd.demo_url.clone();
+        let demo_type = cmd.demo_type.clone();
 
         let project_id: i64 = sqlx::query_scalar(
             r#"
@@ -278,7 +279,7 @@ impl ProjectService for ProjectServiceImpl {
         .fetch_one(&mut *tx)
         .await?;
 
-        if initial_demo_url.is_none() || initial_demo_url.as_deref().unwrap_or("").trim().is_empty() {
+        if (demo_type == "html5" || demo_type == "webgl") && (initial_demo_url.is_none() || initial_demo_url.as_deref().unwrap_or("").trim().is_empty()) {
             let local_demo_url = std::path::PathBuf::from(cmd.demo_url_dir)
                 .join(project_id.to_string())
                 .join("index.html");

@@ -16,10 +16,10 @@
 	const maxFileSize = 5 * 1024 * 1024;
 	const demoTypes = [
 		{ value: 'html5', label: 'HTML5', disabled: false },
-		{ value: 'embed', label: 'Embed', disabled: true },
-		{ value: 'webgl', label: 'WebGL', disabled: true },
-		{ value: 'download', label: 'Download', disabled: true },
-		{ value: 'video', label: 'Video', disabled: true }
+		{ value: 'embed', label: 'Embed', disabled: false },
+		{ value: 'webgl', label: 'WebGL', disabled: false },
+		{ value: 'download', label: 'Download', disabled: false },
+		{ value: 'video', label: 'Video', disabled: false }
 	];
 
 	let { mode = 'create', data, isOwner = true } = $props();
@@ -133,6 +133,18 @@
 		}, 2200);
 	});
 
+	$effect(() => {
+		if (
+			editingData.demoType === 'embed' ||
+			editingData.demoType === 'download' ||
+			editingData.demoType === 'video'
+		) {
+			editor.demoZip = undefined;
+			editor.demoZipName = '';
+			editor.demoZipError = '';
+		}
+	});
+
 	const normalizedLinks = () =>
 		editingData.links
 			.map((link) => ({ label: link.label.trim(), url: link.url.trim() }))
@@ -164,10 +176,47 @@
 		return true;
 	};
 
+	const validateDemoFields = () => {
+		const type = editingData.demoType;
+		const url = editingData.demoUrl;
+		const zip = editor.demoZip;
+
+		switch (type) {
+			case 'html5':
+			case 'webgl':
+				if (!zip && !url) {
+					return {
+						valid: false,
+						error: `Zip file or Demo URL is required for ${type.toUpperCase()} projects.`
+					};
+				}
+				break;
+			case 'embed':
+				if (!url) {
+					return { valid: false, error: 'Demo URL is required for Embed projects.' };
+				}
+				break;
+			case 'download':
+				if (!url) {
+					return { valid: false, error: 'Download URL is required.' };
+				}
+				break;
+			case 'video':
+				if (!url) {
+					return { valid: false, error: 'Video URL is required.' };
+				}
+				break;
+			default:
+				return { valid: false, error: `Unsupported demo type: ${type}` };
+		}
+		return { valid: true };
+	};
+
 	const newProject = async () => {
-		if (!editor.demoZip && !editingData.demoUrl) {
+		const demoValidation = validateDemoFields();
+		if (!demoValidation.valid) {
 			editor.isCritical = true;
-			editor.status = 'Demo zip or Demo URL is required';
+			editor.status = demoValidation.error;
 			return;
 		}
 
@@ -223,6 +272,13 @@
 	};
 
 	const updateProject = async () => {
+		const demoValidation = validateDemoFields();
+		if (!demoValidation.valid) {
+			editor.isCritical = true;
+			editor.status = demoValidation.error;
+			return;
+		}
+
 		const formData = new FormData();
 		const projectData = { number_of_files: 0 };
 		let offlineKeys = [];
@@ -581,41 +637,61 @@
 								</div>
 							</div>
 							<div class="flex flex-col">
-								<label for="demo-url">Demo URL (optional):</label>
+								<label for="demo-url">
+									{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl'}
+										Demo URL (optional):
+									{:else if editingData.demoType === 'embed'}
+										Demo URL (required):
+									{:else if editingData.demoType === 'download'}
+										Download URL (required):
+									{:else if editingData.demoType === 'video'}
+										Video URL (required):
+									{:else}
+										URL:
+									{/if}
+								</label>
 								<input
 									id="demo-url"
 									class="px-1 min-w-0 bg-white rounded-sm"
 									bind:value={editingData.demoUrl}
-									placeholder="https://example.github.io/my-demo/"
+									placeholder={editingData.demoType === 'video'
+										? 'https://example.com/video.mp4'
+										: editingData.demoType === 'download'
+											? 'https://example.com/download-link'
+											: 'https://example.github.io/my-demo/'}
 									readonly={!isOwner}
 								/>
 							</div>
-							<div
-								class="p-2 rounded-lg bg-white/70 border-2 border-dashed border-dark/30"
-								ondrop={(e) => {
-									e.preventDefault();
-									setDemoZip(e.dataTransfer.files[0]);
-								}}
-								ondragover={preventDefault}
-								role="none"
-							>
-								<label class="block font-semibold" for="demo-zip">HTML5 zip:</label>
-								<input
-									id="demo-zip"
-									type="file"
-									accept=".zip,application/zip"
-									disabled={!isOwner}
-									onchange={(e) => setDemoZip(e.currentTarget.files?.[0])}
-								/>
-								{#if editor.demoZipName}
-									<p class="text-sm text-accent-green">{editor.demoZipName}</p>
-								{:else if mode === 'edit'}
-									<p class="text-sm text-dark/50">Leave empty to keep current demo.</p>
-								{/if}
-								{#if editor.demoZipError}
-									<p class="text-sm text-accent-red">{editor.demoZipError}</p>
-								{/if}
-							</div>
+							{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl'}
+								<div
+									class="p-2 rounded-lg bg-white/70 border-2 border-dashed border-dark/30"
+									ondrop={(e) => {
+										e.preventDefault();
+										setDemoZip(e.dataTransfer.files[0]);
+									}}
+									ondragover={preventDefault}
+									role="none"
+								>
+									<label class="block font-semibold" for="demo-zip">
+										{editingData.demoType === 'html5' ? 'HTML5' : 'WebGL'} zip:
+									</label>
+									<input
+										id="demo-zip"
+										type="file"
+										accept=".zip,application/zip"
+										disabled={!isOwner}
+										onchange={(e) => setDemoZip(e.currentTarget.files?.[0])}
+									/>
+									{#if editor.demoZipName}
+										<p class="text-sm text-accent-green">{editor.demoZipName}</p>
+									{:else if mode === 'edit'}
+										<p class="text-sm text-dark/50">Leave empty to keep current demo.</p>
+									{/if}
+									{#if editor.demoZipError}
+										<p class="text-sm text-accent-red">{editor.demoZipError}</p>
+									{/if}
+								</div>
+							{/if}
 							<div class="space-y-2">
 								<div class="flex items-center justify-between">
 									<span>External links:</span>
