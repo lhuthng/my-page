@@ -43,7 +43,7 @@
 			:
 		</p>
 		<div class="flex flex-col gap-4 relative">
-			<img class="mx-auto w-100 py-2" src="/thinkcats.jpg" alt="roles" />
+			<img class="mx-auto w-180 py-2" src="/thinkcats.jpg" alt="roles" />
 			<ul
 				class="full md:left-1/2 md:-translate-x-1/2 block md:absolute md:top-0 *:block md:*:absolute not-md:*:w-full not-md:space-y-2 text-shadow-lg"
 			>
