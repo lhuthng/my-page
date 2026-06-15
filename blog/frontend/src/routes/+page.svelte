@@ -1,13 +1,15 @@
 <script>
 	import { page } from '$app/state';
 	import App from '$lib/components/App.svelte';
-	import HomeDiscovery from '$lib/components/home/HomeDiscovery.svelte';
 	import Introduction from '$lib/components/home/Introduction.svelte';
+	import PostDiscovery from '$lib/components/home/PostDiscovery.svelte';
+	import ProjectDiscovery from '$lib/components/home/ProjectDiscovery.svelte';
 	import Suggestion from '$lib/components/home/Suggestion.svelte';
 
 	const { data } = $props();
 
 	const featuredPosts = data.featured_posts || [];
+	const featuredProjects = data.featured_projects || [];
 
 	let imageUrl = $derived(page.url.origin + '/thinkcats.jpg');
 </script>
@@ -40,8 +42,13 @@
 
 <div class="relative z-5 flex gap-4 *:h-fit pb-2 lg:pb-4">
 	<div class="grow space-y-2 lg:space-y-4">
+		{#if featuredProjects.length > 0}
+			<div class="bg-white rounded-xl px-4 pb-2 overflow-hidden">
+				<ProjectDiscovery {featuredProjects} />
+			</div>
+		{/if}
 		<div class="bg-white rounded-xl px-4 pb-2 overflow-hidden">
-			<HomeDiscovery {featuredPosts} />
+			<PostDiscovery {featuredPosts} />
 		</div>
 	</div>
 	<div class="not-lg:hidden w-60 bg-white rounded-xl">

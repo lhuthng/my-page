@@ -29,6 +29,14 @@ pub trait ProjectService {
         &self,
         cmd: commands::project::GetLatestProjectsCommand,
     ) -> Result<entities::project::ProjectSnapshotPage, errors::project::ProjectError>;
+    async fn set_project_featured(
+        &self,
+        cmd: commands::project::SetFeaturedProjectCommand,
+    ) -> Result<(), errors::project::ProjectError>;
+    async fn get_featured_project_snapshots(
+        &self,
+        cmd: commands::project::GetFeaturedProjectsCommand,
+    ) -> Result<Vec<entities::project::ProjectSnapshot>, errors::project::ProjectError>;
     async fn get_project_snapshots_by_tag(
         &self,
         cmd: commands::project::GetProjectsByTagCommand,

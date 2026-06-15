@@ -24,8 +24,9 @@ use crate::{
             media::{ChangePostCoverCommand, UploadMediaWithoutDescriptionCommand},
             post::{CheckSlugCommand, NewPostCommand, PublishCommand, UpdatePostCommand},
             project::{
-                GetLatestProjectsCommand, GetProjectBySlugCommand, GetProjectDetailsCommand,
-                GetProjectPostIdCommand, NewProjectCommand, UpdateProjectCommand,
+                GetFeaturedProjectsCommand, GetLatestProjectsCommand, GetProjectBySlugCommand,
+                GetProjectDetailsCommand, GetProjectPostIdCommand, NewProjectCommand,
+                SetFeaturedProjectCommand, UpdateProjectCommand,
             },
         },
         services::{media::MediaService, post::PostService, project::ProjectService},
@@ -901,6 +902,54 @@ pub async fn get_latest_projects(
         projects: projects.projects.into_iter().map(Into::into).collect(),
         has_more: projects.has_more,
     }))
+}
+
+#[derive(Deserialize)]
+pub struct FeaturedProjectsQuery {
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct FeaturedProjectsResponse {
+    pub featured_projects: Vec<ProjectCard>,
+    pub has_more: bool,
+}
+
+pub async fn get_featured_projects(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<FeaturedProjectsQuery>,
+) -> Result<impl IntoResponse, ProjectError> {
+    let projects = state
+        .project_service
+        .get_featured_project_snapshots(GetFeaturedProjectsCommand {
+            limit: query.limit.unwrap_or(5),
+        })
+        .await?;
+
+    Ok(Json(FeaturedProjectsResponse {
+        featured_projects: projects.into_iter().map(Into::into).collect(),
+        has_more: false,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct SetProjectFeaturedBody {
+    pub is_featured: bool,
+}
+
+pub async fn set_project_featured(
+    State(state): State<Arc<AppState>>,
+    AxumPath(project_id): AxumPath<i64>,
+    Json(body): Json<SetProjectFeaturedBody>,
+) -> Result<impl IntoResponse, ProjectError> {
+    state
+        .project_service
+        .set_project_featured(SetFeaturedProjectCommand {
+            project_id,
+            is_featured: body.is_featured,
+        })
+        .await?;
+    Ok(())
 }
 
 pub async fn get_all_projects(

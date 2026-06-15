@@ -6,22 +6,19 @@
 	let currentPath = $derived($page.url.pathname);
 
 	const baseTabs = [
-		{ label: 'Overview', path: '/dashboard' },
+		{ label: 'Overview', path: '/dashboard', exact: true },
 		{ label: 'Posts', path: '/dashboard/posts' },
-		{ label: 'Projects', path: '/dashboard/projects' },
+		{ label: 'Projects', path: '/dashboard/projects', exact: true },
 		{ label: 'Series', path: '/dashboard/series' },
 		{ label: 'Users', path: '/dashboard/users' }
 	];
 
-	// $page.data.role is returned by +layout.server.js on every navigation
-	// (both SSR and client-side), so it's always reliable. $page.data.user
-	// is only populated on the initial HTML request (set via hooks.server.js)
-	// and becomes null on subsequent client-side navigations.
 	let tabs = $derived(
 		$page.data.role === 'admin'
 			? [
 					...baseTabs,
 					{ label: 'Highlights', path: '/dashboard/highlights' },
+					{ label: 'Project Highlights', path: '/dashboard/projects/highlights' },
 					{ label: 'Database', path: '/dashboard/database' }
 				]
 			: baseTabs
@@ -36,7 +33,7 @@
 	<nav class="bg-white rounded-xl p-2 flex gap-1">
 		{#each tabs as tab}
 			{@const active =
-				currentPath === tab.path || (tab.path !== '/dashboard' && currentPath.startsWith(tab.path))}
+				currentPath === tab.path || (!tab.exact && tab.path !== '/dashboard' && currentPath.startsWith(tab.path))}
 			<a
 				href={tab.path}
 				class="px-4 py-1.5 rounded-lg text-lg font-medium transition-colors no-underline! {active
