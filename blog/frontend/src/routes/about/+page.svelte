@@ -374,12 +374,12 @@
 						class="font-semibold text-accent-blue"
 						href="https://portfolio.huuthangle.site"
 					>
-						portfolio.huuthang.site
+						portfolio.huuthangle.site
 					</a>
 				</li>
 				<li>
 					GitHub: <a class="font-semibold text-accent-blue" href="https://github.com/lhuthng">
-						github.com/lhuthng
+						/lhuthng
 					</a>
 				</li>
 				<li>
@@ -387,7 +387,26 @@
 						class="font-semibold text-accent-blue"
 						href="https://www.linkedin.com/in/huuthangle/"
 					>
-						linkedin.com/in/huuthangle
+						/huuthangle
+					</a>
+				</li>
+			</ul>
+			<h2 class="font-bold text-xl">Not-quite-professional Links</h2>
+			<ul>
+				<li>
+					Youtube: <a
+						class="font-semibold text-accent-blue"
+						href="https://www.youtube.com/@memofie"
+					>
+						/@memofie
+					</a>
+				</li>
+				<li>
+					Artstation: <a
+						class="font-semibold text-accent-blue"
+						href="https://www.artstation.com/lhuthng"
+					>
+						/lhuthng
 					</a>
 				</li>
 			</ul>
@@ -395,7 +414,7 @@
 			<ul>
 				<li>
 					<strong>Editors:</strong>
-					Zed (primary), Visual Studio Code (ssh-remote), Visual Studio.
+					Zed
 				</li>
 				<li>
 					<strong>Illustration &amp; Animation:</strong>
