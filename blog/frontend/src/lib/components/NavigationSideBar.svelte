@@ -24,7 +24,7 @@
 </script>
 
 <div
-	class="sticky self-start top-16 lg:top-32 mb-4 w-12 min-w-12 lg:w-46 lg:min-w-46 drop-shadow-sm space-y-2 lg:space-y-4 transition-transform duration-200"
+	class="hidden sm:block sticky self-start top-16 lg:top-32 mb-4 w-12 min-w-12 lg:w-46 lg:min-w-46 drop-shadow-sm space-y-2 lg:space-y-4 transition-transform duration-200"
 >
 	<ul class="space-y-2 bg-white p-2 rounded-xl" id="side-bar">
 		{#each routes as [Icon, text, path, routeName, secret], index}
