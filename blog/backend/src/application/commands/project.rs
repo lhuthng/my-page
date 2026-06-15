@@ -47,6 +47,15 @@ pub struct GetLatestProjectsCommand {
     pub required_author_id: Option<i64>,
 }
 
+pub struct GetFeaturedProjectsCommand {
+    pub limit: i64,
+}
+
+pub struct SetFeaturedProjectCommand {
+    pub project_id: i64,
+    pub is_featured: bool,
+}
+
 pub struct GetProjectsByTagCommand {
     pub slug: String,
     pub limit: i64,

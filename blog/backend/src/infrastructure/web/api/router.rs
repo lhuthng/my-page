@@ -227,10 +227,21 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 ))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
         )
+        // admin-protected routes
+        .merge(
+            Router::new()
+                .route("/id/{project_id}/featured", put(handlers::project::set_project_featured))
+                .layer(middleware::from_fn(middlewares::auth::admin_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        )
         // public routes
         .merge(
             Router::new()
                 .route("/latest", get(handlers::project::get_latest_projects))
+                .route("/featured", get(handlers::project::get_featured_projects))
                 .route("/check", get(handlers::project::check_project)),
         );
 

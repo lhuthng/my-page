@@ -5,9 +5,9 @@ use sqlx::{FromRow, SqlitePool};
 use crate::{
     application::{
         commands::project::{
-            GetLatestProjectsCommand, GetProjectBySlugCommand, GetProjectDetailsCommand,
-            GetProjectPostIdCommand, GetProjectsByTagCommand, NewProjectCommand,
-            UpdateProjectCommand,
+            GetFeaturedProjectsCommand, GetLatestProjectsCommand, GetProjectBySlugCommand,
+            GetProjectDetailsCommand, GetProjectPostIdCommand, GetProjectsByTagCommand,
+            NewProjectCommand, SetFeaturedProjectCommand, UpdateProjectCommand,
         },
         services::project::ProjectService,
     },
@@ -614,6 +614,64 @@ impl ProjectService for ProjectServiceImpl {
         }
 
         Ok(ProjectSnapshotPage { projects, has_more })
+    }
+
+    async fn set_project_featured(
+        &self,
+        cmd: SetFeaturedProjectCommand,
+    ) -> Result<(), ProjectError> {
+        let is_featured_val = if cmd.is_featured { 1 } else { 0 };
+        sqlx::query(
+            r#"
+            UPDATE posts
+            SET is_featured = ?
+            WHERE id = (SELECT post_id FROM projects WHERE id = ?)
+            "#,
+        )
+        .bind(is_featured_val)
+        .bind(cmd.project_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn get_featured_project_snapshots(
+        &self,
+        cmd: GetFeaturedProjectsCommand,
+    ) -> Result<Vec<ProjectSnapshot>, ProjectError> {
+        let rows = sqlx::query_as::<_, ProjectSnapshotRow>(
+            r#"
+            SELECT
+                projects.id AS project_id,
+                posts.id AS post_id,
+                posts.title,
+                posts.slug,
+                posts.excerpt,
+                users.username AS author_slug,
+                user_meta.display_name AS author_name,
+                posts.status,
+                'media/i/' || media.short_name AS url,
+                projects.demo_type,
+                post_stats.views,
+                post_stats.likes,
+                post_stats.comments_count
+            FROM projects
+            JOIN posts ON posts.id = projects.post_id
+            JOIN users ON users.id = posts.user_id
+            JOIN user_meta ON user_meta.user_id = posts.user_id
+            JOIN post_stats ON post_stats.post_id = posts.id
+            LEFT JOIN media ON media.id = posts.cover_image_id
+            WHERE posts.status = 'published' AND posts.is_featured = 1
+            ORDER BY posts.created_at DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(cmd.limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        self.hydrate_project_rows(rows).await
     }
 
     async fn get_project_snapshots_by_tag(
