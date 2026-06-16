@@ -43,7 +43,7 @@
 <div class="relative z-5 flex gap-4 *:h-fit pb-2 lg:pb-4">
 	<div class="grow space-y-2 lg:space-y-4">
 		{#if featuredProjects.length > 0}
-			<div class="bg-white rounded-xl px-4 pb-2 overflow-hidden">
+			<div class="bg-white rounded-xl px-4 pb-4 overflow-hidden">
 				<ProjectDiscovery {featuredProjects} />
 			</div>
 		{/if}
