@@ -15,6 +15,27 @@ pub struct AppConfig {
     pub auth: AuthConfig,
     pub mail: Option<MailConfig>,
     pub app_base_url: String,
+    pub database_source: DatabaseSource,
+}
+
+pub enum DatabaseSource {
+    Sqlite { path: PathBuf },
+}
+
+impl DatabaseSource {
+    pub fn from_env() -> Self {
+        let url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        if let Some(path) = url.strip_prefix("sqlite:") {
+            DatabaseSource::Sqlite {
+                path: PathBuf::from(path),
+            }
+        } else {
+            panic!(
+                "Unsupported DATABASE_URL scheme: {}. Only sqlite: is supported.",
+                url
+            );
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -225,6 +246,7 @@ impl AppConfig {
             mail: Self::mail_from_env(),
             app_base_url: env::var("APP_BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:5000".to_string()),
+            database_source: DatabaseSource::from_env(),
         }
     }
 }

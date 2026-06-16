@@ -19,7 +19,8 @@
 					...baseTabs,
 					{ label: 'Highlights', path: '/dashboard/highlights' },
 					{ label: 'Project Highlights', path: '/dashboard/projects/highlights' },
-					{ label: 'Database', path: '/dashboard/database' }
+					{ label: 'Database', path: '/dashboard/database' },
+					{ label: 'Backup', path: '/dashboard/backup' }
 				]
 			: baseTabs
 	);

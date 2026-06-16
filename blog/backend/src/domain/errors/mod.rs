@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod backup;
 pub mod mail;
 pub mod media;
 pub mod post;
