@@ -284,7 +284,16 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             middlewares::auth::user_guard,
-        ));
+        ))
+        .merge(
+            Router::new()
+                .route("/backup", get(handlers::backup::download_backup))
+                .layer(middleware::from_fn(middlewares::auth::admin_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        );
 
     let mail_routes = Router::new().merge(
         Router::new()
