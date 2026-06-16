@@ -58,7 +58,7 @@
 		</div>
 	{:else}
 		<div out:fly={{ y: 20, duration: 800 }} class="absolute top-1/2 left-1/2 -translate-1/2">
-			<div class="w-fit duo-btn duo-green">
+			<div class="w-fit duo-btn" data-duo-color="green">
 				<button onclick={() => (loaded = true)} disabled={!src}>
 					{resolving ? 'Loading Demo...' : 'Start App'}
 				</button>

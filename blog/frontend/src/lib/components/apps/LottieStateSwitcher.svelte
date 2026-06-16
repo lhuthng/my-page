@@ -69,11 +69,7 @@
 
 	<div class="flex gap-4 *:w-20 justify-center not-lg:items-center">
 		{#each state_entries as [state, _]}
-			<div
-				class="duo-btn"
-				class:duo-blue={selection !== state}
-				class:duo-green={selection === state}
-			>
+			<div class="duo-btn" data-duo-color={selection === state ? 'green' : 'blue'}>
 				<button disabled={isPlaying} onclick={() => goto(state)}>{state}</button>
 			</div>
 		{/each}

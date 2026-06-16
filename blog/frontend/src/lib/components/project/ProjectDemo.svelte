@@ -27,7 +27,7 @@
 			<div class="absolute inset-0 grid place-items-center p-6 text-center">
 				<div class="space-y-4">
 					<p class="text-dark/80 text-lg">This project is available for download.</p>
-					<div class="duo-btn duo-green text-xl">
+					<div class="duo-btn text-xl" data-duo-color="green">
 						<a
 							href={demoUrl}
 							download
@@ -52,7 +52,7 @@
 				></iframe>
 			{:else}
 				<div out:fly={{ y: 20, duration: 300 }} class="absolute inset-0 grid place-items-center">
-					<div class="duo-btn duo-green">
+					<div class="duo-btn" data-duo-color="green">
 						<button onclick={() => (loaded = true)}>
 							{demoType === 'webgl' ? 'Launch WebGL' : 'Start Demo'}
 						</button>

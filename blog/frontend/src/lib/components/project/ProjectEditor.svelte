@@ -417,7 +417,7 @@
 				{#if editor.coverError}
 					<span class="inline-block w-60 text-accent-red">*{editor.coverError}</span>
 				{/if}
-				<div class="duo-btn duo-green">
+				<div class="duo-btn" data-duo-color="green">
 					<button
 						disabled={!editor.newCover || editor.isUploadedCover || editor.isUploadingCover}
 						onclick={async () => {
@@ -500,17 +500,13 @@
 		>
 			<div class="flex justify-between p-2 w-full">
 				<div class="flex gap-2">
-					<div
-						class="w-25 duo-btn"
-						class:duo-green={!editor.toggled}
-						class:duo-red={editor.toggled}
-					>
+					<div class="w-25 duo-btn" data-duo-color={editor.toggled ? 'red' : 'green'}>
 						<button onclick={() => (editor.toggled = !editor.toggled)}>
 							{editor.toggled ? 'Collapse' : 'Expand'}
 						</button>
 					</div>
 					{#if mode === 'edit' && isOwner}
-						<div in:fly={{ duration: 200 }} class="duo-btn duo-blue">
+						<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="blue">
 							<button
 								onclick={() => {
 									if (editor.view === 'public') {
@@ -538,16 +534,16 @@
 							<span>{editor.status}</span>
 						</div>
 						{#if mode === 'create'}
-							<div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+							<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
 								<button onclick={newProject}>Submit</button>
 							</div>
 						{:else if !isOwner}
 							<div class="my-auto text-dark/50 text-sm italic"><span>View only</span></div>
 						{:else}
-							<div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+							<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
 								<button onclick={updateProject}>Change</button>
 							</div>
-							<div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+							<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
 								<button onclick={publishProject} disabled={editor.isPublishing}>
 									{editor.isPublishing ? 'Publishing...' : 'Publish'}
 								</button>

@@ -144,7 +144,7 @@
 		</div>
 	{/if}
 
-	<div class="ml-auto w-fit duo-btn duo-blue">
+	<div class="ml-auto w-fit duo-btn" data-duo-color="blue">
 		<button
 			onclick={() => {
 				editor.seriesMode = 'new';
@@ -238,7 +238,7 @@
 						<span class="text-accent-green text-base">✓ Series created!</span>
 					{/if}
 
-					<div class="mx-auto w-fit duo-btn duo-green">
+					<div class="mx-auto w-fit duo-btn" data-duo-color="green">
 						<button
 							disabled={editor.isUploading || !editor.title || !editor.slug}
 							onclick={handleNewSeries}
@@ -274,7 +274,7 @@
 					{:else if !postId && selectedForCreate?.id === editor.selected.id}
 						<p class="text-accent-green">✓ Selected for this post</p>
 						<div class="flex justify-evenly">
-							<div class="duo-btn duo-red">
+							<div class="duo-btn" data-duo-color="red">
 								<button
 									onclick={() => {
 										onSelect?.(null);
@@ -293,7 +293,7 @@
 							</i>
 						</p>
 						<div class="flex justify-evenly">
-							<div class="duo-btn duo-green">
+							<div class="duo-btn" data-duo-color="green">
 								<button onclick={handleAddToSeries}>Yes</button>
 							</div>
 						</div>

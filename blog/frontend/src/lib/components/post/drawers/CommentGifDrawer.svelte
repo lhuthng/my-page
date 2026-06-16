@@ -19,7 +19,7 @@
 					}
 				}}
 			/>
-			<div class="ml-auto w-fit duo-btn duo-blue">
+			<div class="ml-auto w-fit duo-btn" data-duo-color="blue">
 				<button type="button" onclick={() => fetchGifs(true)}>Search</button>
 			</div>
 		</div>

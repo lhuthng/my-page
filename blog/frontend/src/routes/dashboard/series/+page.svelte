@@ -106,7 +106,7 @@
 							<span class="text-sm text-dark/50">
 								{s.post_count} post{s.post_count !== 1 ? 's' : ''}
 							</span>
-							<div class="duo-btn" class:duo-green={!expanded[s.id]} class:duo-red={expanded[s.id]}>
+							<div class="duo-btn" data-duo-color={expanded[s.id] ? 'red' : 'green'}>
 								<button onclick={() => toggleExpand(s.id)}>
 									{expanded[s.id] ? 'Collapse' : 'Manage'}
 								</button>

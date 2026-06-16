@@ -399,7 +399,7 @@
 						*{editor.coverError}
 					</span>
 				{/if}
-				<div class="duo-btn duo-green">
+				<div class="duo-btn" data-duo-color="green">
 					<button
 						disabled={!editor.newCover || editor.isUploaded || editor.isUploading}
 						onclick={async () => {
@@ -490,17 +490,13 @@
 		>
 			<div class="flex justify-between p-2 w-full">
 				<div class="flex gap-2">
-					<div
-						class="w-25 duo-btn"
-						class:duo-green={!editor.toggled}
-						class:duo-red={editor.toggled}
-					>
+					<div class="w-25 duo-btn" data-duo-color={editor.toggled ? 'red' : 'green'}>
 						<button onclick={() => (editor.toggled = !editor.toggled)}>
 							{editor.toggled ? 'Collapse' : 'Expand'}
 						</button>
 					</div>
 					{#if mode === 'edit' && isOwner}
-						<div in:fly={{ duration: 200 }} class="duo-btn duo-blue">
+						<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="blue">
 							<button
 								onclick={() => {
 									switch (editor.view) {
@@ -533,7 +529,7 @@
 							>
 								<span>{editor.status}</span>
 							</div>
-							<div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+							<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
 								<button onclick={newPost}>Submit</button>
 							</div>
 						{:else if mode === 'edit'}
@@ -549,10 +545,10 @@
 									<span>View only</span>
 								</div>
 							{:else}
-								<div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+								<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
 									<button onclick={updatePost}>Change</button>
 								</div>
-								<div in:fly={{ duration: 200 }} class="duo-btn duo-green">
+								<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
 									<button onclick={publishPost} disabled={editor.isPublishing}>
 										{editor.isPublishing ? 'Publishing…' : 'Publish'}
 									</button>

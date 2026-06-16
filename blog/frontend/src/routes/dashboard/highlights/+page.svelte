@@ -156,7 +156,7 @@
 								</div>
 							</div>
 
-							<div class="duo-btn duo-red shrink-0">
+							<div class="duo-btn shrink-0" data-duo-color="red">
 								<button
 									onclick={() => toggleHighlight(post, true)}
 									class="px-3 py-1.5 text-sm font-semibold"
@@ -258,7 +258,7 @@
 
 								<div class="shrink-0">
 									{#if isFeatured}
-										<div class="duo-btn duo-red">
+										<div class="duo-btn" data-duo-color="red">
 											<button
 												onclick={() => toggleHighlight(post, true)}
 												class="px-2.5 py-1.5 text-xs font-bold"
@@ -267,7 +267,7 @@
 											</button>
 										</div>
 									{:else}
-										<div class="duo-btn duo-green">
+										<div class="duo-btn" data-duo-color="green">
 											<button
 												onclick={() => toggleHighlight(post, false)}
 												class="px-2.5 py-1.5 text-xs font-bold"

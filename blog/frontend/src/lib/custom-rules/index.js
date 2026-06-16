@@ -67,7 +67,8 @@ export function pluginExtend(root) {
 		});
 
 		const duoBtn = document.createElement('div');
-		duoBtn.className = 'mx-auto w-fit duo-btn duo-dark';
+		duoBtn.className = 'mx-auto w-fit duo-btn';
+		duoBtn.dataset.duoColor = 'dark';
 		const btn = document.createElement('button');
 		btn.textContent = 'Sync Time';
 		duoBtn.append(btn);
