@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compact()
         .init();
 
-    let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:data/blog.db".to_string());
+    let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let mut server = HTTPServer::new();
     server.set_addr("0.0.0.0");
