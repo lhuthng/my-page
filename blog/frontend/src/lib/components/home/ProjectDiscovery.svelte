@@ -30,6 +30,7 @@
 					tags={tag_slugs}
 					src={url}
 					{stats}
+					routePrefix="/projects"
 				/>
 			</li>
 		{/each}
