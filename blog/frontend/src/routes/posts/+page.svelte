@@ -97,7 +97,7 @@
 					{#each posts as post (post.slug)}
 						<li
 							animate:flip={{ duration: 250 }}
-							class:intro={hydrated}
+							class:animate-fly-in={hydrated}
 							style:--delay={`${post._introDelay}ms`}
 						>
 							<PostCard
@@ -144,22 +144,3 @@
 		</div>
 	</div>
 </div>
-
-<style>
-	.intro {
-		animation: fly-in 420ms ease-out both;
-		animation-delay: var(--delay);
-	}
-
-	@keyframes fly-in {
-		from {
-			opacity: 0;
-			transform: translateY(-20px);
-		}
-
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-</style>

@@ -5,6 +5,8 @@
 	import { onMount, tick, untrack } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
+	import Smug from '../svgs/emotes/Smug.svelte';
+	import ExploreMore from './ExploreMore.svelte';
 
 	const { featuredPosts } = $props();
 
@@ -125,16 +127,6 @@
 	});
 </script>
 
-{#snippet exploreMore(link)}
-	<li
-		class="flex justify-center items-center full min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34 rounded-lg border-2 border-dashed"
-	>
-		<div class="duo-btn duo-blue">
-			<a class="no-underline!" href={link}>explore more</a>
-		</div>
-	</li>
-{/snippet}
-
 <div class="space-y-4 pt-4">
 	<div class="flex not-sm:flex-col min-h-10 items-center justify-between">
 		<ul id="home-tab" class="text-lg sm:text-xl font-medium h-8">
@@ -191,10 +183,10 @@
 	<div bind:this={tab.container} class="pb-2">
 		<ul
 			bind:this={tab.discover}
-			class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+			class="[&>li]:opacity-0 grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
 		>
 			{#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
-				<li class:intro={hydrated} style:--delay={`${index * itemDelay}ms`}>
+				<li class:animate-fly-in={hydrated} style:--delay={`${index * itemDelay}ms`}>
 					<PostCard
 						{title}
 						{slug}
@@ -210,15 +202,7 @@
 				</li>
 			{/each}
 
-			<li
-				class="flex justify-center items-center full min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34 rounded-lg border-2 border-dashed"
-				class:intro={hydrated}
-				style:--delay={`${featuredPosts.length * itemDelay}ms`}
-			>
-				<div class="duo-btn duo-blue">
-					<a class="no-underline!" href="/posts">explore more</a>
-				</div>
-			</li>
+			<ExploreMore intro={hydrated} delay={featuredPosts.length * itemDelay} href="/posts" />
 		</ul>
 
 		<ul
@@ -228,7 +212,7 @@
 			{#if fresh[order]?.status === 'fetched'}
 				{#each fresh[order].cache as post (post.slug)}
 					<li
-						class:intro={hydrated && !skipIntro}
+						class:animate-fly-in={hydrated && !skipIntro}
 						style:--delay={`${post._introDelay}ms`}
 						animate:flip={{ delay: post._introDelay, duration: 500 }}
 					>
@@ -247,15 +231,7 @@
 					</li>
 				{/each}
 
-				<li
-					class="flex justify-center items-center full min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34 rounded-lg border-2 border-dashed"
-					class:intro={hydrated}
-					style:--delay={`${fresh[order].cache.length * itemDelay}ms`}
-				>
-					<div class="duo-btn duo-blue">
-						<a class="no-underline!" href="/posts">explore more</a>
-					</div>
-				</li>
+				<ExploreMore intro={hydrated} delay={fresh[order].cache.length * itemDelay} href="/posts" />
 			{:else}
 				<div class="w-full col-span-full py-10 text-center">Loading</div>
 			{/if}
@@ -265,23 +241,6 @@
 
 <style lang="postcss">
 	@reference "../../../app.css";
-
-	.intro {
-		animation: fly-in 420ms ease-out both;
-		animation-delay: var(--delay);
-	}
-
-	@keyframes fly-in {
-		from {
-			opacity: 0;
-			transform: translateY(-20px);
-		}
-
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
 
 	#home-tab {
 		@apply flex gap-4;
