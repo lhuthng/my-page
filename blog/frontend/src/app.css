@@ -18,29 +18,30 @@ body {
 	max-width: 100vw;
 }
 
+/* Theme color variables are defined as RGB here. Hex equivalents are shown in comments for quick reference. */
 @theme {
-	--color-dark: rgb(73, 92, 131);
-	--color-primary: rgb(122, 134, 182);
-	--color-secondary: rgb(168, 164, 206);
-	--color-background: rgb(200, 182, 226);
+	--color-dark: rgb(73, 92, 131); /* #495c83 */
+	--color-primary: rgb(122, 134, 182); /* #7a86b6 */
+	--color-secondary: rgb(168, 164, 206); /* #a8a4ce */
+	--color-background: rgb(200, 182, 226); /* #c8b6e2 */
 
-	--color-primary-20: rgb(228, 231, 240);
+	--color-primary-20: rgb(228, 231, 240); /* #e4e7f0 */
 
-	--color-accent-red: rgb(184, 104, 114);
-	--color-accent-red-light-1: rgb(204, 144, 152);
-	--color-accent-red-light-2: rgb(224, 184, 190);
-	--color-accent-green: rgb(104, 184, 126);
-	--color-accent-green-light-1: rgb(144, 204, 162);
-	--color-accent-green-light-2: rgb(184, 224, 194);
-	--color-accent-blue: rgb(120, 150, 200);
-	--color-accent-blue-light-1: rgb(150, 170, 215);
-	--color-accent-blue-light-2: rgb(180, 195, 225);
-	--color-accent-yellow: rgb(225, 200, 100);
-	--color-accent-yellow-light-1: rgb(235, 215, 130);
-	--color-accent-yellow-light-2: rgb(245, 230, 160);
-	--color-accent-orange: rgb(220, 145, 90);
-	--color-accent-orange-light-1: rgb(235, 175, 130);
-	--color-accent-orange-light-2: rgb(245, 205, 170);
+	--color-accent-red: rgb(184, 104, 114); /* #b86872 */
+	--color-accent-red-light-1: rgb(204, 144, 152); /* #cc9098 */
+	--color-accent-red-light-2: rgb(224, 184, 190); /* #e0b8be */
+	--color-accent-green: rgb(104, 184, 126); /* #68b87e */
+	--color-accent-green-light-1: rgb(144, 204, 162); /* #90cca2 */
+	--color-accent-green-light-2: rgb(184, 224, 194); /* #b8e0c2 */
+	--color-accent-blue: rgb(120, 150, 200); /* #7896c8 */
+	--color-accent-blue-light-1: rgb(150, 170, 215); /* #96aad7 */
+	--color-accent-blue-light-2: rgb(180, 195, 225); /* #b4c3e1 */
+	--color-accent-yellow: rgb(225, 200, 100); /* #e1c864 */
+	--color-accent-yellow-light-1: rgb(235, 215, 130); /* #ebd782 */
+	--color-accent-yellow-light-2: rgb(245, 230, 160); /* #f5e6a0 */
+	--color-accent-orange: rgb(220, 145, 90); /* #dc915a */
+	--color-accent-orange-light-1: rgb(235, 175, 130); /* #ebaf82 */
+	--color-accent-orange-light-2: rgb(245, 205, 170); /* #f5cdaa */
 
 	--breakpoint-xxs: 500px;
 }
@@ -55,6 +56,45 @@ body {
 	to {
 		opacity: 1;
 	}
+}
+
+@utility animate-fly-in {
+	animation: fly-in 0.4s ease-out var(--delay, 0ms) both;
+}
+
+@keyframes fly-in {
+	from {
+		opacity: 0;
+		transform: translateY(-20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@utility animate-wave {
+	animation: wave 3s linear infinite;
+}
+
+@keyframes wave {
+	0% { rotate: 0deg; }
+	6.25% { rotate: 1.9deg; }
+	12.5% { rotate: 3.5deg; }
+	18.75% { rotate: 4.6deg; }
+	25% { rotate: 5deg; }
+	31.25% { rotate: 4.6deg; }
+	37.5% { rotate: 3.5deg; }
+	43.75% { rotate: 1.9deg; }
+	50% { rotate: 0deg; }
+	56.25% { rotate: -1.9deg; }
+	62.5% { rotate: -3.5deg; }
+	68.75% { rotate: -4.6deg; }
+	75% { rotate: -5deg; }
+	81.25% { rotate: -4.6deg; }
+	87.5% { rotate: -3.5deg; }
+	93.75% { rotate: -1.9deg; }
+	100% { rotate: 0deg; }
 }
 
 a {
