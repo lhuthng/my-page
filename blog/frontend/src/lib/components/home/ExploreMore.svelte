@@ -12,7 +12,7 @@
 	<Smug
 		class="relative w-24 hover:scale-110 origin-[60%_96%] duration-100 transition-[scale,rotate] animate-wave"
 	/>
-	<div class="duo-btn duo-blue">
+	<div class="duo-btn" data-duo-color="blue">
 		<a class="no-underline!" {href}>explore more?</a>
 	</div>
 </li>

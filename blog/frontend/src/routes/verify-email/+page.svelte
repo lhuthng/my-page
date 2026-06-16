@@ -49,7 +49,7 @@
 			*{message}
 		</p>
 		{#if !pending}
-			<div class="duo-btn duo-primary text-lg mx-auto mt-6 w-60">
+			<div class="text-lg mx-auto mt-6 w-60 duo-btn" data-duo-color="primary">
 				<a href="/login">{success ? 'Log In' : 'Back To Login'}</a>
 			</div>
 		{/if}

@@ -66,7 +66,7 @@
 				Posts
 				<span class="text-dark/40 text-lg font-normal">({total})</span>
 			</h1>
-			<div class="duo-btn duo-green w-fit">
+			<div class="w-fit duo-btn" data-duo-color="green">
 				<a href="/dashboard/posts/new">New Post</a>
 			</div>
 		</div>
@@ -106,7 +106,7 @@
 					{search ? 'No posts match your search' : 'No posts yet'}
 				</p>
 				{#if !search}
-					<div class="duo-btn duo-green w-fit">
+					<div class="w-fit duo-btn" data-duo-color="green">
 						<a href="/dashboard/posts/new">Create your first post</a>
 					</div>
 				{/if}
@@ -145,7 +145,7 @@
 
 			{#if hasMore}
 				<div class="flex justify-center bg-transparent! p-0!">
-					<div class="duo-btn duo-green">
+					<div class="duo-btn" data-duo-color="green">
 						<button onclick={() => fetchPosts(false)} disabled={loadingMore}>
 							{loadingMore ? 'Loading…' : `Load more (${total - posts.length} remaining)`}
 						</button>

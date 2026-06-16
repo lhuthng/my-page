@@ -126,92 +126,79 @@ button {
 }
 
 .duo-btn {
-	@apply relative;
-	a,
-	button {
-		@apply relative z-11 block w-full cursor-pointer rounded-2xl border-2 px-2 py-1 font-semibold text-nowrap text-white transition-all duration-50 not-disabled:hover:brightness-105 focus:outline-dark not-disabled:active:translate-y-[0.2rem] not-disabled:active:brightness-105;
-	}
-	a:disabled,
-	button:disabled {
-		@apply translate-y-[0.2rem] cursor-not-allowed border-primary bg-secondary;
-	}
-	&:has(*:disabled)::before {
-		@apply bg-primary;
-	}
-	&::before {
-		@apply absolute top-1/2 left-0 z-10 h-[calc(50%+0.2rem)] w-full rounded-b-2xl content-[''];
-	}
+  --duo-border: var(--color-primary);
+  --duo-bg: var(--color-secondary);
+  --duo-before: var(--color-primary);
+  --duo-text: var(--color-white);
+
+  @apply relative;
+  a,
+  button {
+    @apply relative z-11 block w-full cursor-pointer rounded-2xl border-2 px-2 py-1 font-semibold text-nowrap transition-all duration-50 not-disabled:hover:brightness-105 focus:outline-dark not-disabled:active:translate-y-[0.2rem] not-disabled:active:brightness-105;
+    border-color: var(--duo-border);
+    background-color: var(--duo-bg);
+    color: var(--duo-text);
+  }
+  a:disabled,
+  button:disabled {
+    @apply translate-y-[0.2rem] cursor-not-allowed;
+  }
+  &:has(*:disabled)::before {
+    background-color: var(--duo-before);
+  }
+  &::before {
+    @apply absolute top-1/2 left-0 z-10 h-[calc(50%+0.2rem)] w-full rounded-b-2xl content-[''];
+    background-color: var(--duo-before);
+  }
 }
 
-.duo-primary {
-	a,
-	button {
-		@apply border-primary bg-secondary;
-	}
-
-	&::before {
-		@apply bg-primary;
-	}
+.duo-btn[data-duo-color="primary"] {
+  --duo-border: var(--color-primary);
+  --duo-bg: var(--color-secondary);
+  --duo-before: var(--color-primary);
+  --duo-text: var(--color-white);
 }
 
-.duo-dark {
-	a,
-	button {
-		@apply border-dark bg-primary;
-	}
-	&::before {
-		@apply bg-dark;
-	}
+.duo-btn[data-duo-color="dark"] {
+  --duo-border: var(--color-dark);
+  --duo-bg: var(--color-primary);
+  --duo-before: var(--color-dark);
+  --duo-text: var(--color-white);
 }
 
-.duo-black {
-	a,
-	button {
-		@apply border-black bg-gray-800;
-	}
-	&::before {
-		@apply bg-black;
-	}
+.duo-btn[data-duo-color="black"] {
+  --duo-border: black;
+  --duo-bg: rgb(31, 41, 55);
+  --duo-before: black;
+  --duo-text: var(--color-white);
 }
 
-.duo-white {
-	a,
-	button {
-		@apply border-gray-300 bg-white text-black;
-	}
-	&::before {
-		@apply bg-gray-300;
-	}
+.duo-btn[data-duo-color="white"] {
+  --duo-border: rgb(209, 213, 219);
+  --duo-bg: white;
+  --duo-before: rgb(209, 213, 219);
+  --duo-text: black;
 }
 
-.duo-red {
-	a,
-	button {
-		@apply border-accent-red bg-accent-red-light-1;
-	}
-	&::before {
-		@apply bg-accent-red;
-	}
+.duo-btn[data-duo-color="red"] {
+  --duo-border: var(--color-accent-red);
+  --duo-bg: var(--color-accent-red-light-1);
+  --duo-before: var(--color-accent-red);
+  --duo-text: var(--color-white);
 }
 
-.duo-green {
-	a,
-	button {
-		@apply border-accent-green bg-accent-green-light-1;
-	}
-	&::before {
-		@apply bg-accent-green;
-	}
+.duo-btn[data-duo-color="green"] {
+  --duo-border: var(--color-accent-green);
+  --duo-bg: var(--color-accent-green-light-1);
+  --duo-before: var(--color-accent-green);
+  --duo-text: var(--color-white);
 }
 
-.duo-blue {
-	a,
-	button {
-		@apply border-accent-blue bg-accent-blue-light-1;
-	}
-	&::before {
-		@apply bg-accent-blue;
-	}
+.duo-btn[data-duo-color="blue"] {
+  --duo-border: var(--color-accent-blue);
+  --duo-bg: var(--color-accent-blue-light-1);
+  --duo-before: var(--color-accent-blue);
+  --duo-text: var(--color-white);
 }
 
 .custom-scrollbar {

@@ -22,7 +22,7 @@
 			aria-labelledby="markdown-help-title"
 		>
 			<div class="fixed top-4 right-6 lg:top-13 lg:right-14">
-				<div class="duo-btn duo-primary">
+				<div class="duo-btn" data-duo-color="primary">
 					<button type="button" class="text-base font-semibold" onclick={close}>Close</button>
 				</div>
 			</div>

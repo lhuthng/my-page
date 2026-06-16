@@ -30,7 +30,7 @@
 					}
 				}}
 			/>
-			<div class="ml-auto w-fit duo-btn duo-blue">
+			<div class="ml-auto w-fit duo-btn" data-duo-color="blue">
 				<button type="button" onclick={() => fetchKaomojis(true)}>Search</button>
 			</div>
 		</div>

@@ -122,7 +122,7 @@
 							in:fly={{ y: -28, duration: 420, delay: length * itemDelay }}
 							out:fade={{ duration: 150 }}
 						>
-							<div class="duo-btn duo-blue">
+							<div class="duo-btn" data-duo-color="blue">
 								<button
 									type="button"
 									class="no-underline!"

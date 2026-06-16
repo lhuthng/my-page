@@ -196,7 +196,7 @@
 						*{editor.avatarError}
 					</span>
 				{/if}
-				<div class="duo-btn duo-green">
+				<div class="duo-btn" data-duo-color="green">
 					<button
 						disabled={!editor.newAvatar || editor.isUploaded || editor.isUploading}
 						onclick={async () => {
@@ -248,7 +248,7 @@
 						<div
 							class="absolute bottom-0 left-0 flex items-center justify-center w-full py-2 bg-dark/30"
 						>
-							<div class="duo-btn duo-green">
+							<div class="duo-btn" data-duo-color="green">
 								<button onclick={() => (editor.isChangingAvatar = true)}>Change Avatar</button>
 							</div>
 						</div>
@@ -261,10 +261,10 @@
 				/>
 			</div>
 			<div class="flex justify-evenly gap-2 lg:*:grow not-lg:*:max-w-40">
-				<div class="duo-btn duo-blue">
+				<div class="duo-btn" data-duo-color="blue">
 					<button disabled>Message</button>
 				</div>
-				<div class="duo-btn duo-green">
+				<div class="duo-btn" data-duo-color="green">
 					<button disabled>Follow</button>
 				</div>
 			</div>
@@ -300,8 +300,7 @@
 					<span class="grow"></span>
 					<div
 						class="duo-btn col-span-full"
-						class:duo-green={!editor.isEditing}
-						class:duo-red={editor.isEditing}
+						data-duo-color={!editor.isEditing ? 'green' : 'red'}
 					>
 						<button
 							onclick={() => {
@@ -332,8 +331,8 @@
 						bind:value={editor.bio}
 						use:autoHResize
 					></textarea>
-					<div class="flex justify-end">
-						<div class="duo-btn duo-green w-fit">
+<div class="flex justify-end">
+					<div class="duo-btn w-fit" data-duo-color="green">
 							<button
 								onclick={async () => {
 									editor.isFetching = true;
@@ -442,7 +441,7 @@
 					{/each}
 				</ul>
 				<div class="flex col-span-full full items-center justify-center">
-					<div class="duo-btn duo-green">
+					<div class="duo-btn" data-duo-color="green">
 						<button disabled={posts.fetchingMore || posts.fetchedAll} onclick={fetchMore}>
 							{posts.fetchingMore ? 'loading' : posts.fetchedAll ? 'no more to load' : 'load more'}
 						</button>

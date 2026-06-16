@@ -208,7 +208,7 @@
 
 			{#if hasMore}
 				<div class="flex justify-center">
-					<div class="duo-btn duo-green">
+					<div class="duo-btn" data-duo-color="green">
 						<button onclick={() => fetchUsers(false)} disabled={loadingMore}>
 							{loadingMore
 								? 'Loading…'

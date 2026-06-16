@@ -170,7 +170,7 @@
 			</div>
 		{/if}
 
-		<div class="ml-auto mb-4 w-fit duo-btn duo-blue">
+		<div class="ml-auto mb-4 w-fit duo-btn" data-duo-color="blue">
 			<button
 				class="fill-white"
 				type="button"

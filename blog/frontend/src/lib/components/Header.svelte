@@ -265,7 +265,7 @@
 		<div class="flex flex-col not-lg:hidden items-end gap-3">
 			<div class="flex h-9 gap-2 items-center text-dark">
 				{#if displayName && username}
-					<div class="duo-btn duo-primary">
+					<div class="duo-btn" data-duo-color="primary">
 						<button onclick={handleLogout}>
 							<span>Sign Out{' '}</span>
 							<svg class="inline fill-white h-6" viewBox="0 0 24 24">
@@ -279,7 +279,7 @@
 					</div>
 				{:else}
 					<span>wanna</span>
-					<div class="duo-btn duo-primary">
+					<div class="duo-btn" data-duo-color="primary">
 						<a class="no-underline!" href={loginHref}>
 							<span>Log In{' '}</span>
 							<svg class="inline fill-white h-6" viewBox="0 0 24 24">
@@ -290,7 +290,7 @@
 						</a>
 					</div>
 					<span class="text-dark">or</span>
-					<div class="duo-btn duo-primary">
+					<div class="duo-btn" data-duo-color="primary">
 						<a class="no-underline!" href={registerHref}>
 							<svg class="inline fill-white h-6" viewBox="0 0 24 24">
 								<path
@@ -380,7 +380,7 @@
 							/>
 						</a>
 					</div>
-					<div class="duo-btn duo-primary">
+					<div class="duo-btn" data-duo-color="primary">
 						<button onclick={handleLogout}>Sign Out</button>
 					</div>
 				</div>
@@ -388,7 +388,7 @@
 			{#if !displayName || !username}
 				<div class="relative flex h-9 items-center">
 					<div class="absolute right-full pr-2">
-						<div class="duo-btn w-fit duo-primary">
+						<div class="duo-btn w-fit" data-duo-color="primary">
 							<a class="no-underline!" href={loginHref} onclick={() => (menuToggled = false)}>
 								<span>log in</span>
 								<svg class="inline fill-white h-5" viewBox="0 0 24 24">
@@ -401,7 +401,7 @@
 					</div>
 					<span class="text-dark">or</span>
 					<div class="absolute left-full pl-2">
-						<div class="duo-btn w-fit duo-primary">
+						<div class="duo-btn w-fit" data-duo-color="primary">
 							<a class="no-underline!" href={registerHref} onclick={() => (menuToggled = false)}>
 								<svg class="inline fill-white h-5" viewBox="0 0 24 24">
 									<path

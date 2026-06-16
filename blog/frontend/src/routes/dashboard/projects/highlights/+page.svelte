@@ -29,9 +29,7 @@
 			if (!res.ok) throw new Error(await res.text());
 			const data = await res.json();
 			const q = search.trim().toLowerCase();
-			searchResults = (data.projects ?? []).filter((p) =>
-				p.title.toLowerCase().includes(q)
-			);
+			searchResults = (data.projects ?? []).filter((p) => p.title.toLowerCase().includes(q));
 		} catch (e) {
 			searchError = e.message;
 		} finally {
@@ -90,8 +88,8 @@
 	<div class="bg-white rounded-xl p-6 shadow-sm">
 		<h1 class="text-3xl font-bold text-dark">Project Highlights</h1>
 		<p class="text-base text-dark/60 mt-1">
-			Select which projects are featured on the homepage. The featured section displays the
-			5 most recent featured projects.
+			Select which projects are featured on the homepage. The featured section displays the 5 most
+			recent featured projects.
 		</p>
 	</div>
 
@@ -148,7 +146,7 @@
 								</div>
 							</div>
 
-							<div class="duo-btn duo-red shrink-0">
+							<div class="shrink-0 duo-btn" data-duo-color="red">
 								<button
 									onclick={() => toggleHighlight(project, true)}
 									class="px-3 py-1.5 text-sm font-semibold"
@@ -216,7 +214,11 @@
 								class="flex items-center gap-3 p-3 border border-background/40 rounded-xl hover:bg-background/5 transition-colors"
 							>
 								{#if project.url}
-									<img src={project.url} alt="" class="w-12 h-12 rounded-lg object-cover shrink-0" />
+									<img
+										src={project.url}
+										alt=""
+										class="w-12 h-12 rounded-lg object-cover shrink-0"
+									/>
 								{:else}
 									<div
 										class="w-12 h-12 rounded-lg bg-background/40 shrink-0 flex items-center justify-center text-dark/30 text-xs font-semibold"
@@ -247,7 +249,7 @@
 
 								<div class="shrink-0">
 									{#if isFeatured}
-										<div class="duo-btn duo-red">
+										<div class="duo-btn" data-duo-color="red">
 											<button
 												onclick={() => toggleHighlight(project, true)}
 												class="px-2.5 py-1.5 text-xs font-bold"
@@ -256,7 +258,7 @@
 											</button>
 										</div>
 									{:else}
-										<div class="duo-btn duo-green">
+										<div class="duo-btn" data-duo-color="red">
 											<button
 												onclick={() => toggleHighlight(project, false)}
 												class="px-2.5 py-1.5 text-xs font-bold"

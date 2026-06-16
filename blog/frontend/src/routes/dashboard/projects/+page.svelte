@@ -8,7 +8,7 @@
 <section class="flex flex-col gap-4 pb-4">
 	<div class="flex items-center justify-between bg-white rounded-xl p-4 drop-shadow-xl">
 		<h1 class="text-3xl">Projects</h1>
-		<div class="duo-btn duo-green">
+		<div class="duo-btn" data-duo-color="green">
 			<a href="/dashboard/projects/new">New project</a>
 		</div>
 	</div>

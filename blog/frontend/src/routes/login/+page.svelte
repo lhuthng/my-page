@@ -240,7 +240,7 @@
 					</span>
 				</div>
 			{/if}
-			<div class="w-full duo-btn duo-primary">
+			<div class="w-full duo-btn" data-duo-color="primary">
 				<button class="w-full" type="submit" disabled={pending || (isLogging && isLogged)}>
 					{#if isLogging}
 						Log In
@@ -261,7 +261,7 @@
 					{#if captchaRequired}
 						<div class="mt-3" bind:this={turnstileHost}></div>
 					{/if}
-					<div class="mt-3 duo-btn duo-blue">
+					<div class="mt-3 duo-btn" data-duo-color="blue">
 						<button
 							type="button"
 							class="w-full"
@@ -298,7 +298,7 @@
 			<div class="separator">
 				<span>or</span>
 			</div>
-			<div class="w-full duo-btn duo-primary">
+			<div class="w-full duo-btn" data-duo-color="primary">
 				<button type="button" class="w-full" onclick={() => (isLogging = !isLogging)}>
 					{#if isLogging}
 						Sign Up

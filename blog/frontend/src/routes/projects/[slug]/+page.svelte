@@ -92,7 +92,7 @@
 			</div>
 			<ul class="flex flex-wrap">
 				{#each links as link}
-					<li class="duo-btn duo-blue">
+					<li class="duo-btn" data-duo-color="blue">
 						<a class="no-underline!" href={link.url} target="_blank" rel="noopener noreferrer">
 							{link.label}
 						</a>
