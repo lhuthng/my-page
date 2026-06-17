@@ -5,7 +5,7 @@
 
 	import MediaDirectory from './MediaDirectory.svelte';
 	import MediaEditForm from './MediaEditForm.svelte';
-	import MediumEntity from './MediumEntity.svelte';
+	import MediaUploadPreview from './MediaUploadPreview.svelte';
 	import Portal from '$lib/components/Portal.svelte';
 
 	let { keyword, detailPanel } = $props();
@@ -56,7 +56,7 @@
 	<MediaDirectory class="full p-2" cellWidth="120px" cellHeight="200px" onclick={() => {}}>
 		{#if requestCache[deKeyword]?.status === 'success'}
 			{#each requestCache[deKeyword]?.results as item, index (item.short_name)}
-				<MediumEntity
+				<MediaUploadPreview
 					size={80}
 					file={{ name: item.short_name, url: item.url }}
 					isSelected={selection === item.short_name}

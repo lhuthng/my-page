@@ -10,7 +10,7 @@ export function preventDefault(e) {
 }
 
 export function stopPropagation(e) {
-	e.stopPropagation;
+	e.stopPropagation();
 }
 
 export const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;

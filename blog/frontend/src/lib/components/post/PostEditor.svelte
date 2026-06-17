@@ -1,11 +1,11 @@
 <script>
 	import { goto } from '$app/navigation';
 	import { auth, user } from '$lib/client/user';
-	import { arraysEqualIgnoreOrder, nowToDate, preventDefault } from '$lib/common';
+	import { arraysEqualIgnoreOrder, nowToDate, preventDefault } from '$lib/utils';
 	import { useDebounce } from '$lib/effects/debounce';
 	import { fly } from 'svelte/transition';
 	import PostCard from '../home/PostCard.svelte';
-	import ContentDebounceEdtior from './ContentDebounceEdtior.svelte';
+	import ContentDebounceEditor from './ContentDebounceEditor.svelte';
 	import MediaDictionaryController from './MediaDictionaryController.svelte';
 	import PostSection from './PostSection.svelte';
 	import SeriesController from './SeriesController.svelte';
@@ -626,7 +626,7 @@
 							{/if}
 						</div>
 					</div>
-					<ContentDebounceEdtior
+					<ContentDebounceEditor
 						class="max-h-80 grow bg-primary/40 p-2 rounded-lg"
 						delay="500"
 						onUpdateRendered={(_renderedText) => (renderedText = _renderedText)}

@@ -1,10 +1,10 @@
 <script>
-	import { pick } from '$lib/client/misc';
+	import { pick } from '$lib/client/elements';
 	import { auth } from '$lib/client/user';
 	import { useDebounce } from '$lib/effects/debounce';
 	import { onMount } from 'svelte';
 	import MediaSearcher from './MediaSearcher.svelte';
-	import MediaUploader from './MediaUploader.svelte';
+	import EditorMediaUploader from './EditorMediaUploader.svelte';
 	import PostRenderer from './PostRenderer.svelte';
 
 	const colorMap = {
@@ -326,7 +326,7 @@
 		<div class="w-1/3 min-w-80 max-w-100 space-y-4">
 			<div class="w-full h-fit bg-gray-200 border border-gray-300 rounded-lg space-y-2">
 				<MediaSearcher class="flex flex-col h-80 border-b border-gray-300 overflow-hidden" />
-				<MediaUploader
+				<EditorMediaUploader
 					class="h-80 border-t border-gray-300 p-2"
 					{offlineMedia}
 					{onlineMedia}

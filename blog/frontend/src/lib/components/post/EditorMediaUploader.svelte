@@ -1,6 +1,6 @@
 <script>
-	import { preventDefault } from '$lib/common';
-	import MediumEntity from './MediumEntity.svelte';
+	import { preventDefault } from '$lib/utils';
+	import EditorMediumEntity from './EditorMediumEntity.svelte';
 
 	let { offlineMedia, onlineMedia, handlers, ...rest } = $props();
 
@@ -64,7 +64,7 @@
 				{#each Object.keys(offlineMedia)
 					.sort()
 					.map( (key) => ({ shortName: key, url: offlineMedia[key] }) ) as { shortName, url }, index (shortName)}
-					<MediumEntity
+					<EditorMediumEntity
 						{shortName}
 						{url}
 						{handlers}

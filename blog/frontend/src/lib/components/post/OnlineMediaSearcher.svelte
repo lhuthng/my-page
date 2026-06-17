@@ -2,7 +2,7 @@
 	import { auth } from '$lib/client/user';
 	import { useDebounce } from '$lib/effects/debounce';
 	import SearchButton from '../buttons/SearchButton.svelte';
-	import MediumEntity from './MediumEntity.svelte';
+	import EditorMediumEntity from './EditorMediumEntity.svelte';
 
 	let { ...rest } = $props();
 
@@ -56,7 +56,7 @@
 			{:else}
 				<ul class="space-y-2">
 					{#each results as { short_name: shortName, url, file_type: type }}
-						<MediumEntity {shortName} {url} {type} />
+						<EditorMediumEntity {shortName} {url} {type} />
 					{/each}
 				</ul>
 			{/if}

@@ -1,6 +1,6 @@
 <script>
 	import { page } from '$app/state';
-	import { isPointInTriangle, preventDefault } from '$lib/common';
+	import { isPointInTriangle, preventDefault } from '$lib/utils';
 	import { fly } from 'svelte/transition';
 
 	let portionSelection = $state(-1);

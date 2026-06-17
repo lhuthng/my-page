@@ -16,7 +16,7 @@
 	import { autoHResize } from '$lib/client/auto-resize.js';
 	import PBody from '$lib/components/PBody.svelte';
 	import Comment from '$lib/components/post/Comment.svelte';
-	import { preventDefault } from '$lib/common.js';
+	import { preventDefault } from '$lib/utils.js';
 	import { page } from '$app/state';
 
 	const { data } = $props();
@@ -298,10 +298,7 @@
 				</span>
 				{#if $user?.username === username}
 					<span class="grow"></span>
-					<div
-						class="duo-btn col-span-full"
-						data-duo-color={!editor.isEditing ? 'green' : 'red'}
-					>
+					<div class="duo-btn col-span-full" data-duo-color={!editor.isEditing ? 'green' : 'red'}>
 						<button
 							onclick={() => {
 								const isEditing = !editor.isEditing;
@@ -331,8 +328,8 @@
 						bind:value={editor.bio}
 						use:autoHResize
 					></textarea>
-<div class="flex justify-end">
-					<div class="duo-btn w-fit" data-duo-color="green">
+					<div class="flex justify-end">
+						<div class="duo-btn w-fit" data-duo-color="green">
 							<button
 								onclick={async () => {
 									editor.isFetching = true;

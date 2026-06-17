@@ -58,7 +58,3 @@
 <div class="pb-4">
 	<Introduction />
 </div>
-
-<style lang="postcss">
-	@reference "../app.css";
-</style>

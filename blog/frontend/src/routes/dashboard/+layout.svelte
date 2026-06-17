@@ -34,7 +34,8 @@
 	<nav class="bg-white rounded-xl p-2 flex gap-1">
 		{#each tabs as tab}
 			{@const active =
-				currentPath === tab.path || (!tab.exact && tab.path !== '/dashboard' && currentPath.startsWith(tab.path))}
+				currentPath === tab.path ||
+				(!tab.exact && tab.path !== '/dashboard' && currentPath.startsWith(tab.path))}
 			<a
 				href={tab.path}
 				class="px-4 py-1.5 rounded-lg text-lg font-medium transition-colors no-underline! {active

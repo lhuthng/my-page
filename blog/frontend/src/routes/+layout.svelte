@@ -6,7 +6,7 @@
 	import NavigationSideBar from '$lib/components/NavigationSideBar.svelte';
 	import { onMount } from 'svelte';
 	import '../app.css';
-	import { mbody, pbody } from '$lib/client/misc';
+	import { mbody, pbody } from '$lib/client/elements';
 	import { fade } from 'svelte/transition';
 	import ToTop from '$lib/components/ToTop.svelte';
 	import { width } from '$lib/client/windows';

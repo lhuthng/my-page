@@ -1,4 +1,4 @@
-import { mediaSyntax } from '$lib/common.js';
+import { mediaSyntax } from '$lib/utils.js';
 import { fixClientRoute, route } from '$lib/server/proxy.js';
 import { error } from '@sveltejs/kit';
 
