@@ -1,5 +1,6 @@
 <script>
 	import PostCard from '$lib/components/home/PostCard.svelte';
+	import { api } from '$lib/client/api-client';
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
@@ -43,29 +44,26 @@
 		isLoadingMore = true;
 		loadError = '';
 
-		const res = await fetch(`/api/projects/latest?limit=${limit}&offset=${projects.length}`, {
-			method: 'GET'
-		});
+		try {
+			const payload = await api.get(`projects/latest?limit=${limit}&offset=${projects.length}`, {
+				auth: false
+			});
 
-		if (!res.ok) {
+			batchId += 1;
+
+			const newProjects = (payload.projects ?? []).map((project, index) => ({
+				...project,
+				_batchId: batchId,
+				_introDelay: index * itemDelay
+			}));
+
+			projects = [...projects, ...newProjects];
+			hasMore = Boolean(payload.has_more);
+		} catch {
 			loadError = 'Could not load more projects right now.';
+		} finally {
 			isLoadingMore = false;
-			return;
 		}
-
-		const payload = await res.json();
-
-		batchId += 1;
-
-		const newProjects = (payload.projects ?? []).map((project, index) => ({
-			...project,
-			_batchId: batchId,
-			_introDelay: index * itemDelay
-		}));
-
-		projects = [...projects, ...newProjects];
-		hasMore = Boolean(payload.has_more);
-		isLoadingMore = false;
 	};
 </script>
 

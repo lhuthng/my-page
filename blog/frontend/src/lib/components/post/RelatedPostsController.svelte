@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/client/user';
+	import { api } from '$lib/client/api-client';
 	import { useDebounce } from '$lib/effects/debounce';
 
 	let { postId = null, relatedPosts = $bindable([]) } = $props();
@@ -53,15 +53,11 @@
 		saving = true;
 		saveError = '';
 		try {
-			const res = await fetch(`/api/posts/id/${postId}/related`, {
-				method: 'PATCH',
-				headers: {
-					Authorization: auth(),
-					'Content-Type': 'application/json'
-				},
-				body: JSON.stringify({ related_post_slugs: posts.map((p) => p.slug) })
+			await api.patch(`posts/id/${postId}/related`, {
+				body: { related_post_slugs: posts.map((p) => p.slug) }
 			});
-			if (!res.ok) saveError = await res.text();
+		} catch (e) {
+			saveError = e.message;
 		} finally {
 			saving = false;
 		}

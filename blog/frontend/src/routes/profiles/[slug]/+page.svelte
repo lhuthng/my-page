@@ -1,10 +1,10 @@
 <script>
 	import {
-		auth,
 		changeAvatarUrl,
 		changeDisplayname as changeDisplayName,
 		user
 	} from '$lib/client/user.js';
+	import { api } from '$lib/client/api-client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
@@ -79,21 +79,22 @@
 		const before = posts.data.length;
 		posts.fetchingMore = true;
 
-		const res = await fetch(`/api/users/${username}/posts?limit=${limit}&offset=${before}`, {
-			headers: $user?.username === username ? { Authorization: auth() } : undefined
-		});
+		const isOwnProfile = $user?.username === username;
 
-		if (!res.ok) {
-			posts.status = 'failed';
-			posts.message = await res.text();
-		} else {
-			const data = (await res.json()).posts;
-
-			if (data.length < limit) {
+		try {
+			const data = await api.get(`users/${username}/posts?limit=${limit}&offset=${before}`, {
+				auth: isOwnProfile
+			});
+			const items = data.posts ?? [];
+			if (items.length < limit) {
 				posts.fetchedAll = true;
 			}
-
-			posts.data = [...posts.data, ...data];
+			posts.data = [...posts.data, ...items];
+			posts.fetchingMore = false;
+		} catch (e) {
+			posts.status = 'failed';
+			posts.message = e.message;
+		} finally {
 			posts.fetchingMore = false;
 		}
 	};
@@ -105,23 +106,21 @@
 
 		posts.status = 'fetching';
 
-		const init = {
-			method: 'GET',
-			headers: $user?.username === username ? { Authorization: auth() } : undefined
-		};
+		const isOwnProfile = $user?.username === username;
 
-		const res = await fetch(`/api/users/${username}/posts?limit=${limit}&offset=0`, init);
-
-		if (!res.ok) {
-			posts.status = 'failed';
-			posts.message = await res.text();
-		} else {
-			posts.status = 'fetched';
-			const data = (await res.json()).posts;
-			if (data.length < limit) {
+		try {
+			const data = await api.get(`users/${username}/posts?limit=${limit}&offset=0`, {
+				auth: isOwnProfile
+			});
+			const items = data.posts ?? [];
+			if (items.length < limit) {
 				posts.fetchedAll = true;
 			}
-			posts.data = data;
+			posts.data = items;
+			posts.status = 'fetched';
+		} catch (e) {
+			posts.status = 'failed';
+			posts.message = e.message;
 		}
 	});
 </script>

@@ -1,5 +1,7 @@
 <script>
-	let { data } = $props();
+	import { auth } from '$lib/client/user';
+
+	//
 
 	let downloading = $state(false);
 	let error = $state('');
@@ -11,7 +13,7 @@
 		try {
 			const res = await fetch('/api/dashboard/backup', {
 				headers: {
-					Authorization: `Bearer ${data.accessToken.token}`
+					Authorization: auth()
 				}
 			});
 

@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/client/user';
+	import { api } from '$lib/client/api-client';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
@@ -31,11 +31,7 @@
 				offset: 0,
 				search: search.trim()
 			});
-			const res = await fetch(`/api/dashboard/posts?${params}`, {
-				headers: { Authorization: auth() }
-			});
-			if (!res.ok) throw new Error(await res.text());
-			const data = await res.json();
+			const data = await api.get(`dashboard/posts?${params}`);
 			searchResults = data.posts ?? [];
 		} catch (e) {
 			searchError = e.message;
@@ -53,18 +49,9 @@
 		const targetStatus = !currentlyFeatured;
 
 		try {
-			const res = await fetch(`/api/posts/id/${post.id}/featured`, {
-				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: auth()
-				},
-				body: JSON.stringify({ is_featured: targetStatus })
+			await api.put(`posts/id/${post.id}/featured`, {
+				body: { is_featured: targetStatus }
 			});
-
-			if (!res.ok) {
-				throw new Error(await res.text());
-			}
 
 			// Update local state reactively
 			if (targetStatus) {

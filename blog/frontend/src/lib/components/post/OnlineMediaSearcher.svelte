@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/client/user';
+	import { api } from '$lib/client/api-client';
 	import { useDebounce } from '$lib/effects/debounce';
 	import SearchButton from '../buttons/SearchButton.svelte';
 	import EditorMediumEntity from './EditorMediumEntity.svelte';
@@ -22,15 +22,11 @@
 			const request = { status: 'fetching' };
 			cache[keyword] = { ...request };
 
-			const res = await fetch(`/api/media/all?term=${keyword}&size=10`, {
-				method: 'GET',
-				headers: { Authorization: auth() }
-			});
-
-			if (res.ok) {
+			try {
+				const data = await api.get(`media/all?term=${keyword}&size=10`);
 				request.status = 'success';
-				request.results = (await res.json()).results;
-			} else {
+				request.results = data.results;
+			} catch {
 				request.status = 'failed';
 			}
 
