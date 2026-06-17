@@ -499,9 +499,15 @@ pub async fn new_project(
     let demo_zip = parsed.demo_zip;
     match data.demo_type.as_str() {
         "html5" | "webgl" => {
-            if demo_zip.is_none() && data.demo_url.is_none() {
+            if data.demo_url.is_some() {
                 return Err(ProjectError::InvalidDemo(format!(
-                    "Either project demo zip or demo URL is required for {} projects.",
+                    "Demo URL is not accepted for {} projects.",
+                    data.demo_type
+                )));
+            }
+            if demo_zip.is_none() {
+                return Err(ProjectError::InvalidDemo(format!(
+                    "Demo zip is required for {} projects.",
                     data.demo_type
                 )));
             }
@@ -587,16 +593,45 @@ pub async fn update_project(
     let parsed = parse_project_multipart::<ProjectPatchData>(multipart, "project_data").await?;
     let mut data = parsed.data;
 
+    let has_demo_attachments = parsed.demo_zip.is_some() || data.demo_url.is_some();
     if let Some(ref demo_type) = data.demo_type {
-        match demo_type.as_str() {
-            "html5" | "webgl" | "embed" | "download" | "video" => {}
-            _ => {
-                return Err(ProjectError::InvalidDemo(format!(
-                    "Unsupported demo type: {}",
-                    demo_type
-                )));
+        if has_demo_attachments {
+            match demo_type.as_str() {
+                "html5" | "webgl" => {
+                    if data.demo_url.is_some() {
+                        return Err(ProjectError::InvalidDemo(format!(
+                            "Demo URL is not accepted for {} projects.",
+                            demo_type
+                        )));
+                    }
+                    if parsed.demo_zip.is_none() {
+                        return Err(ProjectError::InvalidDemo(format!(
+                            "Demo zip is required for {} projects.",
+                            demo_type
+                        )));
+                    }
+                }
+                "embed" | "download" | "video" => {
+                    let has_url = data.demo_url.as_ref().is_some_and(|u| !u.trim().is_empty());
+                    if !has_url {
+                        return Err(ProjectError::InvalidDemo(format!(
+                            "Demo URL is required for {} projects.",
+                            demo_type
+                        )));
+                    }
+                }
+                _ => {
+                    return Err(ProjectError::InvalidDemo(format!(
+                        "Unsupported demo type: {}",
+                        demo_type
+                    )));
+                }
             }
         }
+    } else if has_demo_attachments {
+        return Err(ProjectError::InvalidDemo(
+            "Demo type is required when providing demo attachments.".to_string(),
+        ));
     }
 
     let post_id = state
@@ -647,7 +682,7 @@ pub async fn update_project(
         })
         .await?;
 
-    let mut demo_url = data.demo_url;
+    let mut demo_url = data.demo_url.filter(|u| !u.trim().is_empty());
     if parsed.demo_zip.is_some() {
         let local_demo_url = state.project_demo_config.dir
             .join(project_id.to_string())
