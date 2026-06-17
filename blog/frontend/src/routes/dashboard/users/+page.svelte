@@ -1,6 +1,6 @@
 <script>
-	import { api } from '$lib/client/api-client';
-	import { user } from '$lib/client/user';
+	import { api } from '$lib/api/client';
+	import { user } from '$lib/auth/user';
 	import Heart from '$lib/components/svgs/Heart.svelte';
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';

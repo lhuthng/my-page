@@ -10,7 +10,7 @@ export async function load({ fetch, params, setHeaders }) {
 
 	const [profileRes, commentsRes] = await Promise.all([
 		fetch(route(`users/${username}`), { method: 'GET' }),
-		fetch(route(`users/${username}/comments?limit=6&offset=0`), {
+		fetch(route(`users/${username}/comments?limit=3&offset=0`), {
 			method: 'GET'
 		})
 	]);

@@ -1,10 +1,6 @@
 <script>
-	import {
-		changeAvatarUrl,
-		changeDisplayname as changeDisplayName,
-		user
-	} from '$lib/client/user.js';
-	import { api } from '$lib/client/api-client';
+	import { changeAvatarUrl, changeDisplayname as changeDisplayName, user } from '$lib/auth/user';
+	import { api } from '$lib/api/client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
@@ -13,10 +9,10 @@
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
-	import { autoHResize } from '$lib/client/auto-resize.js';
+	import { autoHResize } from '$lib/dom/auto-resize';
 	import PBody from '$lib/components/PBody.svelte';
 	import Comment from '$lib/components/post/Comment.svelte';
-	import { preventDefault } from '$lib/utils.js';
+	import { preventDefault } from '$lib/utils';
 	import { page } from '$app/state';
 
 	const { data } = $props();

@@ -1,6 +1,6 @@
 <script>
 	import PostCard from '$lib/components/home/PostCard.svelte';
-	import { api } from '$lib/client/api-client';
+	import { api } from '$lib/api/client';
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';

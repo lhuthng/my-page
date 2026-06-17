@@ -1,5 +1,5 @@
 <script>
-	import { autoHResize } from '$lib/client/auto-resize';
+	import { autoHResize } from '$lib/dom/auto-resize';
 	import CommentAutocompletePopover from '../popovers/CommentAutocompletePopover.svelte';
 	import CommentComposerToolbar from './CommentComposerToolbar.svelte';
 	import CommentGifDrawer from '../drawers/CommentGifDrawer.svelte';

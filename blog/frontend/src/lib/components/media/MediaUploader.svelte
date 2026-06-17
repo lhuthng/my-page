@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/client/user';
+	import { auth } from '$lib/auth/user';
 	import { preventDefault } from '$lib/utils';
 	import MediaDirectory from './MediaDirectory.svelte';
 	import MediaUploaderForm from './MediaUploaderForm.svelte';

@@ -1,6 +1,6 @@
 <script>
-	import { detailsCache } from '$lib/client/details-cache';
-	import { auth } from '$lib/client/user';
+	import { detailsCache } from '$lib/utils/cache';
+	import { auth } from '$lib/auth/user';
 	import DeleteButton from './DeleteButton.svelte';
 	import RevertButton from './RevertButton.svelte';
 

@@ -1,5 +1,5 @@
 <script>
-	import { pbody } from '$lib/client/elements';
+	import { pbody } from '$lib/dom/elements';
 	import Portal from './Portal.svelte';
 
 	let { visible = true, children } = $props();

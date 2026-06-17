@@ -10,7 +10,7 @@
 		youtubeBlockPlugin,
 		kaomojiPlugin
 	} from '$lib/custom-rules';
-	import { useDebounce } from '$lib/effects/debounce';
+	import { useDebounce } from '$lib/utils/debounce';
 	import MarkdownIt from 'markdown-it';
 	import mkKatex from 'markdown-it-katex';
 	import anchor from 'markdown-it-anchor';

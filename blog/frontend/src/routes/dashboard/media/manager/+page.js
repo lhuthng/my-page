@@ -1,5 +1,5 @@
 import { goto } from '$app/navigation';
-import { user } from '$lib/client/user.js';
+import { user } from '$lib/auth/user';
 import { get } from 'svelte/store';
 
 export function load(event) {

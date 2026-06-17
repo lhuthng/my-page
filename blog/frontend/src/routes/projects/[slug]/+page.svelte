@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import { dateTillNow, textToDate } from '$lib/utils';
-	import { isLiked, shouldSendView, VIEW_DELAY } from '$lib/client/post.js';
+	import { isLiked, shouldSendView, VIEW_DELAY } from '$lib/utils/post';
 	import PostSection from '$lib/components/post/PostSection.svelte';
 	import CommentSection from '$lib/components/post/CommentSection.svelte';
 	import ProjectDemo from '$lib/components/project/ProjectDemo.svelte';

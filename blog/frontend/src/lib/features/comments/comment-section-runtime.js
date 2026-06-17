@@ -1,5 +1,5 @@
-import { resizeTextarea } from '$lib/client/auto-resize';
-import { auth, user } from '$lib/client/user';
+import { resizeTextarea } from '$lib/dom/auto-resize';
+import { auth, user } from '$lib/auth/user';
 import { gsap } from 'gsap';
 import MarkdownIt from 'markdown-it';
 import { get } from 'svelte/store';

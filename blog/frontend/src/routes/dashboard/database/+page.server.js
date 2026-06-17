@@ -1,6 +1,6 @@
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { getGqlClient } from '$lib/graphql.js';
+import { getGqlClient } from '$lib/api/graphql';
 
 // ---------------------------------------------------------------------------
 // GraphQL query strings

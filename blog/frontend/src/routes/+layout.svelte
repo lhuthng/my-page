@@ -1,15 +1,15 @@
 <script>
 	import { page } from '$app/stores';
-	import { saveLogin } from '$lib/client/user';
+	import { saveLogin } from '$lib/auth/user';
 	import Footer from '$lib/components/Footer.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import NavigationSideBar from '$lib/components/NavigationSideBar.svelte';
 	import { onMount } from 'svelte';
 	import '../app.css';
-	import { mbody, pbody } from '$lib/client/elements';
+	import { mbody, pbody } from '$lib/dom/elements';
 	import { fade } from 'svelte/transition';
 	import ToTop from '$lib/components/ToTop.svelte';
-	import { width } from '$lib/client/windows';
+	import { width } from '$lib/dom/windows';
 	import { innerWidth } from 'svelte/reactivity/window';
 
 	let { children } = $props();

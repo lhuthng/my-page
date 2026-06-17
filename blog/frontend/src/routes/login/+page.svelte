@@ -3,7 +3,7 @@
 	import { env as publicEnv } from '$env/dynamic/public';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { login, register, resendVerification, user } from '$lib/client/user';
+	import { login, register, resendVerification, user } from '$lib/auth/user';
 	import { onMount } from 'svelte';
 
 	import { fly } from 'svelte/transition';

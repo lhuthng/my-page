@@ -1,5 +1,5 @@
 <script>
-	import { api } from '$lib/client/api-client';
+	import { api } from '$lib/api/client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { fly, fade } from 'svelte/transition';
 

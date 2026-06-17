@@ -1,7 +1,7 @@
 export const prerender = false;
 export const ssr = true;
 
-import { clearLogin, saveLogin } from '$lib/client/user.js';
+import { clearLogin, saveLogin } from '$lib/auth/user';
 
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';
