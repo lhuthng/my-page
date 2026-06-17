@@ -2,7 +2,7 @@ import App from '$lib/components/App.svelte';
 import { mount, unmount } from 'svelte';
 import hljs from 'highlight.js';
 import ImagePreviewer from '$lib/components/ImagePreviewer.svelte';
-import { mbody } from '$lib/client/misc';
+import { mbody } from '$lib/client/elements';
 import { get } from 'svelte/store';
 
 export function pluginExtend(root) {

@@ -1,10 +1,10 @@
 <script>
 	import { auth } from '$lib/client/user';
-	import { preventDefault } from '$lib/common';
+	import { preventDefault } from '$lib/utils';
 	import MediaDirectory from './MediaDirectory.svelte';
 	import MediaUploaderForm from './MediaUploaderForm.svelte';
 	import Portal from '$lib/components/Portal.svelte';
-	import MediumEntity from './MediumEntity.svelte';
+	import MediaUploadPreview from './MediaUploadPreview.svelte';
 
 	let { detailPanel, openDetails } = $props();
 
@@ -99,7 +99,7 @@
 		}}
 	>
 		{#each media as medium, index (medium.name)}
-			<MediumEntity
+			<MediaUploadPreview
 				size={80}
 				file={medium}
 				onclick={() => (selection = index)}

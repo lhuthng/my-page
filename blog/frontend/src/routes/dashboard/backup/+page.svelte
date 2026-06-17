@@ -45,9 +45,8 @@
 <div class="bg-white rounded-xl p-6 max-w-lg">
 	<h2 class="text-2xl font-semibold mb-2">Download Backup</h2>
 	<p class="text-dark/60 text-sm mb-6">
-		Creates a ZIP archive containing the database, all uploaded media, and
-		project demos. This may take a moment depending on the size of your
-		site.
+		Creates a ZIP archive containing the database, all uploaded media, and project demos. This may
+		take a moment depending on the size of your site.
 	</p>
 
 	<button

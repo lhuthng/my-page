@@ -1,4 +1,4 @@
-import { dateTillNow } from '$lib/common.js';
+import { dateTillNow } from '$lib/utils.js';
 import { fixClientRoute, proxyFallback } from '$lib/server/proxy';
 
 export async function GET({ request, params, fetch, url }) {

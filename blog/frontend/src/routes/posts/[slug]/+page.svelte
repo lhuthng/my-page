@@ -1,5 +1,5 @@
 <script>
-	import { dateTillNow, textToDate } from '$lib/common';
+	import { dateTillNow, textToDate } from '$lib/utils';
 	import PostSection from '$lib/components/post/PostSection.svelte';
 	import CommentSection from '$lib/components/post/CommentSection.svelte';
 	import { page } from '$app/state';

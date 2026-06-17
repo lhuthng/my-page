@@ -18,7 +18,7 @@
 	import { quadInOut } from 'svelte/easing';
 	import { onMount } from 'svelte';
 	import SeriesButton from './buttons/SeriesButton.svelte';
-	import { widthThreshold } from '$lib/common';
+	import { widthThreshold } from '$lib/utils';
 	import { isLg } from '$lib/client/windows';
 	const { lg } = widthThreshold;
 

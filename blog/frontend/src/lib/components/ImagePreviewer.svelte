@@ -1,5 +1,5 @@
 <script>
-	import { preventDefault, stopPropagation } from '$lib/common';
+	import { preventDefault, stopPropagation } from '$lib/utils';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { gsap } from 'gsap';
