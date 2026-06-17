@@ -1,4 +1,4 @@
-import { auth } from './user';
+import { auth } from '$lib/auth/user';
 
 class ApiError extends Error {
 	constructor(message, status, data) {

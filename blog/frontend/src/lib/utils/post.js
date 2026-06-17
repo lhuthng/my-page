@@ -1,7 +1,7 @@
 const VIEW_KEY = 'viewed_posts';
 const LIKE_KEY = 'liked_posts';
-export const VIEW_DELAY = 3 * 1000; // ms
-const COOLDOWN = 5 * 60 * 1000; // ms
+export const VIEW_DELAY = 3 * 1000;
+const COOLDOWN = 5 * 60 * 1000;
 
 function saveViewed(map, postId) {
 	if (!map) return false;

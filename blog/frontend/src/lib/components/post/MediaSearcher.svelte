@@ -1,6 +1,6 @@
 <script>
-	import { api } from '$lib/client/api-client';
-	import { useDebounce } from '$lib/effects/debounce';
+	import { api } from '$lib/api/client';
+	import { useDebounce } from '$lib/utils/debounce';
 	import SearchButton from '../buttons/SearchButton.svelte';
 	import EditorMediumEntity from './EditorMediumEntity.svelte';
 

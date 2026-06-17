@@ -1,7 +1,7 @@
 <script>
 	import CommentGifPopover from './CommentGifPopover.svelte';
 	import CommentKaomojiPopover from './CommentKaomojiPopover.svelte';
-	import { COMMENT_COMMANDS } from '$lib/post/comment/comment-syntax.js';
+	import { COMMENT_COMMANDS } from '$lib/features/comments/comment-syntax';
 
 	let { commandState, pickCommandItem, applyKaomojiSuggestion } = $props();
 

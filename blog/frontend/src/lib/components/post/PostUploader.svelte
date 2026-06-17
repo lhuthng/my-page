@@ -1,7 +1,7 @@
 <script>
-	import { pick } from '$lib/client/elements';
-	import { auth } from '$lib/client/user';
-	import { useDebounce } from '$lib/effects/debounce';
+	import { pick } from '$lib/dom/elements';
+	import { auth } from '$lib/auth/user';
+	import { useDebounce } from '$lib/utils/debounce';
 	import { onMount } from 'svelte';
 	import MediaSearcher from './MediaSearcher.svelte';
 	import EditorMediaUploader from './EditorMediaUploader.svelte';

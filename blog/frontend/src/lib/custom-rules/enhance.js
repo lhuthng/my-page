@@ -1,7 +1,7 @@
 import App from '$lib/components/App.svelte';
 import { mount, unmount } from 'svelte';
 import ImagePreviewer from '$lib/components/ImagePreviewer.svelte';
-import { mbody } from '$lib/client/elements';
+import { mbody } from '$lib/dom/elements';
 import { get } from 'svelte/store';
 
 export function pluginExtend(root) {

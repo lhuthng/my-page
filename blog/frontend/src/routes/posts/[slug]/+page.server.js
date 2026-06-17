@@ -1,4 +1,4 @@
-import { mediaSyntax } from '$lib/utils.js';
+import { mediaSyntax } from '$lib/utils';
 import {
 	appBlockPlugin,
 	codeHighlightPlugin,

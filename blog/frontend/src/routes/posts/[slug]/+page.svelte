@@ -3,7 +3,7 @@
 	import PostSection from '$lib/components/post/PostSection.svelte';
 	import CommentSection from '$lib/components/post/CommentSection.svelte';
 	import { page } from '$app/state';
-	import { isLiked, shouldSendView, VIEW_DELAY } from '$lib/client/post.js';
+	import { isLiked, shouldSendView, VIEW_DELAY } from '$lib/utils/post';
 	import { browser } from '$app/environment';
 
 	let { data, slug } = $props();

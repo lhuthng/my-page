@@ -1,8 +1,8 @@
 <script>
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { logout, user, isMod } from '$lib/client/user';
-	import { useDebounce } from '$lib/effects/debounce';
+	import { logout, user, isMod } from '$lib/auth/user';
+	import { useDebounce } from '$lib/utils/debounce';
 	import { draw, fly } from 'svelte/transition';
 	import Portal from '$lib/components/Portal.svelte';
 	import SearchButton from './buttons/SearchButton.svelte';
@@ -19,7 +19,7 @@
 	import { onMount } from 'svelte';
 	import SeriesButton from './buttons/SeriesButton.svelte';
 	import { widthThreshold } from '$lib/utils';
-	import { isLg } from '$lib/client/windows';
+	import { isLg } from '$lib/dom/windows';
 	const { lg } = widthThreshold;
 
 	let displayName = $derived($user?.displayName);

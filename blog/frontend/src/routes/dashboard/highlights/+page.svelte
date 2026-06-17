@@ -1,5 +1,5 @@
 <script>
-	import { api } from '$lib/client/api-client';
+	import { api } from '$lib/api/client';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();

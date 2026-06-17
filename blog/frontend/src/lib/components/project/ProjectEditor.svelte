@@ -1,8 +1,8 @@
 <script>
 	import { goto } from '$app/navigation';
-	import { auth, user } from '$lib/client/user';
+	import { auth, user } from '$lib/auth/user';
 	import { arraysEqualIgnoreOrder, nowToDate, preventDefault } from '$lib/utils';
-	import { useDebounce } from '$lib/effects/debounce';
+	import { useDebounce } from '$lib/utils/debounce';
 	import { fly } from 'svelte/transition';
 	import PostCard from '../home/PostCard.svelte';
 	import PostSection from '../post/PostSection.svelte';

@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/client/user';
+	import { auth } from '$lib/auth/user';
 
 	//
 

@@ -1,5 +1,5 @@
 <script>
-	import { isMod } from '$lib/client/user';
+	import { isMod } from '$lib/auth/user';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import AboutButton from './buttons/AboutButton.svelte';
 	import BlogButton from './buttons/BlogButton.svelte';

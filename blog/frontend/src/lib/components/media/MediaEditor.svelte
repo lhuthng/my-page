@@ -1,7 +1,7 @@
 <script>
-	import { detailsCache } from '$lib/client/details-cache';
-	import { auth } from '$lib/client/user';
-	import { useDebounce } from '$lib/effects/debounce';
+	import { detailsCache } from '$lib/utils/cache';
+	import { auth } from '$lib/auth/user';
+	import { useDebounce } from '$lib/utils/debounce';
 
 	import MediaDirectory from './MediaDirectory.svelte';
 	import MediaEditForm from './MediaEditForm.svelte';
