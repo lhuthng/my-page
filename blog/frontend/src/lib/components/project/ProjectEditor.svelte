@@ -142,6 +142,8 @@
 			editor.demoZip = undefined;
 			editor.demoZipName = '';
 			editor.demoZipError = '';
+		} else {
+			editingData.demoUrl = '';
 		}
 	});
 
@@ -184,10 +186,10 @@
 		switch (type) {
 			case 'html5':
 			case 'webgl':
-				if (!zip && !url) {
+				if (mode === 'create' && !zip) {
 					return {
 						valid: false,
-						error: `Zip file or Demo URL is required for ${type.toUpperCase()} projects.`
+						error: `Zip file is required for ${type.toUpperCase()} projects.`
 					};
 				}
 				break;
@@ -228,26 +230,24 @@
 		if (!validateOfflineKeys(offlineKeys)) return;
 
 		const formData = new FormData();
+		const projectPayload = {
+			title: editingData.title,
+			slug: editingData.slug,
+			excerpt: editingData.excerpt,
+			tags,
+			content: editingData.draft,
+			links: normalizedLinks(),
+			number_of_files: offlineKeys.length,
+			demo_type: editingData.demoType,
+			demo_width: editingData.demoWidth,
+			demo_height: editingData.demoHeight
+		};
+		if (editingData.demoType !== 'html5' && editingData.demoType !== 'webgl') {
+			projectPayload.demo_url = editingData.demoUrl;
+		}
 		formData.append(
 			'project_data',
-			new Blob(
-				[
-					JSON.stringify({
-						title: editingData.title,
-						slug: editingData.slug,
-						excerpt: editingData.excerpt,
-						tags,
-						content: editingData.draft,
-						links: normalizedLinks(),
-						number_of_files: offlineKeys.length,
-						demo_type: editingData.demoType,
-						demo_width: editingData.demoWidth,
-						demo_height: editingData.demoHeight,
-						demo_url: editingData.demoUrl
-					})
-				],
-				{ type: 'application/json' }
-			)
+			new Blob([JSON.stringify(projectPayload)], { type: 'application/json' })
 		);
 		if (editor.demoZip) {
 			formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
@@ -298,7 +298,12 @@
 			projectData.demo_width = editingData.demoWidth;
 		if (editingData.demoHeight !== (data.demoHeight ?? '520px'))
 			projectData.demo_height = editingData.demoHeight;
-		if (editingData.demoUrl !== (data.rawDemoUrl ?? '')) projectData.demo_url = editingData.demoUrl;
+		if (
+			editingData.demoType !== 'html5' &&
+			editingData.demoType !== 'webgl' &&
+			editingData.demoUrl !== (data.rawDemoUrl ?? '')
+		)
+			projectData.demo_url = editingData.demoUrl;
 
 		const tags = editingData.tags
 			.trim()
@@ -632,32 +637,32 @@
 									/>
 								</div>
 							</div>
-							<div class="flex flex-col">
-								<label for="demo-url">
-									{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl'}
-										Demo URL (optional):
-									{:else if editingData.demoType === 'embed'}
-										Demo URL (required):
-									{:else if editingData.demoType === 'download'}
-										Download URL (required):
-									{:else if editingData.demoType === 'video'}
-										Video URL (required):
-									{:else}
-										URL:
-									{/if}
-								</label>
-								<input
-									id="demo-url"
-									class="px-1 min-w-0 bg-white rounded-sm"
-									bind:value={editingData.demoUrl}
-									placeholder={editingData.demoType === 'video'
-										? 'https://example.com/video.mp4'
-										: editingData.demoType === 'download'
-											? 'https://example.com/download-link'
-											: 'https://example.github.io/my-demo/'}
-									readonly={!isOwner}
-								/>
-							</div>
+							{#if editingData.demoType !== 'html5' && editingData.demoType !== 'webgl'}
+								<div class="flex flex-col">
+									<label for="demo-url">
+										{#if editingData.demoType === 'embed'}
+											Demo URL (required):
+										{:else if editingData.demoType === 'download'}
+											Download URL (required):
+										{:else if editingData.demoType === 'video'}
+											Video URL (required):
+										{:else}
+											URL:
+										{/if}
+									</label>
+									<input
+										id="demo-url"
+										class="px-1 min-w-0 bg-white rounded-sm"
+										bind:value={editingData.demoUrl}
+										placeholder={editingData.demoType === 'video'
+											? 'https://example.com/video.mp4'
+											: editingData.demoType === 'download'
+												? 'https://example.com/download-link'
+												: 'https://example.github.io/my-demo/'}
+										readonly={!isOwner}
+									/>
+								</div>
+							{/if}
 							{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl'}
 								<div
 									class="p-2 rounded-lg bg-white/70 border-2 border-dashed border-dark/30"
