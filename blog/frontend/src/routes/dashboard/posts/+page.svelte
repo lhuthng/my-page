@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/client/user';
+	import { api } from '$lib/client/api-client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { fly, fade } from 'svelte/transition';
 
@@ -31,13 +31,9 @@
 		if (search.trim()) params.set('search', search.trim());
 
 		try {
-			const res = await fetch(`/api/dashboard/posts?${params}`, {
-				headers: { Authorization: auth() }
-			});
-			if (!res.ok) throw new Error(await res.text());
-			const data = await res.json();
-			posts = reset ? data.posts : [...posts, ...data.posts];
-			total = data.total;
+			const result = await api.get(`dashboard/posts?${params}`);
+			posts = reset ? result.posts : [...posts, ...result.posts];
+			total = result.total;
 		} catch (e) {
 			error = e.message;
 		} finally {

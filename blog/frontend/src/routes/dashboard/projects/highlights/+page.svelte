@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/client/user';
+	import { api } from '$lib/client/api-client';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
@@ -23,11 +23,7 @@
 		searchError = null;
 
 		try {
-			const res = await fetch('/api/projects/all?limit=100', {
-				headers: { Authorization: auth() }
-			});
-			if (!res.ok) throw new Error(await res.text());
-			const data = await res.json();
+			const data = await api.get('projects/all?limit=100');
 			const q = search.trim().toLowerCase();
 			searchResults = (data.projects ?? []).filter((p) => p.title.toLowerCase().includes(q));
 		} catch (e) {
@@ -46,18 +42,9 @@
 		const targetStatus = !currentlyFeatured;
 
 		try {
-			const res = await fetch(`/api/projects/id/${project.id}/featured`, {
-				method: 'PUT',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: auth()
-				},
-				body: JSON.stringify({ is_featured: targetStatus })
+			await api.put(`projects/id/${project.id}/featured`, {
+				body: { is_featured: targetStatus }
 			});
-
-			if (!res.ok) {
-				throw new Error(await res.text());
-			}
 
 			if (targetStatus) {
 				const newFeatured = {

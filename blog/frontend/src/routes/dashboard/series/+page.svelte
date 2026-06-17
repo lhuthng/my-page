@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/client/user';
+	import { api } from '$lib/client/api-client';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
@@ -20,34 +20,24 @@
 	const loadPosts = async (seriesId) => {
 		seriesPosts[seriesId] = { status: 'loading', items: [] };
 		try {
-			const res = await fetch(`/api/series/id/${seriesId}/posts`, {
-				headers: { Authorization: auth() }
-			});
-			if (!res.ok) {
-				seriesPosts[seriesId] = { status: 'error', items: [] };
-				return;
-			}
-			const { posts } = await res.json();
-			seriesPosts[seriesId] = { status: 'ok', items: posts };
+			const data = await api.get(`series/id/${seriesId}/posts`);
+			seriesPosts[seriesId] = { status: 'ok', items: data.posts };
 		} catch {
 			seriesPosts[seriesId] = { status: 'error', items: [] };
 		}
 	};
 
 	const removePost = async (seriesId, postId) => {
-		const res = await fetch(`/api/series/id/${seriesId}?post_id=${postId}`, {
-			method: 'DELETE',
-			headers: { Authorization: auth() }
-		});
-		if (res.ok) {
-			// Remove from local state
+		try {
+			await api.delete(`series/id/${seriesId}?post_id=${postId}`);
 			const entry = seriesPosts[seriesId];
 			if (entry) {
 				entry.items = entry.items.filter((p) => p.post_id !== postId);
 			}
-			// Decrement count in the series list
 			const s = series.find((s) => s.id === seriesId);
 			if (s) s.post_count = Math.max(0, s.post_count - 1);
+		} catch {
+			// silently fail
 		}
 	};
 </script>

@@ -1,5 +1,6 @@
 <script>
-	import { auth, user } from '$lib/client/user';
+	import { api } from '$lib/client/api-client';
+	import { user } from '$lib/client/user';
 	import Heart from '$lib/components/svgs/Heart.svelte';
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';
@@ -44,15 +45,11 @@
 		if (roleFilter) params.set('role', roleFilter);
 
 		try {
-			const res = await fetch(`/api/dashboard/users?${params}`, {
-				headers: { Authorization: auth() }
-			});
-			if (!res.ok) throw new Error(await res.text());
-			const data = await res.json();
+			const result = await api.get(`dashboard/users?${params}`);
 			userData = {
-				users: reset ? data.users : [...userData.users, ...data.users],
-				total: data.total,
-				role_counts: data.role_counts
+				users: reset ? result.users : [...userData.users, ...result.users],
+				total: result.total,
+				role_counts: result.role_counts
 			};
 		} catch (e) {
 			error = e.message;
