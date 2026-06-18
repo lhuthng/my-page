@@ -1,5 +1,4 @@
-# 1. Base stage for cargo-chef
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-alpine AS chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -8,22 +7,13 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
-
 RUN cargo chef cook --release --recipe-path recipe.json
-
 COPY . .
 RUN cargo build --release --bin backend
 
-FROM ubuntu:24.04 AS runtime
+FROM alpine:3.21 AS runtime
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y \
-  ffmpeg \
-  ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
-
+RUN apk add --no-cache ffmpeg ca-certificates
 COPY --from=builder /app/target/release/backend /usr/local/bin/backend
-
 EXPOSE 3000
-
 CMD ["backend"]
