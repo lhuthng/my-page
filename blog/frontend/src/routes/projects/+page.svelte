@@ -1,9 +1,9 @@
 <script>
-	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { api } from '$lib/api/client';
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
-	import { fade, fly } from 'svelte/transition';
+	import FetchMore from '$lib/components/home/FetchMore.svelte';
+	import BigPostCard from '$lib/components/home/BigPostCard.svelte';
 
 	let { data } = $props();
 
@@ -83,7 +83,7 @@
 		class:transition-[grid-template-rows]={hydrated}
 		class:ease-out={hydrated}
 		style:grid-template-rows={hydrated ? (expanded ? '1fr' : '0fr') : '1fr'}
-		style:transition-duration={hydrated ? '700ms' : '0ms'}
+		style:transition-duration={hydrated ? '1s' : '0ms'}
 	>
 		<div class="min-h-0">
 			{#if data.status !== 'success'}
@@ -91,14 +91,14 @@
 			{:else if length === 0}
 				<div class="text-dark/60">No published projects yet.</div>
 			{:else}
-				<ul class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4">
+				<ul class="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
 					{#each projects as project (project.id)}
 						<li
 							animate:flip={{ duration: 250 }}
 							class:intro={hydrated}
 							style:--delay={`${project._introDelay}ms`}
 						>
-							<PostCard
+							<BigPostCard
 								id={project.id}
 								title={project.title}
 								slug={project.slug}
@@ -115,28 +115,14 @@
 					{/each}
 
 					{#if expanded}
-						<li
-							class="flex justify-center items-center full min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34 rounded-lg border-2 border-dashed"
-							in:fly={{ y: -28, duration: 420, delay: length * itemDelay }}
-							out:fade={{ duration: 150 }}
-						>
-							<div class="duo-btn" data-duo-color="blue">
-								<button
-									type="button"
-									class="no-underline!"
-									disabled={isLoadingMore || !hasMore}
-									onclick={fetchMore}
-								>
-									{#if isLoadingMore}
-										Loading more projects...
-									{:else if hasMore}
-										Load more projects
-									{:else}
-										No more to load
-									{/if}
-								</button>
-							</div>
-						</li>
+						<FetchMore
+							{isLoadingMore}
+							{hasMore}
+							label="project"
+							intro={hydrated}
+							delay={length * itemDelay}
+							onclick={fetchMore}
+						/>
 					{/if}
 				</ul>
 			{/if}

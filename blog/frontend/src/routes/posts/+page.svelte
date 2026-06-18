@@ -3,7 +3,8 @@
 	import { api } from '$lib/api/client';
 	import { onMount } from 'svelte';
 	import { flip } from 'svelte/animate';
-	import { fade, fly } from 'svelte/transition';
+	import ExploreMore from '$lib/components/home/ExploreMore.svelte';
+	import FetchMore from '$lib/components/home/FetchMore.svelte';
 
 	let { data } = $props();
 
@@ -83,7 +84,7 @@
 		class:transition-[grid-template-rows]={hydrated}
 		class:ease-out={hydrated}
 		style:grid-template-rows={hydrated ? (expanded ? '1fr' : '0fr') : '1fr'}
-		style:transition-duration={hydrated ? `${posts.length * itemDelay || 0}ms` : '0ms'}
+		style:transition-duration={hydrated ? `700ms` : '0ms'}
 	>
 		<div class="min-h-0">
 			{#if data.status !== 'success'}
@@ -91,7 +92,9 @@
 			{:else if length === 0}
 				<p class="text-dark/60">No posts published yet.</p>
 			{:else}
-				<ul class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4">
+				<ul
+					class="grid grid-cols-1 [&>li]:opacity-0 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+				>
 					{#each posts as post (post.slug)}
 						<li
 							animate:flip={{ duration: 250 }}
@@ -114,28 +117,14 @@
 					{/each}
 
 					{#if expanded}
-						<li
-							class="flex justify-center items-center full min-w-22 sm:min-w-26 min-h-22 sm:min-h-26 md:min-w-34 md:min-h-34 rounded-lg border-2 border-dashed"
-							in:fly={{ y: -28, duration: 420, delay: length * itemDelay }}
-							out:fade={{ duration: 150 }}
-						>
-							<div class="duo-btn" data-duo-color="blue">
-								<button
-									type="button"
-									class="no-underline!"
-									disabled={isLoadingMore || !hasMore}
-									onclick={fetchMore}
-								>
-									{#if isLoadingMore}
-										Loading more posts...
-									{:else if hasMore}
-										Load more posts
-									{:else}
-										No more to load
-									{/if}
-								</button>
-							</div>
-						</li>
+						<FetchMore
+							{isLoadingMore}
+							{hasMore}
+							label="post"
+							intro={hydrated}
+							delay={length * itemDelay}
+							onclick={fetchMore}
+						/>
 					{/if}
 				</ul>
 			{/if}
