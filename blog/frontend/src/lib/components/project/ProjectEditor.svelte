@@ -49,6 +49,7 @@
 		coverUrl: '',
 		videoShortName: '',
 		ogImageSeconds: 0,
+		coverMediaType: '',
 		demoType: 'html5',
 		demoWidth: '100%',
 		demoHeight: '520px',
@@ -89,6 +90,7 @@
 		editingData.coverUrl = data.coverUrl;
 		editingData.videoShortName = data.videoShortName ?? '';
 		editingData.ogImageSeconds = data.ogImageSeconds ?? 0;
+		editingData.coverMediaType = data.cover_media_type;
 		editingData.demoType = data.demoType ?? 'html5';
 		editingData.demoWidth = data.demoWidth ?? '100%';
 		editingData.demoHeight = data.demoHeight ?? '520px';
@@ -410,7 +412,7 @@
 				author={{ name: authState.user.displayName, slug: authState.user.username }}
 				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
 				src={editingData.coverUrl}
-				coverMediaType={editingData.videoShortName ? 'video/mp4' : undefined}
+				coverMediaType={editingData.coverMediaType || (editingData.videoShortName ? 'video/mp4' : undefined)}
 				stats={{ views: '#', likes: '#', comments_count: '#' }}
 				routePrefix="/projects"
 				dashboardPrefix="/dashboard/projects/id"
