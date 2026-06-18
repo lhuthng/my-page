@@ -1,15 +1,15 @@
 <script>
 	import { page } from '$app/stores';
-	import { saveLogin } from '$lib/auth/user';
-	import Footer from '$lib/components/Footer.svelte';
-	import Header from '$lib/components/Header.svelte';
-	import NavigationSideBar from '$lib/components/NavigationSideBar.svelte';
+	import { saveLogin } from '$lib/auth/user.svelte.js';
+	import Footer from '$lib/components/shell/Footer.svelte';
+	import Header from '$lib/components/shell/Header.svelte';
+	import NavigationSideBar from '$lib/components/shell/NavigationSideBar.svelte';
 	import { onMount } from 'svelte';
 	import '../app.css';
-	import { mbody, pbody } from '$lib/dom/elements';
+	import { el } from '$lib/dom/elements.svelte.js';
 	import { fade } from 'svelte/transition';
-	import ToTop from '$lib/components/ToTop.svelte';
-	import { width } from '$lib/dom/windows';
+	import ToTop from '$lib/components/shell/ToTop.svelte';
+	import { win } from '$lib/dom/windows.svelte.js';
 	import { innerWidth } from 'svelte/reactivity/window';
 
 	let { children } = $props();
@@ -22,12 +22,12 @@
 	const ignoreRoutes = ['login', 'verify-email'];
 
 	$effect(() => {
-		width.set(innerWidth.current);
+		win.width = innerWidth.current;
 	});
 
 	onMount(() => {
-		pbody.set(pDiv);
-		mbody.set(mDiv);
+		el.pbody = pDiv;
+		el.mbody = mDiv;
 	});
 </script>
 

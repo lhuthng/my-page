@@ -17,12 +17,9 @@
 		style:height
 	>
 		{#if demoType === 'video'}
-			<video
-				class="block w-full h-full object-contain bg-black"
-				src={demoUrl}
-				controls
-				{title}
-			></video>
+			<video class="block w-full h-full object-contain bg-black" src={demoUrl} controls {title}>
+				<track kind="captions" src="" srclang="en" label="English captions" default />
+			</video>
 		{:else if demoType === 'download'}
 			<div class="absolute inset-0 grid place-items-center p-6 text-center">
 				<div class="space-y-4">

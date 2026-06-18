@@ -1,5 +1,5 @@
 <script>
-	import App from '../App.svelte';
+	import App from '../embeds/App.svelte';
 	import { findHeaders, pluginExtend } from '$lib/custom-rules';
 
 	let { content, headers = $bindable() } = $props();

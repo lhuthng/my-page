@@ -1,12 +1,12 @@
 <script>
-	import { detailsCache } from '$lib/utils/cache';
-	import { auth } from '$lib/auth/user';
+	import { cache } from '$lib/utils/cache.svelte.js';
+	import { auth } from '$lib/auth/user.svelte.js';
 	import DeleteButton from './DeleteButton.svelte';
 	import RevertButton from './RevertButton.svelte';
 
 	let { shortName } = $props();
 
-	let details = $derived($detailsCache[shortName]);
+	let details = $derived(cache.details[shortName]);
 	let draft = $state([]);
 	let pending = $state();
 

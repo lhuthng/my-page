@@ -1,5 +1,5 @@
 <script>
-	import CommentButton from '../buttons/CommentButton.svelte';
+	import CommentButton from '../shell/buttons/CommentButton.svelte';
 
 	let {
 		src,

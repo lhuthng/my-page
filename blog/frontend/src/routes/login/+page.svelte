@@ -3,14 +3,14 @@
 	import { env as publicEnv } from '$env/dynamic/public';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { login, register, resendVerification, user } from '$lib/auth/user';
+	import { authState, login, register, resendVerification } from '$lib/auth/user.svelte.js';
 	import { onMount } from 'svelte';
 
 	import { fly } from 'svelte/transition';
 
 	let { data } = $props();
 
-	let isLogged = $derived($user !== undefined);
+	let isLogged = $derived(authState.user !== undefined);
 
 	let isLogging = $state(!data.register);
 	let username = $state('');
@@ -37,7 +37,9 @@
 		if (typeof target === 'string' && target.startsWith('/') && !target.startsWith('//'))
 			return target;
 
-		return $user?.role === 'admin' || $user?.role === 'moderator' ? '/dashboard' : '/';
+		return authState.user?.role === 'admin' || authState.user?.role === 'moderator'
+			? '/dashboard'
+			: '/';
 	});
 
 	$effect(() => {
@@ -132,7 +134,7 @@
 
 	$effect(() => {
 		const currentPath = $page.url.pathname;
-		if ($user && isLogging && !redirecting && currentPath === '/login') {
+		if (authState.user && isLogging && !redirecting && currentPath === '/login') {
 			redirecting = true;
 			goto(redirectTarget, { replaceState: true });
 		}
@@ -288,7 +290,7 @@
 			{#if isLogging && isLogged}
 				<div class="flex flex-col items-center w-full">
 					<span class="text-accent-green">
-						You're are logged as {$user.username}
+						You're are logged as {authState.user.username}
 					</span>
 					<span class="text-accent-red">
 						Redirecting to {redirectTarget}

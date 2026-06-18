@@ -1,5 +1,5 @@
 <script>
-	import { auth } from '$lib/auth/user';
+	import { auth } from '$lib/auth/user.svelte.js';
 
 	let { media, onsuccess, onfailed } = $props();
 

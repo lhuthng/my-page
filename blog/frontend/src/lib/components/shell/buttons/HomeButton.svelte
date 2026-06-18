@@ -11,7 +11,7 @@
 </button>
 
 <style lang="postcss">
-	@reference "../../../app.css";
+	@reference "../../../../app.css";
 
 	button {
 		@apply not-disabled:hover:cursor-pointer;

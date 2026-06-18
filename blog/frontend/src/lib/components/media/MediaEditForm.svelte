@@ -1,6 +1,6 @@
 <script>
-	import { detailsCache } from '$lib/utils/cache';
-	import { auth } from '$lib/auth/user';
+	import { cache } from '$lib/utils/cache.svelte.js';
+	import { auth } from '$lib/auth/user.svelte.js';
 
 	import AliasList from './AliasList.svelte';
 	import DeleteButton from './DeleteButton.svelte';
@@ -8,7 +8,7 @@
 
 	let { shortName, onShortNameChanged } = $props();
 
-	let details = $derived($detailsCache[shortName]);
+	let details = $derived(cache.details[shortName]);
 	let truth = $state();
 	let draft = $state();
 
@@ -50,11 +50,11 @@
 				});
 				if (res.ok) {
 					if (draft.shortName !== truth.shortName) {
-						delete detailsCache[truth.shortName];
+						delete cache.details[truth.shortName];
 						onShortNameChanged?.(draft.shortName);
 					} else {
-						detailsCache[truth.shortName] = {
-							...detailsCache[truth.shortName],
+						cache.details[truth.shortName] = {
+							...cache.details[truth.shortName],
 							short_name: draft.shortName,
 							description: draft.description
 						};

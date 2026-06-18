@@ -1,16 +1,17 @@
 <script>
 	import { goto } from '$app/navigation';
-	import { auth, user } from '$lib/auth/user';
-	import { arraysEqualIgnoreOrder, nowToDate, preventDefault } from '$lib/utils';
+	import { auth, authState } from '$lib/auth/user.svelte.js';
+	import { arraysEqualIgnoreOrder, nowToDate } from '$lib/utils';
 	import { useDebounce } from '$lib/utils/debounce';
-	import { fly } from 'svelte/transition';
 	import PostCard from '../home/PostCard.svelte';
 	import ContentDebounceEditor from './ContentDebounceEditor.svelte';
 	import MediaDictionaryController from './MediaDictionaryController.svelte';
 	import PostSection from './PostSection.svelte';
 	import SeriesController from './SeriesController.svelte';
 	import RelatedPostsController from './RelatedPostsController.svelte';
-	import PBody from '../PBody.svelte';
+	import EditorToolbar from '../editor/EditorToolbar.svelte';
+	import EditorCoverUploader from '../editor/EditorCoverUploader.svelte';
+	import PBody from '../shell/PBody.svelte';
 
 	const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 	const glbSyntax = /:::app\s+glb-demo\s+([^\s]+)\s*/g;
@@ -19,9 +20,6 @@
 	// temporary usage only
 	const ignored = ['.glb'];
 	//
-
-	const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-	const maxFileSize = 5 * 1024 * 1024;
 
 	let { mode = 'create', data, series: initialSeries = [], isOwner = true } = $props();
 
@@ -54,25 +52,21 @@
 		pendingSeriesId: null,
 		relatedPosts: [],
 		author: {
-			username: $user?.username,
-			displayName: $user?.displayName,
-			avatarUrl: $user?.avatarUrl
+			username: authState.user?.username,
+			displayName: authState.user?.displayName,
+			avatarUrl: authState.user?.avatarUrl
 		}
 	});
 
 	let editor = $state({
-		coverToggled: false,
 		toggled: false,
 		view: 'private',
 		status: '',
 		isCritical: false,
-		isUploading: false,
-		isUploaded: false,
-		coverFile: undefined,
-		newCover: undefined,
-		coverError: '',
 		isPublishing: false
 	});
+
+	let coverUploaderOpen = $state(false);
 
 	let renderedText = $state('');
 
@@ -172,6 +166,17 @@
 			editor.status = '';
 		}, 2000);
 	});
+
+	const toggleVersion = () => {
+		if (editor.view === 'public') {
+			forceContent(editingData.draft);
+			editor.view = 'private';
+			editor.toggled = true;
+		} else {
+			forceContent(editingData.content);
+			editor.view = 'public';
+		}
+	};
 
 	const newPost = async () => {
 		const { title, slug, excerpt, draft } = editingData;
@@ -343,101 +348,12 @@
 	};
 </script>
 
-{#if editor.coverToggled}
-	<PBody>
-		<div class="sticky top-0 flex justify-center items-center w-full h-screen pointer-events-auto">
-			<div
-				class="absolute cursor-not-allowed inset-0 z-10"
-				onclick={() => {
-					editor.coverToggled = false;
-					editor.coverFile = undefined;
-					editor.newCover = undefined;
-					editor.isUploading = false;
-					editor.isUploaded = false;
-					editor.coverError = '';
-				}}
-				role="none"
-			></div>
-			<div class="w-fit h-fit space-y-4 bg-white rounded-3xl p-4 text-xl z-11" role="none">
-				<div
-					class="flex justify-center items-center w-60 h-60 bg-background/60 outline-4 outline-dark outline-dashed rounded-xl overflow-hidden"
-					ondrop={(e) => {
-						e.preventDefault();
-						const file = e.dataTransfer.files[0];
-						if (!file) {
-							editor.coverError = 'File not found!';
-							return;
-						}
-
-						if (!allowedTypes.includes(file.type)) {
-							editor.coverError = 'Only JPEG, PNG, GIF, or WEBP are allowed.';
-							return;
-						}
-
-						if (file.size > maxFileSize) {
-							editor.coverError = `File size exceeds 5MB (${file.size} bytes)`;
-							return;
-						}
-
-						editor.coverFile = file;
-						editor.newCover = URL.createObjectURL(file);
-
-						editor.isUploading = false;
-						editor.isUploaded = false;
-					}}
-					ondragover={preventDefault}
-					role="none"
-				>
-					{#if editor.newCover}
-						<img class="full object-cover" src={editor.newCover} alt="temporal-avatar" />
-					{:else}
-						<span class="w-40 text-center select-none text-dark">Upload your image here</span>
-					{/if}
-				</div>
-				{#if editor.coverError}
-					<span class="inline-block w-60 text-accent-red">
-						*{editor.coverError}
-					</span>
-				{/if}
-				<div class="duo-btn" data-duo-color="green">
-					<button
-						disabled={!editor.newCover || editor.isUploaded || editor.isUploading}
-						onclick={async () => {
-							const formData = new FormData();
-
-							formData.append('file', editor.coverFile, editor.coverFile.name);
-
-							editor.isUploaded = false;
-							editor.isUploading = true;
-							const res = await fetch(`/api/posts/id/${editingData.id}/cover`, {
-								method: 'PATCH',
-								headers: {
-									Authorization: auth()
-								},
-								body: formData
-							});
-
-							if (res.ok) {
-								editor.isUploaded = true;
-								editor.isUploading = false;
-								editor.coverError = '';
-								editingData.coverUrl = editor.newCover;
-							} else {
-								editor.isUploading = false;
-								editor.coverError = await res.text();
-							}
-						}}
-					>
-						Apply
-					</button>
-				</div>
-				{#if editor.isUploaded}
-					<span class="inline-block w-60 text-accent-green">*New cover uploaded succesfully!</span>
-				{/if}
-			</div>
-		</div>
-	</PBody>
-{/if}
+<EditorCoverUploader
+	show={coverUploaderOpen}
+	apiPath={`/api/posts/id/${editingData.id}/cover`}
+	onclose={() => (coverUploaderOpen = false)}
+	onuploaded={(newCoverUrl) => (editingData.coverUrl = newCoverUrl)}
+/>
 
 <article class="relative flex flex-col gap-4 pb-4 *:drop-shadow-xl">
 	<div class="flex w-full">
@@ -449,8 +365,8 @@
 				slug={editingData.slug}
 				excerpt={editingData.excerpt === '' ? '<Empty>' : editingData.excerpt}
 				author={{
-					name: $user.displayName,
-					slug: $user.username
+					name: authState.user.displayName,
+					slug: authState.user.username
 				}}
 				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
 				src={editingData.coverUrl}
@@ -461,7 +377,7 @@
 				}}
 				onclick={() => {
 					if (mode !== 'edit' || !isOwner) return;
-					editor.coverToggled = true;
+					coverUploaderOpen = true;
 				}}
 			>
 				<div
@@ -488,76 +404,20 @@
 		<div
 			class="relative z-10 flex flex-col items-center bg-white border-2 border-dark not-sm:text-sm rounded-t-xl"
 		>
-			<div class="flex justify-between p-2 w-full">
-				<div class="flex gap-2">
-					<div class="w-25 duo-btn" data-duo-color={editor.toggled ? 'red' : 'green'}>
-						<button onclick={() => (editor.toggled = !editor.toggled)}>
-							{editor.toggled ? 'Collapse' : 'Expand'}
-						</button>
-					</div>
-					{#if mode === 'edit' && isOwner}
-						<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="blue">
-							<button
-								onclick={() => {
-									switch (editor.view) {
-										case 'public': {
-											forceContent(editingData.draft);
-											editor.view = 'private';
-											editor.toggled = true;
-											return;
-										}
-										case 'private': {
-											forceContent(editingData.content);
-											editor.view = 'public';
-											return;
-										}
-									}
-								}}
-							>
-								Ver. {editor.view === 'public' ? 'Published' : 'Draft'}
-							</button>
-						</div>
-					{/if}
-				</div>
-				<div class="flex gap-2">
-					{#if editor.toggled}
-						{#if mode === 'create'}
-							<div
-								class="my-auto"
-								class:text-accent-green={!editor.isCritical}
-								class:text-accent-red={editor.isCritical}
-							>
-								<span>{editor.status}</span>
-							</div>
-							<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
-								<button onclick={newPost}>Submit</button>
-							</div>
-						{:else if mode === 'edit'}
-							<div
-								class="my-auto"
-								class:text-accent-green={!editor.isCritical}
-								class:text-accent-red={editor.isCritical}
-							>
-								<span>{editor.status}</span>
-							</div>
-							{#if !isOwner}
-								<div class="my-auto text-dark/50 text-sm italic">
-									<span>View only</span>
-								</div>
-							{:else}
-								<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
-									<button onclick={updatePost}>Change</button>
-								</div>
-								<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
-									<button onclick={publishPost} disabled={editor.isPublishing}>
-										{editor.isPublishing ? 'Publishing…' : 'Publish'}
-									</button>
-								</div>
-							{/if}
-						{/if}
-					{/if}
-				</div>
-			</div>
+			<EditorToolbar
+				bind:toggled={editor.toggled}
+				view={editor.view}
+				status={editor.status}
+				bind:isCritical={editor.isCritical}
+				isPublishing={editor.isPublishing}
+				{mode}
+				{isOwner}
+				ontoggle={() => (editor.toggled = !editor.toggled)}
+				ontogglevision={toggleVersion}
+				onsubmit={newPost}
+				onchange={updatePost}
+				onpublish={publishPost}
+			/>
 			<div class="flex not-lg:flex-col gap-2 w-full h-full p-2 pt-1">
 				<div class="flex grow gap-2">
 					<div class="max-h-80 p-2 pr-1 w-1/3 bg-primary/40 rounded-lg">

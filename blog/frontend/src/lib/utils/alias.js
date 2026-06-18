@@ -1,5 +1,3 @@
-import { writable } from 'svelte/store';
-
 export class Alias {
 	constructor(text, origin, action) {
 		this.text = text;

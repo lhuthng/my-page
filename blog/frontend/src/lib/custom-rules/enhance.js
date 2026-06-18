@@ -1,8 +1,7 @@
-import App from '$lib/components/App.svelte';
+import App from '$lib/components/embeds/App.svelte';
 import { mount, unmount } from 'svelte';
-import ImagePreviewer from '$lib/components/ImagePreviewer.svelte';
-import { mbody } from '$lib/dom/elements';
-import { get } from 'svelte/store';
+import ImagePreviewer from '$lib/components/embeds/ImagePreviewer.svelte';
+import { el } from '$lib/dom/elements.svelte.js';
 
 export function pluginExtend(root) {
 	const appContainers = root.querySelectorAll('.app-container');
@@ -90,7 +89,7 @@ export function pluginExtend(root) {
 			opened = true;
 
 			let previewer = mount(ImagePreviewer, {
-				target: get(mbody),
+				target: el.mbody,
 				props: {
 					visible: true,
 					origin: container,

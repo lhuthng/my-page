@@ -1,19 +1,18 @@
 <script>
 	import { goto } from '$app/navigation';
-	import { auth, user } from '$lib/auth/user';
-	import { arraysEqualIgnoreOrder, nowToDate, preventDefault } from '$lib/utils';
+	import { auth, authState } from '$lib/auth/user.svelte.js';
+	import { arraysEqualIgnoreOrder, nowToDate } from '$lib/utils';
 	import { useDebounce } from '$lib/utils/debounce';
-	import { fly } from 'svelte/transition';
 	import PostCard from '../home/PostCard.svelte';
 	import PostSection from '../post/PostSection.svelte';
 	import ContentDebounceEditor from '../post/ContentDebounceEditor.svelte';
 	import MediaDictionaryController from '../post/MediaDictionaryController.svelte';
-	import PBody from '../PBody.svelte';
+	import EditorToolbar from '../editor/EditorToolbar.svelte';
+	import EditorCoverUploader from '../editor/EditorCoverUploader.svelte';
+	import PBody from '../shell/PBody.svelte';
 
 	const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 	const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)\s*/g;
-	const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-	const maxFileSize = 5 * 1024 * 1024;
 	const demoTypes = [
 		{ value: 'html5', label: 'HTML5', disabled: false },
 		{ value: 'embed', label: 'Embed', disabled: false },
@@ -54,28 +53,24 @@
 		demoUrl: '',
 		links: [{ label: 'GitHub', url: '' }],
 		author: {
-			username: $user?.username,
-			displayName: $user?.displayName,
-			avatarUrl: $user?.avatarUrl
+			username: authState.user?.username,
+			displayName: authState.user?.displayName,
+			avatarUrl: authState.user?.avatarUrl
 		}
 	});
 
 	let editor = $state({
-		coverToggled: false,
 		toggled: false,
 		view: 'private',
 		status: '',
 		isCritical: false,
-		coverFile: undefined,
-		newCover: undefined,
-		coverError: '',
-		isUploadingCover: false,
-		isUploadedCover: false,
 		isPublishing: false,
 		demoZip: undefined,
 		demoZipName: '',
 		demoZipError: ''
 	});
+
+	let coverUploaderOpen = $state(false);
 
 	let renderedText = $state('');
 	let forDraft = $derived(mode === 'create' || (mode === 'edit' && editor.view === 'private'));
@@ -212,6 +207,17 @@
 				return { valid: false, error: `Unsupported demo type: ${type}` };
 		}
 		return { valid: true };
+	};
+
+	const toggleVersion = () => {
+		if (editor.view === 'public') {
+			forceContent(editingData.draft);
+			editor.view = 'private';
+			editor.toggled = true;
+		} else {
+			forceContent(editingData.content);
+			editor.view = 'public';
+		}
 	};
 
 	const newProject = async () => {
@@ -372,90 +378,12 @@
 	};
 </script>
 
-{#if editor.coverToggled}
-	<PBody>
-		<div class="sticky top-0 flex justify-center items-center w-full h-screen pointer-events-auto">
-			<div
-				class="absolute cursor-not-allowed inset-0 z-10"
-				onclick={() => {
-					editor.coverToggled = false;
-					editor.coverFile = undefined;
-					editor.newCover = undefined;
-					editor.isUploadingCover = false;
-					editor.isUploadedCover = false;
-					editor.coverError = '';
-				}}
-				role="none"
-			></div>
-			<div class="w-fit h-fit space-y-4 bg-white rounded-3xl p-4 text-xl z-11" role="none">
-				<div
-					class="flex justify-center items-center w-60 h-60 bg-background/60 outline-4 outline-dark outline-dashed rounded-xl overflow-hidden"
-					ondrop={(e) => {
-						e.preventDefault();
-						const file = e.dataTransfer.files[0];
-						if (!file) {
-							editor.coverError = 'File not found!';
-							return;
-						}
-						if (!allowedTypes.includes(file.type)) {
-							editor.coverError = 'Only JPEG, PNG, GIF, or WEBP are allowed.';
-							return;
-						}
-						if (file.size > maxFileSize) {
-							editor.coverError = `File size exceeds 5MB (${file.size} bytes)`;
-							return;
-						}
-						editor.coverFile = file;
-						editor.newCover = URL.createObjectURL(file);
-						editor.isUploadingCover = false;
-						editor.isUploadedCover = false;
-					}}
-					ondragover={preventDefault}
-					role="none"
-				>
-					{#if editor.newCover}
-						<img class="full object-cover" src={editor.newCover} alt="temporary project cover" />
-					{:else}
-						<span class="w-40 text-center select-none text-dark">Upload your image here</span>
-					{/if}
-				</div>
-				{#if editor.coverError}
-					<span class="inline-block w-60 text-accent-red">*{editor.coverError}</span>
-				{/if}
-				<div class="duo-btn" data-duo-color="green">
-					<button
-						disabled={!editor.newCover || editor.isUploadedCover || editor.isUploadingCover}
-						onclick={async () => {
-							const formData = new FormData();
-							formData.append('file', editor.coverFile, editor.coverFile.name);
-							editor.isUploadedCover = false;
-							editor.isUploadingCover = true;
-							const res = await fetch(`/api/projects/id/${editingData.id}/cover`, {
-								method: 'PATCH',
-								headers: { Authorization: auth() },
-								body: formData
-							});
-							if (res.ok) {
-								editor.isUploadedCover = true;
-								editor.isUploadingCover = false;
-								editor.coverError = '';
-								editingData.coverUrl = editor.newCover;
-							} else {
-								editor.isUploadingCover = false;
-								editor.coverError = await res.text();
-							}
-						}}
-					>
-						Apply
-					</button>
-				</div>
-				{#if editor.isUploadedCover}
-					<span class="inline-block w-60 text-accent-green">*New cover uploaded succesfully!</span>
-				{/if}
-			</div>
-		</div>
-	</PBody>
-{/if}
+<EditorCoverUploader
+	show={coverUploaderOpen}
+	apiPath={`/api/projects/id/${editingData.id}/cover`}
+	onclose={() => (coverUploaderOpen = false)}
+	onuploaded={(newCoverUrl) => (editingData.coverUrl = newCoverUrl)}
+/>
 
 <article class="relative flex flex-col gap-4 pb-4 *:drop-shadow-xl">
 	<div class="flex w-full">
@@ -466,7 +394,7 @@
 				title={editingData.title === '' ? '<Empty>' : editingData.title}
 				slug={editingData.slug}
 				excerpt={editingData.excerpt === '' ? '<Empty>' : editingData.excerpt}
-				author={{ name: $user.displayName, slug: $user.username }}
+				author={{ name: authState.user.displayName, slug: authState.user.username }}
 				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
 				src={editingData.coverUrl}
 				stats={{ views: '#', likes: '#', comments_count: '#' }}
@@ -474,7 +402,7 @@
 				dashboardPrefix="/dashboard/projects/id"
 				onclick={() => {
 					if (mode !== 'edit' || !isOwner) return;
-					editor.coverToggled = true;
+					coverUploaderOpen = true;
 				}}
 			>
 				<div
@@ -503,60 +431,20 @@
 		<div
 			class="relative z-10 flex flex-col items-center bg-white border-2 border-dark not-sm:text-sm rounded-t-xl"
 		>
-			<div class="flex justify-between p-2 w-full">
-				<div class="flex gap-2">
-					<div class="w-25 duo-btn" data-duo-color={editor.toggled ? 'red' : 'green'}>
-						<button onclick={() => (editor.toggled = !editor.toggled)}>
-							{editor.toggled ? 'Collapse' : 'Expand'}
-						</button>
-					</div>
-					{#if mode === 'edit' && isOwner}
-						<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="blue">
-							<button
-								onclick={() => {
-									if (editor.view === 'public') {
-										forceContent(editingData.draft);
-										editor.view = 'private';
-										editor.toggled = true;
-									} else {
-										forceContent(editingData.content);
-										editor.view = 'public';
-									}
-								}}
-							>
-								Ver. {editor.view === 'public' ? 'Published' : 'Draft'}
-							</button>
-						</div>
-					{/if}
-				</div>
-				<div class="flex gap-2">
-					{#if editor.toggled}
-						<div
-							class="my-auto"
-							class:text-accent-green={!editor.isCritical}
-							class:text-accent-red={editor.isCritical}
-						>
-							<span>{editor.status}</span>
-						</div>
-						{#if mode === 'create'}
-							<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
-								<button onclick={newProject}>Submit</button>
-							</div>
-						{:else if !isOwner}
-							<div class="my-auto text-dark/50 text-sm italic"><span>View only</span></div>
-						{:else}
-							<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
-								<button onclick={updateProject}>Change</button>
-							</div>
-							<div in:fly={{ duration: 200 }} class="duo-btn" data-duo-color="green">
-								<button onclick={publishProject} disabled={editor.isPublishing}>
-									{editor.isPublishing ? 'Publishing...' : 'Publish'}
-								</button>
-							</div>
-						{/if}
-					{/if}
-				</div>
-			</div>
+			<EditorToolbar
+				bind:toggled={editor.toggled}
+				view={editor.view}
+				status={editor.status}
+				bind:isCritical={editor.isCritical}
+				isPublishing={editor.isPublishing}
+				{mode}
+				{isOwner}
+				ontoggle={() => (editor.toggled = !editor.toggled)}
+				ontogglevision={toggleVersion}
+				onsubmit={newProject}
+				onchange={updateProject}
+				onpublish={publishProject}
+			/>
 			<div class="flex not-lg:flex-col gap-2 w-full h-full p-2 pt-1">
 				<div class="flex grow gap-2">
 					<div class="max-h-80 p-2 pr-1 w-1/3 bg-primary/40 rounded-lg">

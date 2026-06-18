@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
-	import PBody from '../PBody.svelte';
+	import PBody from '../shell/PBody.svelte';
 	import { browser } from '$app/environment';
 
 	let { headers } = $props();

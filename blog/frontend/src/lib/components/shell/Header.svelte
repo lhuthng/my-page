@@ -1,10 +1,10 @@
 <script>
 	import { afterNavigate, goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { logout, user, isMod } from '$lib/auth/user';
+	import { logout, authState } from '$lib/auth/user.svelte.js';
 	import { useDebounce } from '$lib/utils/debounce';
 	import { draw, fly } from 'svelte/transition';
-	import Portal from '$lib/components/Portal.svelte';
+	import Portal from '$lib/components/shell/Portal.svelte';
 	import SearchButton from './buttons/SearchButton.svelte';
 	import AboutButton from './buttons/AboutButton.svelte';
 	import BlogButton from './buttons/BlogButton.svelte';
@@ -19,13 +19,13 @@
 	import { onMount } from 'svelte';
 	import SeriesButton from './buttons/SeriesButton.svelte';
 	import { widthThreshold } from '$lib/utils';
-	import { isLg } from '$lib/dom/windows';
+	import { win } from '$lib/dom/windows.svelte.js';
 	const { lg } = widthThreshold;
 
-	let displayName = $derived($user?.displayName);
-	let username = $derived($user?.username);
-	let role = $derived($user?.role);
-	let avatarUrl = $derived($user?.avatarUrl ?? '/missing.png');
+	let displayName = $derived(authState.user?.displayName);
+	let username = $derived(authState.user?.username);
+	let role = $derived(authState.user?.role);
+	let avatarUrl = $derived(authState.user?.avatarUrl ?? '/missing.png');
 	let loginHref = $derived.by(() => {
 		const redirectTo = encodeURIComponent(`${$page.url.pathname}${$page.url.search}`);
 		return `/login?redirectTo=${redirectTo}`;
@@ -41,11 +41,11 @@
 	let windowWidth = $state(0);
 
 	$effect(() => {
-		if ($isLg) menuToggled = false;
+		if (win.isLg) menuToggled = false;
 	});
 
 	$effect(() => {
-		if (menuToggled === false && !$isLg) {
+		if (menuToggled === false && !win.isLg) {
 			searchData._term = '';
 		}
 	});
@@ -78,10 +78,8 @@
 	});
 
 	const handleLogout = async () => {
-		if ($page.url.pathname.startsWith('/dashboard')) {
-			goto('/');
-		}
-		logout();
+		await goto('/');
+		await logout();
 	};
 
 	const change = (e) => {
@@ -478,7 +476,7 @@
 				<div class="w-1/2 flex not-md:flex-col justify-evenly">
 					<ul class="space-y-2 bg-white p-2 rounded-xl" id="side-bar">
 						{#each routes as [Icon, text, path, routeName, secret], index}
-							{#if !secret || $isMod}
+							{#if !secret || authState.isMod}
 								<li>
 									<a class="flex items-center gap-2 stroke-dark fill-dark" href={path}>
 										<Icon class="w-6 transition-all duration-100" />

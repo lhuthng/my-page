@@ -4,17 +4,14 @@
 
 <button {...rest}>
 	<svg xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" viewBox="0 0 24 24" {fill}>
-		<g>
-			<path
-				d="M6,6H2V2h4V6z M14,2h-4v4h4V2z M22,2h-4v4h4V2z M6,10H2v4h4V10z M14,10h-4v4h4V10z M22,10h-4v4h4V10z M6,18H2v4h4V18z M14,18h-4v4h4V18z M22,18h-4v4h4V18z"
-			/>
-		</g>
+		<path
+			d="M21.71,20.29,18,16.61A9,9,0,1,0,16.61,18l3.68,3.68a1,1,0,0,0,1.42,0A1,1,0,0,0,21.71,20.29ZM11,18a7,7,0,1,1,7-7A7,7,0,0,1,11,18Z"
+		/>
 	</svg>
 </button>
 
 <style lang="postcss">
-	@reference "../../../app.css";
-
+	@reference "../../../../app.css";
 	button {
 		@apply not-disabled:hover:cursor-pointer;
 	}

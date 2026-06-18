@@ -1,9 +1,9 @@
 <script>
-	import { user } from '$lib/auth/user';
-	import { isXl } from '$lib/dom/windows';
+	import { authState } from '$lib/auth/user.svelte.js';
+	import { win } from '$lib/dom/windows.svelte.js';
 	import { onDestroy, onMount } from 'svelte';
-	import PBody from '../PBody.svelte';
-	import Portal from '../Portal.svelte';
+	import PBody from '../shell/PBody.svelte';
+	import Portal from '../shell/Portal.svelte';
 	import ContentTable from './ContentTable.svelte';
 	import Post from './Post.svelte';
 	import { browser } from '$app/environment';
@@ -46,7 +46,7 @@
 	let pushingLike = $state(false);
 
 	$effect(() => {
-		if ($isXl) toggled = false;
+		if (win.isXl) toggled = false;
 	});
 
 	function onHashChange() {
@@ -88,7 +88,7 @@
 						{title}
 					</h1>
 				</div>
-				{#if id && $user?.username === author.username}
+				{#if id && authState.user?.username === author.username}
 					<div class="h-fit duo-btn duo-green">
 						<a href={editHref ?? `/dashboard/posts/id/${id}`}>Edit</a>
 					</div>
@@ -351,7 +351,7 @@
 	</div>
 </section>
 
-{#if !$isXl && toggled}
+{#if !win.isXl && toggled}
 	<PBody>
 		<button
 			class="absolute top-0 left-0 full cursor-not-allowed!"
