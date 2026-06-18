@@ -125,6 +125,7 @@
 							tags={post.tag_slugs}
 							src={post.url}
 							stats={post.stats}
+							coverMediaType={post.cover_media_type}
 						/>
 						<!-- Edit overlay for published posts (drafts already link to edit via PostCard) -->
 						{#if post.status !== 'draft'}

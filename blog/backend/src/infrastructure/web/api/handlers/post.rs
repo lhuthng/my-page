@@ -20,6 +20,7 @@ use crate::{
                 PostNewAnynymouseCommentCommand, PostNewCommentCommand, PublishCommand,
                 PushNewLikeCommand, PushNewViewCommand, SearchPostCommand, SearchTagsCommand,
                 SetFeaturedPostCommand, SetRelatedPostsCommand, UpdatePostCommand,
+                UpdatePostCoverCommand,
             },
             project::GetProjectsByTagCommand,
         },
@@ -104,6 +105,9 @@ pub struct GetPostDetailsResponse {
     pub medium_short_names: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_media_type: Option<String>,
+    pub og_image_seconds: i64,
     pub is_owner: bool,
 }
 
@@ -136,6 +140,8 @@ pub async fn get_post_details(
         draft,
         is_featured,
         cover_url,
+        cover_media_type,
+        og_image_seconds,
         medium_urls,
         medium_short_names,
         is_owner,
@@ -160,6 +166,8 @@ pub async fn get_post_details(
         draft,
         is_featured,
         cover_url,
+        cover_media_type,
+        og_image_seconds,
         medium_urls,
         medium_short_names,
         is_owner,
@@ -393,6 +401,18 @@ pub async fn update_post(
 
     state.post_service.update_post(cmd).await?;
 
+    if post_data.video_short_name.is_some() || post_data.og_image_seconds.is_some() {
+        state
+            .post_service
+            .update_post_cover(UpdatePostCoverCommand {
+                user_id: uploader_id,
+                post_id,
+                video_short_name: post_data.video_short_name,
+                og_image_seconds: post_data.og_image_seconds,
+            })
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -430,6 +450,9 @@ pub struct PostResponse {
     pub updated_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_media_type: Option<String>,
+    pub og_image_seconds: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_avatar_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -486,6 +509,8 @@ pub async fn get_post_by_slug(
         medium_urls: post.medium_urls,
         published_at: post.published_at,
         updated_at: post.updated_at,
+        cover_media_type: post.cover_media_type,
+        og_image_seconds: post.og_image_seconds,
         series: post.post_series.map(|series| PostSeriesResponse {
             title: series.series_title,
             slug: series.series_slug,
@@ -579,6 +604,8 @@ pub struct PostData {
     content: String,
     tags: Vec<String>,
     number_of_files: usize,
+    video_short_name: Option<String>,
+    og_image_seconds: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -590,6 +617,8 @@ pub struct PostPatchData {
     draft: Option<String>,
     tags: Option<Vec<String>>,
     number_of_files: usize,
+    video_short_name: Option<String>,
+    og_image_seconds: Option<i64>,
 }
 
 pub struct FileData {
@@ -740,12 +769,24 @@ pub async fn new_post(
         excerpt: post_data.excerpt,
         tags: post_data.tags,
         content,
-        cover_image: None,
+        cover_media: None,
         media_usage,
         content_kind: "post".to_string(),
     };
 
     let post_id = state.post_service.new_post(cmd).await?;
+
+    if post_data.video_short_name.is_some() || post_data.og_image_seconds.is_some() {
+        state
+            .post_service
+            .update_post_cover(UpdatePostCoverCommand {
+                user_id: uploader_id,
+                post_id,
+                video_short_name: post_data.video_short_name,
+                og_image_seconds: post_data.og_image_seconds,
+            })
+            .await?;
+    }
 
     Ok(Json(serde_json::json!({ "id": post_id })))
 }
@@ -926,6 +967,7 @@ pub struct Post {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    pub cover_media_type: Option<String>,
     pub stats: PostStats,
 }
 
@@ -941,6 +983,7 @@ impl From<PostSnapshot> for Post {
             author_name,
             author_slug,
             url,
+            cover_media_type,
             stats,
             ..
         } = value;
@@ -954,6 +997,7 @@ impl From<PostSnapshot> for Post {
             author_name,
             author_slug,
             url,
+            cover_media_type,
             stats: PostStats {
                 views: stats.views,
                 likes: stats.likes,

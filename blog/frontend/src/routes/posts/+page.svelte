@@ -114,6 +114,7 @@
 								tags={post.tag_slugs}
 								src={post.url}
 								stats={post.stats}
+								coverMediaType={post.cover_media_type}
 							/>
 						</li>
 					{/each}

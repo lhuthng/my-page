@@ -16,7 +16,7 @@ use crate::{
             GetRelatedPostsCommand, NewPostCommand, PostNewAnynymouseCommentCommand,
             PostNewCommentCommand, PublishCommand, PushNewLikeCommand, PushNewViewCommand,
             SearchPostCommand, SearchTagsCommand, SetFeaturedPostCommand, SetRelatedPostsCommand,
-            UpdatePostCommand,
+            UpdatePostCommand, UpdatePostCoverCommand,
         },
         services::post::PostService,
     },
@@ -66,6 +66,7 @@ pub struct PostRow {
     pub author_name: String,
     pub author_slug: String,
     pub url: Option<String>,
+    pub cover_media_type: Option<String>,
     pub status: String,
     pub views: i64,
     pub likes: i64,
@@ -85,6 +86,7 @@ impl PostRow {
             author_slug: self.author_slug,
             status: self.status,
             url: self.url,
+            cover_media_type: self.cover_media_type,
             stats: PostStats {
                 likes: self.likes,
                 views: self.views,
@@ -107,6 +109,8 @@ pub struct PostContentRow {
     pub published_at: Option<String>,
     pub updated_at: Option<String>,
     pub url: Option<String>,
+    pub cover_media_type: Option<String>,
+    pub og_image_seconds: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -158,7 +162,8 @@ pub struct PostDetailsRow {
     pub content: String,
     pub user_id: i64,
     pub is_featured: i64,
-    pub cover_image_id: Option<i64>,
+    pub cover_media_id: Option<i64>,
+    pub og_image_seconds: i64,
 }
 
 impl PostServiceImpl {
@@ -244,12 +249,12 @@ impl PostServiceImpl {
 
         let sequel = format!(
             r#"
-            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, 'media/i/' || m.short_name AS url, status, views, likes, comments_count
+            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, 'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, status, views, likes, comments_count
             FROM posts p
                 JOIN users u ON u.id = p.user_id
                 JOIN user_meta um ON um.user_id = p.user_id
                 JOIN post_stats ps ON ps.post_id = p.id
-                LEFT JOIN media m ON m.id = p.cover_image_id
+                LEFT JOIN media m ON m.id = p.cover_media_id
             {}
             ORDER BY p.{} DESC
             LIMIT ?
@@ -427,7 +432,7 @@ impl PostService for PostServiceImpl {
                     ELSE 0
                 END AS score
             FROM posts AS p
-            LEFT JOIN media AS m ON m.id = p.cover_image_id
+            LEFT JOIN media AS m ON m.id = p.cover_media_id
             WHERE p.content_kind = 'post'
                 AND (
                     LOWER(p.title) LIKE '%' || LOWER(?1) || '%'
@@ -534,6 +539,7 @@ impl PostService for PostServiceImpl {
                 username AS author_slug,
                 display_name AS author_name,
                 'media/i/' || m.short_name AS url,
+                m.file_type AS cover_media_type,
                 status,
                 views,
                 likes,
@@ -542,7 +548,7 @@ impl PostService for PostServiceImpl {
                 JOIN users u ON u.id = p.user_id
                 JOIN user_meta um ON um.user_id = p.user_id
                 JOIN post_stats ps ON ps.post_id = p.id
-                LEFT JOIN media m ON m.id = p.cover_image_id
+                LEFT JOIN media m ON m.id = p.cover_media_id
             WHERE p.status = 'published'
                 AND p.content_kind = 'post'
                 AND EXISTS (
@@ -787,13 +793,15 @@ impl PostService for PostServiceImpl {
             published_at,
             updated_at,
             url,
+            cover_media_type,
+            og_image_seconds,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, 'media/i/' || m2.short_name AS author_avatar_url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, m1.file_type AS cover_media_type, posts.og_image_seconds, 'media/i/' || m2.short_name AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
-            LEFT JOIN media m1 ON m1.id = posts.cover_image_id
+            LEFT JOIN media m1 ON m1.id = posts.cover_media_id
             LEFT JOIN media m2 ON m2.id = user_meta.avatar_image_id
             WHERE posts.slug = ? AND status = 'published' AND posts.content_kind = 'post'
             "#,
@@ -875,7 +883,7 @@ impl PostService for PostServiceImpl {
                 FROM series_post sp
                 JOIN series s ON s.id = sp.series_id
                 JOIN posts p ON p.id = sp.post_id
-                LEFT JOIN media m ON m.id = p.cover_image_id
+                LEFT JOIN media m ON m.id = p.cover_media_id
                 WHERE s.id = ? AND sp.number < ? AND p.content_kind = 'post'
                 ORDER BY sp.number DESC
                 LIMIT 1
@@ -901,7 +909,7 @@ impl PostService for PostServiceImpl {
                 FROM series_post sp
                 JOIN series s ON s.id = sp.series_id
                 JOIN posts p ON p.id = sp.post_id
-                LEFT JOIN media m ON m.id = p.cover_image_id
+                LEFT JOIN media m ON m.id = p.cover_media_id
                 WHERE s.id = ? AND sp.number > ? AND p.content_kind = 'post'
                 ORDER BY sp.number ASC
                 LIMIT 1
@@ -944,6 +952,8 @@ impl PostService for PostServiceImpl {
             medium_urls,
             post_series,
             cover_url: url,
+            cover_media_type,
+            og_image_seconds,
         })
     }
     async fn publish(&self, cmd: PublishCommand) -> Result<(), PostError> {
@@ -1031,8 +1041,9 @@ impl PostService for PostServiceImpl {
                 content,
                 draft,
                 is_featured,
-                cover_image_id,
-                user_id
+                cover_media_id,
+                user_id,
+                posts.og_image_seconds
             FROM posts
             LEFT JOIN series_post ON series_post.post_id = posts.id
             WHERE id = ?;
@@ -1061,10 +1072,11 @@ impl PostService for PostServiceImpl {
         .await?;
 
         let mut cover_url: Option<String> = None;
-        if let Some(cover_id) = post_row.cover_image_id {
-            cover_url = sqlx::query_scalar(
+        let mut cover_media_type: Option<String> = None;
+        if let Some(cover_id) = post_row.cover_media_id {
+            let cover_row = sqlx::query_as::<_, (Option<String>, Option<String>)>(
                 r#"
-                SELECT url
+                SELECT url, file_type
                 FROM media
                 WHERE id = ?
                 "#,
@@ -1072,6 +1084,10 @@ impl PostService for PostServiceImpl {
             .bind(cover_id)
             .fetch_optional(&self.pool)
             .await?;
+            if let Some((url, file_type)) = cover_row {
+                cover_url = url;
+                cover_media_type = file_type;
+            }
         }
 
         let mut series_slug: Option<String> = None;
@@ -1155,6 +1171,8 @@ impl PostService for PostServiceImpl {
             medium_urls,
             medium_short_names,
             cover_url,
+            cover_media_type,
+            og_image_seconds: post_row.og_image_seconds,
             is_owner: post_row.user_id == cmd.viewing_user_id,
         })
     }
@@ -1572,7 +1590,7 @@ impl PostService for PostServiceImpl {
             SELECT p.title, p.slug, 'media/i/' || m.short_name AS cover_url
             FROM related_posts rp
             JOIN posts p ON rp.related_post_id = p.id
-            LEFT JOIN media m ON m.id = p.cover_image_id
+            LEFT JOIN media m ON m.id = p.cover_media_id
             WHERE rp.post_id = ? AND p.status = 'published'
             ORDER BY rp.display_order ASC
             "#,
@@ -1629,6 +1647,29 @@ impl PostService for PostServiceImpl {
         .execute(&self.pool)
         .await?;
 
+        Ok(())
+    }
+
+    async fn update_post_cover(&self, cmd: UpdatePostCoverCommand) -> Result<(), PostError> {
+        let mut set_fields: Vec<String> = vec![];
+        if cmd.video_short_name.is_some() {
+            set_fields.push("cover_media_id = (SELECT id FROM media WHERE short_name = ?)".to_string());
+        }
+        if cmd.og_image_seconds.is_some() {
+            set_fields.push("og_image_seconds = ?".to_string());
+        }
+        if !set_fields.is_empty() {
+            let sql = format!("UPDATE posts SET {} WHERE id = ? AND user_id = ?", set_fields.join(", "));
+            let mut query = sqlx::query(&sql);
+            if let Some(ref short_name) = cmd.video_short_name {
+                query = query.bind(short_name);
+            }
+            if let Some(seconds) = cmd.og_image_seconds {
+                query = query.bind(seconds);
+            }
+            query = query.bind(cmd.post_id).bind(cmd.user_id);
+            query.execute(&self.pool).await?;
+        }
         Ok(())
     }
 }

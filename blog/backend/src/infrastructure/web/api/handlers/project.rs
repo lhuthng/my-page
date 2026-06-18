@@ -22,7 +22,10 @@ use crate::{
     application::{
         commands::{
             media::{ChangePostCoverCommand, UploadMediaWithoutDescriptionCommand},
-            post::{CheckSlugCommand, NewPostCommand, PublishCommand, UpdatePostCommand},
+            post::{
+                CheckSlugCommand, NewPostCommand, PublishCommand, UpdatePostCommand,
+                UpdatePostCoverCommand,
+            },
             project::{
                 GetFeaturedProjectsCommand, GetLatestProjectsCommand, GetProjectBySlugCommand,
                 GetProjectDetailsCommand, GetProjectPostIdCommand, NewProjectCommand,
@@ -82,6 +85,8 @@ struct ProjectData {
     demo_height: Option<String>,
     demo_config: Option<String>,
     demo_url: Option<String>,
+    video_short_name: Option<String>,
+    og_image_seconds: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -99,6 +104,8 @@ struct ProjectPatchData {
     demo_height: Option<String>,
     demo_config: Option<String>,
     demo_url: Option<String>,
+    video_short_name: Option<String>,
+    og_image_seconds: Option<i64>,
 }
 
 struct FileData {
@@ -549,7 +556,7 @@ pub async fn new_project(
             excerpt: data.excerpt,
             content: data.content,
             tags: data.tags,
-            cover_image: None,
+            cover_media: None,
             media_usage,
             content_kind: "project".to_string(),
         })
@@ -574,6 +581,18 @@ pub async fn new_project(
         if let Err(err) = extract_demo_zip(&state.project_demo_config, project_id, zip) {
             return Err(err);
         }
+    }
+
+    if data.video_short_name.is_some() || data.og_image_seconds.is_some() {
+        state
+            .post_service
+            .update_post_cover(UpdatePostCoverCommand {
+                user_id: uploader_id,
+                post_id,
+                video_short_name: data.video_short_name,
+                og_image_seconds: data.og_image_seconds,
+            })
+            .await?;
     }
 
     Ok(Json(serde_json::json!({ "id": project_id, "post_id": post_id })))
@@ -709,6 +728,18 @@ pub async fn update_project(
         extract_demo_zip(&state.project_demo_config, project_id, zip)?;
     }
 
+    if data.video_short_name.is_some() || data.og_image_seconds.is_some() {
+        state
+            .post_service
+            .update_post_cover(UpdatePostCoverCommand {
+                user_id,
+                post_id,
+                video_short_name: data.video_short_name,
+                og_image_seconds: data.og_image_seconds,
+            })
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -756,6 +787,9 @@ pub struct ProjectResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_media_type: Option<String>,
+    pub og_image_seconds: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub published_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
@@ -797,6 +831,8 @@ fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
         medium_urls: project.medium_urls,
         medium_short_names: project.medium_short_names,
         cover_url: project.cover_url,
+        cover_media_type: project.cover_media_type,
+        og_image_seconds: project.og_image_seconds,
         published_at: project.published_at,
         updated_at: project.updated_at,
         demo_type: project.demo.demo_type,
@@ -888,6 +924,7 @@ pub struct ProjectCard {
     pub demo_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    pub cover_media_type: Option<String>,
     pub stats: ProjectStats,
 }
 
@@ -905,6 +942,7 @@ impl From<ProjectSnapshot> for ProjectCard {
             author_slug: value.author_slug,
             demo_type: value.demo_type,
             url: value.url,
+            cover_media_type: value.cover_media_type,
             stats: ProjectStats {
                 views: value.stats.views,
                 likes: value.stats.likes,

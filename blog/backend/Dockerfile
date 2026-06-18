@@ -18,6 +18,7 @@ FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
+  ffmpeg \
   libssl3 \
   ca-certificates \
   && rm -rf /var/lib/apt/lists/*

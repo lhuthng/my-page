@@ -6,7 +6,7 @@
 	let series = $derived(data.series);
 </script>
 
-{#snippet postItem({ title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats })}
+{#snippet postItem({ title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, cover_media_type })}
 	<li class="h-fit">
 		<PostCard
 			{title}
@@ -16,6 +16,7 @@
 			tags={tag_slugs}
 			src={url}
 			{stats}
+			coverMediaType={cover_media_type}
 		/>
 	</li>
 {/snippet}

@@ -103,7 +103,7 @@ pub async fn get_series_posts(
             SELECT p.id, p.title, p.slug, p.status, sp.number, 'media/i/' || m.short_name
             FROM series_post sp
             JOIN posts p ON p.id = sp.post_id
-            LEFT JOIN media m ON m.id = p.cover_image_id
+            LEFT JOIN media m ON m.id = p.cover_media_id
             WHERE sp.series_id = ?
             ORDER BY sp.number ASC
             "#,
@@ -118,7 +118,7 @@ pub async fn get_series_posts(
             SELECT p.id, p.title, p.slug, p.status, sp.number, 'media/i/' || m.short_name
             FROM series_post sp
             JOIN posts p ON p.id = sp.post_id
-            LEFT JOIN media m ON m.id = p.cover_image_id
+            LEFT JOIN media m ON m.id = p.cover_media_id
             JOIN series s ON s.id = sp.series_id
             WHERE sp.series_id = ? AND s.user_id = ?
             ORDER BY sp.number ASC

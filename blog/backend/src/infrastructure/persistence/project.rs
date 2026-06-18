@@ -42,6 +42,7 @@ struct ProjectSnapshotRow {
     author_slug: String,
     status: String,
     url: Option<String>,
+    cover_media_type: Option<String>,
     demo_type: String,
     views: i64,
     likes: i64,
@@ -64,6 +65,8 @@ struct ProjectContentRow {
     published_at: Option<String>,
     updated_at: Option<String>,
     cover_url: Option<String>,
+    cover_media_type: Option<String>,
+    og_image_seconds: i64,
     demo_type: String,
     demo_entry_path: String,
     demo_width: Option<String>,
@@ -99,6 +102,7 @@ impl ProjectSnapshotRow {
             author_slug: self.author_slug,
             status: self.status,
             url: self.url,
+            cover_media_type: self.cover_media_type,
             demo_type: self.demo_type,
             stats: PostStats {
                 views: self.views,
@@ -233,6 +237,8 @@ impl ProjectServiceImpl {
             medium_urls,
             medium_short_names,
             cover_url: row.cover_url,
+            cover_media_type: row.cover_media_type,
+            og_image_seconds: row.og_image_seconds,
             demo: ProjectDemo {
                 demo_type: row.demo_type,
                 entry_path: row.demo_entry_path,
@@ -455,6 +461,8 @@ impl ProjectService for ProjectServiceImpl {
                 posts.published_at,
                 posts.updated_at,
                 'media/i/' || cover.short_name AS cover_url,
+                cover.file_type AS cover_media_type,
+                posts.og_image_seconds,
                 projects.demo_type,
                 projects.demo_entry_path,
                 projects.demo_width,
@@ -465,7 +473,7 @@ impl ProjectService for ProjectServiceImpl {
             JOIN posts ON posts.id = projects.post_id
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = users.id
-            LEFT JOIN media cover ON cover.id = posts.cover_image_id
+            LEFT JOIN media cover ON cover.id = posts.cover_media_id
             LEFT JOIN media avatar ON avatar.id = user_meta.avatar_image_id
             WHERE posts.slug = ? AND posts.status = 'published'
             "#,
@@ -499,6 +507,8 @@ impl ProjectService for ProjectServiceImpl {
                 posts.published_at,
                 posts.updated_at,
                 media.url AS cover_url,
+                media.file_type AS cover_media_type,
+                posts.og_image_seconds,
                 projects.demo_type,
                 projects.demo_entry_path,
                 projects.demo_width,
@@ -509,7 +519,7 @@ impl ProjectService for ProjectServiceImpl {
             JOIN posts ON posts.id = projects.post_id
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = users.id
-            LEFT JOIN media ON media.id = posts.cover_image_id
+            LEFT JOIN media ON media.id = posts.cover_media_id
             LEFT JOIN media avatar ON avatar.id = user_meta.avatar_image_id
             WHERE projects.id = ?
             "#,
@@ -579,6 +589,7 @@ impl ProjectService for ProjectServiceImpl {
                 user_meta.display_name AS author_name,
                 posts.status,
                 'media/i/' || media.short_name AS url,
+                media.file_type AS cover_media_type,
                 projects.demo_type,
                 post_stats.views,
                 post_stats.likes,
@@ -588,7 +599,7 @@ impl ProjectService for ProjectServiceImpl {
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = posts.user_id
             JOIN post_stats ON post_stats.post_id = posts.id
-            LEFT JOIN media ON media.id = posts.cover_image_id
+            LEFT JOIN media ON media.id = posts.cover_media_id
             {}
             ORDER BY posts.created_at DESC
             LIMIT ?
@@ -652,6 +663,7 @@ impl ProjectService for ProjectServiceImpl {
                 user_meta.display_name AS author_name,
                 posts.status,
                 'media/i/' || media.short_name AS url,
+                media.file_type AS cover_media_type,
                 projects.demo_type,
                 post_stats.views,
                 post_stats.likes,
@@ -661,7 +673,7 @@ impl ProjectService for ProjectServiceImpl {
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = posts.user_id
             JOIN post_stats ON post_stats.post_id = posts.id
-            LEFT JOIN media ON media.id = posts.cover_image_id
+            LEFT JOIN media ON media.id = posts.cover_media_id
             WHERE posts.status = 'published' AND posts.is_featured = 1
             ORDER BY posts.created_at DESC
             LIMIT ?
@@ -690,6 +702,7 @@ impl ProjectService for ProjectServiceImpl {
                 user_meta.display_name AS author_name,
                 posts.status,
                 'media/i/' || media.short_name AS url,
+                media.file_type AS cover_media_type,
                 projects.demo_type,
                 post_stats.views,
                 post_stats.likes,
@@ -699,7 +712,7 @@ impl ProjectService for ProjectServiceImpl {
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = posts.user_id
             JOIN post_stats ON post_stats.post_id = posts.id
-            LEFT JOIN media ON media.id = posts.cover_image_id
+            LEFT JOIN media ON media.id = posts.cover_media_id
             WHERE posts.status = 'published'
                 AND EXISTS (
                     SELECT 1

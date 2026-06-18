@@ -185,7 +185,7 @@
 			bind:this={tab.discover}
 			class="[&>li]:opacity-0 grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
 		>
-			{#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
+			{#each featuredPosts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, cover_media_type }, index (slug)}
 				<li class:animate-fly-in={hydrated} style:--delay={`${index * itemDelay}ms`}>
 					<PostCard
 						{title}
@@ -198,6 +198,7 @@
 						tags={tag_slugs}
 						src={url}
 						{stats}
+						coverMediaType={cover_media_type}
 					/>
 				</li>
 			{/each}
@@ -227,6 +228,7 @@
 							tags={post.tag_slugs}
 							src={post.url}
 							stats={post.stats}
+							coverMediaType={post.cover_media_type}
 						/>
 					</li>
 				{/each}
