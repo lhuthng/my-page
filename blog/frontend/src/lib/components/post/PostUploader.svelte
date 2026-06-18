@@ -1,6 +1,6 @@
 <script>
-	import { pick } from '$lib/dom/elements';
-	import { auth } from '$lib/auth/user';
+	import { pick } from '$lib/dom/elements.svelte.js';
+	import { auth } from '$lib/auth/user.svelte.js';
 	import { useDebounce } from '$lib/utils/debounce';
 	import { onMount } from 'svelte';
 	import MediaSearcher from './MediaSearcher.svelte';

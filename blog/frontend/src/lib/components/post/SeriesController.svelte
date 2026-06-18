@@ -1,6 +1,6 @@
 <script>
-	import { auth } from '$lib/auth/user';
-	import PBody from '../PBody.svelte';
+	import { auth } from '$lib/auth/user.svelte.js';
+	import PBody from '../shell/PBody.svelte';
 
 	let {
 		postId = null,

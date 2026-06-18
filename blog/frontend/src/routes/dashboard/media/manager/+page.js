@@ -1,8 +1,7 @@
 import { goto } from '$app/navigation';
-import { user } from '$lib/auth/user';
-import { get } from 'svelte/store';
+import { authState } from '$lib/auth/user.svelte.js';
 
 export function load(event) {
-	if (!get(user)) {
+	if (!authState.user) {
 	}
 }

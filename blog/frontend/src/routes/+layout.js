@@ -1,7 +1,7 @@
 export const prerender = false;
 export const ssr = true;
 
-import { clearLogin, saveLogin } from '$lib/auth/user';
+import { clearLogin, saveLogin } from '$lib/auth/user.svelte.js';
 
 import { gsap } from 'gsap';
 import { Flip } from 'gsap/Flip';

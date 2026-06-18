@@ -1,5 +1,5 @@
 <script>
-	import { user } from '$lib/auth/user';
+	import { authState } from '$lib/auth/user.svelte.js';
 	import CommentEditor from './editor/CommentEditor.svelte';
 	import CommentFeed from './feed/CommentFeed.svelte';
 	import {
@@ -10,7 +10,7 @@
 	let { postId, postAuthorUsername = null } = $props();
 	let last = -1;
 
-	let userAvatarUrl = $derived($user?.avatarUrl ?? '/anonymous.gif');
+	let userAvatarUrl = $derived(authState.user?.avatarUrl ?? '/anonymous.gif');
 
 	let state = $state(createEmptyState());
 	const comments = state.comments;

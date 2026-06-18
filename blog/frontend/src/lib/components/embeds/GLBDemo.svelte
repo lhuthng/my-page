@@ -2,7 +2,6 @@
 	import { Canvas } from '@threlte/core';
 	import * as THREE from 'three';
 	import GLBLoader from './GLBLoader.svelte';
-	import { derived } from 'svelte/store';
 	import { fly } from 'svelte/transition';
 
 	let { name, width = '100%', height = '500px', config, temp } = $props();

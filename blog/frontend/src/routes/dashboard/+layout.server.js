@@ -1,5 +1,5 @@
 import { route } from '$lib/server/proxy';
-import { error } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
 
 /**
  * Decode the payload of a JWT without verifying the signature.
@@ -22,7 +22,7 @@ export async function load(event) {
 	const refreshToken = event.cookies.get('refresh-token');
 
 	if (!refreshToken) {
-		throw error(401, 'You are not logged in. Redirecting...');
+		throw redirect(303, '/');
 	}
 
 	let { accessToken } = await event.parent();
@@ -41,7 +41,7 @@ export async function load(event) {
 				httpOnly: true,
 				secure: true
 			});
-			throw error(401, 'Session expired. Redirecting...');
+			throw redirect(303, '/');
 		}
 
 		const { token_type: type, token } = await res.json();
@@ -55,7 +55,7 @@ export async function load(event) {
 
 	const isMod = role === 'admin' || role === 'moderator';
 	if (!isMod) {
-		throw error(403, 'Unauthorized: This page is only for moderators and admins. Redirecting...');
+		throw redirect(303, '/');
 	}
 
 	return {

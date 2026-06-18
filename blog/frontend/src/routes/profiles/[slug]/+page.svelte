@@ -1,5 +1,9 @@
 <script>
-	import { changeAvatarUrl, changeDisplayname as changeDisplayName, user } from '$lib/auth/user';
+	import {
+		authState,
+		changeAvatarUrl,
+		changeDisplayname as changeDisplayName
+	} from '$lib/auth/user.svelte.js';
 	import { api } from '$lib/api/client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';
@@ -10,7 +14,7 @@
 	import { flip } from 'svelte/animate';
 	import { fade, fly } from 'svelte/transition';
 	import { autoHResize } from '$lib/dom/auto-resize';
-	import PBody from '$lib/components/PBody.svelte';
+	import PBody from '$lib/components/shell/PBody.svelte';
 	import Comment from '$lib/components/post/Comment.svelte';
 	import { preventDefault } from '$lib/utils';
 	import { page } from '$app/state';
@@ -48,7 +52,7 @@
 	});
 
 	$effect(() => {
-		if (editor.isEditing && $user?.username !== username) {
+		if (editor.isEditing && authState.user?.username !== username) {
 			editor.isEditing = false;
 		}
 	});
@@ -75,7 +79,7 @@
 		const before = posts.data.length;
 		posts.fetchingMore = true;
 
-		const isOwnProfile = $user?.username === username;
+		const isOwnProfile = authState.user?.username === username;
 
 		try {
 			const data = await api.get(`users/${username}/posts?limit=${limit}&offset=${before}`, {
@@ -102,7 +106,7 @@
 
 		posts.status = 'fetching';
 
-		const isOwnProfile = $user?.username === username;
+		const isOwnProfile = authState.user?.username === username;
 
 		try {
 			const data = await api.get(`users/${username}/posts?limit=${limit}&offset=0`, {
@@ -236,7 +240,7 @@
 	<div class="flex not-lg:flex-col gap-4">
 		<div class="space-y-4 lg:min-w-60">
 			<div class="relative overflow-hidden">
-				{#if $user?.username === username}
+				{#if authState.user?.username === username}
 					<div
 						class="absolute left-0 bottom-0 w-full h-full opacity-0 hover:opacity-100 bg-background/30 transition-opacity duration-200"
 					>
@@ -291,7 +295,7 @@
 						<Spade class="fill-dark" />
 					{/if}
 				</span>
-				{#if $user?.username === username}
+				{#if authState.user?.username === username}
 					<span class="grow"></span>
 					<div class="duo-btn col-span-full" data-duo-color={!editor.isEditing ? 'green' : 'red'}>
 						<button

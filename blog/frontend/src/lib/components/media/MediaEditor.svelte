@@ -1,12 +1,12 @@
 <script>
-	import { detailsCache } from '$lib/utils/cache';
-	import { auth } from '$lib/auth/user';
+	import { cache } from '$lib/utils/cache.svelte.js';
+	import { auth } from '$lib/auth/user.svelte.js';
 	import { useDebounce } from '$lib/utils/debounce';
 
 	import MediaDirectory from './MediaDirectory.svelte';
 	import MediaEditForm from './MediaEditForm.svelte';
 	import MediaUploadPreview from './MediaUploadPreview.svelte';
-	import Portal from '$lib/components/Portal.svelte';
+	import Portal from '$lib/components/shell/Portal.svelte';
 
 	let { keyword, detailPanel } = $props();
 
@@ -61,9 +61,9 @@
 					file={{ name: item.short_name, url: item.url }}
 					isSelected={selection === item.short_name}
 					onclick={async () => {
-						if (!$detailsCache[item.short_name]) {
+						if (!cache.details[item.short_name]) {
 							const details = { status: 'waiting' };
-							$detailsCache[item.short_name] = { ...details };
+							cache.details[item.short_name] = { ...details };
 							const res = await fetch(`/api/media/d/${item.short_name}`, {
 								method: 'GET',
 								headers: {
@@ -76,7 +76,7 @@
 							} else {
 								details.status = 'failed';
 							}
-							$detailsCache[item.short_name] = { ...details };
+							cache.details[item.short_name] = { ...details };
 						}
 						selection = item.short_name;
 					}}

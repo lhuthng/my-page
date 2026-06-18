@@ -1,7 +1,7 @@
 <script>
-	import GLBDemo from './apps/GLBDemo.svelte';
-	import HTMLApp from './apps/HTMLApp.svelte';
-	import LottieStateSwitcher from './apps/LottieStateSwitcher.svelte';
+	import GLBDemo from './GLBDemo.svelte';
+	import HTMLApp from './HTMLApp.svelte';
+	import LottieStateSwitcher from './LottieStateSwitcher.svelte';
 
 	let { name, type, width, height, config, temp } = $props();
 </script>

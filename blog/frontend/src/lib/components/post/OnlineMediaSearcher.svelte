@@ -1,7 +1,7 @@
 <script>
 	import { api } from '$lib/api/client';
 	import { useDebounce } from '$lib/utils/debounce';
-	import SearchButton from '../buttons/SearchButton.svelte';
+	import SearchButton from '../shell/buttons/SearchButton.svelte';
 	import EditorMediumEntity from './EditorMediumEntity.svelte';
 
 	let { ...rest } = $props();

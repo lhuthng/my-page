@@ -1,6 +1,6 @@
 <script>
 	import { api } from '$lib/api/client';
-	import { user } from '$lib/auth/user';
+	import { authState } from '$lib/auth/user.svelte.js';
 	import Heart from '$lib/components/svgs/Heart.svelte';
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';
@@ -21,7 +21,7 @@
 	let debounceTimer;
 	const LIMIT = 20;
 
-	let isAdmin = $derived($user?.role === 'admin');
+	let isAdmin = $derived(authState.user?.role === 'admin');
 
 	async function fetchUsers(reset = false) {
 		if (reset) {

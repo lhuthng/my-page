@@ -1,4 +1,3 @@
-import { user } from '$lib/auth/user';
 import { fixClientRoute, proxyFallback, route } from '$lib/server/proxy.js';
 
 export async function POST({ request, fetch }) {

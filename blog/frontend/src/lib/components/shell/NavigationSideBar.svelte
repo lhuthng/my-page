@@ -1,5 +1,5 @@
 <script>
-	import { isMod } from '$lib/auth/user';
+	import { authState } from '$lib/auth/user.svelte.js';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import AboutButton from './buttons/AboutButton.svelte';
 	import BlogButton from './buttons/BlogButton.svelte';
@@ -28,7 +28,7 @@
 >
 	<ul class="space-y-2 bg-white p-2 rounded-xl" id="side-bar">
 		{#each routes as [Icon, text, path, routeName, secret], index}
-			{#if !secret || $isMod}
+			{#if !secret || authState.isMod}
 				<li class={routeName === route ? 'selected' : undefined}>
 					<a href={path}>
 						<Icon class="w-8 transition-all duration-100" />
@@ -66,7 +66,7 @@
 </div>
 
 <style lang="postcss">
-	@reference "../../app.css";
+	@reference "../../../app.css";
 
 	#side-bar {
 		& > li {

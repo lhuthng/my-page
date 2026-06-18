@@ -1,8 +1,7 @@
 import { resizeTextarea } from '$lib/dom/auto-resize';
-import { auth, user } from '$lib/auth/user';
+import { auth, authState } from '$lib/auth/user.svelte.js';
 import { gsap } from 'gsap';
 import MarkdownIt from 'markdown-it';
-import { get } from 'svelte/store';
 import { codeHighlightPlugin, mentionProfilePlugin, kaomojiPlugin } from '$lib/custom-rules';
 import { createCommentCache } from './comment-cache';
 import {
@@ -1558,7 +1557,7 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
 		if (comments.sending || comments.current.length < 1) return;
 
 		const content = comments.current;
-		const currentUser = get(user);
+		const currentUser = authState.user;
 		const headers =
 			currentUser !== undefined
 				? {

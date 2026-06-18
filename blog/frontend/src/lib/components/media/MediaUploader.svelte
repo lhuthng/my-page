@@ -1,9 +1,9 @@
 <script>
-	import { auth } from '$lib/auth/user';
+	import { auth } from '$lib/auth/user.svelte.js';
 	import { preventDefault } from '$lib/utils';
 	import MediaDirectory from './MediaDirectory.svelte';
 	import MediaUploaderForm from './MediaUploaderForm.svelte';
-	import Portal from '$lib/components/Portal.svelte';
+	import Portal from '$lib/components/shell/Portal.svelte';
 	import MediaUploadPreview from './MediaUploadPreview.svelte';
 
 	let { detailPanel, openDetails } = $props();

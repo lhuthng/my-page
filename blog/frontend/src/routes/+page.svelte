@@ -1,6 +1,6 @@
 <script>
 	import { page } from '$app/state';
-	import App from '$lib/components/App.svelte';
+	import App from '$lib/components/embeds/App.svelte';
 	import Introduction from '$lib/components/home/Introduction.svelte';
 	import PostDiscovery from '$lib/components/home/PostDiscovery.svelte';
 	import ProjectDiscovery from '$lib/components/home/ProjectDiscovery.svelte';

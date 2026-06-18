@@ -1,4 +1,4 @@
-import { auth } from '$lib/auth/user';
+import { auth } from '$lib/auth/user.svelte.js';
 
 class ApiError extends Error {
 	constructor(message, status, data) {

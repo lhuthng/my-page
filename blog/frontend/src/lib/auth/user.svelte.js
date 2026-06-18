@@ -1,37 +1,46 @@
 import { goto } from '$app/navigation';
-import { derived, get, writable } from 'svelte/store';
 
-export let user = writable(undefined);
-export let isMod = derived(user, ($user) => {
-	const role = $user?.role;
-	return role === 'moderator' || role === 'admin';
-});
+class AuthStore {
+	user = $state();
+	isMod = $derived.by(() => {
+		const role = this.user?.role;
+		return role === 'moderator' || role === 'admin';
+	});
+
+	clearLogin() {
+		this.user = undefined;
+	}
+	saveLogin({ username, displayName, token, tokenType, role, avatarUrl }) {
+		this.user = { username, displayName, role, token, tokenType, avatarUrl };
+	}
+	changeDisplayname(displayName) {
+		this.user = { ...this.user, displayName };
+	}
+	changeAvatarUrl(avatarUrl) {
+		this.user = { ...this.user, avatarUrl };
+	}
+	auth() {
+		let { token, tokenType } = this.user;
+		return `${tokenType} ${token}`;
+	}
+}
+
+export const authState = new AuthStore();
 
 export function clearLogin() {
-	user.set(undefined);
+	authState.clearLogin();
 }
-export function saveLogin({ username, displayName, token, tokenType, role, avatarUrl }) {
-	user.set({
-		username,
-		displayName,
-		role,
-		token,
-		tokenType,
-		avatarUrl
-	});
+export function saveLogin(data) {
+	authState.saveLogin(data);
 }
-
 export function changeDisplayname(displayName) {
-	user.update(($user) => ({ ...$user, displayName }));
+	authState.changeDisplayname(displayName);
 }
-
 export function changeAvatarUrl(avatarUrl) {
-	user.update(($user) => ({ ...$user, avatarUrl }));
+	authState.changeAvatarUrl(avatarUrl);
 }
-
 export function auth() {
-	let { token, tokenType } = get(user);
-	return `${tokenType} ${token}`;
+	return authState.auth();
 }
 
 export async function login(username, password) {
@@ -47,7 +56,7 @@ export async function login(username, password) {
 	});
 
 	if (!res.ok) {
-		user.set(undefined);
+		authState.clearLogin();
 		return {
 			status: false,
 			message: await res.text()
@@ -62,7 +71,7 @@ export async function login(username, password) {
 		avatar_url: avatarUrl
 	} = await res.json();
 
-	saveLogin({ username, token, tokenType, displayName, role, avatarUrl });
+	authState.saveLogin({ username, token, tokenType, displayName, role, avatarUrl });
 
 	return {
 		status: true
@@ -71,8 +80,7 @@ export async function login(username, password) {
 
 export async function logout() {
 	await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-
-	user.set(undefined);
+	authState.clearLogin();
 }
 
 export async function register(username, password, email) {
