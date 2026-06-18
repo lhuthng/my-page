@@ -49,6 +49,8 @@
 		content: '',
 		draft: '',
 		coverUrl: '',
+		videoShortName: '',
+		ogImageSeconds: 0,
 		pendingSeriesId: null,
 		relatedPosts: [],
 		author: {
@@ -107,6 +109,8 @@
 		editingData.series = series;
 		editingData.seriesSlug = seriesSlug ?? '';
 		editingData.coverUrl = coverUrl;
+		editingData.videoShortName = data.videoShortName ?? '';
+		editingData.ogImageSeconds = data.ogImageSeconds ?? 0;
 
 		// Load existing related posts asynchronously
 		fetch(`/api/posts/id/${id}/related`, {
@@ -208,7 +212,9 @@
 						tags,
 						content: draft,
 						categories: [],
-						number_of_files: keys.length
+						number_of_files: keys.length,
+						...(editingData.videoShortName && { video_short_name: editingData.videoShortName }),
+						...(editingData.ogImageSeconds > 0 && { og_image_seconds: editingData.ogImageSeconds })
 					})
 				],
 				{ type: 'application/json' }
@@ -307,6 +313,13 @@
 			postData.content = editingData.content;
 		}
 
+		if (editingData.videoShortName !== (data.videoShortName ?? '')) {
+			postData.video_short_name = editingData.videoShortName || null;
+		}
+		if (editingData.ogImageSeconds !== (data.ogImageSeconds ?? 0)) {
+			postData.og_image_seconds = editingData.ogImageSeconds;
+		}
+
 		formData.append(
 			'post_data',
 			new Blob([JSON.stringify(postData)], { type: 'application/json' })
@@ -370,6 +383,7 @@
 				}}
 				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
 				src={editingData.coverUrl}
+				coverMediaType={editingData.videoShortName ? 'video/mp4' : undefined}
 				stats={{
 					views: '#',
 					likes: '#',
@@ -467,6 +481,27 @@
 									rows="5"
 									readonly={!isOwner}
 									bind:value={editingData.excerpt}></textarea>
+							</div>
+							<div class="flex flex-col">
+								<label for="video-short-name">Cover video short name:</label>
+								<input
+									id="video-short-name"
+									class="px-1 min-w-0 bg-white rounded-sm"
+									bind:value={editingData.videoShortName}
+									readonly={!isOwner}
+									placeholder="e.g. my-demo-video"
+								/>
+							</div>
+							<div class="flex flex-col">
+								<label for="og-image-seconds">OG image seconds:</label>
+								<input
+									id="og-image-seconds"
+									type="number"
+									class="px-1 min-w-0 bg-white rounded-sm"
+									bind:value={editingData.ogImageSeconds}
+									readonly={!isOwner}
+									min="0"
+								/>
 							</div>
 							<SeriesController
 								postId={mode === 'edit' ? editingData.id : null}

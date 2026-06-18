@@ -12,7 +12,7 @@ pub struct NewPostCommand {
     pub excerpt: String,
     pub content: String,
     pub tags: Vec<String>,
-    pub cover_image: Option<String>,
+    pub cover_media: Option<String>,
     pub media_usage: HashMap<String, i64>,
     pub content_kind: String,
 }
@@ -117,4 +117,12 @@ pub struct SetRelatedPostsCommand {
 pub struct SetFeaturedPostCommand {
     pub post_id: i64,
     pub is_featured: bool,
+}
+
+#[allow(dead_code)]
+pub struct UpdatePostCoverCommand {
+    pub user_id: i64,
+    pub post_id: i64,
+    pub video_short_name: Option<String>,
+    pub og_image_seconds: Option<i64>,
 }

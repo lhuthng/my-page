@@ -357,7 +357,8 @@ impl MediaService for MediaServiceImpl {
 
         let (bytes, content_type, filename) = convert_to_webp(bytes, &content_type, &filename)?;
 
-        if !self.is_avatar_supported(&content_type, config).await? {
+        let media_type = MediaType::from_str(&content_type)?;
+        if !config.allowed_cover_types.contains(&media_type) {
             return Err(MediaError::InvalidFileType);
         }
 
@@ -383,7 +384,7 @@ impl MediaService for MediaServiceImpl {
             r#"
             SELECT media.id, media.hash, media.file_type
             FROM posts
-            LEFT JOIN media on media.id = posts.cover_image_id
+            LEFT JOIN media on media.id = posts.cover_media_id
             WHERE posts.id = ?
             "#,
         )
@@ -449,7 +450,7 @@ impl MediaService for MediaServiceImpl {
                 sqlx::query(
                     r#"
                     UPDATE posts
-                    SET cover_image_id = ?
+                    SET cover_media_id = ?
                     WHERE id = ?
                     "#,
                 )

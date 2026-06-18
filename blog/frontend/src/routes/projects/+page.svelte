@@ -112,6 +112,7 @@
 								stats={project.stats}
 								routePrefix="/projects"
 								dashboardPrefix="/dashboard/projects/id"
+								coverMediaType={project.cover_media_type}
 							/>
 						</li>
 					{/each}

@@ -91,4 +91,8 @@ pub trait PostService {
         &self,
         cmd: commands::post::SetFeaturedPostCommand,
     ) -> Result<(), errors::post::PostError>;
+    async fn update_post_cover(
+        &self,
+        cmd: commands::post::UpdatePostCoverCommand,
+    ) -> Result<(), errors::post::PostError>;
 }

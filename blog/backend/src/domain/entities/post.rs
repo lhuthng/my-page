@@ -25,6 +25,7 @@ pub struct PostSnapshot {
     pub author_slug: String,
     pub status: String,
     pub url: Option<String>,
+    pub cover_media_type: Option<String>,
     pub stats: PostStats,
 }
 
@@ -47,6 +48,8 @@ pub struct PostDetails {
     pub draft: String,
     pub is_featured: i64,
     pub cover_url: Option<String>,
+    pub cover_media_type: Option<String>,
+    pub og_image_seconds: i64,
     pub medium_urls: Vec<String>,
     pub medium_short_names: Vec<String>,
     pub is_owner: bool,
@@ -90,6 +93,8 @@ pub struct Post {
     pub updated_at: Option<String>,
     pub medium_urls: Vec<String>,
     pub cover_url: Option<String>,
+    pub cover_media_type: Option<String>,
+    pub og_image_seconds: i64,
     pub post_series: Option<PostSeries>,
 }
 

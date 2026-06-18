@@ -133,6 +133,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             Router::new()
                 .route("/s/{short_name}", get(handlers::media::get_link))
                 .route("/i/{short_name}", get(handlers::media::get_media))
+                .route("/thumbnail", get(handlers::media::get_video_thumbnail))
                 .route("/all", get(handlers::media::search)),
         )
         .fallback_service(get_service(ServeDir::new(&state.media_config.dir)));

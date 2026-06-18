@@ -44,9 +44,6 @@
 		}
 	}
 
-	$effect(() => {
-		$inspect(portionSelection, portionSelection !== -1);
-	});
 </script>
 
 <svelte:head>

@@ -416,7 +416,7 @@
 					bind:this={postContainer}
 					class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
 				>
-					{#each posts.data as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, status, url, stats }, index (slug)}
+					{#each posts.data as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, status, url, stats, cover_media_type }, index (slug)}
 						<li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
 							<PostCard
 								id={status === 'draft' ? id : undefined}
@@ -431,6 +431,7 @@
 								tags={tag_slugs}
 								src={url}
 								{stats}
+								coverMediaType={cover_media_type}
 							/>
 						</li>
 					{/each}

@@ -206,7 +206,7 @@ impl SeriesService for SeriesServiceImpl {
             JOIN post_stats ps ON ps.post_id = p.id
             LEFT JOIN users u ON u.id = p.user_id
             LEFT JOIN user_meta um ON um.user_id = u.id
-            LEFT JOIN media m ON m.id = p.cover_image_id
+            LEFT JOIN media m ON m.id = p.cover_media_id
             WHERE p.id IN ({})
             "#,
             all_post_ids
@@ -342,6 +342,7 @@ impl SeriesService for SeriesServiceImpl {
                                 author_slug: author_slug.clone(),
                                 status: status.clone(),
                                 url: url.clone(),
+                                cover_media_type: None,
                                 stats: PostStats {
                                     views: *views,
                                     likes: *likes,

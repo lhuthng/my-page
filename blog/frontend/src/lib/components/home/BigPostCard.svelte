@@ -17,9 +17,9 @@
 		stats,
 		routePrefix = '/posts',
 		dashboardPrefix = '/dashboard/posts/id',
-		children
+		children,
+		coverMediaType = ''
 	} = $props();
-
 	let expanded = $state(false);
 
 	let link = $derived(dashboardMode ? `${dashboardPrefix}/${id}` : `${routePrefix}/${slug}`);
@@ -34,11 +34,24 @@
 				class="relative block z-10 w-full aspect-[1.91/1] cursor-pointer rounded-t-lg origin-center hover:scale-102 transition-[scale,border-radius] duration-100 overflow-hidden hover:rounded-b-lg"
 				href={status === 'draft' ? `${dashboardPrefix}/${id}` : link}
 			>
-				<img
-					class="absolute z-10 left-0 top-0 w-full h-full object-cover bg-white border-3 border-dark rounded-t-lg"
-					src={src ?? '/missing.png'}
-					alt="post-cover"
-				/>
+				{#if coverMediaType?.startsWith('video/')}
+					<video
+						class="absolute z-10 left-0 top-0 w-full h-full object-cover bg-white border-3 border-dark rounded-t-lg"
+						src={src ?? '/missing.png'}
+						poster={src ?? '/missing.png'}
+						muted
+						loop
+						playsinline
+						autoplay
+						preload="auto"
+					></video>
+				{:else}
+					<img
+						class="absolute z-10 left-0 top-0 w-full h-full object-cover bg-white border-3 border-dark rounded-t-lg"
+						src={src ?? '/missing.png'}
+						alt="post-cover"
+					/>
+				{/if}
 				<div
 					class="absolute flex items-center justify-center gap-4 z-11 left-0 right-0 bottom-0 h-8 bg-dark/80 text-sm font-semibold"
 				>
@@ -64,11 +77,24 @@
 			</a>
 		{:else}
 			<button class="relative block z-10 w-full aspect-[1.91/1]" {onclick}>
-				<img
-					class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
-					src={src ?? '/missing.png'}
-					alt="post-cover"
-				/>
+				{#if coverMediaType?.startsWith('video/')}
+					<video
+						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
+						src={src ?? '/missing.png'}
+						poster={src ?? '/missing.png'}
+						muted
+						loop
+						playsinline
+						autoplay
+						preload="auto"
+					></video>
+				{:else}
+					<img
+						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
+						src={src ?? '/missing.png'}
+						alt="post-cover"
+					/>
+				{/if}
 				{#if children !== undefined}
 					{@render children()}
 				{/if}

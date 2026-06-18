@@ -34,6 +34,8 @@ export async function load({ fetch, setHeaders }) {
 			if (project.url) project.url = fixClientRoute(project.url);
 		});
 		data.featured_projects = projectsData.featured_projects ?? [];
+	} else {
+		console.log(await projectsRes.text());
 	}
 
 	return data;

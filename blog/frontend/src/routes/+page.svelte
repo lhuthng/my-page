@@ -8,8 +8,8 @@
 
 	const { data } = $props();
 
-	const featuredPosts = data.featured_posts || [];
-	const featuredProjects = data.featured_projects || [];
+	const featuredPosts = $derived(data.featured_posts || []);
+	const featuredProjects = $derived(data.featured_projects || []);
 
 	let imageUrl = $derived(page.url.origin + '/thinkcats.jpg');
 </script>

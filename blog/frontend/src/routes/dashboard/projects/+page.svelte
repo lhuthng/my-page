@@ -32,6 +32,7 @@
 						stats={project.stats}
 						routePrefix="/projects"
 						dashboardPrefix="/dashboard/projects/id"
+						coverMediaType={project.cover_media_type}
 					/>
 					<a
 						class="absolute inset-0 z-20"

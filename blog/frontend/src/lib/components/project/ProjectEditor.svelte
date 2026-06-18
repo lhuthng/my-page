@@ -47,6 +47,8 @@
 		content: '',
 		draft: '',
 		coverUrl: '',
+		videoShortName: '',
+		ogImageSeconds: 0,
 		demoType: 'html5',
 		demoWidth: '100%',
 		demoHeight: '520px',
@@ -85,6 +87,8 @@
 		editingData.content = data.content;
 		editingData.draft = data.draft;
 		editingData.coverUrl = data.coverUrl;
+		editingData.videoShortName = data.videoShortName ?? '';
+		editingData.ogImageSeconds = data.ogImageSeconds ?? 0;
 		editingData.demoType = data.demoType ?? 'html5';
 		editingData.demoWidth = data.demoWidth ?? '100%';
 		editingData.demoHeight = data.demoHeight ?? '520px';
@@ -246,7 +250,9 @@
 			number_of_files: offlineKeys.length,
 			demo_type: editingData.demoType,
 			demo_width: editingData.demoWidth,
-			demo_height: editingData.demoHeight
+			demo_height: editingData.demoHeight,
+			...(editingData.videoShortName && { video_short_name: editingData.videoShortName }),
+			...(editingData.ogImageSeconds > 0 && { og_image_seconds: editingData.ogImageSeconds })
 		};
 		if (editingData.demoType !== 'html5' && editingData.demoType !== 'webgl') {
 			projectPayload.demo_url = editingData.demoUrl;
@@ -325,6 +331,13 @@
 			projectData.content = editingData.content;
 		}
 
+		if (editingData.videoShortName !== (data.videoShortName ?? '')) {
+			projectData.video_short_name = editingData.videoShortName || null;
+		}
+		if (editingData.ogImageSeconds !== (data.ogImageSeconds ?? 0)) {
+			projectData.og_image_seconds = editingData.ogImageSeconds;
+		}
+
 		formData.append(
 			'project_data',
 			new Blob([JSON.stringify(projectData)], { type: 'application/json' })
@@ -397,6 +410,7 @@
 				author={{ name: authState.user.displayName, slug: authState.user.username }}
 				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
 				src={editingData.coverUrl}
+				coverMediaType={editingData.videoShortName ? 'video/mp4' : undefined}
 				stats={{ views: '#', likes: '#', comments_count: '#' }}
 				routePrefix="/projects"
 				dashboardPrefix="/dashboard/projects/id"
@@ -487,6 +501,27 @@
 									rows="4"
 									bind:value={editingData.excerpt}
 									readonly={!isOwner}></textarea>
+							</div>
+							<div class="flex flex-col">
+								<label for="video-short-name">Cover video short name:</label>
+								<input
+									id="video-short-name"
+									class="px-1 min-w-0 bg-white rounded-sm"
+									bind:value={editingData.videoShortName}
+									readonly={!isOwner}
+									placeholder="e.g. my-demo-video"
+								/>
+							</div>
+							<div class="flex flex-col">
+								<label for="og-image-seconds">OG image seconds:</label>
+								<input
+									id="og-image-seconds"
+									type="number"
+									class="px-1 min-w-0 bg-white rounded-sm"
+									bind:value={editingData.ogImageSeconds}
+									readonly={!isOwner}
+									min="0"
+								/>
 							</div>
 							<div class="flex flex-col">
 								<label for="demo-type">Demo type:</label>

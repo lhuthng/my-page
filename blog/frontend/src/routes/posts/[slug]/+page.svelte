@@ -21,6 +21,8 @@
 		tags,
 		series,
 		cover_url,
+		cover_media_type,
+		og_image_seconds,
 		relatedPosts
 	} = $derived(data);
 	let liked = $state();
@@ -30,7 +32,21 @@
 	let date = $derived(textToDate(published_at));
 	let updateTime = $derived(dateTillNow(updated_at, 'round'));
 
-	let imageUrl = $derived(page.url.origin + cover_url);
+	let imageUrl = $derived.by(() => {
+		if (cover_url) {
+			return page.url.origin + cover_url;
+		}
+		return page.url.origin + '/thinkcats.jpg';
+	});
+
+	let ogImageUrl = $derived.by(() => {
+		if (cover_media_type?.startsWith('video/') && cover_url) {
+			const parts = cover_url.split('/');
+			const shortName = parts[parts.length - 1];
+			return `${page.url.origin}/api/media/thumbnail?short_name=${shortName}`;
+		}
+		return imageUrl;
+	});
 	let canonicalLink = $derived.by(() => {
 		const { origin, pathname, search } = page.url;
 		return origin + pathname + search;
@@ -65,13 +81,18 @@
 	<meta property="og:type" content="article" />
 	<meta property="og:url" content={canonicalLink} />
 	<meta property="og:description" content={excerpt} />
-	<meta property="og:image" content={imageUrl} />
+	<meta property="og:image" content={ogImageUrl} />
+
+	{#if cover_media_type?.startsWith('video/') && cover_url}
+		<meta property="og:video" content={page.url.origin + cover_url} />
+		<meta property="og:video:type" content={cover_media_type} />
+	{/if}
 
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:url" content={canonicalLink} />
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={excerpt} />
-	<meta name="twitter:image" content={imageUrl} />
+	<meta name="twitter:image" content={ogImageUrl} />
 
 	<link rel="canonical" href={canonicalLink} />
 </svelte:head>

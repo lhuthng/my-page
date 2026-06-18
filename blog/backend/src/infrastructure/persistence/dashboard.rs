@@ -102,7 +102,7 @@ const TOP_POSTS_SQL: &str = r#"
     JOIN users u ON u.id = p.user_id
     JOIN user_meta um ON um.user_id = p.user_id
     JOIN post_stats ps ON ps.post_id = p.id
-    LEFT JOIN media m ON m.id = p.cover_image_id
+    LEFT JOIN media m ON m.id = p.cover_media_id
     WHERE p.status = 'published' AND p.content_kind = 'post'
     ORDER BY ps.{ORDER_COL} DESC
     LIMIT 5
@@ -158,7 +158,7 @@ impl DashboardService for DashboardServiceImpl {
             JOIN users u ON u.id = p.user_id
             JOIN user_meta um ON um.user_id = p.user_id
             JOIN post_stats ps ON ps.post_id = p.id
-            LEFT JOIN media m ON m.id = p.cover_image_id
+            LEFT JOIN media m ON m.id = p.cover_media_id
             WHERE p.content_kind = 'post'
             ORDER BY p.created_at DESC
             LIMIT 5
@@ -315,7 +315,7 @@ impl DashboardService for DashboardServiceImpl {
             JOIN users u ON u.id = p.user_id
             JOIN user_meta um ON um.user_id = p.user_id
             JOIN post_stats ps ON ps.post_id = p.id
-            LEFT JOIN media m ON m.id = p.cover_image_id
+            LEFT JOIN media m ON m.id = p.cover_media_id
             WHERE {}
             ORDER BY p.updated_at DESC
             LIMIT {} OFFSET {}

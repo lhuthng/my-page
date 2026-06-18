@@ -420,3 +420,121 @@ pub async fn delete_alias(
 
     state.media_service.delete_alias(cmd).await
 }
+
+#[derive(Deserialize)]
+pub struct ThumbnailQuery {
+    pub short_name: String,
+}
+
+pub async fn get_video_thumbnail(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ThumbnailQuery>,
+) -> Result<impl IntoResponse, MediaError> {
+    let media_row = sqlx::query_as::<_, (i64, String, String, String, i64)>(
+        r#"SELECT id, hash, file_type, url, uploader_id FROM media WHERE short_name = ?"#,
+    )
+    .bind(&query.short_name)
+    .fetch_optional(&state.media_service.pool)
+    .await
+    .map_err(|e| MediaError::InternalError(e.to_string()))?
+    .ok_or(MediaError::FileNotFound)?;
+
+    let (media_id, hash, file_type, _url, uploader_id) = media_row;
+
+    if !file_type.starts_with("video/") {
+        return Err(MediaError::UploadFailed("Not a video file".to_string()));
+    }
+
+    let seconds: i64 = sqlx::query_scalar(
+        r#"SELECT og_image_seconds FROM posts WHERE cover_media_id = ? AND og_image_seconds > 0 LIMIT 1"#,
+    )
+    .bind(media_id)
+    .fetch_optional(&state.media_service.pool)
+    .await
+    .map_err(|e| MediaError::InternalError(e.to_string()))?
+    .unwrap_or(1);
+
+    let extension = MediaType::from_str(&file_type)?.get_extension();
+
+    let input_path = if hash.starts_with('.') {
+        let parts: Vec<&str> = hash.splitn(4, '.').collect();
+        if parts.len() < 4 {
+            return Err(MediaError::FileNotFound);
+        }
+        let type_dir = parts[1];
+        let sha256 = parts[3];
+        state
+            .media_config
+            .dir
+            .join(type_dir)
+            .join(uploader_id.to_string())
+            .join(format!("{}{}", sha256, extension))
+    } else {
+        state
+            .media_config
+            .dir
+            .join(&hash[0..2])
+            .join(&hash[2..4])
+            .join(format!("{}{}", hash, extension))
+    };
+
+    if !input_path.exists() {
+        return Err(MediaError::FileNotFound);
+    }
+
+    let thumb_dir = state.media_config.dir.join("thumb");
+    tokio::fs::create_dir_all(&thumb_dir)
+        .await
+        .map_err(|e| MediaError::InternalError(e.to_string()))?;
+    let thumb_path = thumb_dir.join(format!("{}_{}.webp", media_id, seconds));
+
+    if thumb_path.exists() {
+        let file = tokio::fs::File::open(&thumb_path)
+            .await
+            .map_err(|_| MediaError::FileNotFound)?;
+        let body = Body::from_stream(ReaderStream::new(file));
+        return Ok(Response::builder()
+            .status(200)
+            .header(header::CONTENT_TYPE, "image/webp")
+            .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+            .body(body)
+            .map_err(|e| MediaError::InternalError(e.to_string()))?);
+    }
+
+    let output = tokio::process::Command::new("ffmpeg")
+        .args(["-ss", &seconds.to_string()])
+        .args(["-i", &input_path.to_string_lossy()])
+        .args(["-vframes", "1"])
+        .args(["-f", "image2pipe", "-"])
+        .output()
+        .await
+        .map_err(|e| MediaError::InternalError(format!("ffmpeg error: {}", e)))?;
+
+    if !output.status.success() {
+        return Err(MediaError::InternalError(format!(
+            "ffmpeg failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    let img = image::load_from_memory(&output.stdout)
+        .map_err(|e| MediaError::InternalError(format!("image decode error: {}", e)))?;
+    let mut webp_bytes = Vec::new();
+    img.write_to(
+        &mut std::io::Cursor::new(&mut webp_bytes),
+        image::ImageFormat::WebP,
+    )
+    .map_err(|e| MediaError::InternalError(format!("webp encode error: {}", e)))?;
+
+    tokio::fs::write(&thumb_path, &webp_bytes)
+        .await
+        .map_err(|e| MediaError::InternalError(e.to_string()))?;
+
+    let body = Body::from(Bytes::from(webp_bytes));
+    Ok(Response::builder()
+        .status(200)
+        .header(header::CONTENT_TYPE, "image/webp")
+        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+        .body(body)
+        .map_err(|e| MediaError::InternalError(e.to_string()))?)
+}

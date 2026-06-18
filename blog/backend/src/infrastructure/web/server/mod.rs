@@ -127,6 +127,8 @@ impl MediaConfig {
             MediaType::ImageGif,
             MediaType::ImageWebp,
             MediaType::ImageJpeg,
+            MediaType::VideoMp4,
+            MediaType::VideoWebm,
         ];
 
         Self {

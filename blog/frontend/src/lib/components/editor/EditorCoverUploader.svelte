@@ -5,7 +5,7 @@
 
 	let { show = false, apiPath = '', onclose = () => {}, onuploaded = (_url) => {} } = $props();
 
-	const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+	const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'];
 	const maxFileSize = 5 * 1024 * 1024;
 
 	let coverFile = $state();
@@ -32,7 +32,7 @@
 			return;
 		}
 		if (!allowedTypes.includes(file.type)) {
-			coverError = 'Only JPEG, PNG, GIF, or WEBP are allowed.';
+			coverError = 'Only JPEG, PNG, GIF, WEBP, MP4, or WebM are allowed.';
 			return;
 		}
 		if (file.size > maxFileSize) {
@@ -80,9 +80,13 @@
 					role="none"
 				>
 					{#if newCover}
-						<img class="full object-cover" src={newCover} alt="cover-preview" />
+						{#if coverFile?.type?.startsWith('video/')}
+							<video class="full object-cover" src={newCover} muted controls></video>
+						{:else}
+							<img class="full object-cover" src={newCover} alt="cover-preview" />
+						{/if}
 					{:else}
-						<span class="w-40 text-center select-none text-dark">Upload your image here</span>
+						<span class="w-40 text-center select-none text-dark">Upload your image or video here</span>
 					{/if}
 				</div>
 				{#if coverError}

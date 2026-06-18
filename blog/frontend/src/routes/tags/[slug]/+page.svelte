@@ -41,7 +41,7 @@
 		</div>
 	{:else}
 		<ul class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4">
-			{#each posts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats }, index (slug)}
+			{#each posts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, cover_media_type }, index (slug)}
 				<li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
 					<PostCard
 						{title}
@@ -54,10 +54,11 @@
 						tags={tag_slugs}
 						src={url}
 						{stats}
+						coverMediaType={cover_media_type}
 					/>
 				</li>
 			{/each}
-			{#each projects as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, status }, index (slug)}
+			{#each projects as { id, title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, status, cover_media_type }, index (slug)}
 				<li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
 					<PostCard
 						{id}
@@ -74,6 +75,7 @@
 						{stats}
 						routePrefix="/projects"
 						dashboardPrefix="/dashboard/projects/id"
+						coverMediaType={cover_media_type}
 					/>
 				</li>
 			{/each}
