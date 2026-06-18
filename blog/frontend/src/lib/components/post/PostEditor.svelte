@@ -51,6 +51,7 @@
 		coverUrl: '',
 		videoShortName: '',
 		ogImageSeconds: 0,
+		coverMediaType: '',
 		pendingSeriesId: null,
 		relatedPosts: [],
 		author: {
@@ -111,6 +112,7 @@
 		editingData.coverUrl = coverUrl;
 		editingData.videoShortName = data.videoShortName ?? '';
 		editingData.ogImageSeconds = data.ogImageSeconds ?? 0;
+		editingData.coverMediaType = data.cover_media_type;
 
 		// Load existing related posts asynchronously
 		fetch(`/api/posts/id/${id}/related`, {
@@ -383,7 +385,7 @@
 				}}
 				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
 				src={editingData.coverUrl}
-				coverMediaType={editingData.videoShortName ? 'video/mp4' : undefined}
+				coverMediaType={editingData.coverMediaType || (editingData.videoShortName ? 'video/mp4' : undefined)}
 				stats={{
 					views: '#',
 					likes: '#',
