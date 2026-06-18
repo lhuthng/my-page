@@ -201,7 +201,7 @@ impl SeriesService for SeriesServiceImpl {
 
         let sql = format!(
             r#"
-            SELECT p.id, p.title, p.slug, p.excerpt, um.display_name, u.username, p.status, 'media/i/' || m.short_name, ps.views, ps.likes, ps.comments_count
+            SELECT p.id, p.title, p.slug, p.excerpt, um.display_name, u.username, p.status, 'media/i/' || m.short_name, m.file_type AS cover_media_type, ps.views, ps.likes, ps.comments_count
             FROM posts p
             JOIN post_stats ps ON ps.post_id = p.id
             LEFT JOIN users u ON u.id = p.user_id
@@ -222,6 +222,7 @@ impl SeriesService for SeriesServiceImpl {
                 String,
                 String,
                 Option<String>,
+                Option<String>,
                 i64,
                 i64,
                 i64,
@@ -240,6 +241,7 @@ impl SeriesService for SeriesServiceImpl {
                 String,
                 String,
                 Option<String>,
+                Option<String>,
                 i64,
                 i64,
                 i64,
@@ -254,6 +256,7 @@ impl SeriesService for SeriesServiceImpl {
             username,
             status,
             url,
+            cover_media_type,
             views,
             likes,
             comments_count,
@@ -269,6 +272,7 @@ impl SeriesService for SeriesServiceImpl {
                     username,
                     status,
                     url,
+                    cover_media_type,
                     views,
                     likes,
                     comments_count,
@@ -323,6 +327,7 @@ impl SeriesService for SeriesServiceImpl {
                             author_slug,
                             status,
                             url,
+                            cover_media_type,
                             views,
                             likes,
                             comments_count,
@@ -342,7 +347,7 @@ impl SeriesService for SeriesServiceImpl {
                                 author_slug: author_slug.clone(),
                                 status: status.clone(),
                                 url: url.clone(),
-                                cover_media_type: None,
+                                cover_media_type: cover_media_type.clone(),
                                 stats: PostStats {
                                     views: *views,
                                     likes: *likes,
