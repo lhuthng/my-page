@@ -24,7 +24,7 @@
 	);
 
 	let length = $derived(posts.length);
-	let hasMore = $state(Boolean(data.has_more));
+	let hasMore = $state(() => Boolean(data.has_more));
 	let isLoadingMore = $state(false);
 	let loadError = $state('');
 
@@ -84,7 +84,7 @@
 		class:transition-[grid-template-rows]={hydrated}
 		class:ease-out={hydrated}
 		style:grid-template-rows={hydrated ? (expanded ? '1fr' : '0fr') : '1fr'}
-		style:transition-duration={hydrated ? `700ms` : '0ms'}
+		style:transition-duration={hydrated ? `1s` : '0ms'}
 	>
 		<div class="min-h-0">
 			{#if data.status !== 'success'}

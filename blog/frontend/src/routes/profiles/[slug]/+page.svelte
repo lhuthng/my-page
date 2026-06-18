@@ -325,8 +325,7 @@
 						name="bio"
 						class="text-lg w-full overflow-hidden resize-none outline-none"
 						bind:value={editor.bio}
-						use:autoHResize
-					></textarea>
+						use:autoHResize></textarea>
 					<div class="flex justify-end">
 						<div class="duo-btn w-fit" data-duo-color="green">
 							<button

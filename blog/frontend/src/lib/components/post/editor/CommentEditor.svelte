@@ -90,8 +90,7 @@
 					onscroll={onPopoverScroll}
 					onkeydown={onTextareaKeydown}
 					onblur={onTextareaBlur}
-					{@attach autoHResize}
-				></textarea>
+					{@attach autoHResize}></textarea>
 
 				<CommentGifDrawer
 					show={showGifSearch}

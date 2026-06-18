@@ -23,7 +23,7 @@
 	);
 
 	let length = $derived(projects.length);
-	let hasMore = $state(Boolean(data.has_more));
+	let hasMore = $state(() => Boolean(data.has_more));
 	let isLoadingMore = $state(false);
 	let loadError = $state('');
 
