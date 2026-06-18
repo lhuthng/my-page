@@ -196,8 +196,7 @@
 								autocorrect="off"
 								autocomplete="off"
 								rows="4"
-								bind:value={editor.description}
-							></textarea>
+								bind:value={editor.description}></textarea>
 						</div>
 						<div
 							class="flex shrink-0 m-auto justify-center items-center w-40 h-40 bg-primary/40 outline-4 outline-dark outline-dashed rounded-xl overflow-hidden"

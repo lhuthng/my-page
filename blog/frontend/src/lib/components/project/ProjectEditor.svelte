@@ -477,8 +477,7 @@
 									class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
 									rows="2"
 									bind:value={editingData.tags}
-									readonly={!isOwner}
-								></textarea>
+									readonly={!isOwner}></textarea>
 							</div>
 							<div class="flex flex-col">
 								<label for="excerpt">Excerpt:</label>
@@ -487,8 +486,7 @@
 									class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
 									rows="4"
 									bind:value={editingData.excerpt}
-									readonly={!isOwner}
-								></textarea>
+									readonly={!isOwner}></textarea>
 							</div>
 							<div class="flex flex-col">
 								<label for="demo-type">Demo type:</label>

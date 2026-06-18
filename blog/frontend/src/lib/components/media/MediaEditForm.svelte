@@ -93,8 +93,7 @@
 						type="text"
 						rows="4"
 						bind:value={draft.description}
-						name="short-name"
-					></textarea>
+						name="short-name"></textarea>
 					<RevertButton
 						class="w-6 h-6 not-disabled:hover:scale-110 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
 						title="revert"

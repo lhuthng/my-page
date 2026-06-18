@@ -74,8 +74,7 @@
 					type="text"
 					rows="4"
 					bind:value={draft.description}
-					name="short-name"
-				></textarea>
+					name="short-name"></textarea>
 			</fieldset>
 			<button
 				disabled={media?.ok}

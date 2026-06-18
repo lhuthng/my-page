@@ -456,8 +456,7 @@
 									autocomplete="off"
 									rows="2"
 									readonly={!isOwner}
-									bind:value={editingData.tags}
-								></textarea>
+									bind:value={editingData.tags}></textarea>
 							</div>
 							<div class="flex flex-col">
 								<label class="inline-block" for="slug">Excerpt:</label>
@@ -467,8 +466,7 @@
 									autocomplete="off"
 									rows="5"
 									readonly={!isOwner}
-									bind:value={editingData.excerpt}
-								></textarea>
+									bind:value={editingData.excerpt}></textarea>
 							</div>
 							<SeriesController
 								postId={mode === 'edit' ? editingData.id : null}

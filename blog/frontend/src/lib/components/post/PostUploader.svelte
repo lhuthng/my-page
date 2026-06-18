@@ -319,8 +319,7 @@
 				<textarea
 					class="w-full h-full p-2 resize-none"
 					placeholder="Type here..."
-					bind:value={draft.content.text}
-				></textarea>
+					bind:value={draft.content.text}></textarea>
 			</div>
 		</div>
 		<div class="w-1/3 min-w-80 max-w-100 space-y-4">

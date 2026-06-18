@@ -80,6 +80,5 @@
 		placeholder={disabled ? '' : 'Type here...'}
 		autocorrect="off"
 		{disabled}
-		bind:value={_content}
-	></textarea>
+		bind:value={_content}></textarea>
 </div>
