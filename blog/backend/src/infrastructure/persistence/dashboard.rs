@@ -5,7 +5,11 @@ use sqlx::{FromRow, SqlitePool};
 use crate::{
     application::{commands::dashboard::*, services::dashboard::DashboardService},
     domain::{
-        entities::{dashboard::*, post::PostSnapshot},
+        entities::{
+            dashboard::*,
+            post::{PostSnapshot, PostStats},
+            project::ProjectSnapshot,
+        },
         errors::user::UserError,
     },
     infrastructure::persistence::post::PostRow,
@@ -47,6 +51,94 @@ struct DashTagRow {
     post_id: i64,
     tag_name: String,
     tag_slug: String,
+}
+
+#[derive(FromRow)]
+struct DashProjectRow {
+    project_id: i64,
+    post_id: i64,
+    title: String,
+    slug: String,
+    excerpt: String,
+    author_name: String,
+    author_slug: String,
+    status: String,
+    url: Option<String>,
+    cover_media_type: Option<String>,
+    demo_type: String,
+    views: i64,
+    likes: i64,
+    comments_count: i64,
+}
+
+impl DashProjectRow {
+    fn into_snapshot(self, tag_names: Vec<String>, tag_slugs: Vec<String>) -> ProjectSnapshot {
+        ProjectSnapshot {
+            id: self.project_id,
+            post_id: self.post_id,
+            title: self.title,
+            slug: self.slug,
+            tag_names,
+            tag_slugs,
+            excerpt: self.excerpt,
+            author_name: self.author_name,
+            author_slug: self.author_slug,
+            status: self.status,
+            url: self.url,
+            cover_media_type: self.cover_media_type,
+            demo_type: self.demo_type,
+            stats: PostStats {
+                views: self.views,
+                likes: self.likes,
+                comments: self.comments_count,
+            },
+        }
+    }
+}
+
+async fn fetch_project_snapshots_with_tags(
+    pool: &SqlitePool,
+    rows: Vec<DashProjectRow>,
+) -> Result<Vec<ProjectSnapshot>, UserError> {
+    if rows.is_empty() {
+        return Ok(vec![]);
+    }
+
+    let placeholders = rows.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+
+    let sql = format!(
+        r#"
+        SELECT pj.id AS post_id, tags.name AS tag_name, tags.slug AS tag_slug
+        FROM projects pj
+        JOIN post_tags ON post_tags.post_id = pj.post_id
+        JOIN tags ON tags.id = post_tags.tag_id
+        WHERE pj.id IN ({})
+        "#,
+        placeholders
+    );
+
+    let mut query = sqlx::query_as::<_, DashTagRow>(&sql);
+    let mut map: HashMap<i64, usize> = HashMap::new();
+    let mut snapshots = vec![];
+
+    for row in rows {
+        map.insert(row.project_id, snapshots.len());
+        query = query.bind(row.project_id);
+        snapshots.push(row.into_snapshot(vec![], vec![]));
+    }
+
+    let tag_rows = query.fetch_all(pool).await?;
+
+    for tag in tag_rows {
+        if let Some(&idx) = map.get(&tag.post_id)
+            && let Some(project) = snapshots.get_mut(idx)
+        {
+            project.tag_names.push(tag.tag_name);
+            project.tag_slugs.push(tag.tag_slug);
+        }
+    }
+
+    Ok(snapshots)
 }
 
 async fn fetch_snapshots_with_tags(
@@ -96,7 +188,7 @@ async fn fetch_snapshots_with_tags(
 const TOP_POSTS_SQL: &str = r#"
     SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
            u.username AS author_slug, um.display_name AS author_name,
-           'media/i/' || m.short_name AS url, p.status,
+           'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, p.status,
            ps.views, ps.likes, ps.comments_count
     FROM posts p
     JOIN users u ON u.id = p.user_id
@@ -152,7 +244,7 @@ impl DashboardService for DashboardServiceImpl {
             r#"
             SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
                    u.username AS author_slug, um.display_name AS author_name,
-                   'media/i/' || m.short_name AS url, p.status,
+                   'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, p.status,
                    ps.views, ps.likes, ps.comments_count
             FROM posts p
             JOIN users u ON u.id = p.user_id
@@ -309,7 +401,7 @@ impl DashboardService for DashboardServiceImpl {
             r#"
             SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
                    u.username AS author_slug, um.display_name AS author_name,
-                   'media/i/' || m.short_name AS url, p.status,
+                   'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, p.status,
                    ps.views, ps.likes, ps.comments_count
             FROM posts p
             JOIN users u ON u.id = p.user_id
@@ -423,5 +515,84 @@ impl DashboardService for DashboardServiceImpl {
             total,
             role_counts,
         })
+    }
+
+    async fn get_projects(
+        &self,
+        cmd: GetDashboardProjectsCommand,
+    ) -> Result<DashboardProjectsResult, UserError> {
+        let is_admin = cmd.role == "admin";
+
+        let mut where_parts: Vec<String> = vec![];
+        if !is_admin {
+            where_parts.push("posts.user_id = ".to_string() + &cmd.user_id.to_string());
+        }
+
+        if let Some(ref s) = cmd.search {
+            let escaped = s.replace('\'', "''");
+            where_parts.push(format!(
+                "(LOWER(posts.title) LIKE '%' || LOWER('{}') || '%' OR LOWER(posts.slug) LIKE '%' || LOWER('{}') || '%')",
+                escaped, escaped
+            ));
+        }
+
+        let where_clause = if where_parts.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_parts.join(" AND "))
+        };
+
+        let count_sql = format!(
+            r#"
+            SELECT COUNT(*)
+            FROM projects
+            JOIN posts ON posts.id = projects.post_id
+            {}
+            "#,
+            where_clause
+        );
+        let total: i64 = sqlx::query_scalar(&count_sql)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| UserError::InternalError(e.to_string()))?;
+
+        let data_sql = format!(
+            r#"
+            SELECT
+                projects.id AS project_id,
+                posts.id AS post_id,
+                posts.title,
+                posts.slug,
+                posts.excerpt,
+                users.username AS author_slug,
+                user_meta.display_name AS author_name,
+                posts.status,
+                'media/i/' || media.short_name AS url,
+                media.file_type AS cover_media_type,
+                projects.demo_type,
+                post_stats.views,
+                post_stats.likes,
+                post_stats.comments_count
+            FROM projects
+            JOIN posts ON posts.id = projects.post_id
+            JOIN users ON users.id = posts.user_id
+            JOIN user_meta ON user_meta.user_id = posts.user_id
+            JOIN post_stats ON post_stats.post_id = posts.id
+            LEFT JOIN media ON media.id = posts.cover_media_id
+            {}
+            ORDER BY posts.updated_at DESC
+            LIMIT {} OFFSET {}
+            "#,
+            where_clause, cmd.limit, cmd.offset
+        );
+
+        let rows = sqlx::query_as::<_, DashProjectRow>(&data_sql)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| UserError::InternalError(e.to_string()))?;
+
+        let projects = fetch_project_snapshots_with_tags(&self.pool, rows).await?;
+
+        Ok(DashboardProjectsResult { projects, total })
     }
 }

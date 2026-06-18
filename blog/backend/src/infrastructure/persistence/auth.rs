@@ -194,6 +194,7 @@ impl AuthService for AuthServiceImpl {
         let claims = Claims::new(
             user_row.id.to_string(),
             user_row.role,
+            user_row.email_verified_at.is_some(),
             config.access_expire_hours,
         );
 
@@ -332,6 +333,7 @@ impl AuthService for AuthServiceImpl {
                 let claims = Claims::new(
                     row.user_id.to_string(),
                     row.role.to_string(),
+                    true,
                     config.access_expire_hours,
                 );
 

@@ -1,5 +1,6 @@
 FROM lukemathwalker/cargo-chef:latest-rust-alpine AS chef
 WORKDIR /app
+RUN apk add --no-cache openssl-dev openssl-libs-static musl-dev pkgconfig
 
 FROM chef AS planner
 COPY . .

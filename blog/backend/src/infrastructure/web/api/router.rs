@@ -280,6 +280,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
     let dashboard_routes = Router::new()
         .route("/overview", get(handlers::dashboard::get_overview))
         .route("/posts", get(handlers::dashboard::get_posts))
+        .route("/projects", get(handlers::dashboard::get_projects))
         .route("/users", get(handlers::dashboard::get_users))
         .layer(middleware::from_fn(middlewares::auth::mod_check))
         .layer(middleware::from_fn_with_state(

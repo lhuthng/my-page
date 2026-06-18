@@ -1,6 +1,7 @@
 <script>
 	import { api } from '$lib/api/client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
+	import { onMount } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
@@ -48,6 +49,8 @@
 	}
 
 	let hasMore = $derived(posts.length < total);
+
+	onMount(() => fetchPosts(true));
 </script>
 
 <svelte:head>

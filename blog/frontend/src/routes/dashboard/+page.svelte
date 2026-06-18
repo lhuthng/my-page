@@ -1,8 +1,19 @@
 <script>
+	import { api } from '$lib/api/client';
+	import { onMount, untrack } from 'svelte';
+
 	let { data } = $props();
 
-	let overview = $derived(data.overview);
+	let overview = $state(untrack(() =>  data.overview));
 	let activeTopTab = $state('views');
+
+	onMount(async () => {
+		try {
+			overview = await api.get('dashboard/overview');
+		} catch {
+			overview = null;
+		}
+	});
 
 	let topPosts = $derived(
 		activeTopTab === 'views'

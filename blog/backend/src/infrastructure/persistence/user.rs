@@ -241,7 +241,7 @@ impl UserService for UserServiceImpl {
 
         let sql = format!(
             r#"
-            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, status, 'media/i/' || m.short_name AS url, views, likes, comments_count
+            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, status, 'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, views, likes, comments_count
             FROM posts p
                 JOIN users u ON u.id = p.user_id
                 JOIN user_meta um ON u.id = um.user_id

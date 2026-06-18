@@ -1,10 +1,20 @@
 <script>
 	import { api } from '$lib/api/client';
+	import { onMount } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
 
 	let series = $state(data.series ?? []);
+
+	onMount(async () => {
+		try {
+			const result = await api.get('series/all');
+			series = result.series ?? [];
+		} catch {
+			series = [];
+		}
+	});
 
 	// Per-series expanded state and posts
 	let expanded = $state({}); // { [id]: boolean }
@@ -122,7 +132,7 @@
 											</span>
 											{#if post.cover_url}
 												<img
-													src={`/api/${post.cover_url}`.replace('/./', '/')}
+													src={post.cover_url}
 													alt="cover"
 													class="w-10 h-10 rounded object-cover shrink-0"
 												/>

@@ -13,6 +13,13 @@ use crate::{
     infrastructure::web::server::AppState,
 };
 
+#[derive(Deserialize)]
+pub struct DashboardProjectsQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub search: Option<String>,
+}
+
 #[axum::debug_handler]
 pub async fn get_overview(
     State(state): State<Arc<AppState>>,
@@ -75,6 +82,30 @@ pub struct DashboardUsersQuery {
 }
 
 #[axum::debug_handler]
+pub async fn get_projects(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<DashboardProjectsQuery>,
+) -> Result<impl IntoResponse, UserError> {
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|e| UserError::InternalError(e.to_string()))?;
+
+    let result = state
+        .dashboard_service
+        .get_projects(GetDashboardProjectsCommand {
+            user_id,
+            role: claims.role,
+            search: query.search,
+            limit: query.limit.unwrap_or(20),
+            offset: query.offset.unwrap_or(0),
+        })
+        .await?;
+
+    Ok(Json(result))
+}
+
 pub async fn get_users(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,

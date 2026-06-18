@@ -14,4 +14,8 @@ pub trait DashboardService {
         &self,
         cmd: GetDashboardUsersCommand,
     ) -> Result<DashboardUsersResult, UserError>;
+    async fn get_projects(
+        &self,
+        cmd: GetDashboardProjectsCommand,
+    ) -> Result<DashboardProjectsResult, UserError>;
 }

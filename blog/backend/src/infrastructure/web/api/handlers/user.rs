@@ -208,6 +208,8 @@ pub struct Post {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_media_type: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -280,6 +282,7 @@ pub async fn get_posts(
                 author_slug: post.author_slug,
                 status: post.status,
                 url: post.url,
+                cover_media_type: post.cover_media_type,
             })
             .collect(),
     };

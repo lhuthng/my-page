@@ -1,4 +1,4 @@
-use super::post::PostSnapshot;
+use super::{post::PostSnapshot, project::ProjectSnapshot};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -50,4 +50,10 @@ pub struct DashboardUsersResult {
     pub users: Vec<DashboardUserInfo>,
     pub total: i64,
     pub role_counts: RoleCounts,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DashboardProjectsResult {
+    pub projects: Vec<ProjectSnapshot>,
+    pub total: i64,
 }
