@@ -3,6 +3,7 @@
 	"compilerOptions": {
 		"allowJs": true,
 		"checkJs": false,
-		"moduleResolution": "bundler"
+		"moduleResolution": "bundler",
+		"types": []
 	}
 }
