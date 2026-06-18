@@ -1,26 +1,28 @@
 <script>
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { api } from '$lib/api/client';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import ExploreMore from '$lib/components/home/ExploreMore.svelte';
 	import FetchMore from '$lib/components/home/FetchMore.svelte';
 
 	let { data } = $props();
 
-	const limit = data.firstOffset ?? 5;
+	const limit = $derived(untrack(() => data.firstOffset ?? 5));
 	const itemDelay = 45;
 
 	let batchId = 0;
 
 	let posts = $state(
-		data.status === 'success'
-			? (data.featured_posts ?? []).map((post, index) => ({
-					...post,
-					_batchId: batchId,
-					_introDelay: index * itemDelay
-				}))
-			: []
+		untrack(() =>
+			data.status === 'success'
+				? (data.featured_posts ?? []).map((post, index) => ({
+						...post,
+						_batchId: batchId,
+						_introDelay: index * itemDelay
+					}))
+				: []
+		)
 	);
 
 	let length = $derived(posts.length);

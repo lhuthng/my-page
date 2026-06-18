@@ -1,25 +1,27 @@
 <script>
 	import { api } from '$lib/api/client';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import FetchMore from '$lib/components/home/FetchMore.svelte';
 	import BigPostCard from '$lib/components/home/BigPostCard.svelte';
 
 	let { data } = $props();
 
-	const limit = data.firstOffset ?? 5;
+	const limit = $derived(untrack(() => data.firstOffset ?? 5));
 	const itemDelay = 45;
 
 	let batchId = 0;
 
 	let projects = $state(
-		data.status === 'success'
-			? (data.projects ?? []).map((project, index) => ({
-					...project,
-					_batchId: batchId,
-					_introDelay: index * itemDelay
-				}))
-			: []
+		untrack(() =>
+			data.status === 'success'
+				? (data.projects ?? []).map((project, index) => ({
+						...project,
+						_batchId: batchId,
+						_introDelay: index * itemDelay
+					}))
+				: []
+		)
 	);
 
 	let length = $derived(projects.length);
