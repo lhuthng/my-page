@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { auth, authState } from '$lib/auth/user.svelte.js';
 	import { arraysEqualIgnoreOrder, nowToDate } from '$lib/utils';
+	import { untrack } from 'svelte';
 	import { useDebounce } from '$lib/utils/debounce';
 	import PostCard from '../home/PostCard.svelte';
 	import ContentDebounceEditor from './ContentDebounceEditor.svelte';
@@ -85,7 +86,8 @@
 		)
 	];
 
-	if (mode === 'edit' && data !== undefined) {
+	if (untrack(() => mode) === 'edit' && untrack(() => data) !== undefined) {
+		const d = untrack(() => data);
 		let {
 			id,
 			title,
@@ -99,7 +101,7 @@
 			coverUrl,
 			mediumShortNames,
 			mediumUrls
-		} = data;
+		} = d;
 		editingData.id = id;
 		editingData.title = title;
 		editingData.slug = slug;
@@ -110,9 +112,9 @@
 		editingData.series = series;
 		editingData.seriesSlug = seriesSlug ?? '';
 		editingData.coverUrl = coverUrl;
-		editingData.videoShortName = data.videoShortName ?? '';
-		editingData.ogImageSeconds = data.ogImageSeconds ?? 0;
-		editingData.coverMediaType = data.cover_media_type;
+		editingData.videoShortName = d.videoShortName ?? '';
+		editingData.ogImageSeconds = d.ogImageSeconds ?? 0;
+		editingData.coverMediaType = d.cover_media_type;
 
 		// Load existing related posts asynchronously
 		fetch(`/api/posts/id/${id}/related`, {
@@ -125,8 +127,8 @@
 			.catch(() => {});
 
 		editor.view = 'public';
-	} else if (mode === 'create') {
-		editingData.series = initialSeries;
+	} else if (untrack(() => mode) === 'create') {
+		editingData.series = untrack(() => initialSeries);
 	}
 
 	let slugDebounce = useDebounce(async (slug) => {

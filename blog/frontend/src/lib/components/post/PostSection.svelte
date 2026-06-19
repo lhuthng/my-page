@@ -1,13 +1,14 @@
 <script>
 	import { authState } from '$lib/auth/user.svelte.js';
 	import { win } from '$lib/dom/windows.svelte.js';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import PBody from '../shell/PBody.svelte';
 	import Portal from '../shell/Portal.svelte';
 	import ContentTable from './ContentTable.svelte';
 	import Post from './Post.svelte';
 	import { browser } from '$app/environment';
 	import { sendLike } from '$lib/utils/post';
+
 	import { page } from '$app/state';
 	import Copy from '../svgs/Copy.svelte';
 	import X from '../svgs/X.svelte';
@@ -36,7 +37,7 @@
 		});
 	}
 
-	let liked = $state(initialLiked);
+	let liked = $state(untrack(() => initialLiked));
 	$effect(() => {
 		liked = initialLiked;
 	});

@@ -11,6 +11,7 @@
 		kaomojiPlugin
 	} from '$lib/custom-rules';
 	import { useDebounce } from '$lib/utils/debounce';
+	import { untrack } from 'svelte';
 	import MarkdownIt from 'markdown-it';
 	import mkKatex from 'markdown-it-katex';
 	import anchor from 'markdown-it-anchor';
@@ -32,7 +33,7 @@
 	let content = $state('');
 	let _content = $state('');
 
-	registerForceContent((content) => {
+	untrack(() => registerForceContent)((content) => {
 		_content = content;
 	});
 
@@ -60,7 +61,7 @@
 		const keys = collectMediaKeys(_content);
 		await searchMedia(keys);
 		content = _content;
-	}, delay);
+	}, untrack(() => delay));
 
 	$effect(() => {
 		debounce.update(_content);

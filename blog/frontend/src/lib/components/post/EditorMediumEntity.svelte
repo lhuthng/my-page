@@ -1,6 +1,8 @@
 <script>
+	import { untrack } from 'svelte';
+
 	let { shortName, url, type, warning, changeName } = $props();
-	let draft = $state(shortName);
+	let draft = $state(untrack(() => shortName));
 	let skip = false;
 	let playable = $state();
 	let timeline = $state();
@@ -39,8 +41,10 @@
 		}
 	});
 
+	const t = untrack(() => type);
+	const s = untrack(() => shortName);
 	const isLottie =
-		type === 'application/vnd.lottie+zip' || shortName?.toLowerCase().endsWith('.lottie');
+		t === 'application/vnd.lottie+zip' || s?.toLowerCase().endsWith('.lottie');
 </script>
 
 <li

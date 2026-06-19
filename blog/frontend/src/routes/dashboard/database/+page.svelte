@@ -1,4 +1,5 @@
 <script>
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { navigating } from '$app/stores';
 
@@ -29,10 +30,10 @@
 	// -------------------------------------------------------------------------
 	// Local UI state - synced back from server data after each navigation
 	// -------------------------------------------------------------------------
-	let searchInput = $state(data.search || '');
-	let statusFilter = $state(data.status || '');
-	let roleFilter = $state(data.role || '');
-	let includeDeleted = $state(data.includeDeleted || false);
+	let searchInput = $state(untrack(() => data).search || '');
+	let statusFilter = $state(untrack(() => data).status || '');
+	let roleFilter = $state(untrack(() => data).role || '');
+	let includeDeleted = $state(untrack(() => data).includeDeleted || false);
 
 	// Keep local inputs in sync when the URL changes (browser back/forward, switchTable, etc.)
 	$effect(() => {

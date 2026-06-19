@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { auth, authState } from '$lib/auth/user.svelte.js';
 	import { arraysEqualIgnoreOrder, nowToDate, preventDefault } from '$lib/utils';
+	import { untrack } from 'svelte';
 	import { useDebounce } from '$lib/utils/debounce';
 	import PostCard from '../home/PostCard.svelte';
 	import PostSection from '../post/PostSection.svelte';
@@ -78,24 +79,25 @@
 	let renderedText = $state('');
 	let forDraft = $derived(mode === 'create' || (mode === 'edit' && editor.view === 'private'));
 
-	if (mode === 'edit' && data !== undefined) {
-		editingData.id = data.id;
-		editingData.postId = data.postId;
-		editingData.title = data.title;
-		editingData.slug = data.slug;
-		editingData.excerpt = data.excerpt;
-		editingData.tags = data.tags.join(' ');
-		editingData.content = data.content;
-		editingData.draft = data.draft;
-		editingData.coverUrl = data.coverUrl;
-		editingData.videoShortName = data.videoShortName ?? '';
-		editingData.ogImageSeconds = data.ogImageSeconds ?? 0;
-		editingData.coverMediaType = data.cover_media_type;
-		editingData.demoType = data.demoType ?? 'html5';
-		editingData.demoWidth = data.demoWidth ?? '100%';
-		editingData.demoHeight = data.demoHeight ?? '520px';
-		editingData.demoUrl = data.rawDemoUrl ?? '';
-		editingData.links = data.links?.length ? data.links : [{ label: 'GitHub', url: '' }];
+	if (untrack(() => mode) === 'edit' && untrack(() => data) !== undefined) {
+		const d = untrack(() => data);
+		editingData.id = d.id;
+		editingData.postId = d.postId;
+		editingData.title = d.title;
+		editingData.slug = d.slug;
+		editingData.excerpt = d.excerpt;
+		editingData.tags = d.tags.join(' ');
+		editingData.content = d.content;
+		editingData.draft = d.draft;
+		editingData.coverUrl = d.coverUrl;
+		editingData.videoShortName = d.videoShortName ?? '';
+		editingData.ogImageSeconds = d.ogImageSeconds ?? 0;
+		editingData.coverMediaType = d.cover_media_type;
+		editingData.demoType = d.demoType ?? 'html5';
+		editingData.demoWidth = d.demoWidth ?? '100%';
+		editingData.demoHeight = d.demoHeight ?? '520px';
+		editingData.demoUrl = d.rawDemoUrl ?? '';
+		editingData.links = d.links?.length ? d.links : [{ label: 'GitHub', url: '' }];
 		editor.view = 'public';
 	}
 
@@ -412,7 +414,8 @@
 				author={{ name: authState.user.displayName, slug: authState.user.username }}
 				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
 				src={editingData.coverUrl}
-				coverMediaType={editingData.coverMediaType || (editingData.videoShortName ? 'video/mp4' : undefined)}
+				coverMediaType={editingData.coverMediaType ||
+					(editingData.videoShortName ? 'video/mp4' : undefined)}
 				stats={{ views: '#', likes: '#', comments_count: '#' }}
 				routePrefix="/projects"
 				dashboardPrefix="/dashboard/projects/id"
@@ -464,7 +467,7 @@
 			<div class="flex not-lg:flex-col gap-2 w-full h-full p-2 pt-1">
 				<div class="flex grow gap-2">
 					<div class="max-h-80 p-2 pr-1 w-1/3 bg-primary/40 rounded-lg">
-						<div class="full space-y-2 pr-[3px] custom-scrollbar overflow-y-scroll">
+						<div class="full space-y-2 pr-0.75 custom-scrollbar overflow-y-scroll">
 							<div class="flex not-sm:flex-col">
 								<label class="inline-block min-w-14" for="title">Name:</label>
 								<input

@@ -4,5 +4,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
-	ssr: { noExternal: ['three'] }
+	ssr: { noExternal: ['three'] },
+	build: {
+		chunkSizeWarningLimit: 1200
+	}
 });

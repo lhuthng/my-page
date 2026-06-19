@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { authState, login, register, resendVerification } from '$lib/auth/user.svelte.js';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 
 	import { fly } from 'svelte/transition';
 
@@ -12,7 +12,7 @@
 
 	let isLogged = $derived(authState.user !== undefined);
 
-	let isLogging = $state(!data.register);
+	let isLogging = $state(!untrack(() => data).register);
 	let username = $state('');
 	let password = $state('');
 	let repassword = $state('');

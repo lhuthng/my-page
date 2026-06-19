@@ -3,6 +3,8 @@
 	import gsap from 'gsap';
 	import { Flip } from 'gsap/Flip';
 	import { onMount, tick, untrack } from 'svelte';
+
+	gsap.registerPlugin(Flip);
 	import { fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
 	import Smug from '../svgs/emotes/Smug.svelte';

@@ -1,4 +1,5 @@
 <script>
+	import { untrack } from 'svelte';
 	import { api } from '$lib/api/client';
 	import { authState } from '$lib/auth/user.svelte.js';
 	import Heart from '$lib/components/svgs/Heart.svelte';
@@ -9,9 +10,9 @@
 	let { data } = $props();
 
 	let userData = $state({
-		users: data.users ?? [],
-		total: data.total ?? 0,
-		role_counts: data.role_counts ?? { admin: 0, moderator: 0, user: 0 }
+		users: untrack(() => data).users ?? [],
+		total: untrack(() => data).total ?? 0,
+		role_counts: untrack(() => data).role_counts ?? { admin: 0, moderator: 0, user: 0 }
 	});
 	let loading = $state(false);
 	let loadingMore = $state(false);

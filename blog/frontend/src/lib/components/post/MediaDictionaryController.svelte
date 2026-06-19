@@ -1,6 +1,7 @@
 <script>
 	import OfflineMediaCreator from './OfflineMediaCreator.svelte';
 	import OnlineMediaSearcher from './OnlineMediaSearcher.svelte';
+	import { untrack } from 'svelte';
 
 	let {
 		updateMediaDictionary,
@@ -45,13 +46,13 @@
 		});
 	};
 
-	registerSearch(searchOnlineMedia);
-	registerMediaCheck({
+	untrack(() => registerSearch)(searchOnlineMedia);
+	untrack(() => registerMediaCheck)({
 		isOnline: (keyword) => keyword in onlineMedia && onlineMedia[keyword] != null,
 		isOffline: (keyword) => keyword in offlineMedia && offlineMedia[keyword] != null
 	});
-	registerGetMedia((keyword) => newMedia[keyword]);
-	registerClearNewMedia((names) => {
+	untrack(() => registerGetMedia)((keyword) => newMedia[keyword]);
+	untrack(() => registerClearNewMedia)((names) => {
 		const temp = { ...newMedia };
 		names.forEach((name) => {
 			delete temp[name];

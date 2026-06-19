@@ -1,4 +1,5 @@
 <script>
+	import { untrack } from 'svelte';
 	import ProjectEditor from '$lib/components/project/ProjectEditor.svelte';
 
 	const { data } = $props();
@@ -24,7 +25,7 @@
 		raw_demo_url: rawDemoUrl,
 		links,
 		is_owner: isOwner = true
-	} = data;
+	} = untrack(() => data);
 </script>
 
 <ProjectEditor

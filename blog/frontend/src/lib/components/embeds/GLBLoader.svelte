@@ -2,6 +2,7 @@
 	import { T } from '@threlte/core';
 	import { Environment, GLTF, OrbitControls, useGltfAnimations } from '@threlte/extras';
 	import { AgXToneMapping, LinearToneMapping, SRGBColorSpace } from 'three';
+	import { untrack } from 'svelte';
 
 	let {
 		name,
@@ -12,7 +13,7 @@
 		isReady = $bindable()
 	} = $props();
 
-	let { position, fov, target, autoRotate } = $state(cameraConfig);
+	let { position, fov, target, autoRotate } = $state(untrack(() => cameraConfig));
 
 	let gltfAsset = $state();
 	let orbitControl = $state(autoRotate);

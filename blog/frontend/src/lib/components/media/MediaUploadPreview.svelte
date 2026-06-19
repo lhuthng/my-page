@@ -1,10 +1,13 @@
 <script>
+	import { untrack } from 'svelte';
+
 	let { size, file, isSelected, ok, onclick, ondblclick } = $props();
 
-	const isImage = file.type?.startsWith('image/');
-	const isModel = file.type?.startsWith('model/');
+	const f = untrack(() => file);
+	const isImage = f.type?.startsWith('image/');
+	const isModel = f.type?.startsWith('model/');
 	const isLottie =
-		file.type === 'application/vnd.lottie+zip' || file.name?.toLowerCase().endsWith('.lottie');
+		f.type === 'application/vnd.lottie+zip' || f.name?.toLowerCase().endsWith('.lottie');
 </script>
 
 <button

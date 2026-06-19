@@ -1,12 +1,13 @@
 <script>
+	import { untrack } from 'svelte';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { fade, fly } from 'svelte/transition';
 
 	const { data } = $props();
 
-	const tag = data.tag;
-	const posts = data.posts ?? [];
-	const projects = data.projects ?? [];
+	const tag = untrack(() => data).tag;
+	const posts = untrack(() => data).posts ?? [];
+	const projects = untrack(() => data).projects ?? [];
 
 	const postLabel = $derived(tag.post_count === 1 ? 'item' : 'items');
 </script>

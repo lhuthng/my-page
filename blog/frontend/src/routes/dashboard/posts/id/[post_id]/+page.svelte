@@ -1,4 +1,5 @@
 <script>
+	import { untrack } from 'svelte';
 	import PostEditor from '$lib/components/post/PostEditor.svelte';
 
 	const { data } = $props();
@@ -20,7 +21,7 @@
 		medium_short_names: mediumShortNames,
 		medium_urls: mediumUrls,
 		is_owner: isOwner = true
-	} = data;
+	} = untrack(() => data);
 </script>
 
 <PostEditor

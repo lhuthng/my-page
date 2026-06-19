@@ -1,11 +1,12 @@
 <script>
+	import { untrack } from 'svelte';
 	import { api } from '$lib/api/client';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
 
 	// Active state for currently featured posts
-	let featuredPosts = $state(data.featuredPosts ?? []);
+	let featuredPosts = $state(untrack(() => data).featuredPosts ?? []);
 
 	// Search states
 	let search = $state('');
