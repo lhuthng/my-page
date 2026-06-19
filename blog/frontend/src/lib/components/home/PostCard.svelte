@@ -18,7 +18,7 @@
 		routePrefix = '/posts',
 		dashboardPrefix = '/dashboard/posts/id',
 		children,
-coverMediaType = ''
+		coverMediaType = ''
 	} = $props();
 
 	let toggled = $state(false);
