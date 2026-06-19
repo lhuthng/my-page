@@ -175,7 +175,7 @@
 				{/if}
 			</div>
 
-			<div class="flex-1 min-h-[350px]">
+			<div class="flex-1 min-h-87.5">
 				{#if searchLoading}
 					<div class="flex justify-center items-center py-16 text-dark/40" in:fade>
 						Searching...

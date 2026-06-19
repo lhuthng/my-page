@@ -387,7 +387,8 @@
 				}}
 				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
 				src={editingData.coverUrl}
-				coverMediaType={editingData.coverMediaType || (editingData.videoShortName ? 'video/mp4' : undefined)}
+				coverMediaType={editingData.coverMediaType ||
+					(editingData.videoShortName ? 'video/mp4' : undefined)}
 				stats={{
 					views: '#',
 					likes: '#',
@@ -439,7 +440,7 @@
 			<div class="flex not-lg:flex-col gap-2 w-full h-full p-2 pt-1">
 				<div class="flex grow gap-2">
 					<div class="max-h-80 p-2 pr-1 w-1/3 bg-primary/40 rounded-lg">
-						<div class="full space-y-2 pr-[3px] custom-scrollbar overflow-y-scroll">
+						<div class="full space-y-2 pr-0.75 custom-scrollbar overflow-y-scroll">
 							<div class="flex not-sm:flex-col">
 								<label class="inline-block min-w-11" for="title">Title:</label>
 								<input

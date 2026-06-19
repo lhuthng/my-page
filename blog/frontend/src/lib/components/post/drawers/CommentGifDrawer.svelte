@@ -25,7 +25,7 @@
 		</div>
 
 		{#if gifError}
-			<p class="text-xs text-accent-red font-medium">{gifError}</p>
+			<p class="text-sm text-accent-red font-medium">{gifError}</p>
 		{/if}
 
 		<div

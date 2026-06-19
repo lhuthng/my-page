@@ -3,10 +3,11 @@
 </script>
 
 {#if commandState.items.length > 0}
-	<div class="kaomoji-collection">
+	<div class="flex flex-wrap gap-2">
 		{#each commandState.items as item, index (item.id)}
 			<button
 				type="button"
+				class="w-fit rounded-lg px-2 py-1 text-left font-mono hover:bg-primary-20"
 				class:bg-primary-20={index === commandState.selected}
 				onmousedown={(event) => {
 					event.preventDefault();
@@ -20,12 +21,13 @@
 {/if}
 
 {#if commandState.suggestions.length > 0}
-	<div class="kaomoji-suggestions">
-		<p>Mood not found. Try one of these suggestions:</p>
-		<div>
+	<div class="space-y-2 px-1 py-1">
+		<p class="text-sm text-dark/70">Mood not found. Try one of these suggestions:</p>
+		<div class="flex flex-wrap gap-2">
 			{#each commandState.suggestions as suggestion, index (suggestion)}
 				<button
 					type="button"
+					class="rounded-full border border-primary/30 px-3 py-1 text-sm font-semibold hover:bg-primary-20"
 					class:bg-primary-20={index === commandState.selected}
 					onmousedown={(event) => {
 						event.preventDefault();
@@ -39,27 +41,3 @@
 		<p class="italic">Tip: press Tab to use the first suggestion.</p>
 	</div>
 {/if}
-
-<style lang="postcss">
-	@reference "../../../../app.css";
-
-	.kaomoji-collection {
-		@apply flex flex-wrap gap-2;
-
-		& > button {
-			@apply w-fit rounded-lg px-2 py-1 text-left font-mono hover:bg-primary-20;
-		}
-	}
-	.kaomoji-suggestions {
-		@apply space-y-2 px-1 py-1;
-		& > p {
-			@apply text-sm text-dark/70;
-		}
-		& > div {
-			@apply flex flex-wrap gap-2;
-			& > button {
-				@apply rounded-full border border-primary/30 px-3 py-1 text-sm font-semibold hover:bg-primary-20;
-			}
-		}
-	}
-</style>

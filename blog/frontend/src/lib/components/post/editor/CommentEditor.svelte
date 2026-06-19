@@ -80,7 +80,7 @@
 			>
 				<textarea
 					name="comment-input"
-					class="comment-input block w-full min-h-16 lg:min-h-20 max-w-full overflow-hidden outline-none resize-none p-2 bg-transparent"
+					class="comment-input block w-full min-h-48 lg:min-h-20 max-w-full overflow-hidden outline-none resize-none p-2 bg-transparent"
 					wrap="soft"
 					bind:this={textarea}
 					bind:value
@@ -119,12 +119,17 @@
 
 				<div class="border-t-2 border-primary/15 bg-white/40 p-3 flex flex-col gap-2">
 					<span class="text-base font-semibold text-primary/70 select-none">Live Preview</span>
-					<div class="w-full min-h-12 overflow-hidden">
+					<div class="w-full sm:min-h-12 overflow-hidden">
 						{#if previewHtml}
 							<Comment content={previewHtml} />
 						{:else}
 							<p class="text-sm text-dark/40 italic select-none">
-								Nothing to preview yet. Start typing... <span aria-hidden="true">ヽ(ヅ)ノ</span>
+								Nothing to preview yet. Start typing... <span
+									class="whitespace-nowrap"
+									aria-hidden="true"
+								>
+									ヽ(ヅ)ノ
+								</span>
 							</p>
 						{/if}
 					</div>

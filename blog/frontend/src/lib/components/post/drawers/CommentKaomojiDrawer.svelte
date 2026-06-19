@@ -16,7 +16,7 @@
 
 {#if show}
 	<div class="border-t-2 border-primary/20 bg-white/40 p-3 flex flex-col gap-3">
-		<div class="flex gap-2 h-9">
+		<div class="flex not-sm:flex-col gap-2 min-h-9">
 			<input
 				type="text"
 				value={kaomojiMood}
@@ -36,7 +36,7 @@
 		</div>
 
 		{#if kaomojiError}
-			<p class="text-xs text-accent-red font-medium">{kaomojiError}</p>
+			<p class="text-sm text-accent-red font-medium">{kaomojiError}</p>
 		{/if}
 
 		{#if kaomojiSuggestions.length > 0}

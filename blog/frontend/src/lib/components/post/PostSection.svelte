@@ -142,7 +142,7 @@
 						{pushingLike ? 'Upvote?' : liked ? 'Upvoted!' : 'Upvote?'}
 					</button>
 				</div>
-				<div class="ml-auto flex items-center text-sm font-bold gap-2">
+				<div class="ml-auto flex flex-wrap items-center text-sm font-bold gap-2">
 					<span class="font-normal text-dark/60">Share:</span>
 					<button
 						class="w-fit px-2 h-8 rounded-lg border-2 border-accent-green text-accent-green bg-accent-green-light-2/50 hover:bg-accent-green hover:text-white transition-colors"
