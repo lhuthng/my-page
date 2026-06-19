@@ -2,6 +2,7 @@
 	import { cache } from '$lib/utils/cache.svelte.js';
 	import { auth } from '$lib/auth/user.svelte.js';
 	import { useDebounce } from '$lib/utils/debounce';
+	import { untrack } from 'svelte';
 
 	import MediaDirectory from './MediaDirectory.svelte';
 	import MediaEditForm from './MediaEditForm.svelte';
@@ -14,7 +15,7 @@
 	let selection = $state();
 
 	// Debounce the search keywords
-	let deKeyword = $state(keyword);
+	let deKeyword = $state(untrack(() => keyword));
 	let debounce = useDebounce(async (searchKeywords) => {
 		deKeyword = searchKeywords;
 		selection = undefined;

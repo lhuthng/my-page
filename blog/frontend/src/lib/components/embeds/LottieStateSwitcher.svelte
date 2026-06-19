@@ -1,14 +1,14 @@
 <script>
 	import { DotLottieSvelte } from '@lottiefiles/dotlottie-svelte';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 
 	let { name, states: state_entries, width, height, src } = $props();
 
-	let states = $state(Object.fromEntries(state_entries));
+	let states = $state(untrack(() => Object.fromEntries(state_entries)));
 	let dotLottie = $state();
 	let isPlaying = $state(false);
 
-	let selection = $state(state_entries[0]?.[0] ?? '');
+	let selection = $state(untrack(() => state_entries[0]?.[0] ?? ''));
 
 	function goto(state) {
 		if (!dotLottie) return;

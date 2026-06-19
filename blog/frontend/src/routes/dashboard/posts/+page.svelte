@@ -1,13 +1,13 @@
 <script>
 	import { api } from '$lib/api/client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
 
-	let posts = $state(data.posts ?? []);
-	let total = $state(data.total ?? 0);
+	let posts = $state(untrack(() => data).posts ?? []);
+	let total = $state(untrack(() => data).total ?? 0);
 	let loading = $state(false);
 	let loadingMore = $state(false);
 	let error = $state(null);

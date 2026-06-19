@@ -1,15 +1,23 @@
 <script>
-	import GLBDemo from './GLBDemo.svelte';
 	import HTMLApp from './HTMLApp.svelte';
 	import LottieStateSwitcher from './LottieStateSwitcher.svelte';
 
 	let { name, type, width, height, config, temp } = $props();
+
+	let GLBDemo = $state();
+	$effect(() => {
+		if (type === 'glb-demo') {
+			import('./GLBDemo.svelte').then((m) => (GLBDemo = m.default));
+		}
+	});
 </script>
 
 {#if type === 'html' || type === 'project'}
 	<HTMLApp {name} {type} {width} {height} {config} />
 {:else if type === 'glb-demo'}
-	<GLBDemo {name} {type} {width} {height} {config} {temp} />
+	{#if GLBDemo}
+		<GLBDemo {name} {type} {width} {height} {config} {temp} />
+	{/if}
 {:else if type === 'lottie'}
 	{@const states = (config ?? '')
 		.split('-')

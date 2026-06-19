@@ -1,10 +1,11 @@
 <script>
+	import { untrack } from 'svelte';
 	import { api } from '$lib/api/client';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
 
-	let featuredProjects = $state(data.featuredProjects ?? []);
+	let featuredProjects = $state(untrack(() => data).featuredProjects ?? []);
 
 	let search = $state('');
 	let searchResults = $state([]);

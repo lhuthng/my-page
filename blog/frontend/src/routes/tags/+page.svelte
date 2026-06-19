@@ -1,8 +1,10 @@
 <script>
+	import { untrack } from 'svelte';
+
 	const { data } = $props();
 
-	const tags = data.tags ?? [];
-	const term = data.term ?? '';
+	const tags = untrack(() => data).tags ?? [];
+	const term = untrack(() => data).term ?? '';
 
 	const tagLabel = $derived(tags.length === 1 ? 'tag' : 'tags');
 </script>

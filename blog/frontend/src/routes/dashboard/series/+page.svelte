@@ -1,11 +1,11 @@
 <script>
 	import { api } from '$lib/api/client';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
 
-	let series = $state(data.series ?? []);
+	let series = $state(untrack(() => data).series ?? []);
 
 	onMount(async () => {
 		try {

@@ -5,6 +5,8 @@
 	import { gsap } from 'gsap';
 	import { Flip } from 'gsap/Flip';
 
+	gsap.registerPlugin(Flip);
+
 	let { visible, origin, onClose } = $props();
 
 	let src = $derived(origin?.src);
@@ -135,6 +137,7 @@
 </script>
 
 <div
+	role="application"
 	class="fixed inset-0 bg-dark/80 *:pointer-events-auto overflow-visible touch-none"
 	in:fade={{ duration: 200 }}
 	out:fade={{ duration: 200 }}
