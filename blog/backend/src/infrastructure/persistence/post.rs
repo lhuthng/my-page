@@ -1445,6 +1445,11 @@ impl PostService for PostServiceImpl {
                         guest_identity,
                         direct_reply_count,
                     )| {
+                        let (username, display_name, avatar_url, user_role) = if guest_identity.is_some() {
+                            (None, None, None, None)
+                        } else {
+                            (username, display_name, avatar_url, user_role)
+                        };
                         Comment {
                             id,
                             parent_id,
@@ -1540,6 +1545,11 @@ impl PostService for PostServiceImpl {
                     guest_identity,
                     direct_reply_count,
                 )| {
+                    let (username, display_name, avatar_url, user_role) = if guest_identity.is_some() {
+                        (None, None, None, None)
+                    } else {
+                        (username, display_name, avatar_url, user_role)
+                    };
                     Comment {
                         id,
                         parent_id,
