@@ -25,6 +25,7 @@
 		og_image_seconds,
 		relatedPosts
 	} = $derived(data);
+
 	let liked = $state();
 	$effect(() => {
 		liked = browser ? isLiked(id) : false;

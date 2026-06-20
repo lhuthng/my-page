@@ -4,6 +4,7 @@
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
 	import Heart from '$lib/components/svgs/Heart.svelte';
 	import Spade from '$lib/components/svgs/Spade.svelte';
+	import { GUEST_IDENTITIES } from '$lib/features/comments/guest-identities.js';
 	import Comment from '../Comment.svelte';
 	import CommentThread from './CommentThread.svelte';
 
@@ -18,7 +19,9 @@
 		rootId = null
 	} = $props();
 
-	const isAuthor = (comment) => Boolean(comment.username && comment.display_name);
+	const isGuest = (comment) => Boolean(comment.guest_identity);
+	const isAuthor = (comment) => Boolean(!isGuest(comment) && comment.username && comment.display_name);
+	const getGuest = (comment) => GUEST_IDENTITIES.find(i => i.code === comment.guest_identity);
 	const isPostAuthor = (comment) =>
 		Boolean(postAuthorUsername && comment.username === postAuthorUsername);
 
@@ -50,6 +53,7 @@
 	{#each comments as comment (comment.id)}
 		{@const thread = getThread(comment)}
 		{@const anonymous = isAuthor(comment)}
+		{@const guest = getGuest(comment)}
 		{@const thisRootId = rootForComment(comment)}
 
 		<li
@@ -68,6 +72,8 @@
 								alt="comment-avatar"
 							/>
 						</a>
+					{:else if guest}
+						<img class="full object-cover" src={guest.avatar} alt="comment-avatar" />
 					{:else}
 						<img
 							class="full object-cover"
@@ -88,6 +94,8 @@
 										{#if isPostAuthor(comment)}
 											<span class="ml-1 italic select-none text-dark/60">(author)</span>
 										{/if}
+									{:else if guest}
+										<span class="font-semibold">{guest.name}</span>
 									{:else}
 										<span class="font-normal select-none italic">Anonymous</span>
 									{/if}

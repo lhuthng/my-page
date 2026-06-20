@@ -1198,8 +1198,8 @@ impl PostService for PostServiceImpl {
 
         let id = sqlx::query_scalar(
             r#"
-            INSERT INTO comments (post_id, user_id, parent_id, content)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO comments (post_id, user_id, parent_id, content, guest_identity)
+            VALUES (?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
@@ -1207,6 +1207,7 @@ impl PostService for PostServiceImpl {
         .bind(cmd.user_id)
         .bind(cmd.parent_id)
         .bind(&cmd.content)
+        .bind(&cmd.guest_identity)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -1306,14 +1307,15 @@ impl PostService for PostServiceImpl {
 
         let id = sqlx::query_scalar(
             r#"
-            INSERT INTO comments (post_id, parent_id, content)
-            VALUES (?, ?, ?)
+            INSERT INTO comments (post_id, parent_id, content, guest_identity)
+            VALUES (?, ?, ?, ?)
             RETURNING id
             "#,
         )
         .bind(cmd.post_id)
         .bind(cmd.parent_id)
         .bind(&cmd.content)
+        .bind(&cmd.guest_identity)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -1377,6 +1379,7 @@ impl PostService for PostServiceImpl {
                     user_meta.display_name,
                     media.url,
                     users.role,
+                    comments.guest_identity,
                     (
                         SELECT COUNT(*)
                         FROM comments AS replies
@@ -1404,6 +1407,7 @@ impl PostService for PostServiceImpl {
                     Option<i64>,
                     String,
                     String,
+                    Option<String>,
                     Option<String>,
                     Option<String>,
                     Option<String>,
@@ -1438,6 +1442,7 @@ impl PostService for PostServiceImpl {
                         display_name,
                         avatar_url,
                         user_role,
+                        guest_identity,
                         direct_reply_count,
                     )| {
                         Comment {
@@ -1450,6 +1455,7 @@ impl PostService for PostServiceImpl {
                             display_name,
                             avatar_url,
                             user_role,
+                            guest_identity,
                         }
                     },
                 )
@@ -1469,6 +1475,7 @@ impl PostService for PostServiceImpl {
                 user_meta.display_name,
                 media.url,
                 users.role,
+                comments.guest_identity,
                 (
                     SELECT COUNT(*)
                     FROM comments AS replies
@@ -1496,6 +1503,7 @@ impl PostService for PostServiceImpl {
                 Option<i64>,
                 String,
                 String,
+                Option<String>,
                 Option<String>,
                 Option<String>,
                 Option<String>,
@@ -1529,6 +1537,7 @@ impl PostService for PostServiceImpl {
                     display_name,
                     avatar_url,
                     user_role,
+                    guest_identity,
                     direct_reply_count,
                 )| {
                     Comment {
@@ -1541,6 +1550,7 @@ impl PostService for PostServiceImpl {
                         display_name,
                         avatar_url,
                         user_role,
+                        guest_identity,
                     }
                 },
             )

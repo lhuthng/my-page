@@ -30,18 +30,23 @@ body {
 	--color-accent-red: rgb(184, 104, 114); /* #b86872 */
 	--color-accent-red-light-1: rgb(204, 144, 152); /* #cc9098 */
 	--color-accent-red-light-2: rgb(224, 184, 190); /* #e0b8be */
+	--color-accent-red-light-3: rgb(240, 220, 225); /* #f0dce1 */
 	--color-accent-green: rgb(104, 184, 126); /* #68b87e */
 	--color-accent-green-light-1: rgb(144, 204, 162); /* #90cca2 */
 	--color-accent-green-light-2: rgb(184, 224, 194); /* #b8e0c2 */
+	--color-accent-green-light-3: rgb(220, 240, 224); /* #dcf0e0 */
 	--color-accent-blue: rgb(120, 150, 200); /* #7896c8 */
 	--color-accent-blue-light-1: rgb(150, 170, 215); /* #96aad7 */
 	--color-accent-blue-light-2: rgb(180, 195, 225); /* #b4c3e1 */
+	--color-accent-blue-light-3: rgb(205, 215, 235); /* #cdd7eb */
 	--color-accent-yellow: rgb(225, 200, 100); /* #e1c864 */
 	--color-accent-yellow-light-1: rgb(235, 215, 130); /* #ebd782 */
 	--color-accent-yellow-light-2: rgb(245, 230, 160); /* #f5e6a0 */
+	--color-accent-yellow-light-3: rgb(255, 245, 190); /* #fff5be */
 	--color-accent-orange: rgb(220, 145, 90); /* #dc915a */
 	--color-accent-orange-light-1: rgb(235, 175, 130); /* #ebaf82 */
 	--color-accent-orange-light-2: rgb(245, 205, 170); /* #f5cdaa */
+	--color-accent-orange-light-3: rgb(255, 230, 210); /* #ffe6d2 */
 
 	--breakpoint-xxs: 500px;
 }
