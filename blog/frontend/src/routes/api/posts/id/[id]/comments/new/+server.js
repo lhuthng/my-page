@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { createRateLimiter } from '$lib/server/rate-limiter.js';
 import { isValidGuestIdentity } from '$lib/features/comments/guest-identities.js';
+import { setGuestMapping } from '$lib/server/guest-mapping.js';
 
 const rateLimiter = createRateLimiter({ maxRequests: 3, windowMs: 10 * 60 * 1000 });
 
@@ -9,11 +10,6 @@ export async function PUT({ request, params, getClientAddress }) {
   const bodyText = await request.text();
   const body = JSON.parse(bodyText);
   const headers = new Headers(request.headers);
-  const isAuthenticated = headers.has('Authorization');
-
-  if (isAuthenticated && body.guest_identity) {
-    headers.delete('Authorization');
-  }
 
   if (!headers.has('Authorization')) {
     if (!body.guest_identity || !isValidGuestIdentity(body.guest_identity)) {
@@ -48,5 +44,8 @@ export async function PUT({ request, params, getClientAddress }) {
   }
 
   const data = await res.json();
+  if (body.guest_identity && data.comment_id) {
+    setGuestMapping(data.comment_id, body.guest_identity);
+  }
   return json(data);
 }

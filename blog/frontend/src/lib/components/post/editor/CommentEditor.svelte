@@ -166,7 +166,7 @@
 
 		{#if replyTo}
 			<div
-				class="flex items-center justify-between gap-4 rounded-xl border-2 border-dark/20 bg-primary-20 px-3 py-2"
+				class="flex items-center mt-4 mb-1 justify-between gap-4 rounded-xl border-2 border-dark/20 bg-primary-20 px-3 py-2"
 			>
 				<span class="text-sm text-dark/80">
 					Replying to {replyTo.display_name ?? replyTo.username ?? 'comment'}
