@@ -1,5 +1,5 @@
 <script>
-	let { class: className, expanded, duration = '300ms', children } = $props();
+	let { class: className = '', expanded, duration = '300ms', children } = $props();
 </script>
 
 <div
