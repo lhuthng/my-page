@@ -1073,6 +1073,7 @@ pub async fn get_latest_posts(
 pub struct NewCommentBody {
     pub content: String,
     pub parent_id: Option<i64>,
+    pub guest_identity: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1101,16 +1102,21 @@ pub async fn new_comment(
                     user_id,
                     parent_id: body.parent_id,
                     content: body.content,
+                    guest_identity: body.guest_identity,
                 })
                 .await?
         }
         None => {
+            let guest_identity = body
+                .guest_identity
+                .ok_or(PostError::UploadFailed("guest_identity is required for anonymous comments".into()))?;
             state
                 .post_service
                 .post_new_anonymous_comment(PostNewAnynymouseCommentCommand {
                     post_id,
                     parent_id: body.parent_id,
                     content: body.content,
+                    guest_identity,
                 })
                 .await?
         }

@@ -81,11 +81,13 @@ pub struct PostNewCommentCommand {
     pub user_id: i64,
     pub parent_id: Option<i64>,
     pub content: String,
+    pub guest_identity: Option<String>,
 }
 pub struct PostNewAnynymouseCommentCommand {
     pub post_id: i64,
     pub parent_id: Option<i64>,
     pub content: String,
+    pub guest_identity: String,
 }
 
 pub struct GetCommentsCommand {

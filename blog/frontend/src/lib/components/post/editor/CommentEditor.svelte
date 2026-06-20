@@ -6,10 +6,13 @@
 	import CommentKaomojiDrawer from '../drawers/CommentKaomojiDrawer.svelte';
 	import CommentMarkdownHelp from './CommentMarkdownHelp.svelte';
 	import Comment from '../Comment.svelte';
+	import CommentIdentityPicker from './CommentIdentityPicker.svelte';
 
 	let {
 		textarea = $bindable(),
 		composerSurface = $bindable(),
+		guestIdentity = $bindable(),
+		user = null,
 		value = $bindable(''),
 		userAvatarUrl = '/anonymous.gif',
 		previewHtml = '',
@@ -60,27 +63,27 @@
 
 <div class="flex gap-8">
 	<div
-		class="not-md:hidden min-w-12 max-w-12 lg:min-w-20 lg:max-w-20 h-12 lg:h-20 outline-primary outline-3 rounded-full overflow-hidden"
+		class="translate-y-8 not-md:hidden min-w-12 max-w-12 lg:min-w-20 lg:max-w-20 h-12 lg:h-20 border-primary border-3 rounded-full overflow-hidden"
 	>
 		<img class="full object-cover" src={userAvatarUrl} alt="comment-posting-avatar" />
 	</div>
 
-	<div class="grow min-w-0 flex flex-col gap-4 relative">
+	<div class="grow min-w-0 flex flex-col relative">
 		<svg
-			class="not-md:hidden absolute fill-primary top-6 lg:top-10 -left-4 -translate-y-1/2 w-4 h-4"
+			class="not-md:hidden absolute fill-primary top-14 lg:top-18 -left-4 -translate-y-1/2 w-4 h-4"
 			viewBox="0 0 24 24"
 		>
 			<polygon points="0,12 24,0 24,24" />
 		</svg>
-
+		<CommentIdentityPicker bind:identity={guestIdentity} {user} />
 		<div class="w-full max-w-full">
 			<div
-				class="relative text-base w-full bg-primary-20 border-primary border-2 border-b-0 rounded-t-xl"
+				class="relative text-base w-full bg-primary-20 border-primary border-2 border-b-0 rounded-t-xl overflow-hidden"
 				bind:this={composerSurface}
 			>
 				<textarea
 					name="comment-input"
-					class="comment-input block w-full min-h-48 lg:min-h-20 max-w-full overflow-hidden outline-none resize-none p-2 bg-transparent"
+					class="wrap-anywhere [word-break:break-word] whitespace-pre-wrap block w-full min-h-48 lg:min-h-20 max-w-full overflow-hidden outline-none resize-none p-2 bg-transparent"
 					wrap="soft"
 					bind:this={textarea}
 					bind:value
@@ -174,7 +177,7 @@
 			</div>
 		{/if}
 
-		<div class="ml-auto mb-4 w-fit duo-btn" data-duo-color="blue">
+		<div class="ml-auto mt-2 mb-4 w-fit duo-btn" data-duo-color="blue">
 			<button
 				class="fill-white"
 				type="button"
@@ -195,12 +198,3 @@
 		</div>
 	</div>
 </div>
-
-<style lang="postcss">
-	@reference "../../../../app.css";
-	.comment-input {
-		overflow-wrap: anywhere;
-		word-break: break-word;
-		white-space: pre-wrap;
-	}
-</style>

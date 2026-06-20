@@ -5,6 +5,7 @@
 	import { flip } from 'svelte/animate';
 	import ExploreMore from '$lib/components/home/ExploreMore.svelte';
 	import FetchMore from '$lib/components/home/FetchMore.svelte';
+	import GridExpander from '$lib/components/shell/GridExpander.svelte';
 
 	let { data } = $props();
 
@@ -81,56 +82,52 @@
 <div class="bg-white rounded-xl mb-2 lg:mb-4">
 	<h1 class="text-2xl px-4 pt-4 font-semibold">Posts</h1>
 
-	<div
-		class="grid px-4 p-4 overflow-hidden"
-		class:transition-[grid-template-rows]={hydrated}
-		class:ease-out={hydrated}
-		style:grid-template-rows={hydrated ? (expanded ? '1fr' : '0fr') : '1fr'}
-		style:transition-duration={hydrated ? `1s` : '0ms'}
+	<GridExpander
+		class="p-4"
+		expanded={(hydrated && expanded) || !hydrated}
+		duration={hydrated ? '1s' : '0ms'}
 	>
-		<div class="min-h-0">
-			{#if data.status !== 'success'}
-				<p class="text-dark/60">Could not load posts right now.</p>
-			{:else if length === 0}
-				<p class="text-dark/60">No posts published yet.</p>
-			{:else}
-				<ul
-					class="grid grid-cols-1 [&>li]:opacity-0 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
-				>
-					{#each posts as post (post.slug)}
-						<li
-							animate:flip={{ duration: 250 }}
-							class:animate-fly-in={hydrated}
-							style:--delay={`${post._introDelay}ms`}
-						>
-							<PostCard
-								title={post.title}
-								slug={post.slug}
-								excerpt={post.excerpt}
-								author={{
-									name: post.author_name,
-									slug: post.author_slug
-								}}
-								tags={post.tag_slugs}
-								src={post.url}
-								stats={post.stats}
-								coverMediaType={post.cover_media_type}
-							/>
-						</li>
-					{/each}
-
-					{#if expanded}
-						<FetchMore
-							{isLoadingMore}
-							{hasMore}
-							label="post"
-							intro={hydrated}
-							delay={length * itemDelay}
-							onclick={fetchMore}
+		{#if data.status !== 'success'}
+			<p class="text-dark/60">Could not load posts right now.</p>
+		{:else if length === 0}
+			<p class="text-dark/60">No posts published yet.</p>
+		{:else}
+			<ul
+				class="grid grid-cols-1 [&>li]:opacity-0 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4"
+			>
+				{#each posts as post (post.slug)}
+					<li
+						animate:flip={{ duration: 250 }}
+						class:animate-fly-in={hydrated}
+						style:--delay={`${post._introDelay}ms`}
+					>
+						<PostCard
+							title={post.title}
+							slug={post.slug}
+							excerpt={post.excerpt}
+							author={{
+								name: post.author_name,
+								slug: post.author_slug
+							}}
+							tags={post.tag_slugs}
+							src={post.url}
+							stats={post.stats}
+							coverMediaType={post.cover_media_type}
 						/>
-					{/if}
-				</ul>
-			{/if}
-		</div>
-	</div>
+					</li>
+				{/each}
+
+				{#if expanded}
+					<FetchMore
+						{isLoadingMore}
+						{hasMore}
+						label="post"
+						intro={hydrated}
+						delay={length * itemDelay}
+						onclick={fetchMore}
+					/>
+				{/if}
+			</ul>
+		{/if}
+	</GridExpander>
 </div>

@@ -109,6 +109,7 @@ pub struct Comment {
     pub username: Option<String>,
     pub avatar_url: Option<String>,
     pub user_role: Option<String>,
+    pub guest_identity: Option<String>,
 }
 
 #[derive(Debug, Clone)]

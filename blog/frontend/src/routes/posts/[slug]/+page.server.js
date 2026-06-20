@@ -16,7 +16,8 @@ import MarkdownIt from 'markdown-it';
 import mkKatex from 'markdown-it-katex';
 import anchor from 'markdown-it-anchor';
 
-export async function load({ fetch, params, setHeaders }) {
+export async function load({ locals, fetch, params, setHeaders }) {
+	
 	const res = await fetch(route(`posts/s/${params.slug}`), {
 		method: 'GET'
 	});
@@ -83,7 +84,7 @@ export async function load({ fetch, params, setHeaders }) {
 			}
 		} catch (_) {}
 
-		return { content, author_avatar_url, cover_url, relatedPosts, ...rest };
+		return { content, author_avatar_url, cover_url, relatedPosts,  ...rest };
 	} else {
 		console.log(await res.text());
 	}

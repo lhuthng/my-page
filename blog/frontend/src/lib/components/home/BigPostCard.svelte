@@ -1,5 +1,6 @@
 <script>
 	import CommentButton from '../shell/buttons/CommentButton.svelte';
+	import GridExpander from '../shell/GridExpander.svelte';
 
 	let {
 		src,
@@ -149,21 +150,15 @@
 				</ul>
 			</div>
 			{#if excerpt}
-				<div
-					class="grid transition-[grid-template-rows] duration-300 ease-out"
-					class:grid-rows-[1fr]={expanded}
-					class:grid-rows-[0fr]={!expanded}
-				>
-					<div class="overflow-hidden min-h-0">
-						<div
-							class="transition-opacity duration-200"
-							class:opacity-100={expanded}
-							class:opacity-0={!expanded}
-						>
-							<p>{excerpt}</p>
-						</div>
+				<GridExpander {expanded} duration="300ms">
+					<div
+						class="transition-opacity duration-200"
+						class:opacity-100={expanded}
+						class:opacity-0={!expanded}
+					>
+						<p>{excerpt}</p>
 					</div>
-				</div>
+				</GridExpander>
 				<svg
 					class="expand-btn h-6 w-12 transition-transform duration-200 block mx-auto fill-primary/20 has-hover:fill-dark/60 z-9"
 					class:-rotate-180={expanded}

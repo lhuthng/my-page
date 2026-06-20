@@ -90,7 +90,7 @@ const resetObject = (target, next) => {
 	Object.assign(target, next);
 };
 
-export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
+export const createCommentSectionRuntime = (state, getUserAvatarUrl, getGuestIdentity, onCommentPosted) => {
 	const mentionDictionary = {};
 	const mentionProfileCache = new Map();
 	const mentionProfileInFlight = new Map();
@@ -1572,20 +1572,24 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
 
 		try {
 			const postId = getPostId();
+			const guestIdentity = getGuestIdentity();
+			const body = { content, parent_id: state.replyTo?.id ?? null };
+			if (guestIdentity) {
+				body.guest_identity = guestIdentity;
+			}
 			const res = await fetch(`/api/posts/id/${postId}/comments/new`, {
 				method: 'PUT',
 				headers,
-				body: JSON.stringify({
-					content,
-					parent_id: state.replyTo?.id ?? null
-				})
+				body: JSON.stringify(body)
 			});
 
 			if (!res.ok) return;
 
+			if (onCommentPosted) onCommentPosted();
 			const data = await res.json();
+			const isAlias = currentUser !== undefined && guestIdentity;
 			const userData =
-				currentUser !== undefined
+				currentUser !== undefined && !isAlias
 					? {
 							display_name: currentUser.displayName,
 							username: currentUser.username,
@@ -1599,6 +1603,7 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl) => {
 				parent_id: state.replyTo?.id ?? null,
 				direct_reply_count: 0,
 				created_at: undefined,
+				guest_identity: guestIdentity ?? undefined,
 				...userData
 			};
 
