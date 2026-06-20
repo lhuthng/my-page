@@ -27,6 +27,7 @@ export async function GET({ request, params, fetch, url }) {
 			comment.user_role = null;
 			comment.username = null;
 			comment.display_name = null;
+			comment.avatar_url = null;
 		}
 	});
 
