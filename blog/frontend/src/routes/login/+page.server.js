@@ -1,6 +1,7 @@
 function sanitizeRedirectTarget(rawRedirectTo) {
 	if (!rawRedirectTo || !rawRedirectTo.startsWith('/')) return '/';
 	if (rawRedirectTo.startsWith('//')) return '/';
+	if (rawRedirectTo === '/login' || rawRedirectTo.startsWith('/login?')) return '/';
 
 	return rawRedirectTo;
 }

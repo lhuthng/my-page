@@ -78,6 +78,11 @@
 	<GridExpander class="pb-2" expanded={mounted} duration="300ms">
 		{#if browser}
 			<div class="flex flex-col gap-4" bind:this={state.start}>
+				{#if comments.commentError}
+					<div class="text-accent-red text-sm mb-2 px-2" transition:fade>
+						{comments.commentError}
+					</div>
+				{/if}
 				<CommentEditor
 					bind:textarea={state.textarea}
 					bind:composerSurface={state.composerSurface}

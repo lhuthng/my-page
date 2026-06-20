@@ -27,7 +27,8 @@ const createEmptyComments = () => ({
 	sending: false,
 	endReached: false,
 	lastId: 0,
-	roots: []
+	roots: [],
+	commentError: ''
 });
 
 const createEmptyMentionState = () => ({
@@ -1556,6 +1557,7 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl, getGuestIde
 	const submitComment = async () => {
 		if (comments.sending || comments.current.length < 1) return;
 
+		comments.commentError = '';
 		const content = comments.current;
 		const currentUser = authState.user;
 		const headers =
@@ -1583,7 +1585,15 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl, getGuestIde
 				body: JSON.stringify(body)
 			});
 
-			if (!res.ok) return;
+			if (!res.ok) {
+				try {
+					const err = await res.json();
+					comments.commentError = err.error || 'Failed to post comment.';
+				} catch {
+					comments.commentError = 'Failed to post comment.';
+				}
+				return;
+			}
 
 			if (onCommentPosted) onCommentPosted();
 			const data = await res.json();

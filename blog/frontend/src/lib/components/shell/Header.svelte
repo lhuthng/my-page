@@ -27,10 +27,12 @@
 	let role = $derived(authState.user?.role);
 	let avatarUrl = $derived(authState.user?.avatarUrl ?? '/missing.png');
 	let loginHref = $derived.by(() => {
+		if ($page.url.pathname === '/login') return '/login';
 		const redirectTo = encodeURIComponent(`${$page.url.pathname}${$page.url.search}`);
 		return `/login?redirectTo=${redirectTo}`;
 	});
 	let registerHref = $derived.by(() => {
+		if ($page.url.pathname === '/login') return '/login?register=true';
 		const redirectTo = encodeURIComponent(`${$page.url.pathname}${$page.url.search}`);
 		return `/login?register=true&redirectTo=${redirectTo}`;
 	});
@@ -78,7 +80,9 @@
 	});
 
 	const handleLogout = async () => {
-		await goto('/');
+		if ($page.url.pathname.startsWith('/dashboard')) {
+			await goto('/');
+		}
 		await logout();
 	};
 
