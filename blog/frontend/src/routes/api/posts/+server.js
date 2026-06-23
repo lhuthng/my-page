@@ -18,6 +18,5 @@ export async function GET({ request, params, fetch, url }) {
 		post.cover_url = fixClientRoute(post.cover_url);
 	});
 
-	console.log(posts);
 	return new Response(JSON.stringify({ posts }), { status: 200 });
 }

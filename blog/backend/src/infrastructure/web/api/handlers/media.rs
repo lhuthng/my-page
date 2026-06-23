@@ -478,7 +478,13 @@ pub async fn get_video_thumbnail(
             .join(format!("{}{}", hash, extension))
     };
 
-    if !input_path.exists() {
+    let canonical = input_path.canonicalize()
+        .map_err(|_| MediaError::FileNotFound)?;
+    if !canonical.starts_with(&state.media_config.dir) {
+        return Err(MediaError::FileNotFound);
+    }
+
+    if !canonical.exists() {
         return Err(MediaError::FileNotFound);
     }
 
@@ -503,7 +509,7 @@ pub async fn get_video_thumbnail(
 
     let output = tokio::process::Command::new("ffmpeg")
         .args(["-ss", &seconds.to_string()])
-        .args(["-i", &input_path.to_string_lossy()])
+        .args(["-i", &canonical.to_string_lossy()])
         .args(["-vframes", "1"])
         .args(["-f", "image2pipe", "-"])
         .output()

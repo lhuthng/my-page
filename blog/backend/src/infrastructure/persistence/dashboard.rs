@@ -372,26 +372,27 @@ impl DashboardService for DashboardServiceImpl {
     ) -> Result<DashboardPostsResult, UserError> {
         let is_admin = cmd.role == "admin";
 
-        // Build WHERE conditions
         let mut where_parts: Vec<String> = vec!["p.content_kind = 'post'".to_string()];
 
         if !is_admin {
             where_parts.push(format!("p.user_id = {}", cmd.user_id));
         }
 
-        if let Some(ref s) = cmd.search {
-            let escaped = s.replace('\'', "''");
-            where_parts.push(format!(
-                "(LOWER(p.title) LIKE '%' || LOWER('{}') || '%' OR LOWER(p.slug) LIKE '%' || LOWER('{}') || '%')",
-                escaped, escaped
-            ));
+        if cmd.search.is_some() {
+            where_parts.push(
+                "(LOWER(p.title) LIKE '%' || LOWER(?) || '%' OR LOWER(p.slug) LIKE '%' || LOWER(?) || '%')".to_string()
+            );
         }
 
         let where_clause = where_parts.join(" AND ");
 
         // Total count
         let count_sql = format!("SELECT COUNT(*) FROM posts p WHERE {}", where_clause);
-        let total: i64 = sqlx::query_scalar(&count_sql)
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+        if let Some(ref s) = cmd.search {
+            count_query = count_query.bind(s).bind(s);
+        }
+        let total: i64 = count_query
             .fetch_one(&self.pool)
             .await
             .map_err(|e| UserError::InternalError(e.to_string()))?;
@@ -414,8 +415,11 @@ impl DashboardService for DashboardServiceImpl {
             "#,
             where_clause, cmd.limit, cmd.offset
         );
-
-        let post_rows = sqlx::query_as::<_, PostRow>(&data_sql)
+        let mut data_query = sqlx::query_as::<_, PostRow>(&data_sql);
+        if let Some(ref s) = cmd.search {
+            data_query = data_query.bind(s).bind(s);
+        }
+        let post_rows = data_query
             .fetch_all(&self.pool)
             .await
             .map_err(|e| UserError::InternalError(e.to_string()))?;
@@ -431,24 +435,18 @@ impl DashboardService for DashboardServiceImpl {
     ) -> Result<DashboardUsersResult, UserError> {
         let is_admin = cmd.role == "admin";
 
-        // Build WHERE conditions
         let mut where_parts: Vec<String> = vec!["1=1".to_string()];
 
-        // Role restriction: moderators can only see users with role='user'
         if !is_admin {
             where_parts.push("u.role = 'user'".to_string());
-        } else if let Some(ref rf) = cmd.role_filter {
-            let escaped = rf.replace('\'', "''");
-            where_parts.push(format!("u.role = '{}'", escaped));
+        } else if cmd.role_filter.is_some() {
+            where_parts.push("u.role = ?".to_string());
         }
 
-        // Search filter
-        if let Some(ref s) = cmd.search {
-            let escaped = s.replace('\'', "''");
-            where_parts.push(format!(
-                "(LOWER(um.display_name) LIKE '%' || LOWER('{}') || '%' OR LOWER(u.username) LIKE '%' || LOWER('{}') || '%')",
-                escaped, escaped
-            ));
+        if cmd.search.is_some() {
+            where_parts.push(
+                "(LOWER(um.display_name) LIKE '%' || LOWER(?) || '%' OR LOWER(u.username) LIKE '%' || LOWER(?) || '%')".to_string()
+            );
         }
 
         let where_clause = where_parts.join(" AND ");
@@ -481,7 +479,16 @@ impl DashboardService for DashboardServiceImpl {
             "SELECT COUNT(*) FROM users u JOIN user_meta um ON um.user_id = u.id WHERE {}",
             where_clause
         );
-        let total: i64 = sqlx::query_scalar(&count_sql).fetch_one(&self.pool).await?;
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+        if let Some(ref rf) = cmd.role_filter {
+            if is_admin {
+                count_query = count_query.bind(rf);
+            }
+        }
+        if let Some(ref s) = cmd.search {
+            count_query = count_query.bind(s).bind(s);
+        }
+        let total: i64 = count_query.fetch_one(&self.pool).await?;
 
         // Data query
         let data_sql = format!(
@@ -496,8 +503,16 @@ impl DashboardService for DashboardServiceImpl {
             "#,
             where_clause, cmd.limit, cmd.offset
         );
-
-        let users: Vec<DashboardUserInfo> = sqlx::query_as::<_, UserInfoRow>(&data_sql)
+        let mut data_query = sqlx::query_as::<_, UserInfoRow>(&data_sql);
+        if let Some(ref rf) = cmd.role_filter {
+            if is_admin {
+                data_query = data_query.bind(rf);
+            }
+        }
+        if let Some(ref s) = cmd.search {
+            data_query = data_query.bind(s).bind(s);
+        }
+        let users: Vec<DashboardUserInfo> = data_query
             .fetch_all(&self.pool)
             .await?
             .into_iter()
@@ -528,12 +543,10 @@ impl DashboardService for DashboardServiceImpl {
             where_parts.push("posts.user_id = ".to_string() + &cmd.user_id.to_string());
         }
 
-        if let Some(ref s) = cmd.search {
-            let escaped = s.replace('\'', "''");
-            where_parts.push(format!(
-                "(LOWER(posts.title) LIKE '%' || LOWER('{}') || '%' OR LOWER(posts.slug) LIKE '%' || LOWER('{}') || '%')",
-                escaped, escaped
-            ));
+        if cmd.search.is_some() {
+            where_parts.push(
+                "(LOWER(posts.title) LIKE '%' || LOWER(?) || '%' OR LOWER(posts.slug) LIKE '%' || LOWER(?) || '%')".to_string()
+            );
         }
 
         let where_clause = if where_parts.is_empty() {
@@ -551,7 +564,11 @@ impl DashboardService for DashboardServiceImpl {
             "#,
             where_clause
         );
-        let total: i64 = sqlx::query_scalar(&count_sql)
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+        if let Some(ref s) = cmd.search {
+            count_query = count_query.bind(s).bind(s);
+        }
+        let total: i64 = count_query
             .fetch_one(&self.pool)
             .await
             .map_err(|e| UserError::InternalError(e.to_string()))?;
@@ -585,8 +602,11 @@ impl DashboardService for DashboardServiceImpl {
             "#,
             where_clause, cmd.limit, cmd.offset
         );
-
-        let rows = sqlx::query_as::<_, DashProjectRow>(&data_sql)
+        let mut data_query = sqlx::query_as::<_, DashProjectRow>(&data_sql);
+        if let Some(ref s) = cmd.search {
+            data_query = data_query.bind(s).bind(s);
+        }
+        let rows = data_query
             .fetch_all(&self.pool)
             .await
             .map_err(|e| UserError::InternalError(e.to_string()))?;
