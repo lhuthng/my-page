@@ -244,17 +244,14 @@ impl QueryRoot {
 
         let mut where_parts: Vec<String> = vec!["1=1".to_string()];
 
-        if let Some(ref s) = search {
-            let escaped = s.replace('\'', "''");
-            where_parts.push(format!(
-                "(LOWER(u.username) LIKE '%' || LOWER('{}') || '%' OR LOWER(um.display_name) LIKE '%' || LOWER('{}') || '%')",
-                escaped, escaped
-            ));
+        if search.is_some() {
+            where_parts.push(
+                "(LOWER(u.username) LIKE '%' || LOWER(?) || '%' OR LOWER(um.display_name) LIKE '%' || LOWER(?) || '%')".to_string()
+            );
         }
 
-        if let Some(ref r) = role {
-            let escaped = r.replace('\'', "''");
-            where_parts.push(format!("u.role = '{}'", escaped));
+        if role.is_some() {
+            where_parts.push("u.role = ?".to_string());
         }
 
         let where_clause = where_parts.join(" AND ");
@@ -263,7 +260,14 @@ impl QueryRoot {
             "SELECT COUNT(*) FROM users u JOIN user_meta um ON um.user_id = u.id WHERE {}",
             where_clause
         );
-        let total: i64 = sqlx::query_scalar(&count_sql)
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+        if let Some(ref s) = search {
+            count_query = count_query.bind(s).bind(s);
+        }
+        if let Some(ref r) = role {
+            count_query = count_query.bind(r);
+        }
+        let total: i64 = count_query
             .fetch_one(pool)
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
@@ -281,8 +285,14 @@ impl QueryRoot {
             "#,
             where_clause, limit, offset
         );
-
-        let rows = sqlx::query_as::<_, UserRow>(&data_sql)
+        let mut data_query = sqlx::query_as::<_, UserRow>(&data_sql);
+        if let Some(ref s) = search {
+            data_query = data_query.bind(s).bind(s);
+        }
+        if let Some(ref r) = role {
+            data_query = data_query.bind(r);
+        }
+        let rows = data_query
             .fetch_all(pool)
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
@@ -318,23 +328,27 @@ impl QueryRoot {
 
         let mut where_parts: Vec<String> = vec!["1=1".to_string()];
 
-        if let Some(ref s) = search {
-            let escaped = s.replace('\'', "''");
-            where_parts.push(format!(
-                "(LOWER(p.title) LIKE '%' || LOWER('{}') || '%' OR LOWER(p.slug) LIKE '%' || LOWER('{}') || '%')",
-                escaped, escaped
-            ));
+        if search.is_some() {
+            where_parts.push(
+                "(LOWER(p.title) LIKE '%' || LOWER(?) || '%' OR LOWER(p.slug) LIKE '%' || LOWER(?) || '%')".to_string()
+            );
         }
 
-        if let Some(ref st) = status {
-            let escaped = st.replace('\'', "''");
-            where_parts.push(format!("p.status = '{}'", escaped));
+        if status.is_some() {
+            where_parts.push("p.status = ?".to_string());
         }
 
         let where_clause = where_parts.join(" AND ");
 
         let count_sql = format!("SELECT COUNT(*) FROM posts p WHERE {}", where_clause);
-        let total: i64 = sqlx::query_scalar(&count_sql)
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+        if let Some(ref s) = search {
+            count_query = count_query.bind(s).bind(s);
+        }
+        if let Some(ref st) = status {
+            count_query = count_query.bind(st);
+        }
+        let total: i64 = count_query
             .fetch_one(pool)
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
@@ -355,8 +369,14 @@ impl QueryRoot {
             "#,
             where_clause, limit, offset
         );
-
-        let rows = sqlx::query_as::<_, GqlPostRow>(&data_sql)
+        let mut data_query = sqlx::query_as::<_, GqlPostRow>(&data_sql);
+        if let Some(ref s) = search {
+            data_query = data_query.bind(s).bind(s);
+        }
+        if let Some(ref st) = status {
+            data_query = data_query.bind(st);
+        }
+        let rows = data_query
             .fetch_all(pool)
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
@@ -397,8 +417,8 @@ impl QueryRoot {
 
         let mut where_parts: Vec<String> = vec!["1=1".to_string()];
 
-        if let Some(pid) = post_id {
-            where_parts.push(format!("c.post_id = {}", pid));
+        if post_id.is_some() {
+            where_parts.push("c.post_id = ?".to_string());
         }
 
         if !include_deleted.unwrap_or(false) {
@@ -411,7 +431,11 @@ impl QueryRoot {
             "SELECT COUNT(*) FROM comments c JOIN posts p ON p.id = c.post_id WHERE {}",
             where_clause
         );
-        let total: i64 = sqlx::query_scalar(&count_sql)
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+        if let Some(pid) = post_id {
+            count_query = count_query.bind(pid);
+        }
+        let total: i64 = count_query
             .fetch_one(pool)
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
@@ -431,8 +455,11 @@ impl QueryRoot {
             "#,
             where_clause, limit, offset
         );
-
-        let rows = sqlx::query_as::<_, CommentRow>(&data_sql)
+        let mut data_query = sqlx::query_as::<_, CommentRow>(&data_sql);
+        if let Some(pid) = post_id {
+            data_query = data_query.bind(pid);
+        }
+        let rows = data_query
             .fetch_all(pool)
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
@@ -468,18 +495,20 @@ impl QueryRoot {
 
         let mut where_parts: Vec<String> = vec!["1=1".to_string()];
 
-        if let Some(ref s) = search {
-            let escaped = s.replace('\'', "''");
-            where_parts.push(format!(
-                "(LOWER(m.short_name) LIKE '%' || LOWER('{}') || '%' OR LOWER(m.file_name) LIKE '%' || LOWER('{}') || '%')",
-                escaped, escaped
-            ));
+        if search.is_some() {
+            where_parts.push(
+                "(LOWER(m.short_name) LIKE '%' || LOWER(?) || '%' OR LOWER(m.file_name) LIKE '%' || LOWER(?) || '%')".to_string()
+            );
         }
 
         let where_clause = where_parts.join(" AND ");
 
         let count_sql = format!("SELECT COUNT(*) FROM media m WHERE {}", where_clause);
-        let total: i64 = sqlx::query_scalar(&count_sql)
+        let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
+        if let Some(ref s) = search {
+            count_query = count_query.bind(s).bind(s);
+        }
+        let total: i64 = count_query
             .fetch_one(pool)
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
@@ -498,8 +527,11 @@ impl QueryRoot {
             "#,
             where_clause, limit, offset
         );
-
-        let rows = sqlx::query_as::<_, MediaRow>(&data_sql)
+        let mut data_query = sqlx::query_as::<_, MediaRow>(&data_sql);
+        if let Some(ref s) = search {
+            data_query = data_query.bind(s).bind(s);
+        }
+        let rows = data_query
             .fetch_all(pool)
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
