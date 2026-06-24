@@ -14,7 +14,7 @@ use tower_http::{
 };
 
 use crate::domain::entities::secret::Claims;
-use crate::infrastructure::web::graphql::schema::BlogSchema;
+use crate::infrastructure::web::graphql::BlogSchema;
 use crate::infrastructure::web::{
     api::{handlers, middlewares},
     server::AppState,
@@ -309,7 +309,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             axum::routing::get(graphql_playground).post(graphql_handler),
         )
         .layer(Extension(state.graphql_schema.clone()))
-        .layer(middleware::from_fn(middlewares::auth::admin_check))
+        .layer(middleware::from_fn(middlewares::auth::mod_check))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             middlewares::auth::user_guard,

@@ -1,6 +1,6 @@
 <script>
-	import { untrack } from 'svelte';
-	import { api } from '$lib/api/client';
+	import { onMount, untrack } from 'svelte';
+	import { gql, fixUrl } from '$lib/api/graphql';
 	import { authState } from '$lib/auth/user.svelte.js';
 	import Heart from '$lib/components/svgs/Heart.svelte';
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
@@ -14,7 +14,7 @@
 		total: untrack(() => data).total ?? 0,
 		role_counts: untrack(() => data).role_counts ?? { admin: 0, moderator: 0, user: 0 }
 	});
-	let loading = $state(false);
+	let loading = $state(!untrack(() => data).users?.length);
 	let loadingMore = $state(false);
 	let error = $state(null);
 	let search = $state('');
@@ -22,7 +22,23 @@
 	let debounceTimer;
 	const LIMIT = 20;
 
+	onMount(() => {
+		if (!data.users?.length) fetchUsers(true);
+	});
+
 	let isAdmin = $derived(authState.user?.role === 'admin');
+
+	function mapUser(item) {
+		return {
+			id: item.id,
+			username: item.username,
+			email: item.email,
+			role: item.role,
+			display_name: item.displayName,
+			avatar_url: fixUrl(item.avatarUrl),
+			created_at: item.createdAt
+		};
+	}
 
 	async function fetchUsers(reset = false) {
 		if (reset) {
@@ -38,19 +54,24 @@
 		}
 		error = null;
 
-		const params = new URLSearchParams({
-			limit: String(LIMIT),
-			offset: String(reset ? 0 : userData.users.length)
-		});
-		if (search.trim()) params.set('search', search.trim());
-		if (roleFilter) params.set('role', roleFilter);
+		const variables = {
+			limit: LIMIT,
+			offset: reset ? 0 : userData.users.length
+		};
+		if (search.trim()) variables.search = search.trim();
+		if (roleFilter) variables.role = roleFilter;
 
 		try {
-			const result = await api.get(`dashboard/users?${params}`);
+			const [usersResult, roleResult] = await Promise.all([
+				gql.users(variables),
+				reset ? gql.roleCounts() : null
+			]);
+
+			const items = usersResult.users.items.map(mapUser);
 			userData = {
-				users: reset ? result.users : [...userData.users, ...result.users],
-				total: result.total,
-				role_counts: result.role_counts
+				users: reset ? items : [...userData.users, ...items],
+				total: usersResult.users.total,
+				role_counts: roleResult?.overview?.roleCounts ?? userData.role_counts
 			};
 		} catch (e) {
 			error = e.message;

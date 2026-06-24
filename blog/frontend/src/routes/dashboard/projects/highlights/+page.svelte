@@ -1,11 +1,28 @@
 <script>
-	import { untrack } from 'svelte';
-	import { api } from '$lib/api/client';
+	import { gql, fixUrl } from '$lib/api/graphql';
+	import { api } from '$lib/api/client.js';
+	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
 
 	let featuredProjects = $state(untrack(() => data).featuredProjects ?? []);
+	let loading = $state(!untrack(() => data).featuredProjects?.length);
+
+	onMount(async () => {
+		if (!data.featuredProjects?.length) {
+			try {
+				const result = await gql.request(`query { featuredProjects(limit:100) { id title slug excerpt coverUrl coverMediaType authorName authorSlug demoType views likes commentsCount } }`);
+				featuredProjects = (result.featuredProjects ?? []).map((p) => ({
+					id: p.id, title: p.title, slug: p.slug, excerpt: p.excerpt,
+					author_name: p.authorName, author_slug: p.authorSlug,
+					url: fixUrl(p.coverUrl), cover_media_type: p.coverMediaType,
+					stats: { views: p.views, likes: p.likes, comments: p.commentsCount }
+				}));
+			} catch { /* ignore */ }
+			loading = false;
+		}
+	});
 
 	let search = $state('');
 	let searchResults = $state([]);
@@ -24,9 +41,15 @@
 		searchError = null;
 
 		try {
-			const data = await api.get('projects/all?limit=100');
-			const q = search.trim().toLowerCase();
-			searchResults = (data.projects ?? []).filter((p) => p.title.toLowerCase().includes(q));
+			const result = await gql.dashboardProjects({ limit: 100, search: search.trim() });
+			searchResults = (result.dashboardProjects?.items ?? []).map((p) => ({
+				...p,
+				author_name: p.authorName,
+				author_slug: p.authorSlug,
+				url: p.coverUrl,
+				cover_media_type: p.coverMediaType,
+				stats: { views: p.views, likes: p.likes, comments: p.commentsCount }
+			}));
 		} catch (e) {
 			searchError = e.message;
 		} finally {
@@ -56,6 +79,7 @@
 					author_name: project.author_name,
 					author_slug: project.author_slug,
 					url: project.url,
+					cover_media_type: project.cover_media_type,
 					stats: project.stats || { views: 0, likes: 0, comments: 0 }
 				};
 				featuredProjects = [...featuredProjects, newFeatured];
@@ -69,12 +93,12 @@
 </script>
 
 <svelte:head>
-	<title>Project Highlights - Dashboard | Huu Thang's Blog</title>
+	<title>Highlight Projects - Dashboard | Huu Thang's Blog</title>
 </svelte:head>
 
 <div class="flex flex-col gap-4 pb-8">
 	<div class="bg-white rounded-xl p-6 shadow-sm">
-		<h1 class="text-3xl font-bold text-dark">Project Highlights</h1>
+		<h1 class="text-3xl font-bold text-dark">Highlight Projects</h1>
 		<p class="text-base text-dark/60 mt-1">
 			Select which projects are featured on the homepage. The featured section displays the 5 most
 			recent featured projects.
@@ -107,7 +131,11 @@
 							out:fade={{ duration: 150 }}
 						>
 							{#if project.url}
-								<img src={project.url} alt="" class="w-16 h-16 rounded-lg object-cover shrink-0" />
+								{#if project.cover_media_type?.startsWith('video/')}
+									<video src={project.url} poster={project.url} class="w-16 h-16 rounded-lg object-cover shrink-0" muted loop playsinline autoplay preload="auto"></video>
+								{:else}
+									<img src={project.url} alt="" class="w-16 h-16 rounded-lg object-cover shrink-0" />
+								{/if}
 							{:else}
 								<div
 									class="w-16 h-16 rounded-lg bg-background/40 shrink-0 flex items-center justify-center text-dark/30 text-xs font-semibold"
@@ -149,7 +177,7 @@
 		</div>
 
 		<div class="lg:col-span-5 bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4">
-			<h2 class="text-2xl font-semibold text-dark">Add to Highlights</h2>
+			<h2 class="text-2xl font-semibold text-dark">Add to Highlight Projects</h2>
 
 			<div
 				class="relative flex items-center gap-2 bg-background/30 rounded-xl px-3 py-2.5 border border-background/60"
@@ -202,11 +230,11 @@
 								class="flex items-center gap-3 p-3 border border-background/40 rounded-xl hover:bg-background/5 transition-colors"
 							>
 								{#if project.url}
-									<img
-										src={project.url}
-										alt=""
-										class="w-12 h-12 rounded-lg object-cover shrink-0"
-									/>
+									{#if project.cover_media_type?.startsWith('video/')}
+										<video src={project.url} poster={project.url} class="w-12 h-12 rounded-lg object-cover shrink-0" muted loop playsinline autoplay preload="auto"></video>
+									{:else}
+										<img src={project.url} alt="" class="w-12 h-12 rounded-lg object-cover shrink-0" />
+									{/if}
 								{:else}
 									<div
 										class="w-12 h-12 rounded-lg bg-background/40 shrink-0 flex items-center justify-center text-dark/30 text-xs font-semibold"

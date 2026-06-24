@@ -1,31 +1,37 @@
 <script>
-	import { api } from '$lib/api/client';
-	import { onMount, untrack } from 'svelte';
+	import { onMount } from 'svelte';
+	import { gql } from '$lib/api/graphql';
 
 	let { data } = $props();
 
-	let overview = $state(untrack(() =>  data.overview));
+	let overview = $state(data.overview);
+	let loading = $state(data.overview === null);
 	let activeTopTab = $state('views');
-
-	onMount(async () => {
-		try {
-			overview = await api.get('dashboard/overview');
-		} catch {
-			overview = null;
-		}
-	});
 
 	let topPosts = $derived(
 		activeTopTab === 'views'
-			? overview?.top_posts_by_views
+			? overview?.topPostsByViews
 			: activeTopTab === 'likes'
-				? overview?.top_posts_by_likes
-				: overview?.top_posts_by_comments
+				? overview?.topPostsByLikes
+				: overview?.topPostsByComments
 	);
 
 	function roleLabel(role) {
 		return role === 'admin' ? 'Admin' : role === 'moderator' ? 'Mod' : 'User';
 	}
+
+	onMount(async () => {
+		if (loading) {
+			try {
+				const result = await gql.overview();
+				overview = result.overview;
+			} catch {
+				overview = null;
+			} finally {
+				loading = false;
+			}
+		}
+	});
 </script>
 
 <svelte:head>
@@ -33,10 +39,12 @@
 </svelte:head>
 
 <section class="flex flex-col gap-4 pb-8">
-	{#if overview}
+	{#if loading}
+		<div class="flex justify-center items-center py-16 text-dark/40 text-lg">Loading dashboard data…</div>
+	{:else if overview}
 		<!-- ── Stat cards ─────────────────────────────── -->
 		<div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
-			{#each [['Published Posts', overview.total_published, 'text-accent-green'], ['Drafts', overview.total_drafts, 'text-accent-yellow'], ['Registered Users', overview.total_users, 'text-accent-blue'], ['Comments', overview.total_comments, 'text-primary']] as [label, value, color]}
+			{#each [['Published Posts', overview.totalPublished, 'text-accent-green'], ['Drafts', overview.totalDrafts, 'text-accent-yellow'], ['Registered Users', overview.totalUsers, 'text-accent-blue'], ['Comments', overview.totalComments, 'text-primary']] as [label, value, color]}
 				<div class="bg-white rounded-xl p-4">
 					<p class="text-3xl font-bold {color}">{value}</p>
 					<p class="text-base text-dark/60 mt-1">{label}</p>
@@ -79,14 +87,14 @@
 									>
 										{post.title}
 									</a>
-									<span class="text-sm text-dark/50">by {post.author_name}</span>
+									<span class="text-sm text-dark/50">by {post.authorName}</span>
 								</div>
 								<span class="text-base font-semibold text-primary shrink-0">
 									{activeTopTab === 'views'
-										? post.stats.views
+										? post.views
 										: activeTopTab === 'likes'
-											? post.stats.likes
-											: post.stats.comments}
+											? post.likes
+											: post.commentsCount}
 								</span>
 							</li>
 						{/each}
@@ -99,13 +107,13 @@
 			<!-- Role breakdown (1/3) -->
 			<div class="bg-white rounded-xl p-4 flex flex-col gap-4">
 				<h2 class="text-2xl font-semibold">User Roles</h2>
-				{#if overview.role_counts}
+				{#if overview.roleCounts}
 					{@const total = Math.max(
-						overview.role_counts.admin + overview.role_counts.moderator + overview.role_counts.user,
+						overview.roleCounts.admin + overview.roleCounts.moderator + overview.roleCounts.user,
 						1
 					)}
 					<div class="flex flex-col gap-3 grow">
-						{#each [['Admins', overview.role_counts.admin, 'bg-accent-red'], ['Moderators', overview.role_counts.moderator, 'bg-accent-blue'], ['Users', overview.role_counts.user, 'bg-accent-green']] as [label, count, color]}
+						{#each [['Admins', overview.roleCounts.admin, 'bg-accent-red'], ['Moderators', overview.roleCounts.moderator, 'bg-accent-blue'], ['Users', overview.roleCounts.user, 'bg-accent-green']] as [label, count, color]}
 							<div class="flex flex-col gap-1">
 								<div class="flex justify-between text-base">
 									<span class="font-medium">{label}</span>
@@ -121,7 +129,7 @@
 						{/each}
 					</div>
 					<p class="text-sm text-dark/40 border-t border-background pt-3 text-center">
-						{overview.total_users} users total
+						{overview.totalUsers} users total
 					</p>
 				{/if}
 			</div>
@@ -129,7 +137,7 @@
 
 		<!-- ── Growth chart ────────────────────────────── -->
 		{#if overview.growth?.length}
-			{@const maxVal = Math.max(...overview.growth.flatMap((g) => [g.new_posts, g.new_users]), 1)}
+			{@const maxVal = Math.max(...overview.growth.flatMap((g) => [g.newPosts, g.newUsers]), 1)}
 			<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
 				<h2 class="text-2xl font-semibold">Activity - Last 30 Days</h2>
 				<div class="flex gap-4 text-sm text-dark/60">
@@ -149,19 +157,19 @@
 							<div
 								class="absolute bottom-full mb-1 hidden group-hover:block bg-dark text-white text-sm rounded px-2 py-1 whitespace-nowrap z-10 pointer-events-none left-1/2 -translate-x-1/2"
 							>
-								{g.date}: {g.new_posts} posts · {g.new_users} users
+								{g.date}: {g.newPosts} posts · {g.newUsers} users
 							</div>
 							<div class="w-full flex gap-px items-end h-full">
 								<div
 									class="flex-1 bg-accent-blue rounded-t-sm"
-									style="height:{g.new_posts
-										? Math.max(Math.round((g.new_posts / maxVal) * 100), 2)
+									style="height:{g.newPosts
+										? Math.max(Math.round((g.newPosts / maxVal) * 100), 2)
 										: 0}%"
 								></div>
 								<div
 									class="flex-1 bg-accent-green rounded-t-sm"
-									style="height:{g.new_users
-										? Math.max(Math.round((g.new_users / maxVal) * 100), 2)
+									style="height:{g.newUsers
+										? Math.max(Math.round((g.newUsers / maxVal) * 100), 2)
 										: 0}%"
 								></div>
 							</div>
@@ -179,12 +187,12 @@
 					<h2 class="text-2xl font-semibold">Recent Posts</h2>
 					<a href="/dashboard/posts" class="text-base text-primary hover:underline">View all →</a>
 				</div>
-				{#if overview.recent_posts?.length}
+				{#if overview.recentPosts?.length}
 					<ul class="flex flex-col divide-y divide-background">
-						{#each overview.recent_posts as post}
+						{#each overview.recentPosts as post}
 							<li class="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-								{#if post.url}
-									<img src={post.url} alt="" class="w-10 h-10 rounded-lg object-cover shrink-0" />
+								{#if post.coverUrl}
+									<img src={post.coverUrl} alt="" class="w-10 h-10 rounded-lg object-cover shrink-0" />
 								{:else}
 									<div class="w-10 h-10 rounded-lg bg-background/60 shrink-0"></div>
 								{/if}
@@ -196,7 +204,7 @@
 										{post.title}
 									</a>
 									<div class="flex items-center gap-2 text-sm text-dark/50">
-										<span>by {post.author_name}</span>
+										<span>by {post.authorName}</span>
 										<span
 											class="px-1.5 py-0.5 rounded-full {post.status === 'published'
 												? 'bg-accent-green/20 text-accent-green'
@@ -220,13 +228,13 @@
 					<h2 class="text-2xl font-semibold">Recent Registrations</h2>
 					<a href="/dashboard/users" class="text-base text-primary hover:underline">View all →</a>
 				</div>
-				{#if overview.recent_users?.length}
+				{#if overview.recentUsers?.length}
 					<ul class="flex flex-col divide-y divide-background">
-						{#each overview.recent_users as u}
+						{#each overview.recentUsers as u}
 							<li class="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-								{#if u.avatar_url}
+								{#if u.avatarUrl}
 									<img
-										src={u.avatar_url}
+										src={u.avatarUrl}
 										alt=""
 										class="w-8 h-8 rounded-full object-cover shrink-0"
 									/>
@@ -234,11 +242,11 @@
 									<div
 										class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary shrink-0"
 									>
-										{u.display_name.charAt(0).toUpperCase()}
+										{u.displayName.charAt(0).toUpperCase()}
 									</div>
 								{/if}
 								<div class="flex-1 min-w-0">
-									<p class="text-base font-medium truncate">{u.display_name}</p>
+									<p class="text-base font-medium truncate">{u.displayName}</p>
 									<p class="text-sm text-dark/50">@{u.username}</p>
 								</div>
 								<span

@@ -1,12 +1,29 @@
 <script>
-	import { untrack } from 'svelte';
-	import { api } from '$lib/api/client';
+	import { gql, fixUrl } from '$lib/api/graphql';
+	import { api } from '$lib/api/client.js';
+	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
 
 	// Active state for currently featured posts
 	let featuredPosts = $state(untrack(() => data).featuredPosts ?? []);
+	let loading = $state(!untrack(() => data).featuredPosts?.length);
+
+	onMount(async () => {
+		if (!data.featuredPosts?.length) {
+			try {
+				const result = await gql.request(`query { featuredPosts(limit:100) { id title slug excerpt coverUrl coverMediaType authorName authorSlug views likes commentsCount } }`);
+				featuredPosts = (result.featuredPosts ?? []).map((p) => ({
+					id: p.id, title: p.title, slug: p.slug, excerpt: p.excerpt,
+					author_name: p.authorName, author_slug: p.authorSlug,
+					url: fixUrl(p.coverUrl), cover_media_type: p.coverMediaType,
+					stats: { views: p.views, likes: p.likes, comments: p.commentsCount }
+				}));
+			} catch { /* ignore */ }
+			loading = false;
+		}
+	});
 
 	// Search states
 	let search = $state('');
@@ -27,13 +44,15 @@
 		searchError = null;
 
 		try {
-			const params = new URLSearchParams({
-				limit: 10,
-				offset: 0,
-				search: search.trim()
-			});
-			const data = await api.get(`dashboard/posts?${params}`);
-			searchResults = data.posts ?? [];
+			const result = await gql.dashboardPosts({ limit: 10, search: search.trim() });
+			searchResults = (result.dashboardPosts?.items ?? []).map((p) => ({
+				...p,
+				author_name: p.authorName,
+				author_slug: p.authorSlug,
+				url: p.coverUrl,
+				cover_media_type: p.coverMediaType,
+				stats: { views: p.views, likes: p.likes, comments_count: p.commentsCount }
+			}));
 		} catch (e) {
 			searchError = e.message;
 		} finally {
@@ -64,6 +83,7 @@
 					author_name: post.author_name,
 					author_slug: post.author_slug,
 					url: post.url,
+					cover_media_type: post.cover_media_type,
 					stats: post.stats || { views: 0, likes: 0, comments: 0 }
 				};
 				featuredPosts = [...featuredPosts, newFeatured];
@@ -77,13 +97,13 @@
 </script>
 
 <svelte:head>
-	<title>Homepage Highlights - Dashboard | Huu Thang's Blog</title>
+	<title>Highlight Posts - Dashboard | Huu Thang's Blog</title>
 </svelte:head>
 
 <div class="flex flex-col gap-4 pb-8">
 	<!-- Header Card -->
 	<div class="bg-white rounded-xl p-6 shadow-sm">
-		<h1 class="text-3xl font-bold text-dark">Homepage Highlights</h1>
+		<h1 class="text-3xl font-bold text-dark">Highlight Posts</h1>
 		<p class="text-base text-dark/60 mt-1">
 			Select which posts are featured in the "Discover" tab on the homepage. The discover section on
 			the homepage displays the 5 most recent featured posts.
@@ -117,7 +137,11 @@
 							out:fade={{ duration: 150 }}
 						>
 							{#if post.url}
-								<img src={post.url} alt="" class="w-16 h-16 rounded-lg object-cover shrink-0" />
+								{#if post.cover_media_type?.startsWith('video/')}
+									<video src={post.url} poster={post.url} class="w-16 h-16 rounded-lg object-cover shrink-0" muted loop playsinline autoplay preload="auto"></video>
+								{:else}
+									<img src={post.url} alt="" class="w-16 h-16 rounded-lg object-cover shrink-0" />
+								{/if}
 							{:else}
 								<div
 									class="w-16 h-16 rounded-lg bg-background/40 shrink-0 flex items-center justify-center text-dark/30 text-xs font-semibold"
@@ -160,7 +184,7 @@
 
 		<!-- Add to Highlights Column (Right) -->
 		<div class="lg:col-span-5 bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4">
-			<h2 class="text-2xl font-semibold text-dark">Add to Highlights</h2>
+			<h2 class="text-2xl font-semibold text-dark">Add to Highlight Posts</h2>
 
 			<!-- Search input field -->
 			<div
@@ -215,7 +239,11 @@
 								class="flex items-center gap-3 p-3 border border-background/40 rounded-xl hover:bg-background/5 transition-colors"
 							>
 								{#if post.url}
-									<img src={post.url} alt="" class="w-12 h-12 rounded-lg object-cover shrink-0" />
+									{#if post.cover_media_type?.startsWith('video/')}
+										<video src={post.url} poster={post.url} class="w-12 h-12 rounded-lg object-cover shrink-0" muted loop playsinline autoplay preload="auto"></video>
+									{:else}
+										<img src={post.url} alt="" class="w-12 h-12 rounded-lg object-cover shrink-0" />
+									{/if}
 								{:else}
 									<div
 										class="w-12 h-12 rounded-lg bg-background/40 shrink-0 flex items-center justify-center text-dark/30 text-xs font-semibold"
