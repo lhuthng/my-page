@@ -12,7 +12,7 @@
 	import { win } from '$lib/dom/windows.svelte.js';
 	import { innerWidth } from 'svelte/reactivity/window';
 
-	let { children } = $props();
+	let { data, children } = $props();
 
 	let route = $derived($page.url.pathname.split('/')[1]);
 	let pDiv = $state();
@@ -23,6 +23,19 @@
 
 	$effect(() => {
 		win.width = innerWidth.current;
+	});
+
+	$effect(() => {
+		if (data?.accessToken?.token) {
+			saveLogin({
+				username: data.user?.username,
+				displayName: data.user?.displayName,
+				token: data.accessToken.token,
+				tokenType: data.accessToken.type,
+				role: data.user?.role,
+				avatarUrl: data.user?.avatarUrl
+			});
+		}
 	});
 
 	onMount(() => {

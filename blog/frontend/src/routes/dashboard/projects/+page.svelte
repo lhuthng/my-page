@@ -1,19 +1,28 @@
 <script>
-	import { api } from '$lib/api/client';
+	import { gql } from '$lib/api/graphql';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
 	let { data } = $props();
 
-	let projects = $state(untrack(() => data.projects ?? []));
-	let total = $state(untrack(() => data.total ?? 0));
+	let projects = $state(untrack(() => data).projects ?? []);
+	let total = $state(untrack(() => data).total ?? 0);
 	let loading = $state(false);
 	let loadingMore = $state(false);
 	let error = $state(null);
 	let search = $state('');
 	let debounceTimer;
 	const LIMIT = 9;
+
+	function mapItem(item) {
+		return {
+			...item,
+			url: item.coverUrl,
+			cover_media_type: item.coverMediaType,
+			stats: { views: item.views, likes: item.likes, comments_count: item.commentsCount }
+		};
+	}
 
 	async function fetchProjects(reset = false) {
 		if (reset) {
@@ -25,16 +34,15 @@
 		}
 		error = null;
 
-		const params = new URLSearchParams({
-			limit: LIMIT,
-			offset: reset ? 0 : projects.length
-		});
-		if (search.trim()) params.set('search', search.trim());
-
 		try {
-			const result = await api.get(`dashboard/projects?${params}`);
-			projects = reset ? result.projects : [...projects, ...result.projects];
-			total = result.total;
+			const result = await gql.dashboardProjects({
+				limit: LIMIT,
+				offset: reset ? 0 : projects.length,
+				search: search.trim() || undefined
+			});
+			const items = result.dashboardProjects.items.map(mapItem);
+			projects = reset ? items : [...projects, ...items];
+			total = result.dashboardProjects.total;
 		} catch (e) {
 			error = e.message;
 		} finally {

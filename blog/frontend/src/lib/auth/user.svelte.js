@@ -20,6 +20,7 @@ class AuthStore {
 		this.user = { ...this.user, avatarUrl };
 	}
 	auth() {
+		if (!this.user) return '';
 		let { token, tokenType } = this.user;
 		return `${tokenType} ${token}`;
 	}

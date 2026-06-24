@@ -1,5 +1,6 @@
 <script>
-	import { api } from '$lib/api/client';
+	import { gql } from '$lib/api/graphql';
+	import { authState } from '$lib/auth/user.svelte.js';
 	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
@@ -9,8 +10,16 @@
 
 	onMount(async () => {
 		try {
-			const result = await api.get('series/all');
-			series = result.series ?? [];
+			const result = await gql.series({ limit: 100, offset: 0 });
+			series = (result.series?.items ?? []).map((s) => ({
+				id: s.id,
+				title: s.title,
+				slug: s.slug,
+				description: s.description ?? '',
+				url: s.coverUrl,
+				owner_username: s.ownerUsername,
+				post_count: s.postCount
+			}));
 		} catch {
 			series = [];
 		}
@@ -30,8 +39,18 @@
 	const loadPosts = async (seriesId) => {
 		seriesPosts[seriesId] = { status: 'loading', items: [] };
 		try {
-			const data = await api.get(`series/id/${seriesId}/posts`);
-			seriesPosts[seriesId] = { status: 'ok', items: data.posts };
+			const result = await gql.seriesPosts({ seriesId });
+			seriesPosts[seriesId] = {
+				status: 'ok',
+				items: (result.seriesPosts ?? []).map((p) => ({
+					post_id: p.postId,
+					title: p.title,
+					slug: p.slug,
+					status: p.status,
+					number: p.number,
+					cover_url: p.coverUrl
+				}))
+			};
 		} catch {
 			seriesPosts[seriesId] = { status: 'error', items: [] };
 		}
@@ -39,7 +58,13 @@
 
 	const removePost = async (seriesId, postId) => {
 		try {
-			await api.delete(`series/id/${seriesId}?post_id=${postId}`);
+			await fetch(`/api/series/id/${seriesId}?post_id=${postId}`, {
+				method: 'DELETE',
+				headers: (() => {
+					const token = authState.accessToken;
+					return token ? { Authorization: `${token.type} ${token.token}` } : {};
+				})()
+			});
 			const entry = seriesPosts[seriesId];
 			if (entry) {
 				entry.items = entry.items.filter((p) => p.post_id !== postId);

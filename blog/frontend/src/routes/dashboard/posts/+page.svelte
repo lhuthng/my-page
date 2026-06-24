@@ -1,5 +1,5 @@
 <script>
-	import { api } from '$lib/api/client';
+	import { gql } from '$lib/api/graphql';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
@@ -15,6 +15,15 @@
 	let debounceTimer;
 	const LIMIT = 9;
 
+	function mapPost(item) {
+		return {
+			...item,
+			url: item.coverUrl,
+			cover_media_type: item.coverMediaType,
+			stats: { views: item.views, likes: item.likes, comments_count: item.commentsCount }
+		};
+	}
+
 	async function fetchPosts(reset = false) {
 		if (reset) {
 			posts = [];
@@ -25,16 +34,15 @@
 		}
 		error = null;
 
-		const params = new URLSearchParams({
-			limit: LIMIT,
-			offset: reset ? 0 : posts.length
-		});
-		if (search.trim()) params.set('search', search.trim());
-
 		try {
-			const result = await api.get(`dashboard/posts?${params}`);
-			posts = reset ? result.posts : [...posts, ...result.posts];
-			total = result.total;
+			const result = await gql.dashboardPosts({
+				limit: LIMIT,
+				offset: reset ? 0 : posts.length,
+				search: search.trim() || undefined
+			});
+			const items = result.dashboardPosts.items.map(mapPost);
+			posts = reset ? items : [...posts, ...items];
+			total = result.dashboardPosts.total;
 		} catch (e) {
 			error = e.message;
 		} finally {
