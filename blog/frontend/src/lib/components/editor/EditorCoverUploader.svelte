@@ -101,8 +101,8 @@
 				{/if}
 			</div>
 			{#if coverFile?.type?.startsWith('video/')}
-				<div class="flex flex-col w-60">
-					<label class="text-sm" for="video-seconds">Thumbnail second:</label>
+				<div class="flex flex-col text-dark w-60">
+					<label for="video-seconds">Thumbnail second:</label>
 					<input
 						id="video-seconds"
 						type="number"

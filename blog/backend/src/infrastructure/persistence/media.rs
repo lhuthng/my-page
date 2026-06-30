@@ -253,12 +253,11 @@ impl MediaService for MediaServiceImpl {
             file_path,
         } = hash_bytes(&bytes, &root, extension.to_string(), false).await?;
 
-        if fs::try_exists(&file_path).await? {
-            return Ok(());
+        let file_already_exists = fs::try_exists(&file_path).await?;
+        if !file_already_exists {
+            fs::create_dir_all(&dir_path).await?;
+            fs::write(&file_path, &bytes).await?;
         }
-
-        fs::create_dir_all(&dir_path).await?;
-        fs::write(&file_path, &bytes).await?;
 
         let short_name = format!(".avt.{}", cmd.user_id);
 
@@ -460,12 +459,11 @@ impl MediaService for MediaServiceImpl {
             file_path,
         } = hash_bytes(&bytes, &root, extension.to_string(), false).await?;
 
-        if fs::try_exists(&file_path).await? {
-            return Ok(());
+        let file_already_exists = fs::try_exists(&file_path).await?;
+        if !file_already_exists {
+            fs::create_dir_all(&dir_path).await?;
+            fs::write(&file_path, &bytes).await?;
         }
-
-        fs::create_dir_all(&dir_path).await?;
-        fs::write(&file_path, &bytes).await?;
 
         let short_name = format!(".post.{}", cmd.post_id);
 
