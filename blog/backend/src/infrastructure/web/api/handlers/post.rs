@@ -107,6 +107,8 @@ pub struct GetPostDetailsResponse {
     pub cover_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_media_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub og_image_url: Option<String>,
     pub og_image_seconds: i64,
     pub is_owner: bool,
 }
@@ -141,6 +143,7 @@ pub async fn get_post_details(
         is_featured,
         cover_url,
         cover_media_type,
+        og_image_url,
         og_image_seconds,
         medium_urls,
         medium_short_names,
@@ -167,6 +170,7 @@ pub async fn get_post_details(
         is_featured,
         cover_url,
         cover_media_type,
+        og_image_url,
         og_image_seconds,
         medium_urls,
         medium_short_names,
@@ -452,6 +456,10 @@ pub struct PostResponse {
     pub cover_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_media_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_video_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_avatar_url: Option<String>,
@@ -510,6 +518,8 @@ pub async fn get_post_by_slug(
         published_at: post.published_at,
         updated_at: post.updated_at,
         cover_media_type: post.cover_media_type,
+        cover_video_url: post.cover_video_url,
+        cover_video_type: post.cover_video_type,
         og_image_seconds: post.og_image_seconds,
         series: post.post_series.map(|series| PostSeriesResponse {
             title: series.series_title,
@@ -1107,9 +1117,9 @@ pub async fn new_comment(
                 .await?
         }
         None => {
-            let guest_identity = body
-                .guest_identity
-                .ok_or(PostError::UploadFailed("guest_identity is required for anonymous comments".into()))?;
+            let guest_identity = body.guest_identity.ok_or(PostError::UploadFailed(
+                "guest_identity is required for anonymous comments".into(),
+            ))?;
             state
                 .post_service
                 .post_new_anonymous_comment(PostNewAnynymouseCommentCommand {
@@ -1242,6 +1252,7 @@ pub async fn change_cover(
     let mut opt_filename: Option<String> = None;
     let mut opt_content_type: Option<String> = None;
     let mut opt_bytes: Option<Bytes> = None;
+    let mut opt_og_image_seconds: Option<i64> = None;
 
     while let Some(field) = multipart
         .next_field()
@@ -1251,23 +1262,29 @@ pub async fn change_cover(
         let field_name = field.name().ok_or(MediaError::UploadFailed(
             "Empty field detected.".to_string(),
         ))?;
-
-        if field_name == "file" {
-            if opt_filename.is_some() {
-                return Err(PostError::Media(MediaError::UploadFailed(
-                    "Only one media is allowed at a time.".to_string(),
-                )));
+        match field_name {
+            "file" => {
+                if opt_filename.is_some() {
+                    return Err(PostError::Media(MediaError::UploadFailed(
+                        "Only one media is allowed at a time.".to_string(),
+                    )));
+                }
+                let MediumData {
+                    filename,
+                    content_type,
+                    bytes,
+                } = extract_medium(field).await?;
+                opt_filename = Some(filename);
+                opt_content_type = Some(content_type);
+                opt_bytes = Some(bytes);
             }
-
-            let MediumData {
-                filename,
-                content_type,
-                bytes,
-            } = extract_medium(field).await?;
-
-            opt_filename = Some(filename);
-            opt_content_type = Some(content_type);
-            opt_bytes = Some(bytes);
+            "og_image_seconds" => {
+                let text = field.text().await.map_err(|e| {
+                    PostError::InternalError(format!("Failed to read og_image_seconds: {}", e))
+                })?;
+                opt_og_image_seconds = text.trim().parse::<i64>().ok();
+            }
+            _ => {}
         }
     }
 
@@ -1289,10 +1306,23 @@ pub async fn change_cover(
                     content_type,
                     bytes,
                 },
+                og_image_seconds: opt_og_image_seconds,
             },
             &state.media_config,
         )
         .await?;
+
+    if let Some(og_image_seconds) = opt_og_image_seconds {
+        state
+            .post_service
+            .update_post_cover(UpdatePostCoverCommand {
+                user_id,
+                post_id,
+                video_short_name: None,
+                og_image_seconds: Some(og_image_seconds),
+            })
+            .await?;
+    }
 
     Ok(())
 }

@@ -131,8 +131,8 @@ pub async fn register(
             .map_err(AuthError::InternalError)?;
 
             Ok(Json(RegisterResponse {
-                message:
-                    "User registered. A verification link has been sent to your email.".to_string(),
+                message: "User registered. A verification link has been sent to your email."
+                    .to_string(),
             }))
         }
         Err(e) => Err(e),

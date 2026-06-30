@@ -133,7 +133,6 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             Router::new()
                 .route("/s/{short_name}", get(handlers::media::get_link))
                 .route("/i/{short_name}", get(handlers::media::get_media))
-                .route("/thumbnail", get(handlers::media::get_video_thumbnail))
                 .route("/all", get(handlers::media::search)),
         )
         .fallback_service(get_service(ServeDir::new(&state.media_config.dir)));
@@ -206,7 +205,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // optional-auth routes
         .merge(
             Router::new()
-                .route("/s/{project_slug}", get(handlers::project::get_project_by_slug))
+                .route(
+                    "/s/{project_slug}",
+                    get(handlers::project::get_project_by_slug),
+                )
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::optional_user_guard,
@@ -218,9 +220,15 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/new", post(handlers::project::new_project))
                 .route("/all", get(handlers::project::get_all_projects))
                 .route("/id/{project_id}", post(handlers::project::publish_project))
-                .route("/id/{project_id}", get(handlers::project::get_project_details))
+                .route(
+                    "/id/{project_id}",
+                    get(handlers::project::get_project_details),
+                )
                 .route("/id/{project_id}", patch(handlers::project::update_project))
-                .route("/id/{project_id}/cover", patch(handlers::project::change_cover))
+                .route(
+                    "/id/{project_id}/cover",
+                    patch(handlers::project::change_cover),
+                )
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
@@ -231,7 +239,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // admin-protected routes
         .merge(
             Router::new()
-                .route("/id/{project_id}/featured", put(handlers::project::set_project_featured))
+                .route(
+                    "/id/{project_id}/featured",
+                    put(handlers::project::set_project_featured),
+                )
                 .layer(middleware::from_fn(middlewares::auth::admin_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
@@ -315,7 +326,9 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             middlewares::auth::user_guard,
         ));
 
-    let demos_dir_name = state.project_demo_config.dir
+    let demos_dir_name = state
+        .project_demo_config
+        .dir
         .file_name()
         .and_then(|n| n.to_str())
         .expect("PROJECT_DEMOS_PATH must have a valid directory name");

@@ -399,7 +399,13 @@
 	show={coverUploaderOpen}
 	apiPath={`/api/projects/id/${editingData.id}/cover`}
 	onclose={() => (coverUploaderOpen = false)}
-	onuploaded={(newCoverUrl) => (editingData.coverUrl = newCoverUrl)}
+	onuploaded={({ url, ogImageSeconds, fileType }) => {
+		editingData.coverUrl = url;
+		editingData.coverMediaType = fileType;
+		if (fileType?.startsWith('video/')) {
+			editingData.ogImageSeconds = ogImageSeconds;
+		}
+	}}
 />
 
 <article class="relative flex flex-col gap-4 pb-4 *:drop-shadow-xl">

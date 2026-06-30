@@ -104,14 +104,13 @@ fn decode_verification_token(token: &str) -> Result<(i64, String), AuthError> {
         return Err(AuthError::InvalidToken);
     }
 
-    let user_id = parts[0].parse::<i64>().map_err(|_| AuthError::InvalidToken)?;
+    let user_id = parts[0]
+        .parse::<i64>()
+        .map_err(|_| AuthError::InvalidToken)?;
     Ok((user_id, parts[1].to_string()))
 }
 
-async fn upsert_verification_token(
-    pool: &SqlitePool,
-    user_id: i64,
-) -> Result<String, AuthError> {
+async fn upsert_verification_token(pool: &SqlitePool, user_id: i64) -> Result<String, AuthError> {
     let (token, token_hash) = generate_verification_token(user_id);
     let now = Utc::now();
     let expires_at = now + Duration::minutes(EMAIL_VERIFICATION_EXPIRY_MINUTES);
@@ -406,7 +405,9 @@ impl AuthService for AuthServiceImpl {
     ) -> Result<ResendVerificationResult, AuthError> {
         let identifier = cmd.identifier.trim();
         if identifier.is_empty() {
-            return Err(AuthError::Validation("Username or email is required.".to_string()));
+            return Err(AuthError::Validation(
+                "Username or email is required.".to_string(),
+            ));
         }
 
         let user_row = sqlx::query_as::<_, UserRow>(

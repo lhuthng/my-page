@@ -53,6 +53,7 @@ pub struct PostDetails {
     pub medium_urls: Vec<String>,
     pub medium_short_names: Vec<String>,
     pub is_owner: bool,
+    pub og_image_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -94,6 +95,8 @@ pub struct Post {
     pub medium_urls: Vec<String>,
     pub cover_url: Option<String>,
     pub cover_media_type: Option<String>,
+    pub cover_video_url: Option<String>,
+    pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
     pub post_series: Option<PostSeries>,
 }

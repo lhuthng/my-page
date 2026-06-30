@@ -23,15 +23,15 @@ impl From<zip::result::ZipError> for BackupError {
 impl IntoResponse for BackupError {
     fn into_response(self) -> Response {
         let (status, body) = match self {
-            BackupError::IoError(e) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("IO error: {}", e))
-            }
-            BackupError::ZipError(e) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("Zip error: {}", e))
-            }
-            BackupError::InternalError(msg) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, msg)
-            }
+            BackupError::IoError(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("IO error: {}", e),
+            ),
+            BackupError::ZipError(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Zip error: {}", e),
+            ),
+            BackupError::InternalError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
         (status, body).into_response()
     }

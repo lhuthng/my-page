@@ -20,6 +20,7 @@ pub struct ChangePostCoverCommand {
     pub user_id: i64,
     pub post_id: i64,
     pub medium_details: MediumDetails,
+    pub og_image_seconds: Option<i64>,
 }
 
 #[allow(dead_code)]

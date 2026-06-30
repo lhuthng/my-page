@@ -28,7 +28,17 @@ export async function load({ locals, fetch, params, setHeaders }) {
 		});
 		const data = await res.json();
 
-		let { content, author_avatar_url, cover_url, medium_urls, medium_short_names, ...rest } = data;
+		let {
+			content,
+			author_avatar_url,
+			cover_url,
+			cover_video_url,
+			cover_video_type,
+			og_image_url,
+			medium_urls,
+			medium_short_names,
+			...rest
+		} = data;
 
 		let edits = [...content.matchAll(mediaSyntax)].map((match) => ({
 			index: match.index + match[0].lastIndexOf(match[1]),
@@ -40,6 +50,8 @@ export async function load({ locals, fetch, params, setHeaders }) {
 
 		author_avatar_url = fixClientRoute(author_avatar_url);
 		cover_url = fixClientRoute(cover_url);
+		cover_video_url = fixClientRoute(cover_video_url);
+		og_image_url = fixClientRoute(og_image_url);
 
 		const mediaDictionary = {};
 
@@ -84,7 +96,16 @@ export async function load({ locals, fetch, params, setHeaders }) {
 			}
 		} catch (_) {}
 
-		return { content, author_avatar_url, cover_url, relatedPosts,  ...rest };
+		return {
+			content,
+			author_avatar_url,
+			cover_url,
+			cover_video_url,
+			cover_video_type,
+			og_image_url,
+			relatedPosts,
+			...rest
+		};
 	} else {
 		console.log(await res.text());
 	}

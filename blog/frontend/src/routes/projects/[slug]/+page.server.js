@@ -33,6 +33,9 @@ export async function load({ fetch, params, setHeaders }) {
 		content,
 		author_avatar_url,
 		cover_url,
+		cover_video_url,
+		cover_video_type,
+		og_image_url,
 		medium_urls,
 		medium_short_names,
 		demo_url,
@@ -41,6 +44,8 @@ export async function load({ fetch, params, setHeaders }) {
 
 	author_avatar_url = fixClientRoute(author_avatar_url);
 	cover_url = fixClientRoute(cover_url);
+	cover_video_url = fixClientRoute(cover_video_url);
+	og_image_url = fixClientRoute(og_image_url);
 	demo_url = fixClientRoute(demo_url);
 
 	const mediaDictionary = {};
@@ -62,5 +67,14 @@ export async function load({ fetch, params, setHeaders }) {
 		.use(anchor, { slugify });
 	content = md.render(content);
 
-	return { content, author_avatar_url, cover_url, demo_url, ...rest };
+	return {
+		content,
+		author_avatar_url,
+		cover_url,
+		cover_video_url,
+		cover_video_type,
+		og_image_url,
+		demo_url,
+		...rest
+	};
 }
