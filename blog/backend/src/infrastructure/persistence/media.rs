@@ -254,12 +254,14 @@ impl MediaService for MediaServiceImpl {
         } = hash_bytes(&bytes, &root, extension.to_string(), false).await?;
 
         let file_already_exists = fs::try_exists(&file_path).await?;
+        let file_was_written = !file_already_exists;
         if !file_already_exists {
             fs::create_dir_all(&dir_path).await?;
             fs::write(&file_path, &bytes).await?;
         }
 
         let short_name = format!(".avt.{}", cmd.user_id);
+        let content_hash = hash.clone();
 
         hash = format!(".avt.{}.{}", cmd.user_id, hash);
 
@@ -297,7 +299,7 @@ impl MediaService for MediaServiceImpl {
                 .await?;
             }
             Err(e) => {
-                if let Err(remove_err) = fs::remove_file(&file_path).await {
+                if file_was_written && let Err(remove_err) = fs::remove_file(&file_path).await {
                     return Err(MediaError::ExposedInternalError(format!(
                         "Failed to remove file after DB error {}",
                         remove_err
@@ -309,8 +311,8 @@ impl MediaService for MediaServiceImpl {
 
         tx.commit().await?;
 
-        if let (_, Some(hash), Some(file_type)) = hash_row {
-            let hash = match hash.split('.').nth(3) {
+        if let (_, Some(old_hash), Some(file_type)) = hash_row {
+            let old_hash = match old_hash.split('.').nth(3) {
                 Some(hash) => hash.to_string(),
                 None => {
                     return Err(MediaError::UploadFailed(
@@ -319,25 +321,27 @@ impl MediaService for MediaServiceImpl {
                 }
             };
 
-            let extension = match file_type.split('/').nth(1) {
-                Some(extension) => format!(".{}", extension),
-                None => {
-                    return Err(MediaError::UploadFailed(
-                        "Invalid stored file type found".to_string(),
-                    ));
+            if old_hash != content_hash {
+                let extension = match file_type.split('/').nth(1) {
+                    Some(extension) => format!(".{}", extension),
+                    None => {
+                        return Err(MediaError::UploadFailed(
+                            "Invalid stored file type found".to_string(),
+                        ));
+                    }
+                };
+
+                let (dir_path, file_name) =
+                    generate_dir_and_name(&root, &old_hash, extension.to_string(), false);
+
+                let file_path = dir_path.join(file_name);
+
+                if let Err(remove_err) = fs::remove_file(&file_path).await {
+                    return Err(MediaError::ExposedInternalError(format!(
+                        "Failed to clean up previous avatar after updated {}",
+                        remove_err
+                    )));
                 }
-            };
-
-            let (dir_path, file_name) =
-                generate_dir_and_name(&root, &hash, extension.to_string(), false);
-
-            let file_path = dir_path.join(file_name);
-
-            if let Err(remove_err) = fs::remove_file(&file_path).await {
-                return Err(MediaError::ExposedInternalError(format!(
-                    "Failed to clean up previous avatar after updated {}",
-                    remove_err
-                )));
             }
         }
 
@@ -460,12 +464,14 @@ impl MediaService for MediaServiceImpl {
         } = hash_bytes(&bytes, &root, extension.to_string(), false).await?;
 
         let file_already_exists = fs::try_exists(&file_path).await?;
+        let file_was_written = !file_already_exists;
         if !file_already_exists {
             fs::create_dir_all(&dir_path).await?;
             fs::write(&file_path, &bytes).await?;
         }
 
         let short_name = format!(".post.{}", cmd.post_id);
+        let content_hash = hash.clone();
 
         hash = format!(".post.{}.{}", cmd.post_id, hash);
 
@@ -504,7 +510,7 @@ impl MediaService for MediaServiceImpl {
                 image_id
             }
             Err(e) => {
-                if let Err(remove_err) = fs::remove_file(&file_path).await {
+                if file_was_written && let Err(remove_err) = fs::remove_file(&file_path).await {
                     return Err(MediaError::ExposedInternalError(format!(
                         "Failed to remove file after DB error {}",
                         remove_err
@@ -591,12 +597,14 @@ impl MediaService for MediaServiceImpl {
                 if parts.len() >= 4 {
                     let type_dir = parts[1];
                     let sha256 = parts[3];
-                    let old_path = config
-                        .dir
-                        .join(type_dir)
-                        .join(cmd.user_id.to_string())
-                        .join(format!("{}{}", sha256, ext));
-                    let _ = fs::remove_file(&old_path).await;
+                    if sha256 != content_hash {
+                        let old_path = config
+                            .dir
+                            .join(type_dir)
+                            .join(cmd.user_id.to_string())
+                            .join(format!("{}{}", sha256, ext));
+                        let _ = fs::remove_file(&old_path).await;
+                    }
                 }
             } else {
                 let old_root = config.dir.join("post").join(cmd.user_id.to_string());
@@ -613,12 +621,14 @@ impl MediaService for MediaServiceImpl {
                 None => String::new(),
             };
             if let Some(sha256) = old_video_hash.split('.').nth(3) {
-                let old_video_path = config
-                    .dir
-                    .join("post")
-                    .join(cmd.user_id.to_string())
-                    .join(format!("{}{}", sha256, ext));
-                let _ = fs::remove_file(&old_video_path).await;
+                if sha256 != content_hash {
+                    let old_video_path = config
+                        .dir
+                        .join("post")
+                        .join(cmd.user_id.to_string())
+                        .join(format!("{}{}", sha256, ext));
+                    let _ = fs::remove_file(&old_video_path).await;
+                }
             }
         }
 
