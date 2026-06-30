@@ -110,6 +110,8 @@ pub struct PostContentRow {
     pub updated_at: Option<String>,
     pub url: Option<String>,
     pub cover_media_type: Option<String>,
+    pub cover_video_url: Option<String>,
+    pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
 }
 
@@ -162,7 +164,8 @@ pub struct PostDetailsRow {
     pub content: String,
     pub user_id: i64,
     pub is_featured: i64,
-    pub cover_media_id: Option<i64>,
+    pub cover_url: Option<String>,
+    pub cover_media_type: Option<String>,
     pub og_image_seconds: i64,
 }
 
@@ -794,15 +797,18 @@ impl PostService for PostServiceImpl {
             updated_at,
             url,
             cover_media_type,
+            cover_video_url,
+            cover_video_type,
             og_image_seconds,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, m1.file_type AS cover_media_type, posts.og_image_seconds, 'media/i/' || m2.short_name AS author_avatar_url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, m1.file_type AS cover_media_type, 'media/i/' || video.short_name AS cover_video_url, video.file_type AS cover_video_type, posts.og_image_seconds, 'media/i/' || m2.short_name AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
             LEFT JOIN media m1 ON m1.id = posts.cover_media_id
             LEFT JOIN media m2 ON m2.id = user_meta.avatar_image_id
+            LEFT JOIN media video ON video.short_name = '.post.' || posts.id
             WHERE posts.slug = ? AND status = 'published' AND posts.content_kind = 'post'
             "#,
         )
@@ -953,6 +959,8 @@ impl PostService for PostServiceImpl {
             post_series,
             cover_url: url,
             cover_media_type,
+            cover_video_url,
+            cover_video_type,
             og_image_seconds,
         })
     }
@@ -1041,11 +1049,13 @@ impl PostService for PostServiceImpl {
                 content,
                 draft,
                 is_featured,
-                cover_media_id,
                 user_id,
+                cover.url AS cover_url,
+                cover.file_type AS cover_media_type,
                 posts.og_image_seconds
             FROM posts
             LEFT JOIN series_post ON series_post.post_id = posts.id
+            LEFT JOIN media cover ON cover.id = posts.cover_media_id
             WHERE id = ?;
             "#,
         )
@@ -1070,25 +1080,6 @@ impl PostService for PostServiceImpl {
         .bind(post_row.post_id)
         .fetch_all(&self.pool)
         .await?;
-
-        let mut cover_url: Option<String> = None;
-        let mut cover_media_type: Option<String> = None;
-        if let Some(cover_id) = post_row.cover_media_id {
-            let cover_row = sqlx::query_as::<_, (Option<String>, Option<String>)>(
-                r#"
-                SELECT url, file_type
-                FROM media
-                WHERE id = ?
-                "#,
-            )
-            .bind(cover_id)
-            .fetch_optional(&self.pool)
-            .await?;
-            if let Some((url, file_type)) = cover_row {
-                cover_url = url;
-                cover_media_type = file_type;
-            }
-        }
 
         let mut series_slug: Option<String> = None;
         let mut series_cover_url: Option<String> = None;
@@ -1154,6 +1145,10 @@ impl PostService for PostServiceImpl {
             medium_short_names[index] = short_name;
         }
 
+        let cover_url = post_row.cover_url;
+        let cover_media_type = post_row.cover_media_type;
+        let og_image_url = Some(format!("media/i/.post.{}.thumbnail", post_row.post_id));
+
         Ok(PostDetails {
             id: post_row.post_id,
             title: post_row.title,
@@ -1174,6 +1169,7 @@ impl PostService for PostServiceImpl {
             cover_media_type,
             og_image_seconds: post_row.og_image_seconds,
             is_owner: post_row.user_id == cmd.viewing_user_id,
+            og_image_url,
         })
     }
     async fn post_new_comment(&self, cmd: PostNewCommentCommand) -> Result<i64, PostError> {
@@ -1445,11 +1441,12 @@ impl PostService for PostServiceImpl {
                         guest_identity,
                         direct_reply_count,
                     )| {
-                        let (username, display_name, avatar_url, user_role) = if guest_identity.is_some() {
-                            (None, None, None, None)
-                        } else {
-                            (username, display_name, avatar_url, user_role)
-                        };
+                        let (username, display_name, avatar_url, user_role) =
+                            if guest_identity.is_some() {
+                                (None, None, None, None)
+                            } else {
+                                (username, display_name, avatar_url, user_role)
+                            };
                         Comment {
                             id,
                             parent_id,
@@ -1545,11 +1542,12 @@ impl PostService for PostServiceImpl {
                     guest_identity,
                     direct_reply_count,
                 )| {
-                    let (username, display_name, avatar_url, user_role) = if guest_identity.is_some() {
-                        (None, None, None, None)
-                    } else {
-                        (username, display_name, avatar_url, user_role)
-                    };
+                    let (username, display_name, avatar_url, user_role) =
+                        if guest_identity.is_some() {
+                            (None, None, None, None)
+                        } else {
+                            (username, display_name, avatar_url, user_role)
+                        };
                     Comment {
                         id,
                         parent_id,
@@ -1673,13 +1671,17 @@ impl PostService for PostServiceImpl {
     async fn update_post_cover(&self, cmd: UpdatePostCoverCommand) -> Result<(), PostError> {
         let mut set_fields: Vec<String> = vec![];
         if cmd.video_short_name.is_some() {
-            set_fields.push("cover_media_id = (SELECT id FROM media WHERE short_name = ?)".to_string());
+            set_fields
+                .push("cover_media_id = (SELECT id FROM media WHERE short_name = ?)".to_string());
         }
         if cmd.og_image_seconds.is_some() {
             set_fields.push("og_image_seconds = ?".to_string());
         }
         if !set_fields.is_empty() {
-            let sql = format!("UPDATE posts SET {} WHERE id = ? AND user_id = ?", set_fields.join(", "));
+            let sql = format!(
+                "UPDATE posts SET {} WHERE id = ? AND user_id = ?",
+                set_fields.join(", ")
+            );
             let mut query = sqlx::query(&sql);
             if let Some(ref short_name) = cmd.video_short_name {
                 query = query.bind(short_name);

@@ -61,8 +61,11 @@ pub struct Project {
     pub medium_short_names: Vec<String>,
     pub cover_url: Option<String>,
     pub cover_media_type: Option<String>,
+    pub cover_video_url: Option<String>,
+    pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
     pub demo: ProjectDemo,
     pub links: Vec<ProjectLink>,
     pub is_owner: bool,
+    pub og_image_url: Option<String>,
 }

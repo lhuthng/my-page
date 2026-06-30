@@ -1,6 +1,5 @@
 use lettre::{
-    Message, SmtpTransport, Transport,
-    message::Mailbox,
+    Message, SmtpTransport, Transport, message::Mailbox,
     transport::smtp::authentication::Credentials,
 };
 use reqwest::Client;
@@ -85,7 +84,9 @@ pub async fn send_contact_emails(
             )
             .await
         }
-        MailTransportConfig::Smtp { .. } => send_contact_emails_via_smtp(mail_config, contact_form).await,
+        MailTransportConfig::Smtp { .. } => {
+            send_contact_emails_via_smtp(mail_config, contact_form).await
+        }
     }
 }
 
@@ -254,10 +255,7 @@ fn build_smtp_mailer(mail_config: &MailConfig) -> Result<SmtpTransport, String> 
         .map_err(|err| format!("Invalid SMTP relay host: {err}"))
         .map(|builder| {
             builder
-                .credentials(Credentials::new(
-                    username.clone(),
-                    password.clone(),
-                ))
+                .credentials(Credentials::new(username.clone(), password.clone()))
                 .port(*port)
                 .timeout(Some(std::time::Duration::from_secs(10)))
                 .build()

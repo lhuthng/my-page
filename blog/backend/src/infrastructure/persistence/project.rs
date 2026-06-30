@@ -66,6 +66,8 @@ struct ProjectContentRow {
     updated_at: Option<String>,
     cover_url: Option<String>,
     cover_media_type: Option<String>,
+    cover_video_url: Option<String>,
+    cover_video_type: Option<String>,
     og_image_seconds: i64,
     demo_type: String,
     demo_entry_path: String,
@@ -220,6 +222,10 @@ impl ProjectServiceImpl {
             medium_short_names[index] = medium.short_name;
         }
 
+        let cover_url = row.cover_url;
+        let cover_media_type = row.cover_media_type;
+        let og_image_url = Some(format!("media/i/.post.{}.thumbnail", row.post_id));
+
         Ok(Project {
             id: row.project_id,
             post_id: row.post_id,
@@ -236,8 +242,11 @@ impl ProjectServiceImpl {
             updated_at: row.updated_at,
             medium_urls,
             medium_short_names,
-            cover_url: row.cover_url,
-            cover_media_type: row.cover_media_type,
+            cover_url,
+            cover_media_type,
+            og_image_url,
+            cover_video_url: row.cover_video_url,
+            cover_video_type: row.cover_video_type,
             og_image_seconds: row.og_image_seconds,
             demo: ProjectDemo {
                 demo_type: row.demo_type,
@@ -285,7 +294,10 @@ impl ProjectService for ProjectServiceImpl {
         .fetch_one(&mut *tx)
         .await?;
 
-        if (demo_type == "html5" || demo_type == "webgl") && (initial_demo_url.is_none() || initial_demo_url.as_deref().unwrap_or("").trim().is_empty()) {
+        if (demo_type == "html5" || demo_type == "webgl")
+            && (initial_demo_url.is_none()
+                || initial_demo_url.as_deref().unwrap_or("").trim().is_empty())
+        {
             let local_demo_url = std::path::PathBuf::from(cmd.demo_url_dir)
                 .join(project_id.to_string())
                 .join("index.html");
@@ -462,6 +474,8 @@ impl ProjectService for ProjectServiceImpl {
                 posts.updated_at,
                 'media/i/' || cover.short_name AS cover_url,
                 cover.file_type AS cover_media_type,
+                'media/i/' || video.short_name AS cover_video_url,
+                video.file_type AS cover_video_type,
                 posts.og_image_seconds,
                 projects.demo_type,
                 projects.demo_entry_path,
@@ -475,6 +489,7 @@ impl ProjectService for ProjectServiceImpl {
             JOIN user_meta ON user_meta.user_id = users.id
             LEFT JOIN media cover ON cover.id = posts.cover_media_id
             LEFT JOIN media avatar ON avatar.id = user_meta.avatar_image_id
+            LEFT JOIN media video ON video.short_name = '.post.' || posts.id
             WHERE posts.slug = ? AND posts.status = 'published'
             "#,
         )
@@ -508,6 +523,8 @@ impl ProjectService for ProjectServiceImpl {
                 posts.updated_at,
                 media.url AS cover_url,
                 media.file_type AS cover_media_type,
+                'media/i/' || video.short_name AS cover_video_url,
+                video.file_type AS cover_video_type,
                 posts.og_image_seconds,
                 projects.demo_type,
                 projects.demo_entry_path,
@@ -521,6 +538,7 @@ impl ProjectService for ProjectServiceImpl {
             JOIN user_meta ON user_meta.user_id = users.id
             LEFT JOIN media ON media.id = posts.cover_media_id
             LEFT JOIN media avatar ON avatar.id = user_meta.avatar_image_id
+            LEFT JOIN media video ON video.short_name = '.post.' || posts.id
             WHERE projects.id = ?
             "#,
         )

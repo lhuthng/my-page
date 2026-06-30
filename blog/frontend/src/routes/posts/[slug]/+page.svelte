@@ -21,7 +21,9 @@
 		tags,
 		series,
 		cover_url,
-		cover_media_type,
+		og_image_url,
+		cover_video_url,
+		cover_video_type,
 		og_image_seconds,
 		relatedPosts
 	} = $derived(data);
@@ -35,16 +37,16 @@
 
 	let imageUrl = $derived.by(() => {
 		if (cover_url) {
+			if (cover_url.includes('://')) return cover_url;
 			return page.url.origin + cover_url;
 		}
 		return page.url.origin + '/thinkcats.jpg';
 	});
 
 	let ogImageUrl = $derived.by(() => {
-		if (cover_media_type?.startsWith('video/') && cover_url) {
-			const parts = cover_url.split('/');
-			const shortName = parts[parts.length - 1];
-			return `${page.url.origin}/api/media/thumbnail?short_name=${shortName}`;
+		if (og_image_url) {
+			if (og_image_url.includes('://')) return og_image_url;
+			return page.url.origin + og_image_url;
 		}
 		return imageUrl;
 	});
@@ -84,9 +86,14 @@
 	<meta property="og:description" content={excerpt} />
 	<meta property="og:image" content={ogImageUrl} />
 
-	{#if cover_media_type?.startsWith('video/') && cover_url}
-		<meta property="og:video" content={page.url.origin + cover_url} />
-		<meta property="og:video:type" content={cover_media_type} />
+	{#if cover_video_url}
+		<meta
+			property="og:video"
+			content={cover_video_url.includes('://')
+				? cover_video_url
+				: page.url.origin + cover_video_url}
+		/>
+		<meta property="og:video:type" content={cover_video_type} />
 	{/if}
 
 	<meta name="twitter:card" content="summary_large_image" />

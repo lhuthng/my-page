@@ -1,5 +1,5 @@
-use std::str::FromStr;
 use std::sync::Arc;
+use std::{path::PathBuf, str::FromStr};
 
 use axum::{
     Extension, Json,
@@ -22,7 +22,10 @@ use crate::{
         services::media::MediaService,
     },
     domain::{
-        entities::{media::MediaType, secret::Claims},
+        entities::{
+            media::{LinkResult, MediaType},
+            secret::Claims,
+        },
         errors::media::MediaError,
     },
     infrastructure::web::{
@@ -194,11 +197,81 @@ pub async fn get_media(
     State(state): State<Arc<AppState>>,
     Path(short_name): Path<String>,
 ) -> Result<impl IntoResponse, MediaError> {
-    let link = state
-        .media_service
-        .get_link(GetLinkCommand { short_name })
-        .await?;
+    let thumbnail_fallback = post_thumbnail_fallback_short_name(&short_name);
+    let mut used_fallback = false;
 
+    let link = match state
+        .media_service
+        .get_link(GetLinkCommand {
+            short_name: short_name.clone(),
+        })
+        .await
+    {
+        Ok(link) => link,
+        Err(e) => {
+            if let Some(fallback_short_name) = thumbnail_fallback.as_ref() {
+                used_fallback = true;
+                state
+                    .media_service
+                    .get_link(GetLinkCommand {
+                        short_name: fallback_short_name.clone(),
+                    })
+                    .await?
+            } else {
+                return Err(e);
+            }
+        }
+    };
+
+    let opened = open_media_link(&link, &state.media_config.dir).await;
+    let (file, content_hash, file_type) = match opened {
+        Ok(result) => result,
+        Err(e) => {
+            if !used_fallback && let Some(fallback_short_name) = thumbnail_fallback {
+                let fallback_link = state
+                    .media_service
+                    .get_link(GetLinkCommand {
+                        short_name: fallback_short_name,
+                    })
+                    .await?;
+                open_media_link(&fallback_link, &state.media_config.dir).await?
+            } else {
+                return Err(e);
+            }
+        }
+    };
+
+    let body = Body::from_stream(ReaderStream::new(file));
+
+    // Use the plain SHA-256 as the ETag - stable content identifier
+    // regardless of the storage layout.
+    let etag = format!("\"{}\"", content_hash);
+
+    Response::builder()
+        .status(200)
+        .header(header::CONTENT_TYPE, file_type)
+        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+        .header(header::ETAG, etag)
+        .body(body)
+        .map_err(|e| MediaError::InternalError(e.to_string()))
+}
+
+fn post_thumbnail_fallback_short_name(short_name: &str) -> Option<String> {
+    let post_id = short_name
+        .strip_prefix(".post.")?
+        .strip_suffix(".thumbnail")?;
+
+    if post_id.is_empty() || !post_id.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    Some(format!(".post.{}", post_id))
+}
+
+fn media_path_from_link(
+    link: &LinkResult,
+    media_dir: &std::path::Path,
+) -> Result<(PathBuf, String), MediaError> {
     // Decode the storage layout from the hash field. Three layouts exist:
     //
     //  Regular media  hash = "<sha256>"
@@ -213,15 +286,10 @@ pub async fn get_media(
     //
     //  Series cover   hash = ".srs.<user_id>.<sha256>"  (fixed)
     //                 file = <media_dir>/srs/<uploader_id>/<sha256><ext>
-    //                 Older rows were incorrectly stored with ".avt." prefix
-    //                 due to a copy-paste bug; those are caught by the fallback.
     //
-    // Hash-based reconstruction is the primary path. If the file is missing
-    // (e.g. stale stored hash from the copy-paste bug), we fall back to
-    // reroot_path() which strips the old media-dir prefix from the stored
-    // `url` column and re-joins it under the current MEDIA_PATH.
+    // Hash-based reconstruction is the primary path. If the file is missing,
+    // open_media_link() falls back to reroot_path() using the stored `url`.
     let extension = MediaType::from_str(&link.file_type)?.get_extension();
-
     let (file_path, content_hash) = if link.hash.starts_with('.') {
         // Special layout: ".<type>.<id>.<sha256>"
         // splitn(4, '.') keeps the sha256 tail (which has no dots) in one piece:
@@ -237,23 +305,28 @@ pub async fn get_media(
         }
         let type_dir = parts[1]; // "post", "avt", or "srs"
         let sha256 = parts[3]; // plain SHA-256 hex
-        let path = state
-            .media_config
-            .dir
+        let path = media_dir
             .join(type_dir)
             .join(link.uploader_id.to_string()) // user_id used at upload time
             .join(format!("{}{}", sha256, extension));
         (path, sha256.to_string())
     } else {
         // Regular layout: hash is a plain SHA-256 hex string.
-        let path = state
-            .media_config
-            .dir
+        let path = media_dir
             .join(&link.hash[0..2])
             .join(&link.hash[2..4])
             .join(format!("{}{}", link.hash, extension));
         (path, link.hash.clone())
     };
+
+    Ok((file_path, content_hash))
+}
+
+async fn open_media_link(
+    link: &LinkResult,
+    media_dir: &std::path::Path,
+) -> Result<(fs::File, String, String), MediaError> {
+    let (file_path, content_hash) = media_path_from_link(link, media_dir)?;
 
     // Open the file for streaming - avoids loading the entire file into RAM,
     // which previously caused OOM kills on the 256 MB machine when many
@@ -265,27 +338,14 @@ pub async fn get_media(
     let file = match fs::File::open(&file_path).await {
         Ok(f) => f,
         Err(_) => {
-            let fallback =
-                reroot_path(&link.url, &state.media_config.dir).ok_or(MediaError::FileNotFound)?;
+            let fallback = reroot_path(&link.url, media_dir).ok_or(MediaError::FileNotFound)?;
             fs::File::open(&fallback)
                 .await
                 .map_err(|_| MediaError::FileNotFound)?
         }
     };
 
-    let body = Body::from_stream(ReaderStream::new(file));
-
-    // Use the plain SHA-256 as the ETag - stable content identifier
-    // regardless of the storage layout.
-    let etag = format!("\"{}\"", content_hash);
-
-    Response::builder()
-        .status(200)
-        .header(header::CONTENT_TYPE, &link.file_type)
-        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
-        .header(header::ETAG, etag)
-        .body(body)
-        .map_err(|e| MediaError::InternalError(e.to_string()))
+    Ok((file, content_hash, link.file_type.clone()))
 }
 
 /// Re-root a stored file path under a new media directory.
@@ -419,128 +479,4 @@ pub async fn delete_alias(
     let cmd = DeleteAliasCommand { short_name, alias };
 
     state.media_service.delete_alias(cmd).await
-}
-
-#[derive(Deserialize)]
-pub struct ThumbnailQuery {
-    pub short_name: String,
-}
-
-pub async fn get_video_thumbnail(
-    State(state): State<Arc<AppState>>,
-    Query(query): Query<ThumbnailQuery>,
-) -> Result<impl IntoResponse, MediaError> {
-    let media_row = sqlx::query_as::<_, (i64, String, String, String, i64)>(
-        r#"SELECT id, hash, file_type, url, uploader_id FROM media WHERE short_name = ?"#,
-    )
-    .bind(&query.short_name)
-    .fetch_optional(&state.media_service.pool)
-    .await
-    .map_err(|e| MediaError::InternalError(e.to_string()))?
-    .ok_or(MediaError::FileNotFound)?;
-
-    let (media_id, hash, file_type, _url, uploader_id) = media_row;
-
-    if !file_type.starts_with("video/") {
-        return Err(MediaError::UploadFailed("Not a video file".to_string()));
-    }
-
-    let seconds: i64 = sqlx::query_scalar(
-        r#"SELECT og_image_seconds FROM posts WHERE cover_media_id = ? AND og_image_seconds > 0 LIMIT 1"#,
-    )
-    .bind(media_id)
-    .fetch_optional(&state.media_service.pool)
-    .await
-    .map_err(|e| MediaError::InternalError(e.to_string()))?
-    .unwrap_or(1);
-
-    let extension = MediaType::from_str(&file_type)?.get_extension();
-
-    let input_path = if hash.starts_with('.') {
-        let parts: Vec<&str> = hash.splitn(4, '.').collect();
-        if parts.len() < 4 {
-            return Err(MediaError::FileNotFound);
-        }
-        let type_dir = parts[1];
-        let sha256 = parts[3];
-        state
-            .media_config
-            .dir
-            .join(type_dir)
-            .join(uploader_id.to_string())
-            .join(format!("{}{}", sha256, extension))
-    } else {
-        state
-            .media_config
-            .dir
-            .join(&hash[0..2])
-            .join(&hash[2..4])
-            .join(format!("{}{}", hash, extension))
-    };
-
-    let canonical = input_path.canonicalize()
-        .map_err(|_| MediaError::FileNotFound)?;
-    if !canonical.starts_with(&state.media_config.dir) {
-        return Err(MediaError::FileNotFound);
-    }
-
-    if !canonical.exists() {
-        return Err(MediaError::FileNotFound);
-    }
-
-    let thumb_dir = state.media_config.dir.join("thumb");
-    tokio::fs::create_dir_all(&thumb_dir)
-        .await
-        .map_err(|e| MediaError::InternalError(e.to_string()))?;
-    let thumb_path = thumb_dir.join(format!("{}_{}.webp", media_id, seconds));
-
-    if thumb_path.exists() {
-        let file = tokio::fs::File::open(&thumb_path)
-            .await
-            .map_err(|_| MediaError::FileNotFound)?;
-        let body = Body::from_stream(ReaderStream::new(file));
-        return Ok(Response::builder()
-            .status(200)
-            .header(header::CONTENT_TYPE, "image/webp")
-            .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
-            .body(body)
-            .map_err(|e| MediaError::InternalError(e.to_string()))?);
-    }
-
-    let output = tokio::process::Command::new("ffmpeg")
-        .args(["-ss", &seconds.to_string()])
-        .args(["-i", &canonical.to_string_lossy()])
-        .args(["-vframes", "1"])
-        .args(["-f", "image2pipe", "-"])
-        .output()
-        .await
-        .map_err(|e| MediaError::InternalError(format!("ffmpeg error: {}", e)))?;
-
-    if !output.status.success() {
-        return Err(MediaError::InternalError(format!(
-            "ffmpeg failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )));
-    }
-
-    let img = image::load_from_memory(&output.stdout)
-        .map_err(|e| MediaError::InternalError(format!("image decode error: {}", e)))?;
-    let mut webp_bytes = Vec::new();
-    img.write_to(
-        &mut std::io::Cursor::new(&mut webp_bytes),
-        image::ImageFormat::WebP,
-    )
-    .map_err(|e| MediaError::InternalError(format!("webp encode error: {}", e)))?;
-
-    tokio::fs::write(&thumb_path, &webp_bytes)
-        .await
-        .map_err(|e| MediaError::InternalError(e.to_string()))?;
-
-    let body = Body::from(Bytes::from(webp_bytes));
-    Ok(Response::builder()
-        .status(200)
-        .header(header::CONTENT_TYPE, "image/webp")
-        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
-        .body(body)
-        .map_err(|e| MediaError::InternalError(e.to_string()))?)
 }

@@ -64,7 +64,10 @@ pub async fn check_project(
     Query(query): Query<CheckQuery>,
 ) -> Result<impl IntoResponse, ProjectError> {
     if let Some(post_slug) = query.slug {
-        let exists = state.post_service.check_slug(CheckSlugCommand { post_slug }).await?;
+        let exists = state
+            .post_service
+            .check_slug(CheckSlugCommand { post_slug })
+            .await?;
         Ok(Json(CheckResponse { exists }))
     } else {
         Ok(Json(CheckResponse { exists: true }))
@@ -207,10 +210,9 @@ async fn parse_project_multipart<T: for<'de> Deserialize<'de>>(
                 .map_err(|_| ProjectError::UploadFailed("Invalid short name index".to_string()))?;
             short_names.insert(
                 index,
-                field
-                    .text()
-                    .await
-                    .map_err(|_| ProjectError::UploadFailed("Cannot read short name".to_string()))?,
+                field.text().await.map_err(|_| {
+                    ProjectError::UploadFailed("Cannot read short name".to_string())
+                })?,
             );
         }
     }
@@ -328,7 +330,9 @@ fn normalized_zip_path(path: &Path) -> Option<PathBuf> {
 fn strip_common_root(paths: &[PathBuf]) -> Option<String> {
     let mut first_root: Option<String> = None;
     for path in paths {
-        if path.file_name().is_some_and(|name| name == "index.html") && path.parent() == Some(Path::new("")) {
+        if path.file_name().is_some_and(|name| name == "index.html")
+            && path.parent() == Some(Path::new(""))
+        {
             return None;
         }
 
@@ -382,7 +386,10 @@ fn extract_demo_zip(
             continue;
         }
         #[cfg(unix)]
-        if file.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) {
+        if file
+            .unix_mode()
+            .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
             return Err(ProjectError::InvalidDemo(
                 "Demo archive cannot contain symlinks.".to_string(),
             ));
@@ -572,7 +579,12 @@ pub async fn new_project(
             demo_height: data.demo_height,
             demo_config: data.demo_config,
             demo_url: data.demo_url,
-            demo_url_dir: state.project_demo_config.dir.to_str().unwrap_or("").to_string(),
+            demo_url_dir: state
+                .project_demo_config
+                .dir
+                .to_str()
+                .unwrap_or("")
+                .to_string(),
             links: normalize_links(data.links),
         })
         .await?;
@@ -595,7 +607,9 @@ pub async fn new_project(
             .await?;
     }
 
-    Ok(Json(serde_json::json!({ "id": project_id, "post_id": post_id })))
+    Ok(Json(
+        serde_json::json!({ "id": project_id, "post_id": post_id }),
+    ))
 }
 
 #[axum::debug_handler]
@@ -703,7 +717,9 @@ pub async fn update_project(
 
     let mut demo_url = data.demo_url.filter(|u| !u.trim().is_empty());
     if parsed.demo_zip.is_some() {
-        let local_demo_url = state.project_demo_config.dir
+        let local_demo_url = state
+            .project_demo_config
+            .dir
             .join(project_id.to_string())
             .join("index.html");
         demo_url = Some(local_demo_url.to_str().unwrap_or("").to_string());
@@ -788,6 +804,12 @@ pub struct ProjectResponse {
     pub cover_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_media_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub og_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_video_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub published_at: Option<String>,
@@ -832,6 +854,9 @@ fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
         medium_short_names: project.medium_short_names,
         cover_url: project.cover_url,
         cover_media_type: project.cover_media_type,
+        og_image_url: project.og_image_url,
+        cover_video_url: project.cover_video_url,
+        cover_video_type: project.cover_video_type,
         og_image_seconds: project.og_image_seconds,
         published_at: project.published_at,
         updated_at: project.updated_at,
@@ -858,9 +883,7 @@ pub async fn get_project_by_slug(
 ) -> Result<impl IntoResponse, ProjectError> {
     let mut as_id = None;
     let include_draft = query.with_draft.unwrap_or(false);
-    if include_draft
-        && let Some(claims) = opt_claims
-    {
+    if include_draft && let Some(claims) = opt_claims {
         as_id = Some(
             claims
                 .user_id
@@ -1069,6 +1092,7 @@ pub async fn change_cover(
         .await?;
 
     let mut medium: Option<MediumData> = None;
+    let mut opt_og_image_seconds: Option<i64> = None;
     while let Some(field) = multipart
         .next_field()
         .await
@@ -1077,13 +1101,22 @@ pub async fn change_cover(
         let field_name = field.name().ok_or(MediaError::UploadFailed(
             "Empty field detected.".to_string(),
         ))?;
-        if field_name == "file" {
-            if medium.is_some() {
-                return Err(ProjectError::UploadFailed(
-                    "Only one media is allowed at a time.".to_string(),
-                ));
+        match field_name {
+            "file" => {
+                if medium.is_some() {
+                    return Err(ProjectError::UploadFailed(
+                        "Only one media is allowed at a time.".to_string(),
+                    ));
+                }
+                medium = Some(extract_medium(field).await?);
             }
-            medium = Some(extract_medium(field).await?);
+            "og_image_seconds" => {
+                let text = field.text().await.map_err(|e| {
+                    ProjectError::InternalError(format!("Failed to read og_image_seconds: {}", e))
+                })?;
+                opt_og_image_seconds = text.trim().parse::<i64>().ok();
+            }
+            _ => {}
         }
     }
     let MediumData {
@@ -1103,10 +1136,23 @@ pub async fn change_cover(
                     content_type,
                     bytes,
                 },
+                og_image_seconds: opt_og_image_seconds,
             },
             &state.media_config,
         )
         .await?;
+
+    if let Some(og_image_seconds) = opt_og_image_seconds {
+        state
+            .post_service
+            .update_post_cover(UpdatePostCoverCommand {
+                user_id,
+                post_id,
+                video_short_name: None,
+                og_image_seconds: Some(og_image_seconds),
+            })
+            .await?;
+    }
 
     Ok(())
 }

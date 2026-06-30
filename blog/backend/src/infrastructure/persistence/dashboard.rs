@@ -204,15 +204,17 @@ const TOP_POSTS_SQL: &str = r#"
 impl DashboardService for DashboardServiceImpl {
     async fn get_overview(&self, _cmd: GetOverviewCommand) -> Result<DashboardOverview, UserError> {
         // --- Scalar counts ---
-        let total_published: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE status = 'published' AND content_kind = 'post'")
-                .fetch_one(&self.pool)
-                .await?;
+        let total_published: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM posts WHERE status = 'published' AND content_kind = 'post'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
 
-        let total_drafts: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE status = 'draft' AND content_kind = 'post'")
-                .fetch_one(&self.pool)
-                .await?;
+        let total_drafts: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM posts WHERE status = 'draft' AND content_kind = 'post'",
+        )
+        .fetch_one(&self.pool)
+        .await?;
 
         let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
             .fetch_one(&self.pool)

@@ -9,12 +9,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use zip::write::FileOptions;
 use zip::ZipWriter;
+use zip::write::FileOptions;
 
 use crate::domain::errors::backup::BackupError;
-use crate::infrastructure::web::server::DatabaseSource;
 use crate::infrastructure::web::server::AppState;
+use crate::infrastructure::web::server::DatabaseSource;
 
 fn add_dir_to_zip<W: Write + Seek>(
     zip: &mut ZipWriter<W>,
@@ -87,7 +87,11 @@ pub async fn download_backup(
     }
 
     // Add media
-    add_dir_to_zip(&mut zip, &state.media_config.dir, &format!("{}/media", prefix))?;
+    add_dir_to_zip(
+        &mut zip,
+        &state.media_config.dir,
+        &format!("{}/media", prefix),
+    )?;
 
     // Add project demos
     add_dir_to_zip(

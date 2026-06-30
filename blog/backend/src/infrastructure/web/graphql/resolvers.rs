@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema};
 use sqlx::SqlitePool;
 
-use super::helpers::{attach_tags_to_posts, attach_tags_to_projects, DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS};
+use super::helpers::{
+    DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts, attach_tags_to_projects,
+};
+use super::rows::CategoryRow;
 use super::rows::{
     CommentRow, DashboardPostRow, DashboardProjectRow, GqlPostRow, GrowthDayRow, MediaRow,
     PostDetailRow, RoleCountRow, SeriesPostRow, SeriesRow, TagRow, UserInfoRow, UserRow,
 };
-use super::rows::CategoryRow;
 use super::types::{
     CategoryConnection, CommentConnection, DashboardPostConnection, DbStats, GqlCategory,
     GqlComment, GqlDashboardOverview, GqlDashboardPost, GqlDashboardProject, GqlDashboardUser,
@@ -546,23 +548,29 @@ impl QueryRoot {
     async fn overview(&self, ctx: &Context<'_>) -> async_graphql::Result<GqlDashboardOverview> {
         let pool = ctx.data::<SqlitePool>()?;
 
-        let total_published: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE status = 'published' AND content_kind = 'post'")
-                .fetch_one(pool).await
-                .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        let total_published: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM posts WHERE status = 'published' AND content_kind = 'post'",
+        )
+        .fetch_one(pool)
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
-        let total_drafts: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE status = 'draft' AND content_kind = 'post'")
-                .fetch_one(pool).await
-                .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        let total_drafts: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM posts WHERE status = 'draft' AND content_kind = 'post'",
+        )
+        .fetch_one(pool)
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let total_users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
-            .fetch_one(pool).await
+            .fetch_one(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let total_comments: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM comments WHERE is_deleted = 0")
-                .fetch_one(pool).await
+                .fetch_one(pool)
+                .await
                 .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let top_sql = |order: &str| -> String {
@@ -575,23 +583,32 @@ impl QueryRoot {
         let top_by_views = attach_tags_to_posts(
             pool,
             sqlx::query_as::<_, DashboardPostRow>(&top_sql("views"))
-                .fetch_all(pool).await
+                .fetch_all(pool)
+                .await
                 .map_err(|e| async_graphql::Error::new(e.to_string()))?,
-        ).await.map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let top_by_likes = attach_tags_to_posts(
             pool,
             sqlx::query_as::<_, DashboardPostRow>(&top_sql("likes"))
-                .fetch_all(pool).await
+                .fetch_all(pool)
+                .await
                 .map_err(|e| async_graphql::Error::new(e.to_string()))?,
-        ).await.map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let top_by_comments = attach_tags_to_posts(
             pool,
             sqlx::query_as::<_, DashboardPostRow>(&top_sql("comments_count"))
-                .fetch_all(pool).await
+                .fetch_all(pool)
+                .await
                 .map_err(|e| async_graphql::Error::new(e.to_string()))?,
-        ).await.map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let recent_sql = format!(
             r#"SELECT {} {} WHERE p.content_kind = 'post' ORDER BY p.created_at DESC LIMIT 5"#,
@@ -600,9 +617,12 @@ impl QueryRoot {
         let recent_posts = attach_tags_to_posts(
             pool,
             sqlx::query_as::<_, DashboardPostRow>(&recent_sql)
-                .fetch_all(pool).await
+                .fetch_all(pool)
+                .await
                 .map_err(|e| async_graphql::Error::new(e.to_string()))?,
-        ).await.map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        )
+        .await
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let recent_users: Vec<GqlDashboardUser> = sqlx::query_as::<_, UserInfoRow>(
             r#"
@@ -629,10 +649,15 @@ impl QueryRoot {
         let role_rows = sqlx::query_as::<_, RoleCountRow>(
             "SELECT role, COUNT(*) AS count FROM users GROUP BY role",
         )
-        .fetch_all(pool).await
+        .fetch_all(pool)
+        .await
         .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
-        let mut role_counts = GqlRoleCounts { admin: 0, moderator: 0, user: 0 };
+        let mut role_counts = GqlRoleCounts {
+            admin: 0,
+            moderator: 0,
+            user: 0,
+        };
         for r in role_rows {
             match r.role.as_str() {
                 "admin" => role_counts.admin = r.count,
@@ -651,7 +676,8 @@ impl QueryRoot {
             ORDER BY date ASC
             "#,
         )
-        .fetch_all(pool).await
+        .fetch_all(pool)
+        .await
         .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let user_growth = sqlx::query_as::<_, GrowthDayRow>(
@@ -663,7 +689,8 @@ impl QueryRoot {
             ORDER BY date ASC
             "#,
         )
-        .fetch_all(pool).await
+        .fetch_all(pool)
+        .await
         .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let mut growth_map: HashMap<String, (i64, i64)> = HashMap::new();
@@ -675,7 +702,11 @@ impl QueryRoot {
         }
         let mut growth: Vec<GqlGrowthPoint> = growth_map
             .into_iter()
-            .map(|(date, (new_posts, new_users))| GqlGrowthPoint { date, new_posts, new_users })
+            .map(|(date, (new_posts, new_users))| GqlGrowthPoint {
+                date,
+                new_posts,
+                new_users,
+            })
             .collect();
         growth.sort_by(|a, b| a.date.cmp(&b.date));
 
@@ -718,7 +749,9 @@ impl QueryRoot {
         if let Some(ref s) = search {
             count_query = count_query.bind(s).bind(s);
         }
-        let total: i64 = count_query.fetch_one(pool).await
+        let total: i64 = count_query
+            .fetch_one(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let data_sql = format!(
@@ -729,10 +762,13 @@ impl QueryRoot {
         if let Some(ref s) = search {
             data_query = data_query.bind(s).bind(s);
         }
-        let rows = data_query.fetch_all(pool).await
+        let rows = data_query
+            .fetch_all(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
-        let items = attach_tags_to_posts(pool, rows).await
+        let items = attach_tags_to_posts(pool, rows)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         Ok(DashboardPostConnection { items, total })
@@ -769,7 +805,9 @@ impl QueryRoot {
         if let Some(ref s) = search {
             count_query = count_query.bind(s).bind(s);
         }
-        let total: i64 = count_query.fetch_one(pool).await
+        let total: i64 = count_query
+            .fetch_one(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let data_sql = format!(
@@ -795,10 +833,13 @@ impl QueryRoot {
         if let Some(ref s) = search {
             data_query = data_query.bind(s).bind(s);
         }
-        let rows = data_query.fetch_all(pool).await
+        let rows = data_query
+            .fetch_all(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
-        let items = attach_tags_to_projects(pool, rows).await
+        let items = attach_tags_to_projects(pool, rows)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         Ok(ProjectConnection { items, total })
@@ -817,10 +858,12 @@ impl QueryRoot {
             DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, limit
         );
         let rows = sqlx::query_as::<_, DashboardPostRow>(&sql)
-            .fetch_all(pool).await
+            .fetch_all(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
-        attach_tags_to_posts(pool, rows).await
+        attach_tags_to_posts(pool, rows)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))
     }
 
@@ -852,10 +895,12 @@ impl QueryRoot {
             limit
         );
         let rows = sqlx::query_as::<_, DashboardProjectRow>(&sql)
-            .fetch_all(pool).await
+            .fetch_all(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
-        attach_tags_to_projects(pool, rows).await
+        attach_tags_to_projects(pool, rows)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))
     }
 
@@ -878,7 +923,8 @@ impl QueryRoot {
             "#,
         )
         .bind(series_id)
-        .fetch_all(pool).await
+        .fetch_all(pool)
+        .await
         .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let items = rows
@@ -919,7 +965,8 @@ impl QueryRoot {
             "#,
         )
         .bind(id)
-        .fetch_optional(pool).await
+        .fetch_optional(pool)
+        .await
         .map_err(|e| async_graphql::Error::new(e.to_string()))?
         .ok_or_else(|| async_graphql::Error::new("Post not found"))?;
 
@@ -995,7 +1042,8 @@ impl QueryRoot {
             "#,
         )
         .bind(id)
-        .fetch_optional(pool).await
+        .fetch_optional(pool)
+        .await
         .map_err(|e| async_graphql::Error::new(e.to_string()))?
         .ok_or_else(|| async_graphql::Error::new("Project not found"))?;
 
@@ -1041,23 +1089,22 @@ impl QueryRoot {
         );
         let rows = sqlx::query_as::<_, DashboardPostRow>(&sql)
             .bind(post_id)
-            .fetch_all(pool).await
+            .fetch_all(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
-        attach_tags_to_posts(pool, rows).await
+        attach_tags_to_posts(pool, rows)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))
     }
 
-    async fn check_slug(
-        &self,
-        ctx: &Context<'_>,
-        slug: String,
-    ) -> async_graphql::Result<bool> {
+    async fn check_slug(&self, ctx: &Context<'_>, slug: String) -> async_graphql::Result<bool> {
         let pool = ctx.data::<SqlitePool>()?;
 
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE slug = ?")
             .bind(&slug)
-            .fetch_one(pool).await
+            .fetch_one(pool)
+            .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         Ok(count == 0)

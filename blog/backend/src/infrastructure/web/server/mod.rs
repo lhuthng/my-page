@@ -142,8 +142,7 @@ impl MediaConfig {
 
 impl ProjectDemoConfig {
     pub fn from_env() -> Self {
-        let demo_path =
-            env::var("PROJECT_DEMOS_PATH").expect("PROJECT_DEMOS_PATH must be set");
+        let demo_path = env::var("PROJECT_DEMOS_PATH").expect("PROJECT_DEMOS_PATH must be set");
         let dir = PathBuf::from(&demo_path);
         if !dir.exists() {
             std::fs::create_dir_all(&dir).expect("Failed to create project demo directory");
@@ -291,8 +290,7 @@ impl<'a> HTTPServer<'a> {
         )
         .await?;
         sqlx::migrate!().run(&pool).await?;
-        let graphql_schema =
-            crate::infrastructure::web::graphql::build_schema(pool.clone());
+        let graphql_schema = crate::infrastructure::web::graphql::build_schema(pool.clone());
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
             media_config: MediaConfig::from_env(),
