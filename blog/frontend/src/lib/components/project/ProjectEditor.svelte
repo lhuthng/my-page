@@ -4,18 +4,12 @@
 	import { arraysEqualIgnoreOrder, nowToDate, preventDefault } from '$lib/utils';
 	import { untrack } from 'svelte';
 	import { useDebounce } from '$lib/utils/debounce';
-	import PostCard from '../home/PostCard.svelte';
-	import PostSection from '../post/PostSection.svelte';
-	import ContentDebounceEditor from '../post/ContentDebounceEditor.svelte';
-	import MediaDictionaryController from '../post/MediaDictionaryController.svelte';
-	import EditorToolbar from '../editor/EditorToolbar.svelte';
-	import EditorCoverUploader from '../editor/EditorCoverUploader.svelte';
-	import PBody from '../shell/PBody.svelte';
+	import PostEditorShell from '../editor/PostEditorShell.svelte';
+	import { appendCreateCover, selectCreateCover } from '../editor/createCover.js';
+	import { finishCreatedDraftPrompt, openCreatedDraftPrompt } from '../editor/draftCreation.js';
 
 	const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 	const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)\s*/g;
-	const allowedCoverTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'];
-	const maxCoverFileSize = 5 * 1024 * 1024;
 	const demoTypes = [
 		{ value: 'none', label: 'No Demo', disabled: false },
 		{ value: 'html5', label: 'HTML5', disabled: false },
@@ -74,12 +68,14 @@
 		isPublishing: false,
 		createCoverFile: undefined,
 		createCoverError: '',
+		createPromptOpen: false,
+		createPromptBusy: false,
+		createPromptError: '',
+		createdEntryId: null,
 		demoZip: undefined,
 		demoZipName: '',
 		demoZipError: ''
 	});
-
-	let coverUploaderOpen = $state(false);
 
 	let renderedText = $state('');
 	let forDraft = $derived(mode === 'create' || (mode === 'edit' && editor.view === 'private'));
@@ -241,26 +237,24 @@
 	};
 
 	const setCreateCover = (file) => {
-		editor.createCoverError = '';
-		if (!file) {
-			editor.createCoverFile = undefined;
-			editingData.coverUrl = '';
-			editingData.coverMediaType = '';
-			editingData.ogImageSeconds = 0;
-			return;
-		}
-		if (!allowedCoverTypes.includes(file.type)) {
-			editor.createCoverError = 'Only JPEG, PNG, GIF, WEBP, MP4, or WebM are allowed.';
-			return;
-		}
-		if (file.size > maxCoverFileSize) {
-			editor.createCoverError = `File size exceeds 5MB (${file.size} bytes)`;
-			return;
-		}
-		editor.createCoverFile = file;
-		editingData.coverUrl = URL.createObjectURL(file);
-		editingData.coverMediaType = file.type;
-		editingData.ogImageSeconds = file.type.startsWith('video/') ? 1 : 0;
+		const next = selectCreateCover(file);
+		editor.createCoverFile = next.file;
+		editor.createCoverError = next.error;
+		editingData.coverUrl = next.previewUrl;
+		editingData.coverMediaType = next.mediaType;
+		editingData.ogImageSeconds = next.ogImageSeconds;
+	};
+
+	const finishCreateFlow = async (publishNow) => {
+		await finishCreatedDraftPrompt({
+			editor,
+			publishNow,
+			publishPath: (id) => `/api/projects/id/${id}`,
+			gotoPath: (id) => `/dashboard/projects/id/${id}`,
+			fetchImpl: fetch,
+			authHeader: auth(),
+			goto
+		});
 	};
 
 	const newProject = async () => {
@@ -302,12 +296,7 @@
 			'project_data',
 			new Blob([JSON.stringify(projectPayload)], { type: 'application/json' })
 		);
-		if (editor.createCoverFile) {
-			formData.append('cover_file', editor.createCoverFile, editor.createCoverFile.name);
-			if (editor.createCoverFile.type.startsWith('video/')) {
-				formData.append('cover_og_image_seconds', editingData.ogImageSeconds.toString());
-			}
-		}
+		appendCreateCover(formData, editor.createCoverFile, editingData.ogImageSeconds);
 		if (editor.demoZip) {
 			formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
 		}
@@ -323,7 +312,7 @@
 			editor.isCritical = false;
 			editor.status = 'OK!';
 			const { id } = await res.json();
-			goto(`/dashboard/projects/id/${id}`);
+			openCreatedDraftPrompt(editor, id);
 		} else {
 			editor.isCritical = true;
 			editor.status = await res.text();
@@ -438,332 +427,180 @@
 	};
 </script>
 
-<EditorCoverUploader
-	show={coverUploaderOpen}
-	apiPath={`/api/projects/id/${editingData.id}/cover`}
-	onclose={() => (coverUploaderOpen = false)}
-	onuploaded={({ url, ogImageSeconds, fileType }) => {
+{#snippet extraFields()}
+	<div class="flex flex-col">
+		<label for="demo-type">Demo type:</label>
+		<select
+			id="demo-type"
+			class="px-1 min-w-0 bg-white rounded-sm"
+			bind:value={editingData.demoType}
+			disabled={!isOwner}
+		>
+			{#each demoTypes as type}
+				<option value={type.value} disabled={type.disabled}>
+					{type.label}{type.disabled ? ' (soon)' : ''}
+				</option>
+			{/each}
+		</select>
+	</div>
+	{#if editingData.demoType !== 'none'}
+		<div class="grid grid-cols-2 gap-2">
+			<div class="flex flex-col">
+				<label for="demo-width">Demo width:</label>
+				<input
+					id="demo-width"
+					class="px-1 min-w-0 bg-white rounded-sm"
+					bind:value={editingData.demoWidth}
+					readonly={!isOwner}
+				/>
+			</div>
+			<div class="flex flex-col">
+				<label for="demo-height">Demo height:</label>
+				<input
+					id="demo-height"
+					class="px-1 min-w-0 bg-white rounded-sm"
+					bind:value={editingData.demoHeight}
+					readonly={!isOwner}
+				/>
+			</div>
+		</div>
+	{/if}
+	{#if editingData.demoType !== 'none' && editingData.demoType !== 'html5' && editingData.demoType !== 'webgl'}
+		<div class="flex flex-col">
+			<label for="demo-url">
+				{#if editingData.demoType === 'embed'}
+					Demo URL (required):
+				{:else if editingData.demoType === 'download'}
+					Download URL (required):
+				{:else if editingData.demoType === 'video'}
+					Video URL (required):
+				{:else}
+					URL:
+				{/if}
+			</label>
+			<input
+				id="demo-url"
+				class="px-1 min-w-0 bg-white rounded-sm"
+				bind:value={editingData.demoUrl}
+				placeholder={editingData.demoType === 'video'
+					? 'https://example.com/video.mp4'
+					: editingData.demoType === 'download'
+						? 'https://example.com/download-link'
+						: 'https://example.github.io/my-demo/'}
+				readonly={!isOwner}
+			/>
+		</div>
+	{/if}
+	{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl'}
+		<div
+			class="p-2 rounded-lg bg-white/70 border-2 border-dashed border-dark/30"
+			ondrop={(e) => {
+				e.preventDefault();
+				setDemoZip(e.dataTransfer.files[0]);
+			}}
+			ondragover={preventDefault}
+			role="none"
+		>
+			<label class="block font-semibold" for="demo-zip">
+				{editingData.demoType === 'html5' ? 'HTML5' : 'WebGL'} zip:
+			</label>
+			<input
+				id="demo-zip"
+				type="file"
+				accept=".zip,application/zip"
+				disabled={!isOwner}
+				onchange={(e) => setDemoZip(e.currentTarget.files?.[0])}
+			/>
+			{#if editor.demoZipName}
+				<p class="text-sm text-accent-green">{editor.demoZipName}</p>
+			{:else if mode === 'edit'}
+				<p class="text-sm text-dark/50">Leave empty to keep current demo.</p>
+			{/if}
+			{#if editor.demoZipError}
+				<p class="text-sm text-accent-red">{editor.demoZipError}</p>
+			{/if}
+		</div>
+	{/if}
+	<div class="space-y-2">
+		<div class="flex items-center justify-between">
+			<span>External links:</span>
+			<button
+				class="px-2 rounded-sm bg-white"
+				disabled={!isOwner}
+				onclick={() => (editingData.links = [...editingData.links, { label: '', url: '' }])}
+			>
+				+
+			</button>
+		</div>
+		{#each editingData.links as link, index}
+			<div class="grid grid-cols-[1fr_1fr_auto] gap-1">
+				<input
+					class="px-1 min-w-0 bg-white rounded-sm"
+					placeholder="Label"
+					bind:value={link.label}
+					readonly={!isOwner}
+				/>
+				<input
+					class="px-1 min-w-0 bg-white rounded-sm"
+					placeholder="URL"
+					bind:value={link.url}
+					readonly={!isOwner}
+				/>
+				<button
+					class="px-2 rounded-sm bg-white text-accent-red"
+					disabled={!isOwner}
+					onclick={() => (editingData.links = editingData.links.filter((_, i) => i !== index))}
+				>
+					x
+				</button>
+			</div>
+		{/each}
+	</div>
+{/snippet}
+
+<PostEditorShell
+	{mode}
+	{isOwner}
+	kind="project"
+	routePrefix="/projects"
+	dashboardPrefix="/dashboard/projects/id"
+	coverApiPath={`/api/projects/id/${editingData.id}/cover`}
+	titleLabel="Name"
+	excerptRows={4}
+	{editingData}
+	{editor}
+	{renderedText}
+	{forDraft}
+	{mediaSyntax}
+	{mediaDictionary}
+	{searchMedia}
+	onToggleVersion={toggleVersion}
+	onSubmit={newProject}
+	onChange={updateProject}
+	onPublish={publishProject}
+	onCreateCoverSelect={setCreateCover}
+	onCreateCoverSecondsChange={(seconds) => (editingData.ogImageSeconds = seconds)}
+	onCoverUploaded={({ url, ogImageSeconds, fileType }) => {
 		editingData.coverUrl = url;
 		editingData.coverMediaType = fileType;
 		if (fileType?.startsWith('video/')) {
 			editingData.ogImageSeconds = ogImageSeconds;
 		}
 	}}
+	onRenderedUpdate={(_renderedText) => (renderedText = _renderedText)}
+	onDraftUpdate={(content) => (editingData.draft = content)}
+	onForceContent={(fn) => {
+		forceContent = fn;
+	}}
+	onMediaCheck={({ isOnline: _isOnline, isOffline: _isOffline }) => {
+		isOnline = _isOnline;
+		isOffline = _isOffline;
+	}}
+	onGetMedia={(fn) => (getNewMedia = fn)}
+	onMediaDictionaryUpdate={updateMediaDictionary}
+	onMediaSearch={(fn) => (searchMedia = fn)}
+	onClearNewMedia={(fn) => (clearNewMedia = fn)}
+	onPromptConfirm={() => finishCreateFlow(true)}
+	onPromptCancel={() => finishCreateFlow(false)}
+	{extraFields}
 />
-
-<article class="relative flex flex-col gap-4 pb-4 *:drop-shadow-xl">
-	<div class="flex w-full">
-		<div class="p-2 rounded-xl bg-white mx-auto w-120">
-			<PostCard
-				id={editingData.id}
-				dashboardMode={true}
-				title={editingData.title === '' ? '<Empty>' : editingData.title}
-				slug={editingData.slug}
-				excerpt={editingData.excerpt === '' ? '<Empty>' : editingData.excerpt}
-				author={{ name: authState.user.displayName, slug: authState.user.username }}
-				tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
-				src={editingData.coverUrl}
-				coverMediaType={editingData.coverMediaType ||
-					(editingData.videoShortName ? 'video/mp4' : undefined)}
-				stats={{ views: '#', likes: '#', comments_count: '#' }}
-				routePrefix="/projects"
-				dashboardPrefix="/dashboard/projects/id"
-				onclick={() => {
-					if (mode !== 'edit' || !isOwner) return;
-					coverUploaderOpen = true;
-				}}
-			>
-				<div
-					class="absolute top-0 full z-20 grid place-items-center border-4 border-dashed border-accent-green rounded-lg opacity-0 bg-accent-green/40 hover:opacity-100 hover:scale-105 transition-all duration-100"
-				></div>
-			</PostCard>
-		</div>
-	</div>
-
-	<PostSection
-		title={editingData.title}
-		tags={editingData.tags.split(' ').filter((tag) => tag !== '')}
-		date={editingData.date}
-		content={renderedText}
-		author={editingData.author}
-	/>
-
-	<div id="padding"></div>
-	<div
-		class="fixed z-10 top-full left-1/2 -translate-x-1/2 w-full max-w-400 transition-transform duration-100 -translate-y-14"
-		class:-translate-y-full={editor.toggled}
-	>
-		<div
-			class="absolute z-9 left-1/2 top-1/2 -translate-1/2 w-[calc(100%+6px)] h-[calc(100%+6px)] bg-dark/20 rounded-t-xl"
-		></div>
-		<div
-			class="relative z-10 flex flex-col items-center bg-white border-2 border-dark not-sm:text-sm rounded-t-xl"
-		>
-			<EditorToolbar
-				bind:toggled={editor.toggled}
-				view={editor.view}
-				status={editor.status}
-				bind:isCritical={editor.isCritical}
-				isPublishing={editor.isPublishing}
-				{mode}
-				{isOwner}
-				ontoggle={() => (editor.toggled = !editor.toggled)}
-				ontogglevision={toggleVersion}
-				onsubmit={newProject}
-				onchange={updateProject}
-				onpublish={publishProject}
-			/>
-			<div class="flex not-lg:flex-col gap-2 w-full h-full p-2 pt-1">
-				<div class="flex grow gap-2">
-					<div class="max-h-80 p-2 pr-1 w-1/3 bg-primary/40 rounded-lg">
-						<div class="full space-y-2 pr-0.75 custom-scrollbar overflow-y-scroll">
-							<div class="flex not-sm:flex-col">
-								<label class="inline-block min-w-14" for="title">Name:</label>
-								<input
-									id="title"
-									class="grow px-1 min-w-0 bg-white rounded-sm"
-									bind:value={editingData.title}
-									readonly={!isOwner}
-								/>
-							</div>
-							<div class="flex not-sm:flex-col">
-								<label class="inline-block min-w-14" for="slug">Slug:</label>
-								<input
-									id="slug"
-									class="grow px-1 min-w-0 bg-white rounded-sm"
-									class:bg-red-200!={editingData._slugStatus[editingData.slug] === 'used'}
-									class:bg-yellow-200!={editingData._slugStatus[editingData.slug] === 'pending'}
-									class:bg-green-200!={editingData._slugStatus[editingData.slug] === 'ready'}
-									bind:value={editingData.slug}
-									readonly={!isOwner}
-								/>
-							</div>
-							<div class="flex flex-col">
-								<label for="tags">Tags:</label>
-								<textarea
-									id="tags"
-									class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
-									rows="2"
-									bind:value={editingData.tags}
-									readonly={!isOwner}></textarea>
-							</div>
-							<div class="flex flex-col">
-								<label for="excerpt">Excerpt:</label>
-								<textarea
-									id="excerpt"
-									class="p-1 outline-none bg-white rounded-sm resize-none custom-scrollbar"
-									rows="4"
-									bind:value={editingData.excerpt}
-									readonly={!isOwner}></textarea>
-							</div>
-							{#if mode === 'create'}
-								<div class="flex flex-col gap-2">
-									<label for="create-cover">Cover media:</label>
-									<input
-										id="create-cover"
-										type="file"
-										accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"
-										onchange={(e) => setCreateCover(e.currentTarget.files?.[0])}
-										disabled={!isOwner}
-									/>
-									{#if editor.createCoverFile?.type?.startsWith('video/')}
-										<div class="flex flex-col">
-											<label for="create-cover-seconds">Thumbnail second:</label>
-											<input
-												id="create-cover-seconds"
-												type="number"
-												class="px-1 min-w-0 bg-white rounded-sm"
-												bind:value={editingData.ogImageSeconds}
-												min="0"
-												step="0.1"
-												readonly={!isOwner}
-											/>
-										</div>
-									{/if}
-									{#if editor.createCoverError}
-										<p class="text-sm text-accent-red">{editor.createCoverError}</p>
-									{/if}
-								</div>
-							{:else if mode === 'edit'}
-								<div class="flex flex-col">
-									<label for="og-image-seconds">Thumbnail seconds:</label>
-									<input
-										id="og-image-seconds"
-										type="number"
-										class="px-1 min-w-0 bg-white rounded-sm"
-										bind:value={editingData.ogImageSeconds}
-										readonly={!isOwner}
-										min="0"
-									/>
-								</div>
-							{/if}
-							<div class="flex flex-col">
-								<label for="demo-type">Demo type:</label>
-								<select
-									id="demo-type"
-									class="px-1 min-w-0 bg-white rounded-sm"
-									bind:value={editingData.demoType}
-									disabled={!isOwner}
-								>
-									{#each demoTypes as type}
-										<option value={type.value} disabled={type.disabled}>
-											{type.label}{type.disabled ? ' (soon)' : ''}
-										</option>
-									{/each}
-								</select>
-							</div>
-								{#if editingData.demoType !== 'none'}
-									<div class="grid grid-cols-2 gap-2">
-										<div class="flex flex-col">
-											<label for="demo-width">Demo width:</label>
-											<input
-												id="demo-width"
-												class="px-1 min-w-0 bg-white rounded-sm"
-												bind:value={editingData.demoWidth}
-												readonly={!isOwner}
-											/>
-										</div>
-										<div class="flex flex-col">
-											<label for="demo-height">Demo height:</label>
-											<input
-												id="demo-height"
-												class="px-1 min-w-0 bg-white rounded-sm"
-												bind:value={editingData.demoHeight}
-												readonly={!isOwner}
-											/>
-										</div>
-									</div>
-								{/if}
-							{#if editingData.demoType !== 'none' && editingData.demoType !== 'html5' && editingData.demoType !== 'webgl'}
-								<div class="flex flex-col">
-									<label for="demo-url">
-										{#if editingData.demoType === 'embed'}
-											Demo URL (required):
-										{:else if editingData.demoType === 'download'}
-											Download URL (required):
-										{:else if editingData.demoType === 'video'}
-											Video URL (required):
-										{:else}
-											URL:
-										{/if}
-									</label>
-									<input
-										id="demo-url"
-										class="px-1 min-w-0 bg-white rounded-sm"
-										bind:value={editingData.demoUrl}
-										placeholder={editingData.demoType === 'video'
-											? 'https://example.com/video.mp4'
-											: editingData.demoType === 'download'
-												? 'https://example.com/download-link'
-												: 'https://example.github.io/my-demo/'}
-										readonly={!isOwner}
-									/>
-								</div>
-							{/if}
-							{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl'}
-								<div
-									class="p-2 rounded-lg bg-white/70 border-2 border-dashed border-dark/30"
-									ondrop={(e) => {
-										e.preventDefault();
-										setDemoZip(e.dataTransfer.files[0]);
-									}}
-									ondragover={preventDefault}
-									role="none"
-								>
-									<label class="block font-semibold" for="demo-zip">
-										{editingData.demoType === 'html5' ? 'HTML5' : 'WebGL'} zip:
-									</label>
-									<input
-										id="demo-zip"
-										type="file"
-										accept=".zip,application/zip"
-										disabled={!isOwner}
-										onchange={(e) => setDemoZip(e.currentTarget.files?.[0])}
-									/>
-									{#if editor.demoZipName}
-										<p class="text-sm text-accent-green">{editor.demoZipName}</p>
-									{:else if mode === 'edit'}
-										<p class="text-sm text-dark/50">Leave empty to keep current demo.</p>
-									{/if}
-									{#if editor.demoZipError}
-										<p class="text-sm text-accent-red">{editor.demoZipError}</p>
-									{/if}
-								</div>
-							{/if}
-							<div class="space-y-2">
-								<div class="flex items-center justify-between">
-									<span>External links:</span>
-									<button
-										class="px-2 rounded-sm bg-white"
-										disabled={!isOwner}
-										onclick={() =>
-											(editingData.links = [...editingData.links, { label: '', url: '' }])}
-									>
-										+
-									</button>
-								</div>
-								{#each editingData.links as link, index}
-									<div class="grid grid-cols-[1fr_1fr_auto] gap-1">
-										<input
-											class="px-1 min-w-0 bg-white rounded-sm"
-											placeholder="Label"
-											bind:value={link.label}
-											readonly={!isOwner}
-										/>
-										<input
-											class="px-1 min-w-0 bg-white rounded-sm"
-											placeholder="URL"
-											bind:value={link.url}
-											readonly={!isOwner}
-										/>
-										<button
-											class="px-2 rounded-sm bg-white text-accent-red"
-											disabled={!isOwner}
-											onclick={() =>
-												(editingData.links = editingData.links.filter((_, i) => i !== index))}
-										>
-											x
-										</button>
-									</div>
-								{/each}
-							</div>
-						</div>
-					</div>
-					<ContentDebounceEditor
-						class="max-h-80 grow bg-primary/40 p-2 rounded-lg"
-						delay="500"
-						onUpdateRendered={(_renderedText) => (renderedText = _renderedText)}
-						onUpdateDraft={(content) => (editingData.draft = content)}
-						disabled={editor.view === 'public'}
-						{mediaSyntax}
-						{mediaDictionary}
-						{searchMedia}
-						{forDraft}
-						registerForceContent={(fn) => {
-							forceContent = fn;
-						}}
-					/>
-				</div>
-				<MediaDictionaryController
-					class="flex max-h-80 gap-2 not-lg:h-40 overflow-hidden"
-					registerMediaCheck={({ isOnline: _isOnline, isOffline: _isOffline }) => {
-						isOnline = _isOnline;
-						isOffline = _isOffline;
-					}}
-					registerGetMedia={(fn) => (getNewMedia = fn)}
-					{updateMediaDictionary}
-					registerSearch={(fn) => (searchMedia = fn)}
-					registerClearNewMedia={(fn) => (clearNewMedia = fn)}
-				/>
-			</div>
-		</div>
-	</div>
-</article>
-
-<style lang="postcss">
-	@reference "../../../app.css";
-
-	#padding {
-		@apply h-80;
-	}
-</style>

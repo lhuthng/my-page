@@ -42,6 +42,11 @@ export async function load(event) {
 		headers: { Authorization: `${type} ${token}` }
 	});
 
+	let relatedRes = event.fetch(route(`posts/id/${post_id}/related`), {
+		method: 'GET',
+		headers: { Authorization: `${type} ${token}` }
+	});
+
 	res = await res;
 
 	if (!res.ok) {
@@ -64,6 +69,13 @@ export async function load(event) {
 		data.series.forEach((series) => {
 			series.url = fixClientRoute(series.url);
 		});
+	}
+
+	relatedRes = await relatedRes;
+	if (relatedRes.ok) {
+		data.related_posts = (await relatedRes.json()).posts ?? [];
+	} else {
+		data.related_posts = [];
 	}
 
 	data.cover_url = fixClientRoute(data.cover_url);

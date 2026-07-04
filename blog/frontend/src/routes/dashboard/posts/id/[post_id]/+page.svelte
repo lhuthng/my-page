@@ -18,6 +18,7 @@
 		draft,
 		tags,
 		excerpt,
+		related_posts: relatedPosts,
 		medium_short_names: mediumShortNames,
 		medium_urls: mediumUrls,
 		is_owner: isOwner = true
@@ -41,6 +42,7 @@
 		draft,
 		tags,
 		excerpt,
+		relatedPosts,
 		mediumShortNames,
 		mediumUrls
 	}}

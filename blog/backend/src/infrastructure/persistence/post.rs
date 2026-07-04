@@ -1056,7 +1056,7 @@ impl PostService for PostServiceImpl {
             FROM posts
             LEFT JOIN series_post ON series_post.post_id = posts.id
             LEFT JOIN media cover ON cover.id = posts.cover_media_id
-            WHERE id = ?;
+            WHERE posts.id = ?;
             "#,
         )
         .bind(cmd.post_id)
