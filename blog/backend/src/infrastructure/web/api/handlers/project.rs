@@ -44,7 +44,10 @@ use crate::{
     },
     helper::string::replace_range_unicode,
     infrastructure::web::{
-        api::handlers::common::{MediumData, extract_medium},
+        api::handlers::common::{
+            CreateCoverUpload, MediumData, apply_created_cover_upload, extract_medium,
+            try_collect_create_cover_field,
+        },
         server::{AppState, ProjectDemoConfig},
     },
 };
@@ -125,8 +128,7 @@ struct ParsedMultipart<T> {
     files: HashMap<usize, FileData>,
     short_names: HashMap<usize, String>,
     demo_zip: Option<Bytes>,
-    cover_medium: Option<MediumData>,
-    cover_og_image_seconds: Option<i64>,
+    create_cover: CreateCoverUpload,
 }
 
 async fn parse_project_multipart<T: for<'de> Deserialize<'de>>(
@@ -137,8 +139,7 @@ async fn parse_project_multipart<T: for<'de> Deserialize<'de>>(
     let mut files = HashMap::<usize, FileData>::new();
     let mut short_names = HashMap::<usize, String>::new();
     let mut demo_zip: Option<Bytes> = None;
-    let mut cover_medium: Option<MediumData> = None;
-    let mut cover_og_image_seconds: Option<i64> = None;
+    let mut create_cover = CreateCoverUpload::default();
 
     while let Some(field) = multipart
         .next_field()
@@ -171,19 +172,6 @@ async fn parse_project_multipart<T: for<'de> Deserialize<'de>>(
                     .await
                     .map_err(|e| ProjectError::UploadFailed(e.to_string()))?,
             );
-        } else if field_name == "cover_file" {
-            if cover_medium.is_some() {
-                return Err(ProjectError::UploadFailed(
-                    "Only one cover file is allowed.".to_string(),
-                ));
-            }
-            cover_medium = Some(extract_medium(field).await?);
-        } else if field_name == "cover_og_image_seconds" {
-            let text = field
-                .text()
-                .await
-                .map_err(|e| ProjectError::UploadFailed(e.to_string()))?;
-            cover_og_image_seconds = text.trim().parse::<i64>().ok();
         } else if let Some(index_str) = field_name.strip_prefix("file_") {
             let index = index_str
                 .parse::<usize>()
@@ -228,6 +216,7 @@ async fn parse_project_multipart<T: for<'de> Deserialize<'de>>(
                     ProjectError::UploadFailed("Cannot read short name".to_string())
                 })?,
             );
+        } else if try_collect_create_cover_field(&field_name, field, &mut create_cover).await? {
         }
     }
 
@@ -238,8 +227,7 @@ async fn parse_project_multipart<T: for<'de> Deserialize<'de>>(
         files,
         short_names,
         demo_zip,
-        cover_medium,
-        cover_og_image_seconds,
+        create_cover,
     })
 }
 
@@ -527,8 +515,7 @@ pub async fn new_project(
     let mut data = parsed.data;
 
     let demo_zip = parsed.demo_zip;
-    let cover_medium = parsed.cover_medium;
-    let cover_og_image_seconds = parsed.cover_og_image_seconds;
+    let create_cover = parsed.create_cover;
     let has_demo_url = data.demo_url.as_ref().is_some_and(|u| !u.trim().is_empty());
     match data.demo_type.as_str() {
         "none" => {
@@ -621,36 +608,7 @@ pub async fn new_project(
         }
     }
 
-    let has_cover_medium = cover_medium.is_some();
-    if let Some(cover_medium) = cover_medium {
-        state
-            .media_service
-            .change_post_cover(
-                ChangePostCoverCommand {
-                    post_id,
-                    user_id: uploader_id,
-                    medium_details: MediumDetails {
-                        filename: cover_medium.filename,
-                        content_type: cover_medium.content_type,
-                        bytes: cover_medium.bytes,
-                    },
-                    og_image_seconds: cover_og_image_seconds,
-                },
-                &state.media_config,
-            )
-            .await?;
-    }
-
-    if has_cover_medium && cover_og_image_seconds.is_some() {
-        state
-            .post_service
-            .update_post_cover(UpdatePostCoverCommand {
-                user_id: uploader_id,
-                post_id,
-                og_image_seconds: cover_og_image_seconds,
-            })
-            .await?;
-    }
+    apply_created_cover_upload(&state, uploader_id, post_id, create_cover).await?;
 
     Ok(Json(
         serde_json::json!({ "id": project_id, "post_id": post_id }),
