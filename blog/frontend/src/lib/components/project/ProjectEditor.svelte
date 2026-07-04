@@ -15,6 +15,7 @@
 	const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 	const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)\s*/g;
 	const demoTypes = [
+		{ value: 'none', label: 'No Demo', disabled: false },
 		{ value: 'html5', label: 'HTML5', disabled: false },
 		{ value: 'embed', label: 'Embed', disabled: false },
 		{ value: 'webgl', label: 'WebGL', disabled: false },
@@ -145,6 +146,11 @@
 			editor.demoZip = undefined;
 			editor.demoZipName = '';
 			editor.demoZipError = '';
+		} else if (editingData.demoType === 'none') {
+			editor.demoZip = undefined;
+			editor.demoZipName = '';
+			editor.demoZipError = '';
+			editingData.demoUrl = '';
 		} else {
 			editingData.demoUrl = '';
 		}
@@ -187,6 +193,8 @@
 		const zip = editor.demoZip;
 
 		switch (type) {
+			case 'none':
+				break;
 			case 'html5':
 			case 'webgl':
 				if (mode === 'create' && !zip) {
@@ -258,7 +266,11 @@
 			...(editingData.videoShortName && { video_short_name: editingData.videoShortName }),
 			...(editingData.ogImageSeconds > 0 && { og_image_seconds: editingData.ogImageSeconds })
 		};
-		if (editingData.demoType !== 'html5' && editingData.demoType !== 'webgl') {
+		if (
+			editingData.demoType !== 'none' &&
+			editingData.demoType !== 'html5' &&
+			editingData.demoType !== 'webgl'
+		) {
 			projectPayload.demo_url = editingData.demoUrl;
 		}
 		formData.append(
@@ -314,7 +326,10 @@
 			projectData.demo_width = editingData.demoWidth;
 		if (editingData.demoHeight !== (data.demoHeight ?? '520px'))
 			projectData.demo_height = editingData.demoHeight;
-		if (
+		if (editingData.demoType === 'none' && (data.rawDemoUrl ?? '') !== '') {
+			projectData.demo_url = '';
+		} else if (
+			editingData.demoType !== 'none' &&
 			editingData.demoType !== 'html5' &&
 			editingData.demoType !== 'webgl' &&
 			editingData.demoUrl !== (data.rawDemoUrl ?? '')
@@ -514,7 +529,7 @@
 									readonly={!isOwner}></textarea>
 							</div>
 							<div class="flex flex-col">
-								<label for="video-short-name">Cover video short name:</label>
+									<label for="video-short-name">Video short name:</label>
 								<input
 									id="video-short-name"
 									class="px-1 min-w-0 bg-white rounded-sm"
@@ -524,7 +539,7 @@
 								/>
 							</div>
 							<div class="flex flex-col">
-								<label for="og-image-seconds">OG image seconds:</label>
+									<label for="og-image-seconds">Thumbnail seconds:</label>
 								<input
 									id="og-image-seconds"
 									type="number"
@@ -549,27 +564,29 @@
 									{/each}
 								</select>
 							</div>
-							<div class="grid grid-cols-2 gap-2">
-								<div class="flex flex-col">
-									<label for="demo-width">Demo width:</label>
-									<input
-										id="demo-width"
-										class="px-1 min-w-0 bg-white rounded-sm"
-										bind:value={editingData.demoWidth}
-										readonly={!isOwner}
-									/>
-								</div>
-								<div class="flex flex-col">
-									<label for="demo-height">Demo height:</label>
-									<input
-										id="demo-height"
-										class="px-1 min-w-0 bg-white rounded-sm"
-										bind:value={editingData.demoHeight}
-										readonly={!isOwner}
-									/>
-								</div>
-							</div>
-							{#if editingData.demoType !== 'html5' && editingData.demoType !== 'webgl'}
+								{#if editingData.demoType !== 'none'}
+									<div class="grid grid-cols-2 gap-2">
+										<div class="flex flex-col">
+											<label for="demo-width">Demo width:</label>
+											<input
+												id="demo-width"
+												class="px-1 min-w-0 bg-white rounded-sm"
+												bind:value={editingData.demoWidth}
+												readonly={!isOwner}
+											/>
+										</div>
+										<div class="flex flex-col">
+											<label for="demo-height">Demo height:</label>
+											<input
+												id="demo-height"
+												class="px-1 min-w-0 bg-white rounded-sm"
+												bind:value={editingData.demoHeight}
+												readonly={!isOwner}
+											/>
+										</div>
+									</div>
+								{/if}
+							{#if editingData.demoType !== 'none' && editingData.demoType !== 'html5' && editingData.demoType !== 'webgl'}
 								<div class="flex flex-col">
 									<label for="demo-url">
 										{#if editingData.demoType === 'embed'}

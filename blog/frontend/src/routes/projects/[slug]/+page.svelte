@@ -99,13 +99,15 @@
 </svelte:head>
 
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
-	<ProjectDemo
-		{title}
-		demoType={demo_type}
-		demoUrl={demo_url}
-		width={demo_width ?? '100%'}
-		height={demo_height ?? '520px'}
-	/>
+	{#if demo_type !== 'none'}
+		<ProjectDemo
+			{title}
+			demoType={demo_type}
+			demoUrl={demo_url}
+			width={demo_width ?? '100%'}
+			height={demo_height ?? '520px'}
+		/>
+	{/if}
 
 	{#if links?.length > 0}
 		<section class="flex flex-col gap-2 bg-white rounded-xl p-4">

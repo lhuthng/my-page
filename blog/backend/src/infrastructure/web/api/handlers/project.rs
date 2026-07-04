@@ -511,9 +511,17 @@ pub async fn new_project(
     let mut data = parsed.data;
 
     let demo_zip = parsed.demo_zip;
+    let has_demo_url = data.demo_url.as_ref().is_some_and(|u| !u.trim().is_empty());
     match data.demo_type.as_str() {
+        "none" => {
+            if has_demo_url || demo_zip.is_some() {
+                return Err(ProjectError::InvalidDemo(
+                    "Demo attachments are not accepted for projects without demos.".to_string(),
+                ));
+            }
+        }
         "html5" | "webgl" => {
-            if data.demo_url.is_some() {
+            if has_demo_url {
                 return Err(ProjectError::InvalidDemo(format!(
                     "Demo URL is not accepted for {} projects.",
                     data.demo_type
@@ -527,7 +535,7 @@ pub async fn new_project(
             }
         }
         "embed" | "download" | "video" => {
-            if data.demo_url.is_none() {
+            if !has_demo_url {
                 return Err(ProjectError::InvalidDemo(format!(
                     "Demo URL is required for {} projects.",
                     data.demo_type
@@ -626,10 +634,17 @@ pub async fn update_project(
     let parsed = parse_project_multipart::<ProjectPatchData>(multipart, "project_data").await?;
     let mut data = parsed.data;
 
-    let has_demo_attachments = parsed.demo_zip.is_some() || data.demo_url.is_some();
+    let has_demo_url = data.demo_url.as_ref().is_some_and(|u| !u.trim().is_empty());
+    let has_demo_attachments = parsed.demo_zip.is_some() || has_demo_url;
     if let Some(ref demo_type) = data.demo_type {
         if has_demo_attachments {
             match demo_type.as_str() {
+                "none" => {
+                    return Err(ProjectError::InvalidDemo(
+                        "Demo attachments are not accepted for projects without demos."
+                            .to_string(),
+                    ));
+                }
                 "html5" | "webgl" => {
                     if data.demo_url.is_some() {
                         return Err(ProjectError::InvalidDemo(format!(
