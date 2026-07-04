@@ -17,6 +17,8 @@
 	const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 	const glbSyntax = /:::app\s+glb-demo\s+([^\s]+)\s*/g;
 	const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)\s*/g;
+	const allowedCoverTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'];
+	const maxCoverFileSize = 5 * 1024 * 1024;
 
 	// temporary usage only
 	const ignored = ['.glb'];
@@ -67,7 +69,9 @@
 		view: 'private',
 		status: '',
 		isCritical: false,
-		isPublishing: false
+		isPublishing: false,
+		createCoverFile: undefined,
+		createCoverError: ''
 	});
 
 	let coverUploaderOpen = $state(false);
@@ -186,6 +190,29 @@
 		}
 	};
 
+	const setCreateCover = (file) => {
+		editor.createCoverError = '';
+		if (!file) {
+			editor.createCoverFile = undefined;
+			editingData.coverUrl = '';
+			editingData.coverMediaType = '';
+			editingData.ogImageSeconds = 0;
+			return;
+		}
+		if (!allowedCoverTypes.includes(file.type)) {
+			editor.createCoverError = 'Only JPEG, PNG, GIF, WEBP, MP4, or WebM are allowed.';
+			return;
+		}
+		if (file.size > maxCoverFileSize) {
+			editor.createCoverError = `File size exceeds 5MB (${file.size} bytes)`;
+			return;
+		}
+		editor.createCoverFile = file;
+		editingData.coverUrl = URL.createObjectURL(file);
+		editingData.coverMediaType = file.type;
+		editingData.ogImageSeconds = file.type.startsWith('video/') ? 1 : 0;
+	};
+
 	const newPost = async () => {
 		const { title, slug, excerpt, draft } = editingData;
 		const tags = editingData.tags
@@ -209,26 +236,30 @@
 			'post_data',
 			new Blob(
 				[
-					JSON.stringify({
-						title,
-						slug,
-						excerpt,
-						tags,
-						content: draft,
-						categories: [],
-						number_of_files: keys.length,
-						...(editingData.videoShortName && { video_short_name: editingData.videoShortName }),
-						...(editingData.ogImageSeconds > 0 && { og_image_seconds: editingData.ogImageSeconds })
-					})
-				],
-				{ type: 'application/json' }
-			)
-		);
+						JSON.stringify({
+							title,
+							slug,
+							excerpt,
+							tags,
+							content: draft,
+							categories: [],
+							number_of_files: keys.length
+						})
+					],
+					{ type: 'application/json' }
+				)
+			);
 
 		for (let index = 0; index < keys.length; index++) {
 			const mediaItem = getNewMedia(keys[index]);
 			formData.append(`file_${index + 1}`, mediaItem.file, mediaItem.file.name);
 			formData.append(`short_name_${index + 1}`, keys[index]);
+		}
+		if (editor.createCoverFile) {
+			formData.append('cover_file', editor.createCoverFile, editor.createCoverFile.name);
+			if (editor.createCoverFile.type.startsWith('video/')) {
+				formData.append('cover_og_image_seconds', editingData.ogImageSeconds.toString());
+			}
 		}
 
 		editor.isCritical = false;
@@ -317,9 +348,6 @@
 			postData.content = editingData.content;
 		}
 
-		if (editingData.videoShortName !== (data.videoShortName ?? '')) {
-			postData.video_short_name = editingData.videoShortName || null;
-		}
 		if (editingData.ogImageSeconds !== (data.ogImageSeconds ?? 0)) {
 			postData.og_image_seconds = editingData.ogImageSeconds;
 		}
@@ -493,27 +521,47 @@
 									readonly={!isOwner}
 									bind:value={editingData.excerpt}></textarea>
 							</div>
-							<div class="flex flex-col">
-								<label for="video-short-name">Cover video short name:</label>
-								<input
-									id="video-short-name"
-									class="px-1 min-w-0 bg-white rounded-sm"
-									bind:value={editingData.videoShortName}
-									readonly={!isOwner}
-									placeholder="e.g. my-demo-video"
-								/>
-							</div>
-							<div class="flex flex-col">
-								<label for="og-image-seconds">OG image seconds:</label>
-								<input
-									id="og-image-seconds"
-									type="number"
-									class="px-1 min-w-0 bg-white rounded-sm"
-									bind:value={editingData.ogImageSeconds}
-									readonly={!isOwner}
-									min="0"
-								/>
-							</div>
+							{#if mode === 'create'}
+								<div class="flex flex-col gap-2">
+									<label for="create-cover">Cover media:</label>
+									<input
+										id="create-cover"
+										type="file"
+										accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"
+										onchange={(e) => setCreateCover(e.currentTarget.files?.[0])}
+										disabled={!isOwner}
+									/>
+									{#if editor.createCoverFile?.type?.startsWith('video/')}
+										<div class="flex flex-col">
+											<label for="create-cover-seconds">Thumbnail second:</label>
+											<input
+												id="create-cover-seconds"
+												type="number"
+												class="px-1 min-w-0 bg-white rounded-sm"
+												bind:value={editingData.ogImageSeconds}
+												min="0"
+												step="0.1"
+												readonly={!isOwner}
+											/>
+										</div>
+									{/if}
+									{#if editor.createCoverError}
+										<p class="text-sm text-accent-red">{editor.createCoverError}</p>
+									{/if}
+								</div>
+							{:else if mode === 'edit'}
+								<div class="flex flex-col">
+									<label for="og-image-seconds">Thumbnail seconds:</label>
+									<input
+										id="og-image-seconds"
+										type="number"
+										class="px-1 min-w-0 bg-white rounded-sm"
+										bind:value={editingData.ogImageSeconds}
+										readonly={!isOwner}
+										min="0"
+									/>
+								</div>
+							{/if}
 							<SeriesController
 								postId={mode === 'edit' ? editingData.id : null}
 								bind:series={editingData.series}

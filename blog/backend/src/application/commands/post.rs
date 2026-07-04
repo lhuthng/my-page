@@ -125,6 +125,5 @@ pub struct SetFeaturedPostCommand {
 pub struct UpdatePostCoverCommand {
     pub user_id: i64,
     pub post_id: i64,
-    pub video_short_name: Option<String>,
     pub og_image_seconds: Option<i64>,
 }

@@ -14,6 +14,8 @@
 
 	const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 	const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)\s*/g;
+	const allowedCoverTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm'];
+	const maxCoverFileSize = 5 * 1024 * 1024;
 	const demoTypes = [
 		{ value: 'none', label: 'No Demo', disabled: false },
 		{ value: 'html5', label: 'HTML5', disabled: false },
@@ -70,6 +72,8 @@
 		status: '',
 		isCritical: false,
 		isPublishing: false,
+		createCoverFile: undefined,
+		createCoverError: '',
 		demoZip: undefined,
 		demoZipName: '',
 		demoZipError: ''
@@ -236,6 +240,29 @@
 		}
 	};
 
+	const setCreateCover = (file) => {
+		editor.createCoverError = '';
+		if (!file) {
+			editor.createCoverFile = undefined;
+			editingData.coverUrl = '';
+			editingData.coverMediaType = '';
+			editingData.ogImageSeconds = 0;
+			return;
+		}
+		if (!allowedCoverTypes.includes(file.type)) {
+			editor.createCoverError = 'Only JPEG, PNG, GIF, WEBP, MP4, or WebM are allowed.';
+			return;
+		}
+		if (file.size > maxCoverFileSize) {
+			editor.createCoverError = `File size exceeds 5MB (${file.size} bytes)`;
+			return;
+		}
+		editor.createCoverFile = file;
+		editingData.coverUrl = URL.createObjectURL(file);
+		editingData.coverMediaType = file.type;
+		editingData.ogImageSeconds = file.type.startsWith('video/') ? 1 : 0;
+	};
+
 	const newProject = async () => {
 		const demoValidation = validateDemoFields();
 		if (!demoValidation.valid) {
@@ -262,9 +289,7 @@
 			number_of_files: offlineKeys.length,
 			demo_type: editingData.demoType,
 			demo_width: editingData.demoWidth,
-			demo_height: editingData.demoHeight,
-			...(editingData.videoShortName && { video_short_name: editingData.videoShortName }),
-			...(editingData.ogImageSeconds > 0 && { og_image_seconds: editingData.ogImageSeconds })
+			demo_height: editingData.demoHeight
 		};
 		if (
 			editingData.demoType !== 'none' &&
@@ -277,6 +302,12 @@
 			'project_data',
 			new Blob([JSON.stringify(projectPayload)], { type: 'application/json' })
 		);
+		if (editor.createCoverFile) {
+			formData.append('cover_file', editor.createCoverFile, editor.createCoverFile.name);
+			if (editor.createCoverFile.type.startsWith('video/')) {
+				formData.append('cover_og_image_seconds', editingData.ogImageSeconds.toString());
+			}
+		}
 		if (editor.demoZip) {
 			formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
 		}
@@ -350,9 +381,6 @@
 			projectData.content = editingData.content;
 		}
 
-		if (editingData.videoShortName !== (data.videoShortName ?? '')) {
-			projectData.video_short_name = editingData.videoShortName || null;
-		}
 		if (editingData.ogImageSeconds !== (data.ogImageSeconds ?? 0)) {
 			projectData.og_image_seconds = editingData.ogImageSeconds;
 		}
@@ -528,27 +556,47 @@
 									bind:value={editingData.excerpt}
 									readonly={!isOwner}></textarea>
 							</div>
-							<div class="flex flex-col">
-									<label for="video-short-name">Video short name:</label>
-								<input
-									id="video-short-name"
-									class="px-1 min-w-0 bg-white rounded-sm"
-									bind:value={editingData.videoShortName}
-									readonly={!isOwner}
-									placeholder="e.g. my-demo-video"
-								/>
-							</div>
-							<div class="flex flex-col">
+							{#if mode === 'create'}
+								<div class="flex flex-col gap-2">
+									<label for="create-cover">Cover media:</label>
+									<input
+										id="create-cover"
+										type="file"
+										accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm"
+										onchange={(e) => setCreateCover(e.currentTarget.files?.[0])}
+										disabled={!isOwner}
+									/>
+									{#if editor.createCoverFile?.type?.startsWith('video/')}
+										<div class="flex flex-col">
+											<label for="create-cover-seconds">Thumbnail second:</label>
+											<input
+												id="create-cover-seconds"
+												type="number"
+												class="px-1 min-w-0 bg-white rounded-sm"
+												bind:value={editingData.ogImageSeconds}
+												min="0"
+												step="0.1"
+												readonly={!isOwner}
+											/>
+										</div>
+									{/if}
+									{#if editor.createCoverError}
+										<p class="text-sm text-accent-red">{editor.createCoverError}</p>
+									{/if}
+								</div>
+							{:else if mode === 'edit'}
+								<div class="flex flex-col">
 									<label for="og-image-seconds">Thumbnail seconds:</label>
-								<input
-									id="og-image-seconds"
-									type="number"
-									class="px-1 min-w-0 bg-white rounded-sm"
-									bind:value={editingData.ogImageSeconds}
-									readonly={!isOwner}
-									min="0"
-								/>
-							</div>
+									<input
+										id="og-image-seconds"
+										type="number"
+										class="px-1 min-w-0 bg-white rounded-sm"
+										bind:value={editingData.ogImageSeconds}
+										readonly={!isOwner}
+										min="0"
+									/>
+								</div>
+							{/if}
 							<div class="flex flex-col">
 								<label for="demo-type">Demo type:</label>
 								<select

@@ -1670,10 +1670,6 @@ impl PostService for PostServiceImpl {
 
     async fn update_post_cover(&self, cmd: UpdatePostCoverCommand) -> Result<(), PostError> {
         let mut set_fields: Vec<String> = vec![];
-        if cmd.video_short_name.is_some() {
-            set_fields
-                .push("cover_media_id = (SELECT id FROM media WHERE short_name = ?)".to_string());
-        }
         if cmd.og_image_seconds.is_some() {
             set_fields.push("og_image_seconds = ?".to_string());
         }
@@ -1683,9 +1679,6 @@ impl PostService for PostServiceImpl {
                 set_fields.join(", ")
             );
             let mut query = sqlx::query(&sql);
-            if let Some(ref short_name) = cmd.video_short_name {
-                query = query.bind(short_name);
-            }
             if let Some(seconds) = cmd.og_image_seconds {
                 query = query.bind(seconds);
             }

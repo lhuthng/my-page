@@ -405,13 +405,12 @@ pub async fn update_post(
 
     state.post_service.update_post(cmd).await?;
 
-    if post_data.video_short_name.is_some() || post_data.og_image_seconds.is_some() {
+    if post_data.og_image_seconds.is_some() {
         state
             .post_service
             .update_post_cover(UpdatePostCoverCommand {
                 user_id: uploader_id,
                 post_id,
-                video_short_name: post_data.video_short_name,
                 og_image_seconds: post_data.og_image_seconds,
             })
             .await?;
@@ -614,8 +613,6 @@ pub struct PostData {
     content: String,
     tags: Vec<String>,
     number_of_files: usize,
-    video_short_name: Option<String>,
-    og_image_seconds: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -627,7 +624,6 @@ pub struct PostPatchData {
     draft: Option<String>,
     tags: Option<Vec<String>>,
     number_of_files: usize,
-    video_short_name: Option<String>,
     og_image_seconds: Option<i64>,
 }
 
@@ -651,6 +647,8 @@ pub async fn new_post(
     let mut post_data: Option<PostData> = None;
     let mut file_map = HashMap::<usize, FileData>::new();
     let mut short_name_map = HashMap::<usize, String>::new();
+    let mut cover_medium: Option<MediumData> = None;
+    let mut cover_og_image_seconds: Option<i64> = None;
 
     while let Some(field) = multipart
         .next_field()
@@ -665,6 +663,19 @@ pub async fn new_post(
             if let Ok(bytes) = field.bytes().await {
                 post_data = Some(serde_json::from_slice::<PostData>(&bytes).unwrap());
             }
+        } else if field_name == "cover_file" {
+            if cover_medium.is_some() {
+                return Err(PostError::UploadFailed(
+                    "Only one cover file is allowed.".to_string(),
+                ));
+            }
+            cover_medium = Some(extract_medium(field).await?);
+        } else if field_name == "cover_og_image_seconds" {
+            let text = field
+                .text()
+                .await
+                .map_err(|e| PostError::InternalError(e.to_string()))?;
+            cover_og_image_seconds = text.trim().parse::<i64>().ok();
         } else if let Some(index_str) = field_name.strip_prefix("file_") {
             let index: usize = index_str
                 .parse()
@@ -786,14 +797,33 @@ pub async fn new_post(
 
     let post_id = state.post_service.new_post(cmd).await?;
 
-    if post_data.video_short_name.is_some() || post_data.og_image_seconds.is_some() {
+    let has_cover_medium = cover_medium.is_some();
+    if let Some(cover_medium) = cover_medium {
+        state
+            .media_service
+            .change_post_cover(
+                ChangePostCoverCommand {
+                    post_id,
+                    user_id: uploader_id,
+                    medium_details: MediumDetails {
+                        filename: cover_medium.filename,
+                        content_type: cover_medium.content_type,
+                        bytes: cover_medium.bytes,
+                    },
+                    og_image_seconds: cover_og_image_seconds,
+                },
+                &state.media_config,
+            )
+            .await?;
+    }
+
+    if has_cover_medium && cover_og_image_seconds.is_some() {
         state
             .post_service
             .update_post_cover(UpdatePostCoverCommand {
                 user_id: uploader_id,
                 post_id,
-                video_short_name: post_data.video_short_name,
-                og_image_seconds: post_data.og_image_seconds,
+                og_image_seconds: cover_og_image_seconds,
             })
             .await?;
     }
@@ -1318,7 +1348,6 @@ pub async fn change_cover(
             .update_post_cover(UpdatePostCoverCommand {
                 user_id,
                 post_id,
-                video_short_name: None,
                 og_image_seconds: Some(og_image_seconds),
             })
             .await?;
