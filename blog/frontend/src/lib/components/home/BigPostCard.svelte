@@ -24,6 +24,7 @@
 	let expanded = $state(false);
 
 	let link = $derived(dashboardMode ? `${dashboardPrefix}/${id}` : `${routePrefix}/${slug}`);
+	let coverSrc = $derived(src ?? '/missing.png');
 </script>
 
 <div class="bg-white rounded-lg drop-shadow-sm h-full">
@@ -38,8 +39,8 @@
 				{#if coverMediaType?.startsWith('video/')}
 					<video
 						class="absolute z-10 left-0 top-0 w-full h-full object-cover bg-white border-3 border-dark rounded-t-lg"
-						src={src ?? '/missing.png'}
-						poster={src ?? '/missing.png'}
+						src={coverSrc}
+						poster={`${coverSrc}.thumbnail`}
 						muted
 						loop
 						playsinline
@@ -49,7 +50,7 @@
 				{:else}
 					<img
 						class="absolute z-10 left-0 top-0 w-full h-full object-cover bg-white border-3 border-dark rounded-t-lg"
-						src={src ?? '/missing.png'}
+						src={coverSrc}
 						alt="post-cover"
 					/>
 				{/if}
@@ -81,8 +82,8 @@
 				{#if coverMediaType?.startsWith('video/')}
 					<video
 						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
-						src={src ?? '/missing.png'}
-						poster={src ?? '/missing.png'}
+						src={coverSrc}
+						poster={`${coverSrc}.thumbnail`}
 						muted
 						loop
 						playsinline
@@ -92,7 +93,7 @@
 				{:else}
 					<img
 						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
-						src={src ?? '/missing.png'}
+						src={coverSrc}
 						alt="post-cover"
 					/>
 				{/if}
