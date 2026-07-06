@@ -135,6 +135,7 @@ pub struct TagRow {
 pub struct TagSummaryRow {
     pub name: String,
     pub slug: String,
+    pub description: Option<String>,
     pub post_count: i64,
     #[allow(dead_code)]
     pub score: i32,
@@ -475,6 +476,7 @@ impl PostService for PostServiceImpl {
             SELECT
                 t.name,
                 t.slug,
+                t.description,
                 COUNT(DISTINCT p.id) AS post_count,
                 CASE
                     WHEN ?1 IS NULL THEN 0
@@ -488,7 +490,7 @@ impl PostService for PostServiceImpl {
             WHERE
                 ?1 IS NULL
                 OR LOWER(t.slug) LIKE '%' || LOWER(?1) || '%'
-            GROUP BY t.id, t.name, t.slug
+            GROUP BY t.id, t.name, t.slug, t.description
             HAVING COUNT(DISTINCT p.id) > 0
             ORDER BY score DESC, post_count DESC, t.name ASC
             LIMIT ?2 OFFSET ?3
@@ -505,6 +507,7 @@ impl PostService for PostServiceImpl {
             .map(|row| TagSummary {
                 name: row.name,
                 slug: row.slug,
+                description: row.description,
                 post_count: row.post_count,
             })
             .collect())
@@ -518,13 +521,14 @@ impl PostService for PostServiceImpl {
             SELECT
                 t.name,
                 t.slug,
+                t.description,
                 COUNT(DISTINCT p.id) AS post_count,
                 0 AS score
             FROM tags t
             LEFT JOIN post_tags pt ON pt.tag_id = t.id
             LEFT JOIN posts p ON p.id = pt.post_id AND p.status = 'published'
             WHERE t.slug = ?1
-            GROUP BY t.id, t.name, t.slug
+            GROUP BY t.id, t.name, t.slug, t.description
             "#,
         )
         .bind(&cmd.slug)
@@ -576,6 +580,7 @@ impl PostService for PostServiceImpl {
             TagSummary {
                 name: tag.name,
                 slug: tag.slug,
+                description: tag.description,
                 post_count: tag.post_count,
             },
             posts,

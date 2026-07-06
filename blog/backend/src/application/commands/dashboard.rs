@@ -27,3 +27,9 @@ pub struct GetDashboardProjectsCommand {
     pub limit: i64,
     pub offset: i64,
 }
+
+pub struct UpdateDashboardTagCommand {
+    pub id: i64,
+    pub slug: String,
+    pub description: Option<String>,
+}

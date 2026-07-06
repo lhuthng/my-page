@@ -2,6 +2,7 @@
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/stores';
 	import { gql, fixUrl } from '$lib/api/graphql';
+	import { ApiError, api } from '$lib/api/client';
 
 	let { data } = $props();
 
@@ -16,6 +17,11 @@
 	let roleFilter = $state('');
 	let includeDeleted = $state(false);
 	let loading = $state(true);
+	let savingTagId = $state(null);
+	let editingTagId = $state(null);
+	let editingTagSlug = $state('');
+	let editingTagDescription = $state('');
+	let tagError = $state('');
 
 	const TABLES = [
 		{ id: 'users', label: 'Users', statKey: 'totalUsers' },
@@ -35,7 +41,7 @@
 		comments: `query Comments($limit: Int, $offset: Int, $includeDeleted: Boolean) { comments(limit: $limit, offset: $offset, includeDeleted: $includeDeleted) { total items { id content postTitle postSlug authorName authorUsername parentId isDeleted createdAt } } }`,
 		media: `query Media($limit: Int, $offset: Int, $search: String) { media(limit: $limit, offset: $offset, search: $search) { total items { id shortName fileName fileType url size description uploaderName useCount createdAt } } }`,
 		series: `query Series($limit: Int, $offset: Int) { series(limit: $limit, offset: $offset) { total items { id title slug description postCount createdAt } } }`,
-		tags: `query Tags($limit: Int, $offset: Int) { tags(limit: $limit, offset: $offset) { total items { id name slug postCount } } }`,
+		tags: `query Tags($limit: Int, $offset: Int) { tags(limit: $limit, offset: $offset) { total items { id name slug description postCount } } }`,
 		categories: `query Categories($limit: Int, $offset: Int) { categories(limit: $limit, offset: $offset) { total items { id name slug description postCount } } }`
 	};
 
@@ -102,6 +108,46 @@
 
 	function fmtDate(iso) {
 		return iso ? iso.slice(0, 10) : '-';
+	}
+
+	const isAdmin = $derived($page.data.role === 'admin');
+
+	function startTagEdit(row) {
+		editingTagId = row.id;
+		editingTagSlug = row.slug ?? '';
+		editingTagDescription = row.description ?? '';
+		tagError = '';
+	}
+
+	function cancelTagEdit() {
+		editingTagId = null;
+		editingTagSlug = '';
+		editingTagDescription = '';
+		tagError = '';
+	}
+
+	async function saveTag(row) {
+		savingTagId = row.id;
+		tagError = '';
+		try {
+			const updated = await api.patch(`dashboard/tags/${row.id}`, {
+				body: {
+					slug: editingTagSlug,
+					description: editingTagDescription
+				}
+			});
+
+			tableData = {
+				...tableData,
+				items: tableData.items.map((item) => (item.id === row.id ? { ...item, ...updated } : item))
+			};
+
+			cancelTagEdit();
+		} catch (error) {
+			tagError = error instanceof ApiError ? error.message : 'Failed to update tag.';
+		} finally {
+			savingTagId = null;
+		}
 	}
 </script>
 
@@ -189,7 +235,7 @@
 									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
 								{/each}
 							{:else if table === 'tags'}
-								{#each ['#', 'Name', 'Slug', 'Posts'] as h}
+								{#each ['#', 'Name', 'Slug', 'Description', 'Posts', 'Actions'] as h}
 									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
 								{/each}
 							{:else if table === 'categories'}
@@ -249,8 +295,67 @@
 										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">{fmtDate(row.createdAt)}</td>
 									{:else if table === 'tags'}
 										<td class="px-4 py-2.5 font-medium">{row.name}</td>
-										<td class="px-4 py-2.5 font-mono text-xs text-dark/55">{row.slug}</td>
+										<td class="px-4 py-2.5">
+											{#if isAdmin && editingTagId === row.id}
+												<input
+													bind:value={editingTagSlug}
+													class="w-full min-w-44 rounded-lg border border-background px-3 py-2 font-mono text-xs text-dark/75 outline-none focus:border-dark/30"
+												/>
+											{:else}
+												<span class="font-mono text-xs text-dark/55">{row.slug}</span>
+											{/if}
+										</td>
+										<td class="px-4 py-2.5">
+											{#if isAdmin && editingTagId === row.id}
+												<div class="space-y-1">
+													<textarea
+														bind:value={editingTagDescription}
+														rows="3"
+														class="w-full min-w-56 rounded-lg border border-background px-3 py-2 text-xs text-dark/75 outline-none focus:border-dark/30"
+														placeholder="Optional description"
+													></textarea>
+													{#if tagError}
+														<p class="text-xs text-accent-red">{tagError}</p>
+													{/if}
+												</div>
+											{:else}
+												<div class="max-w-[18rem] truncate text-xs text-dark/45" title={row.description ?? ''}>
+													{row.description ?? '-'}
+												</div>
+											{/if}
+										</td>
 										<td class="px-4 py-2.5 text-dark/60 tabular-nums">{row.postCount}</td>
+										<td class="px-4 py-2.5">
+											{#if isAdmin}
+												{#if editingTagId === row.id}
+													<div class="flex items-center gap-2">
+														<button
+															onclick={() => saveTag(row)}
+															disabled={savingTagId === row.id}
+															class="rounded-lg bg-dark px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-dark/85 disabled:opacity-50"
+														>
+															{savingTagId === row.id ? 'Saving...' : 'Save'}
+														</button>
+														<button
+															onclick={cancelTagEdit}
+															disabled={savingTagId === row.id}
+															class="rounded-lg border border-background px-3 py-1.5 text-xs text-dark/65 transition-colors hover:bg-background/60 disabled:opacity-50"
+														>
+															Cancel
+														</button>
+													</div>
+												{:else}
+													<button
+														onclick={() => startTagEdit(row)}
+														class="rounded-lg border border-background px-3 py-1.5 text-xs text-dark/70 transition-colors hover:bg-background/60"
+													>
+														Edit
+													</button>
+												{/if}
+											{:else}
+												<span class="text-xs text-dark/30">Admin only</span>
+											{/if}
+										</td>
 									{:else if table === 'categories'}
 										<td class="px-4 py-2.5 font-medium">{row.name}</td>
 										<td class="px-4 py-2.5 font-mono text-xs text-dark/55">{row.slug}</td>

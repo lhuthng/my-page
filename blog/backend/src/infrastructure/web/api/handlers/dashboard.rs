@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
     Extension, Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     response::IntoResponse,
 };
 use serde::Deserialize;
@@ -119,6 +119,29 @@ pub async fn get_users(
             role_filter: query.role,
             limit: query.limit.unwrap_or(20),
             offset: query.offset.unwrap_or(0),
+        })
+        .await?;
+
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+pub struct UpdateTagBody {
+    pub slug: String,
+    pub description: Option<String>,
+}
+
+pub async fn update_tag(
+    State(state): State<Arc<AppState>>,
+    Path(tag_id): Path<i64>,
+    Json(body): Json<UpdateTagBody>,
+) -> Result<impl IntoResponse, UserError> {
+    let result = state
+        .dashboard_service
+        .update_tag(UpdateDashboardTagCommand {
+            id: tag_id,
+            slug: body.slug,
+            description: body.description,
         })
         .await?;
 
