@@ -824,6 +824,7 @@ pub struct SearchTagsQuery {
 pub struct SearchTagResult {
     pub name: String,
     pub slug: String,
+    pub description: Option<String>,
     pub post_count: i64,
 }
 
@@ -891,10 +892,12 @@ pub async fn search_tags(
             |TagSummary {
                  name,
                  slug,
+                 description,
                  post_count,
              }| SearchTagResult {
                 name,
                 slug,
+                description,
                 post_count,
             },
         )
@@ -937,6 +940,7 @@ pub async fn get_posts_by_tag(
         tag: SearchTagResult {
             name: tag.name,
             slug: tag.slug,
+            description: tag.description,
             post_count: tag.post_count,
         },
         posts: posts.into_iter().map(Into::into).collect(),
