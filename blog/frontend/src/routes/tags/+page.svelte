@@ -1,4 +1,5 @@
 <script>
+	import BackButton from '$lib/components/ui/BackButton.svelte';
 	import { untrack } from 'svelte';
 
 	const { data } = $props();
@@ -20,7 +21,8 @@
 <section class="bg-white rounded-xl p-4 mb-2 lg:mb-4 space-y-4">
 	<div class="flex not-md:flex-col justify-between gap-4">
 		<div class="space-y-2">
-			<h1 class="text-2xl font-semibold">Tags</h1>
+			<BackButton href="/" text="Home" />
+			<h1 class="text-2xl font-semibold">Projects</h1>
 			<p class="max-w-2xl text-dark/70">
 				Browse the recurring topics, rabbit holes, and experiments that keep showing up across the
 				blog.
@@ -38,7 +40,6 @@
 				Browse {tags.length} published {tagLabel}.
 			{/if}
 		</p>
-		<a class="font-semibold text-accent-blue" href="/posts">Jump to all posts</a>
 	</div>
 
 	{#if tags.length === 0}

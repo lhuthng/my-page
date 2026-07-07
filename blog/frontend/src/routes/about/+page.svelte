@@ -1,5 +1,6 @@
 <script>
 	import { page } from '$app/state';
+	import BackButton from '$lib/components/ui/BackButton.svelte';
 	import { isPointInTriangle, preventDefault } from '$lib/utils';
 	import { fly } from 'svelte/transition';
 
@@ -43,7 +44,6 @@
 			lockedSelection = -1;
 		}
 	}
-
 </script>
 
 <svelte:head>
@@ -91,8 +91,9 @@
 {/snippet}
 
 <div class="bg-white rounded-lg mb-4">
-	<div class="flex flex-col gap-2 p-4">
-		<h1 class="font-bold text-2xl">About</h1>
+	<div class="space-y-2 p-4">
+		<BackButton href="/" text="Home" />
+		<h1 class="text-2xl font-semibold">About</h1>
 		<h2 class="font-semibold text-center text-xl">
 			Welcome back to the Field <span
 				aria-hidden="true"

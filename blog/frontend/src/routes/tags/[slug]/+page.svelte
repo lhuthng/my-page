@@ -2,37 +2,41 @@
 	import { untrack } from 'svelte';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { fade, fly } from 'svelte/transition';
+	import BackButton from '$lib/components/ui/BackButton.svelte';
 
 	const { data } = $props();
 
 	const tag = untrack(() => data).tag;
 	const posts = untrack(() => data).posts ?? [];
 	const projects = untrack(() => data).projects ?? [];
+	const tagDescription = $derived(tag.description?.trim() || '');
+	const metaDescription = $derived(
+		tagDescription || `Published posts filed under the ${tag.slug} tag.`
+	);
 
 	const postLabel = $derived(tag.post_count === 1 ? 'item' : 'items');
 </script>
 
 <svelte:head>
 	<title>#{tag.slug} | Tags | Huu Thang's Blog</title>
-	<meta name="description" content={`Published posts filed under the ${tag.slug} tag.`} />
+	<meta name="description" content={metaDescription} />
 </svelte:head>
 
 <section class="bg-white space-y-4 rounded-xl p-4 mb-2 lg:mb-4">
 	<div class="flex not-md:flex-col justify-between gap-4">
 		<div class="space-y-2">
-			<a class="font-semibold text-accent-blue" href="/tags">All tags</a>
+			<BackButton href="/tags" text="All tags" />
 			<h1 class="text-2xl font-semibold">#{tag.slug}</h1>
-			<p class="text-dark/70">
-				{tag.post_count} published {postLabel} filed under this tag.
-			</p>
+			{#if tagDescription}
+				<p class="max-w-2xl text-dark/70">{tagDescription}</p>
+			{:else}
+				<p class="text-dark/70">
+					{tag.post_count} published {postLabel} filed under this tag.
+				</p>
+			{/if}
 			<p class="text-sm text-dark/40">
-				Display name: {tag.name}
+				Display name: {tag.name} · {tag.post_count} published {postLabel}
 			</p>
-		</div>
-
-		<div class="h-fit rounded-xl bg-background/30 px-4 py-3">
-			<div class="text-sm uppercase tracking-[0.15em] text-dark/50">Slug</div>
-			<div class="font-semibold text-dark whitespace-nowrap">/{tag.slug}</div>
 		</div>
 	</div>
 

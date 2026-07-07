@@ -5,6 +5,7 @@
 	import FetchMore from '$lib/components/home/FetchMore.svelte';
 	import BigPostCard from '$lib/components/home/BigPostCard.svelte';
 	import GridExpander from '$lib/components/shell/GridExpander.svelte';
+	import BackButton from '$lib/components/ui/BackButton.svelte';
 
 	let { data } = $props();
 
@@ -79,7 +80,10 @@
 </svelte:head>
 
 <div class="bg-white rounded-xl mb-2 lg:mb-4">
-	<h1 class="text-2xl px-4 pt-4 font-semibold">Projects</h1>
+	<div class="px-4 pt-4 space-y-2">
+		<BackButton href="/" text="Home" />
+		<h1 class="text-2xl font-semibold">Projects</h1>
+	</div>
 	<GridExpander
 		class="p-4"
 		expanded={(hydrated && expanded) || !hydrated}
