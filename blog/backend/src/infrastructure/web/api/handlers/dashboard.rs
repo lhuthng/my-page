@@ -127,6 +127,7 @@ pub async fn get_users(
 
 #[derive(Deserialize)]
 pub struct UpdateTagBody {
+    pub name: String,
     pub slug: String,
     pub description: Option<String>,
 }
@@ -140,10 +141,23 @@ pub async fn update_tag(
         .dashboard_service
         .update_tag(UpdateDashboardTagCommand {
             id: tag_id,
+            name: body.name,
             slug: body.slug,
             description: body.description,
         })
         .await?;
 
     Ok(Json(result))
+}
+
+pub async fn delete_tag(
+    State(state): State<Arc<AppState>>,
+    Path(tag_id): Path<i64>,
+) -> Result<impl IntoResponse, UserError> {
+    state
+        .dashboard_service
+        .delete_tag(DeleteDashboardTagCommand { id: tag_id })
+        .await?;
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
