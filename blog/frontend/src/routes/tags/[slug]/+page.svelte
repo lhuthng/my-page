@@ -1,14 +1,13 @@
 <script>
-	import { untrack } from 'svelte';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { fade, fly } from 'svelte/transition';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
 
-	const { data } = $props();
+	let { data } = $props();
 
-	const tag = untrack(() => data).tag;
-	const posts = untrack(() => data).posts ?? [];
-	const projects = untrack(() => data).projects ?? [];
+	const tag = $derived(data.tag);
+	const posts = $derived(data.posts ?? []);
+	const projects = $derived(data.projects ?? []);
 	const tagDescription = $derived(tag.description?.trim() || '');
 	const metaDescription = $derived(
 		tagDescription || `Published posts filed under the ${tag.slug} tag.`
