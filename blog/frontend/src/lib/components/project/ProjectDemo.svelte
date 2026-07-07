@@ -1,14 +1,18 @@
 <script>
 	import { fade, fly } from 'svelte/transition';
+	import BackButton from '../ui/BackButton.svelte';
 
 	let { title, demoType = 'html5', demoUrl, width = '100%', height = '520px' } = $props();
 	let loaded = $state(false);
 </script>
 
 <section class="bg-white rounded-xl p-4 drop-shadow-xl">
-	<div class="flex items-center gap-3 mb-3">
-		<h2 class="text-xl lg:text-2xl">Demo</h2>
-		<hr class="grow border" />
+	<div class="space-y-2">
+		<BackButton href="/projects" text="All projects" />
+		<div class="flex items-center gap-3 mb-3">
+			<h2 class="text-xl lg:text-2xl">Demo</h2>
+			<hr class="grow border" />
+		</div>
 	</div>
 	<div
 		class="relative mx-auto bg-background rounded-lg overflow-hidden"

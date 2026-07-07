@@ -13,6 +13,7 @@
 	import Copy from '../svgs/Copy.svelte';
 	import X from '../svgs/X.svelte';
 	import Linkedin from '../svgs/Linkedin.svelte';
+	import BackButton from '../ui/BackButton.svelte';
 
 	let {
 		id,
@@ -25,7 +26,8 @@
 		series,
 		liked: initialLiked,
 		editHref,
-		relatedPosts = []
+		relatedPosts = [],
+		hideBackButton = false
 	} = $props();
 
 	let copyDone = $state(false);
@@ -72,6 +74,9 @@
 		class="flex grow flex-col bg-white p-4 gap-4 rounded-xl not-xl:rounded-b-none xl:rounded-tr-none"
 	>
 		<div class="space-y-2 text-base">
+			{#if !hideBackButton}
+				<BackButton href="/posts" text="All posts" />
+			{/if}
 			<div class="flex gap-4">
 				<div class="*:inline">
 					<button
