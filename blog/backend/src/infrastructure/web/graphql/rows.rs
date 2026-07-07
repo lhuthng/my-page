@@ -71,6 +71,7 @@ pub struct TagRow {
     pub id: i64,
     pub name: String,
     pub slug: String,
+    pub description: Option<String>,
     pub post_count: i64,
 }
 

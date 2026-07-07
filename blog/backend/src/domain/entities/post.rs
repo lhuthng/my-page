@@ -67,6 +67,7 @@ pub struct PostSummary {
 pub struct TagSummary {
     pub name: String,
     pub slug: String,
+    pub description: Option<String>,
     pub post_count: i64,
 }
 

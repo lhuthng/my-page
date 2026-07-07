@@ -57,3 +57,12 @@ pub struct DashboardProjectsResult {
     pub projects: Vec<ProjectSnapshot>,
     pub total: i64,
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DashboardTagRecord {
+    pub id: i64,
+    pub name: String,
+    pub slug: String,
+    pub description: Option<String>,
+    pub post_count: i64,
+}

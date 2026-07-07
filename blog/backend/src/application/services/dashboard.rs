@@ -18,4 +18,8 @@ pub trait DashboardService {
         &self,
         cmd: GetDashboardProjectsCommand,
     ) -> Result<DashboardProjectsResult, UserError>;
+    async fn update_tag(
+        &self,
+        cmd: UpdateDashboardTagCommand,
+    ) -> Result<DashboardTagRecord, UserError>;
 }

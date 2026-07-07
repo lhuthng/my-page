@@ -419,7 +419,7 @@ impl QueryRoot {
 
         let data_sql = format!(
             r#"
-            SELECT t.id, t.name, t.slug,
+            SELECT t.id, t.name, t.slug, t.description,
                    COUNT(pt.post_id) AS post_count
             FROM tags t
             LEFT JOIN post_tags pt ON pt.tag_id = t.id
@@ -441,6 +441,7 @@ impl QueryRoot {
                 id: r.id,
                 name: r.name,
                 slug: r.slug,
+                description: r.description,
                 post_count: r.post_count,
             })
             .collect();

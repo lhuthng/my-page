@@ -6,6 +6,7 @@
 	import PostSection from '$lib/components/post/PostSection.svelte';
 	import CommentSection from '$lib/components/post/CommentSection.svelte';
 	import ProjectDemo from '$lib/components/project/ProjectDemo.svelte';
+	import BackButton from '$lib/components/ui/BackButton.svelte';
 
 	let { data } = $props();
 
@@ -85,7 +86,12 @@
 	<meta property="og:image" content={ogImageUrl} />
 
 	{#if cover_video_url}
-		<meta property="og:video" content={cover_video_url.includes('://') ? cover_video_url : page.url.origin + cover_video_url} />
+		<meta
+			property="og:video"
+			content={cover_video_url.includes('://')
+				? cover_video_url
+				: page.url.origin + cover_video_url}
+		/>
 		<meta property="og:video:type" content={cover_video_type} />
 	{/if}
 
@@ -111,9 +117,14 @@
 
 	{#if links?.length > 0}
 		<section class="flex flex-col gap-2 bg-white rounded-xl p-4">
-			<div class="flex items-center gap-3 mb-3">
-				<h2 class="text-xl lg:text-2xl">Sources</h2>
-				<hr class="grow border" />
+			<div class="space-y-2">
+				{#if demo_type === 'none'}
+					<BackButton href="/projects" text="All projects" />
+				{/if}
+				<div class="flex items-center gap-3 mb-3">
+					<h2 class="text-xl lg:text-2xl">Sources</h2>
+					<hr class="grow border" />
+				</div>
 			</div>
 			<ul class="flex flex-wrap">
 				{#each links as link}
@@ -141,6 +152,7 @@
 			displayName: author_name,
 			avatarUrl: author_avatar_url
 		}}
+		hideBackButton={demo_type !== 'none' || links?.length > 0}
 	/>
 
 	<CommentSection postId={post_id} postAuthorUsername={author_slug} />
