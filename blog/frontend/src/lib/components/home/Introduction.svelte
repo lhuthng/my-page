@@ -57,7 +57,7 @@
 				</li>
 				<li class="left-0 bottom-20 w-2/7">
 					<span>
-						<a class="bg-red-500 text-white rounded-full py-1 px-2" href="/profiles/thnglhu">
+						<a class="bg-red-500 text-white rounded-full py-1 px-2" href="/profiles/lhuthng">
 							Thắng
 						</a>
 						: My personal account for sharing direct experiences, unfiltered thoughts, and hands-on experiments.
@@ -65,7 +65,7 @@
 				</li>
 				<li class="right-0 bottom-20 w-2/7">
 					<span class="inline-block md:text-right">
-						<a class="bg-red-500 text-white rounded-full py-1 px-2" href="/profiles/lhuthng">
+						<a class="bg-red-500 text-white rounded-full py-1 px-2" href="/profiles/memo-fie">
 							Memory Field
 						</a>
 						: A dedicated space for my creative works, artistic side projects, and the "juice" that makes
