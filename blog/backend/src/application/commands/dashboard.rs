@@ -30,6 +30,11 @@ pub struct GetDashboardProjectsCommand {
 
 pub struct UpdateDashboardTagCommand {
     pub id: i64,
+    pub name: String,
     pub slug: String,
     pub description: Option<String>,
+}
+
+pub struct DeleteDashboardTagCommand {
+    pub id: i64,
 }
