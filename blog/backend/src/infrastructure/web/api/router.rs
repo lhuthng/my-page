@@ -301,6 +301,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/tags/{tag_id}", patch(handlers::dashboard::update_tag))
+                .route("/tags/{tag_id}", delete(handlers::dashboard::delete_tag))
                 .route("/backup", get(handlers::backup::download_backup))
                 .layer(middleware::from_fn(middlewares::auth::admin_check))
                 .layer(middleware::from_fn_with_state(

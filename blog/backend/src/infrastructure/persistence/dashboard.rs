@@ -631,6 +631,13 @@ impl DashboardService for DashboardServiceImpl {
         &self,
         cmd: UpdateDashboardTagCommand,
     ) -> Result<DashboardTagRecord, UserError> {
+        let name = cmd.name.trim().to_string();
+        if name.len() < 2 {
+            return Err(UserError::InvalidData(
+                "Tag name must be at least 2 characters.".to_string(),
+            ));
+        }
+
         let slug = cmd.slug.trim().to_lowercase();
         if slug.len() < 2 {
             return Err(UserError::InvalidData(
@@ -668,10 +675,11 @@ impl DashboardService for DashboardServiceImpl {
         let updated = sqlx::query(
             r#"
             UPDATE tags
-            SET slug = ?, description = ?
+            SET name = ?, slug = ?, description = ?
             WHERE id = ?
             "#,
         )
+        .bind(&name)
         .bind(&slug)
         .bind(&description)
         .bind(cmd.id)
@@ -703,5 +711,29 @@ impl DashboardService for DashboardServiceImpl {
             description: row.description,
             post_count: row.post_count,
         })
+    }
+
+    async fn delete_tag(&self, cmd: DeleteDashboardTagCommand) -> Result<(), UserError> {
+        let usage_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM post_tags WHERE tag_id = ?")
+            .bind(cmd.id)
+            .fetch_one(&self.pool)
+            .await?;
+
+        if usage_count > 0 {
+            return Err(UserError::InvalidData(
+                "Only unused tags can be deleted.".to_string(),
+            ));
+        }
+
+        let deleted = sqlx::query("DELETE FROM tags WHERE id = ?")
+            .bind(cmd.id)
+            .execute(&self.pool)
+            .await?;
+
+        if deleted.rows_affected() == 0 {
+            return Err(UserError::NotFound);
+        }
+
+        Ok(())
     }
 }

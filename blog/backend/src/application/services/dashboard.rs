@@ -22,4 +22,5 @@ pub trait DashboardService {
         &self,
         cmd: UpdateDashboardTagCommand,
     ) -> Result<DashboardTagRecord, UserError>;
+    async fn delete_tag(&self, cmd: DeleteDashboardTagCommand) -> Result<(), UserError>;
 }

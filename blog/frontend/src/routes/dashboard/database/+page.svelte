@@ -18,10 +18,13 @@
 	let includeDeleted = $state(false);
 	let loading = $state(true);
 	let savingTagId = $state(null);
+	let deletingTagId = $state(null);
 	let editingTagId = $state(null);
+	let editingTagName = $state('');
 	let editingTagSlug = $state('');
 	let editingTagDescription = $state('');
 	let tagError = $state('');
+	let tagToDelete = $state(null);
 
 	const TABLES = [
 		{ id: 'users', label: 'Users', statKey: 'totalUsers' },
@@ -114,6 +117,7 @@
 
 	function startTagEdit(row) {
 		editingTagId = row.id;
+		editingTagName = row.name ?? '';
 		editingTagSlug = row.slug ?? '';
 		editingTagDescription = row.description ?? '';
 		tagError = '';
@@ -121,9 +125,20 @@
 
 	function cancelTagEdit() {
 		editingTagId = null;
+		editingTagName = '';
 		editingTagSlug = '';
 		editingTagDescription = '';
 		tagError = '';
+	}
+
+	function promptDeleteTag(row) {
+		if (row.postCount > 0) return;
+		tagError = '';
+		tagToDelete = row;
+	}
+
+	function closeDeletePrompt() {
+		tagToDelete = null;
 	}
 
 	async function saveTag(row) {
@@ -132,6 +147,7 @@
 		try {
 			const updated = await api.patch(`dashboard/tags/${row.id}`, {
 				body: {
+					name: editingTagName,
 					slug: editingTagSlug,
 					description: editingTagDescription
 				}
@@ -147,6 +163,29 @@
 			tagError = error instanceof ApiError ? error.message : 'Failed to update tag.';
 		} finally {
 			savingTagId = null;
+		}
+	}
+
+	async function deleteTag(row) {
+		if (row.postCount > 0) return;
+
+		deletingTagId = row.id;
+		tagError = '';
+		try {
+			await api.delete(`dashboard/tags/${row.id}`);
+			tableData = {
+				...tableData,
+				total: Math.max(0, (tableData?.total ?? 1) - 1),
+				items: tableData.items.filter((item) => item.id !== row.id)
+			};
+			if (editingTagId === row.id) {
+				cancelTagEdit();
+			}
+			closeDeletePrompt();
+		} catch (error) {
+			tagError = error instanceof ApiError ? error.message : 'Failed to delete tag.';
+		} finally {
+			deletingTagId = null;
 		}
 	}
 </script>
@@ -294,7 +333,16 @@
 										<td class="px-4 py-2.5 text-dark/60 tabular-nums">{row.postCount}</td>
 										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">{fmtDate(row.createdAt)}</td>
 									{:else if table === 'tags'}
-										<td class="px-4 py-2.5 font-medium">{row.name}</td>
+										<td class="px-4 py-2.5">
+											{#if isAdmin && editingTagId === row.id}
+												<input
+													bind:value={editingTagName}
+													class="w-full min-w-40 rounded-lg border border-background px-3 py-2 text-sm text-dark/80 outline-none focus:border-dark/30"
+												/>
+											{:else}
+												<span class="font-medium">{row.name}</span>
+											{/if}
+										</td>
 										<td class="px-4 py-2.5">
 											{#if isAdmin && editingTagId === row.id}
 												<input
@@ -332,25 +380,42 @@
 														<button
 															onclick={() => saveTag(row)}
 															disabled={savingTagId === row.id}
-															class="rounded-lg bg-dark px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-dark/85 disabled:opacity-50"
+															class="rounded-lg bg-dark px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-dark/85 disabled:opacity-50"
 														>
 															{savingTagId === row.id ? 'Saving...' : 'Save'}
 														</button>
 														<button
 															onclick={cancelTagEdit}
-															disabled={savingTagId === row.id}
-															class="rounded-lg border border-background px-3 py-1.5 text-xs text-dark/65 transition-colors hover:bg-background/60 disabled:opacity-50"
+															disabled={savingTagId === row.id || deletingTagId === row.id}
+															class="rounded-lg border border-background px-3 py-1.5 text-sm text-dark/65 transition-colors hover:bg-background/60 disabled:opacity-50"
 														>
 															Cancel
 														</button>
+														<button
+															onclick={() => promptDeleteTag(row)}
+															disabled={row.postCount > 0 || savingTagId === row.id || deletingTagId === row.id}
+															class="rounded-lg border border-accent-red/20 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
+														>
+															{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
+														</button>
 													</div>
 												{:else}
-													<button
-														onclick={() => startTagEdit(row)}
-														class="rounded-lg border border-background px-3 py-1.5 text-xs text-dark/70 transition-colors hover:bg-background/60"
-													>
-														Edit
-													</button>
+													<div class="flex items-center gap-2">
+														<button
+															onclick={() => startTagEdit(row)}
+															class="rounded-lg border border-background px-3 py-1.5 text-sm text-dark/70 transition-colors hover:bg-background/60"
+														>
+															Edit
+														</button>
+														<button
+															onclick={() => promptDeleteTag(row)}
+															disabled={row.postCount > 0 || deletingTagId === row.id}
+															class="rounded-lg border border-accent-red/20 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
+															title={row.postCount > 0 ? 'Only unused tags can be deleted.' : 'Delete this unused tag'}
+														>
+															{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
+														</button>
+													</div>
 												{/if}
 											{:else}
 												<span class="text-xs text-dark/30">Admin only</span>
@@ -381,3 +446,42 @@
 		</div>
 	</div>
 </div>
+
+{#if tagToDelete}
+	<div class="fixed inset-0 z-40 flex items-center justify-center bg-dark/45 px-4">
+		<div
+			class="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="delete-tag-title"
+		>
+			<div class="space-y-3">
+				<div>
+					<h3 id="delete-tag-title" class="text-lg font-semibold text-dark">Delete unused tag?</h3>
+					<p class="mt-1 text-sm text-dark/65">
+						<span class="font-medium text-dark">{tagToDelete.name}</span> will be removed permanently. This is only available because the tag has no current usage.
+					</p>
+				</div>
+				{#if tagError}
+					<p class="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red">{tagError}</p>
+				{/if}
+				<div class="flex items-center justify-end gap-2">
+					<button
+						onclick={closeDeletePrompt}
+						disabled={deletingTagId === tagToDelete.id}
+						class="rounded-lg border border-background px-4 py-2 text-sm text-dark/70 transition-colors hover:bg-background/60 disabled:opacity-50"
+					>
+						Cancel
+					</button>
+					<button
+						onclick={() => deleteTag(tagToDelete)}
+						disabled={deletingTagId === tagToDelete.id}
+						class="rounded-lg bg-accent-red px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+					>
+						{deletingTagId === tagToDelete.id ? 'Deleting...' : 'Delete tag'}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}
