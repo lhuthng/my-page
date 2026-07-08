@@ -65,6 +65,11 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/register", post(handlers::auth::register))
         .route("/verify-email", get(handlers::auth::verify_email))
         .route(
+            "/forgot-password",
+            post(handlers::auth::request_password_reset),
+        )
+        .route("/reset-password", post(handlers::auth::reset_password))
+        .route(
             "/resend-verification",
             post(handlers::auth::resend_verification),
         )

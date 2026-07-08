@@ -27,4 +27,12 @@ pub trait AuthService {
         &self,
         cmd: commands::auth::ResendVerificationCommand,
     ) -> Result<entities::auth::ResendVerificationResult, errors::auth::AuthError>;
+    async fn request_password_reset(
+        &self,
+        cmd: commands::auth::RequestPasswordResetCommand,
+    ) -> Result<entities::auth::RequestPasswordResetResult, errors::auth::AuthError>;
+    async fn reset_password(
+        &self,
+        cmd: commands::auth::ResetPasswordCommand,
+    ) -> Result<(), errors::auth::AuthError>;
 }
