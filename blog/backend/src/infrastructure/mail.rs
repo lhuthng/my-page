@@ -7,7 +7,10 @@ use serde::Serialize;
 use tokio::task;
 
 use crate::{
-    domain::entities::{auth::VerificationMailPayload, mail::ContactFormCredential},
+    domain::entities::{
+        auth::{PasswordResetMailPayload, VerificationMailPayload},
+        mail::ContactFormCredential,
+    },
     infrastructure::web::server::{MailConfig, MailTransportConfig},
 };
 
@@ -131,6 +134,47 @@ pub async fn send_verification_email(
     }
 }
 
+pub async fn send_password_reset_email(
+    mail_config: &MailConfig,
+    app_base_url: &str,
+    payload: &PasswordResetMailPayload,
+) -> Result<(), String> {
+    let reset_link = format!(
+        "{}/reset-password?token={}",
+        app_base_url.trim_end_matches('/'),
+        payload.token
+    );
+    let body = format!(
+        "Hi {},\n\nUse the link below within 30 minutes to set a new password:\n\n{}\n\nIf you did not request this change, you can ignore this email.\n",
+        payload.username, reset_link
+    );
+
+    match &mail_config.transport {
+        MailTransportConfig::BrevoApi { api_key } => {
+            send_brevo_email(
+                api_key,
+                &BrevoEmailPayload {
+                    sender: BrevoAddress {
+                        email: &mail_config.from,
+                        name: None,
+                    },
+                    to: vec![BrevoAddress {
+                        email: &payload.email,
+                        name: Some(&payload.username),
+                    }],
+                    reply_to: None,
+                    subject: "Reset your huuthangle.site password",
+                    text_content: &body,
+                },
+            )
+            .await
+        }
+        MailTransportConfig::Smtp { .. } => {
+            send_password_reset_email_via_smtp(mail_config, payload, &body).await
+        }
+    }
+}
+
 async fn send_contact_emails_via_smtp(
     mail_config: &MailConfig,
     contact_form: &ContactFormCredential,
@@ -206,6 +250,37 @@ async fn send_verification_email_via_smtp(
         build_smtp_mailer(&mail_config)?
             .send(&email)
             .map_err(|err| format!("Failed to send verification email: {err}"))?;
+
+        Ok(())
+    })
+    .await
+    .map_err(|err| format!("SMTP worker failed: {err}"))?
+}
+
+async fn send_password_reset_email_via_smtp(
+    mail_config: &MailConfig,
+    payload: &PasswordResetMailPayload,
+    body: &str,
+) -> Result<(), String> {
+    let mail_config = mail_config.clone();
+    let payload = payload.clone();
+    let body = body.to_string();
+
+    task::spawn_blocking(move || {
+        let sender = parse_mailbox(&mail_config.from, "SMTP_FROM")?;
+        let recipient = parse_mailbox(&payload.email, "password reset email")?;
+
+        let email = Message::builder()
+            .from(sender)
+            .to(recipient)
+            .subject("Reset your huuthangle.site password")
+            .message_id(Some(build_message_id(&mail_config)))
+            .body(body)
+            .map_err(|err| format!("Failed to build password reset email: {err}"))?;
+
+        build_smtp_mailer(&mail_config)?
+            .send(&email)
+            .map_err(|err| format!("Failed to send password reset email: {err}"))?;
 
         Ok(())
     })

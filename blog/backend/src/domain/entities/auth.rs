@@ -19,6 +19,13 @@ pub struct VerificationMailPayload {
 }
 
 #[derive(Debug, Clone)]
+pub struct PasswordResetMailPayload {
+    pub username: String,
+    pub email: String,
+    pub token: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct RegisterResult {
     pub verification_mail: VerificationMailPayload,
 }
@@ -35,6 +42,13 @@ pub enum LoginResult {
 pub enum ResendVerificationResult {
     VerificationMailQueued(VerificationMailPayload),
     AlreadyVerified,
+    UserNotFound,
+}
+
+#[derive(Debug, Clone)]
+pub enum RequestPasswordResetResult {
+    ResetMailQueued(PasswordResetMailPayload),
+    RecentlySent,
     UserNotFound,
 }
 
@@ -63,6 +77,12 @@ pub struct RegisterCredentials {
     #[validate(email(message = "Invalid email address"))]
     pub email: String,
 
+    #[validate(length(min = 6, message = "Password must be at least 6 characters"),regex(path = *RE_PASSWORD,message = "Password must be 8-30 characters long and can only contain letters, numbers, and common symbols (no spaces)."))]
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct ResetPasswordCredentials {
     #[validate(length(min = 6, message = "Password must be at least 6 characters"),regex(path = *RE_PASSWORD,message = "Password must be 8-30 characters long and can only contain letters, numbers, and common symbols (no spaces)."))]
     pub password: String,
 }
