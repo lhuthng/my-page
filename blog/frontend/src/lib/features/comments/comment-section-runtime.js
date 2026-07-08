@@ -61,6 +61,7 @@ const createEmptyState = () => ({
 	start: null,
 	textarea: null,
 	composerSurface: null,
+	popoverSurface: null,
 	comments: createEmptyComments(),
 	replyThreads: {},
 	replyTo: null,
@@ -127,6 +128,7 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl, getGuestIde
 	const getPostId = () => state.postId;
 	const getTextarea = () => state.textarea;
 	const getComposerSurface = () => state.composerSurface;
+	const getPopoverSurface = () => state.popoverSurface ?? state.composerSurface;
 	const getStart = () => state.start;
 
 	const normalizeAvatarUrl = (url) => {
@@ -275,7 +277,8 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl, getGuestIde
 		popoverAnchorRaf = requestAnimationFrame(() => {
 			const textarea = getTextarea();
 			const composerSurface = getComposerSurface();
-			if (!textarea || !composerSurface) {
+			const popoverSurface = getPopoverSurface();
+			if (!textarea || !composerSurface || !popoverSurface) {
 				state.popoverTop = null;
 				return;
 			}
@@ -292,7 +295,7 @@ export const createCommentSectionRuntime = (state, getUserAvatarUrl, getGuestIde
 			}
 
 			const textareaRect = textarea.getBoundingClientRect();
-			const containerRect = composerSurface.getBoundingClientRect();
+			const containerRect = popoverSurface.getBoundingClientRect();
 			const anchorOffset = getTextareaAnchorOffsetY(textarea, anchorIndex);
 
 			if (anchorOffset == null) {

@@ -86,6 +86,7 @@
 				<CommentEditor
 					bind:textarea={state.textarea}
 					bind:composerSurface={state.composerSurface}
+					bind:popoverSurface={state.popoverSurface}
 					bind:value={comments.current}
 					bind:guestIdentity
 					user={authState.user}
