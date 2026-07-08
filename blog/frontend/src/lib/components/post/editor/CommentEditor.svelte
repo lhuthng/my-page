@@ -11,6 +11,7 @@
 	let {
 		textarea = $bindable(),
 		composerSurface = $bindable(),
+		popoverSurface = $bindable(),
 		guestIdentity = $bindable(),
 		user = null,
 		value = $bindable(''),
@@ -76,7 +77,7 @@
 			<polygon points="0,12 24,0 24,24" />
 		</svg>
 		<CommentIdentityPicker bind:identity={guestIdentity} {user} />
-		<div class="w-full max-w-full">
+		<div class="relative w-full max-w-full overflow-visible" bind:this={popoverSurface}>
 			<div
 				class="relative text-base w-full bg-primary-20 border-primary border-2 border-b-0 rounded-t-xl overflow-hidden"
 				bind:this={composerSurface}
@@ -138,15 +139,16 @@
 					</div>
 				</div>
 
-				<CommentAutocompletePopover
-					{commandState}
-					{mentionState}
-					{popoverTop}
-					{pickCommandItem}
-					{applyKaomojiSuggestion}
-					{pickMention}
-				/>
 			</div>
+
+			<CommentAutocompletePopover
+				{commandState}
+				{mentionState}
+				{popoverTop}
+				{pickCommandItem}
+				{applyKaomojiSuggestion}
+				{pickMention}
+			/>
 
 			<CommentComposerToolbar
 				{showMarkdownHelp}

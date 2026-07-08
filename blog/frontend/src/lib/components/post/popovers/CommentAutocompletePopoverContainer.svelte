@@ -58,7 +58,7 @@
 {#if open}
 	<div
 		bind:this={popoverEl}
-		class={`comment-autocomplete-popover absolute left-2 right-2 z-30 overflow-hidden rounded-xl border-2 border-primary bg-white py-2 shadow-lg ${className}`}
+		class={`comment-autocomplete-popover absolute left-2 right-2 z-50 overflow-hidden rounded-xl border-2 border-primary bg-white py-2 shadow-lg ${className}`}
 		style={popoverStyle}
 		onmousedown={(event) => {
 			event.preventDefault();
