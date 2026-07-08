@@ -19,7 +19,7 @@
 	let mDiv = $state();
 	let scrollTarget = $state();
 
-	const ignoreRoutes = ['login', 'verify-email'];
+	const ignoreRoutes = ['login', 'verify-email', 'reset-password'];
 
 	$effect(() => {
 		win.width = innerWidth.current;

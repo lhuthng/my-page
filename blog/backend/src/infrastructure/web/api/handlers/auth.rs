@@ -14,16 +14,22 @@ use validator::Validate;
 use crate::{
     application::{
         commands::auth::{
-            LoginCommand, RefreshAccessTokenCommand, RegisterCommand, ResendVerificationCommand,
-            VerifyEmailCommand,
+            LoginCommand, RefreshAccessTokenCommand, RegisterCommand, RequestPasswordResetCommand,
+            ResendVerificationCommand, ResetPasswordCommand, VerifyEmailCommand,
         },
         services::auth::AuthService,
     },
     domain::{
-        entities::auth::{LoginResult, RegisterCredentials, ResendVerificationResult},
+            entities::auth::{
+                LoginResult, RegisterCredentials, RequestPasswordResetResult,
+                ResendVerificationResult,
+            },
         errors::auth::AuthError,
     },
-    infrastructure::{mail::send_verification_email, web::server::AppState},
+    infrastructure::{
+        mail::{send_password_reset_email, send_verification_email},
+        web::server::AppState,
+    },
 };
 
 #[derive(Debug, Serialize)]
@@ -87,6 +93,11 @@ pub struct RegisterResponse {
 
 #[derive(Debug, Serialize)]
 pub struct VerifyEmailResponse {
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PasswordResetResponse {
     message: String,
 }
 
@@ -223,4 +234,62 @@ pub async fn resend_verification(
             message: "If the account exists, a new verification email is on the way.".to_string(),
         })),
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RequestPasswordResetPayload {
+    username: String,
+    email: String,
+}
+
+#[axum::debug_handler]
+pub async fn request_password_reset(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RequestPasswordResetPayload>,
+) -> Result<Json<PasswordResetResponse>, AuthError> {
+    let result = state
+        .auth_service
+        .request_password_reset(RequestPasswordResetCommand {
+            username: payload.username,
+            email: payload.email,
+        })
+        .await?;
+
+    if let RequestPasswordResetResult::ResetMailQueued(mail) = result {
+        let mail_config = state.config.mail.as_ref().ok_or_else(|| {
+            AuthError::InternalError("Mail is not configured on the server".to_string())
+        })?;
+        send_password_reset_email(mail_config, &state.config.app_base_url, &mail)
+            .await
+            .map_err(AuthError::InternalError)?;
+    }
+
+    Ok(Json(PasswordResetResponse {
+        message: "If the username and email match an account, a reset link has been sent."
+            .to_string(),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ResetPasswordPayload {
+    token: String,
+    password: String,
+}
+
+#[axum::debug_handler]
+pub async fn reset_password(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ResetPasswordPayload>,
+) -> Result<Json<PasswordResetResponse>, AuthError> {
+    state
+        .auth_service
+        .reset_password(ResetPasswordCommand {
+            token: payload.token,
+            password: payload.password,
+        })
+        .await?;
+
+    Ok(Json(PasswordResetResponse {
+        message: "Password changed. You can log in with the new password now.".to_string(),
+    }))
 }

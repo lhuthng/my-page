@@ -5,11 +5,13 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use sqlx::{FromRow, SqlitePool};
 use tokio::join;
+use validator::Validate;
 
 use crate::{
     application::{
         commands::auth::{
-            LoginCommand, RefreshAccessTokenCommand, ResendVerificationCommand, VerifyEmailCommand,
+            LoginCommand, RefreshAccessTokenCommand, RequestPasswordResetCommand,
+            ResendVerificationCommand, ResetPasswordCommand, VerifyEmailCommand,
         },
         services::auth::AuthService,
     },
@@ -17,7 +19,8 @@ use crate::{
         entities::{
             auth::{
                 AuthConfig, AuthTokens, LoginResult, RegisterCredentials, RegisterResult,
-                ResendVerificationResult, VerificationMailPayload,
+                PasswordResetMailPayload, RequestPasswordResetResult, ResendVerificationResult,
+                ResetPasswordCredentials, VerificationMailPayload,
             },
             secret::Claims,
         },
@@ -29,6 +32,8 @@ use crate::{
 const DELIMITER: char = '`';
 const EMAIL_VERIFICATION_EXPIRY_MINUTES: i64 = 30;
 const RESEND_VERIFICATION_COOLDOWN_SECONDS: i64 = 60;
+const PASSWORD_RESET_EXPIRY_MINUTES: i64 = 30;
+const PASSWORD_RESET_COOLDOWN_SECONDS: i64 = 60;
 
 pub struct AuthServiceImpl {
     pub pool: SqlitePool,
@@ -142,6 +147,40 @@ fn verification_mail_payload(user_row: &UserRow, token: String) -> VerificationM
         email: user_row.email.clone(),
         token,
     }
+}
+
+fn password_reset_mail_payload(user_row: &UserRow, token: String) -> PasswordResetMailPayload {
+    PasswordResetMailPayload {
+        username: user_row.username.clone(),
+        email: user_row.email.clone(),
+        token,
+    }
+}
+
+async fn upsert_password_reset_token(pool: &SqlitePool, user_id: i64) -> Result<String, AuthError> {
+    let (token, token_hash) = generate_verification_token(user_id);
+    let now = Utc::now();
+    let expires_at = now + Duration::minutes(PASSWORD_RESET_EXPIRY_MINUTES);
+
+    sqlx::query(
+        r#"
+        INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, sent_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+            token_hash = excluded.token_hash,
+            expires_at = excluded.expires_at,
+            sent_at = excluded.sent_at
+        "#,
+    )
+    .bind(user_id)
+    .bind(token_hash)
+    .bind(expires_at.to_rfc3339())
+    .bind(now.to_rfc3339())
+    .execute(pool)
+    .await?;
+
+    Ok(token)
 }
 
 #[async_trait::async_trait]
@@ -453,5 +492,120 @@ impl AuthService for AuthServiceImpl {
         Ok(ResendVerificationResult::VerificationMailQueued(
             verification_mail_payload(&user_row, token),
         ))
+    }
+
+    async fn request_password_reset(
+        &self,
+        cmd: RequestPasswordResetCommand,
+    ) -> Result<RequestPasswordResetResult, AuthError> {
+        let username = cmd.username.trim();
+        let email = cmd.email.trim();
+        if username.is_empty() || email.is_empty() {
+            return Err(AuthError::Validation(
+                "Username and email are required.".to_string(),
+            ));
+        }
+
+        let user_row = sqlx::query_as::<_, UserRow>(
+            r#"
+            SELECT id, username, password_hash, email, role, email_verified_at
+            FROM users
+            WHERE username = ? AND email = ?
+            "#,
+        )
+        .bind(username)
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some(user_row) = user_row else {
+            return Ok(RequestPasswordResetResult::UserNotFound);
+        };
+
+        if user_row.email_verified_at.is_none() {
+            return Ok(RequestPasswordResetResult::UserNotFound);
+        }
+
+        let existing = sqlx::query_as::<_, VerificationRow>(
+            r#"
+            SELECT token_hash, expires_at, sent_at
+            FROM password_reset_tokens
+            WHERE user_id = ?
+            "#,
+        )
+        .bind(user_row.id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(row) = existing {
+            let elapsed = Utc::now() - row.sent_at;
+            if elapsed < Duration::seconds(PASSWORD_RESET_COOLDOWN_SECONDS) {
+                return Ok(RequestPasswordResetResult::RecentlySent);
+            }
+        }
+
+        let token = upsert_password_reset_token(&self.pool, user_row.id).await?;
+
+        Ok(RequestPasswordResetResult::ResetMailQueued(
+            password_reset_mail_payload(&user_row, token),
+        ))
+    }
+
+    async fn reset_password(&self, cmd: ResetPasswordCommand) -> Result<(), AuthError> {
+        let reset_creds = ResetPasswordCredentials {
+            password: cmd.password,
+        };
+        if let Err(err) = reset_creds.validate() {
+            return Err(AuthError::Validation(err.to_string()));
+        }
+
+        let (user_id, secret) = decode_verification_token(&cmd.token)?;
+        let reset_row = sqlx::query_as::<_, VerificationRow>(
+            r#"
+            SELECT token_hash, expires_at, sent_at
+            FROM password_reset_tokens
+            WHERE user_id = ?
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some(row) = reset_row else {
+            return Err(AuthError::InvalidToken);
+        };
+
+        if row.expires_at <= Utc::now() {
+            sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = ?")
+                .bind(user_id)
+                .execute(&self.pool)
+                .await?;
+            return Err(AuthError::ExpiredToken);
+        }
+
+        if row.token_hash != hash_verification_secret(&secret) {
+            return Err(AuthError::InvalidToken);
+        }
+
+        let password_hash = hash(&reset_creds.password, DEFAULT_COST)?;
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+            .bind(password_hash)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 }
