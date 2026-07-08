@@ -134,3 +134,47 @@ export async function resendVerification(identifier, captchaToken) {
 		message: payload.message ?? 'Request failed.'
 	};
 }
+
+export async function requestPasswordReset(username, email) {
+	const res = await fetch('/api/auth/forgot-password', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ username, email })
+	});
+
+	let payload;
+	try {
+		payload = await res.json();
+	} catch {
+		payload = { message: await res.text() };
+	}
+
+	return {
+		status: res.ok,
+		message: payload.message ?? 'Request failed.'
+	};
+}
+
+export async function resetPassword(token, password) {
+	const res = await fetch('/api/auth/reset-password', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({ token, password })
+	});
+
+	let payload;
+	try {
+		payload = await res.json();
+	} catch {
+		payload = { message: await res.text() };
+	}
+
+	return {
+		status: res.ok,
+		message: payload.message ?? 'Request failed.'
+	};
+}

@@ -3,7 +3,14 @@
 	import { env as publicEnv } from '$env/dynamic/public';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { authState, login, register, resendVerification } from '$lib/auth/user.svelte.js';
+	import {
+		authState,
+		login,
+		register,
+		requestPasswordReset,
+		resendVerification
+	} from '$lib/auth/user.svelte.js';
+	import Eye from '$lib/components/svgs/Eye.svelte';
 	import { onMount, untrack } from 'svelte';
 
 	import { fly } from 'svelte/transition';
@@ -17,6 +24,8 @@
 	let password = $state('');
 	let repassword = $state('');
 	let email = $state('');
+	let showPassword = $state(false);
+	let showRepassword = $state(false);
 	let pending = $state(false);
 	let status = $state(true);
 	let message = $state('');
@@ -29,6 +38,12 @@
 	let turnstileHost = $state();
 	let turnstileToken = $state('');
 	let turnstileWidgetId;
+	let forgotOpen = $state(false);
+	let forgotUsername = $state('');
+	let forgotEmail = $state('');
+	let forgotPending = $state(false);
+	let forgotStatus = $state(true);
+	let forgotMessage = $state('');
 	const turnstileSiteKey = publicEnv.PUBLIC_TURNSTILE_SITE_KEY ?? '';
 	const captchaRequired = !dev;
 
@@ -105,6 +120,23 @@
 		resetTurnstile();
 	}
 
+	async function handleForgotPassword() {
+		forgotMessage = '';
+		forgotPending = true;
+		const res = await requestPasswordReset(forgotUsername, forgotEmail);
+		forgotPending = false;
+		forgotStatus = res.status;
+		forgotMessage = res.message;
+	}
+
+	function toggleForgotPassword() {
+		forgotOpen = !forgotOpen;
+		forgotMessage = '';
+		if (forgotOpen && !forgotUsername) {
+			forgotUsername = username;
+		}
+	}
+
 	function resetTurnstile() {
 		if (window.turnstile && turnstileWidgetId !== undefined) {
 			window.turnstile.reset(turnstileWidgetId);
@@ -119,6 +151,8 @@
 		message = '';
 		verificationNeeded = false;
 		verificationIdentifier = '';
+		forgotOpen = false;
+		forgotMessage = '';
 	});
 
 	$effect(() => {
@@ -206,35 +240,113 @@
 				<div class="relative gap-2 px-2">
 					<input
 						class="flex-1 py-1.5"
+						class:pr-28={isLogging}
+						class:pr-10={!isLogging}
 						placeholder="Password"
-						type="password"
+						type={showPassword ? 'text' : 'password'}
 						bind:value={password}
 						disabled={isLogged && isLogging}
 					/>
+					<button
+						type="button"
+						class="absolute top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer disabled:cursor-not-allowed"
+						class:right-20={isLogging}
+						class:right-2={!isLogging}
+						aria-pressed={showPassword}
+						disabled={isLogged && isLogging}
+						onclick={() => (showPassword = !showPassword)}
+						tabindex="-1"
+					>
+						<Eye class="h-5 w-5" slashed={showPassword} />
+						<span class="sr-only">{showPassword ? 'Hide password' : 'Show password'}</span>
+					</button>
 					{#if isLogging}
 						<button
 							type="button"
-							class=" absolute right-2 top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer"
+							class="absolute right-2 top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer"
 							disabled={isLogged}
+							onclick={toggleForgotPassword}
+							tabindex="-1"
 						>
 							forgot?
 						</button>
 					{/if}
 				</div>
 				{#if !isLogging}
-					<div class="flex px-2" in:fly={{ x: -10 }}>
+					<div class="relative flex px-2" in:fly={{ x: -10 }}>
 						<input
-							class="grow py-1.5"
+							class="grow py-1.5 pr-10"
 							placeholder="Re-password"
-							type="password"
+							type={showRepassword ? 'text' : 'password'}
 							bind:value={repassword}
 						/>
+						<button
+							type="button"
+							class="absolute right-2 top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer"
+							aria-pressed={showRepassword}
+							onclick={() => (showRepassword = !showRepassword)}
+						>
+							<Eye class="h-5 w-5" slashed={showRepassword} />
+							<span class="sr-only">
+								{showRepassword ? 'Hide repeated password' : 'Show repeated password'}
+							</span>
+						</button>
 					</div>
 					<div class="flex px-2" in:fly={{ x: 10 }}>
 						<input class="grow py-1.5" placeholder="Email" type="email" bind:value={email} />
 					</div>
 				{/if}
 			</div>
+			{#if isLogging && forgotOpen}
+				<div
+					in:fly
+					class="rounded-2xl border-2 border-accent-blue bg-accent-blue-light-2/20 p-3 text-lg text-dark/80"
+				>
+					<p class="mb-3">
+						Enter your username and email. If they match a verified account, I’ll send a reset link.
+					</p>
+					<div
+						class="space-y-2 *:rounded-xl *:border-2 *:border-dark/40 *:has-focus:border-dark *:bg-white text-dark"
+					>
+						<div class="px-2">
+							<input
+								class="w-full py-1.5"
+								placeholder="Username"
+								autocomplete="username"
+								bind:value={forgotUsername}
+							/>
+						</div>
+						<div class="px-2">
+							<input
+								class="w-full py-1.5"
+								placeholder="Email"
+								type="email"
+								autocomplete="email"
+								bind:value={forgotEmail}
+							/>
+						</div>
+					</div>
+					<div class="mt-3 duo-btn" data-duo-color="blue">
+						<button
+							type="button"
+							class="w-full"
+							disabled={forgotPending}
+							onclick={handleForgotPassword}
+						>
+							{forgotPending ? 'Sending...' : 'Send Reset Link'}
+						</button>
+					</div>
+					{#if forgotMessage}
+						<p
+							class="mt-2 text-center"
+							class:text-accent-green={forgotStatus}
+							class:text-accent-red={!forgotStatus}
+						>
+							{forgotMessage}
+						</p>
+					{/if}
+				</div>
+			{/if}
 			{#if message}
 				<div class="w-full">
 					<span class="text-right" class:text-accent-red={!status} class:text-accent-green={status}>

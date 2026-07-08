@@ -25,3 +25,15 @@ pub struct VerifyEmailCommand {
 pub struct ResendVerificationCommand {
     pub identifier: String,
 }
+
+#[derive(serde::Deserialize)]
+pub struct RequestPasswordResetCommand {
+    pub username: String,
+    pub email: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ResetPasswordCommand {
+    pub token: String,
+    pub password: String,
+}
