@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { getGqlClient } from '$lib/api/graphql';
 import { OVERVIEW_QUERY } from '$lib/graphql/queries';
-import { fixClientRoute } from '$lib/server/proxy.js';
+import { fixClientRoute, route } from '$lib/server/proxy.js';
 
 function fixOverviewData(overview) {
 	if (!overview) return overview;
@@ -23,14 +23,26 @@ function fixOverviewData(overview) {
 }
 
 export async function load(event) {
-	const { accessToken } = await event.parent();
+	const { accessToken, role } = await event.parent();
 
 	try {
 		const client = getGqlClient(event.fetch, env.API_URL, accessToken.token);
-		const result = await client.request(OVERVIEW_QUERY);
-		return { overview: fixOverviewData(result.overview) };
+		const [result, visitorCountries] = await Promise.all([
+			client.request(OVERVIEW_QUERY),
+			role === 'admin'
+				? event
+						.fetch(route('dashboard/analytics/countries?days=30'), {
+							headers: { Authorization: `${accessToken.type} ${accessToken.token}` }
+						})
+						.then((res) => (res.ok ? res.json() : { countries: [] }))
+				: Promise.resolve({ countries: [] })
+		]);
+		return {
+			overview: fixOverviewData(result.overview),
+			visitorCountries: visitorCountries.countries ?? []
+		};
 	} catch (e) {
 		console.error('[overview] GraphQL error:', e);
-		return { overview: null };
+		return { overview: null, visitorCountries: [] };
 	}
 }

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod analytics;
 pub mod dashboard;
 pub mod image_convert;
 pub mod media;

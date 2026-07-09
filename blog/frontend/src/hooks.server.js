@@ -5,6 +5,19 @@ export async function handle({ event, resolve }) {
 	const { API_URL } = env;
 	const accept = event.request.headers.get('accept') ?? '';
 	if (accept.includes('text/html')) {
+		event.fetch(route('analytics/visit'), {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				...(event.request.headers.get('cf-ipcountry')
+					? { 'CF-IPCountry': event.request.headers.get('cf-ipcountry') }
+					: {})
+			},
+			body: JSON.stringify({ path: event.url.pathname })
+		}).catch((error) => {
+			console.warn('[analytics] failed to track visit:', error);
+		});
+
 		const refreshToken = event.cookies.get('refresh-token');
 
 		if (!refreshToken) {
