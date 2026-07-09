@@ -305,6 +305,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         ))
         .merge(
             Router::new()
+                .route("/analytics/countries", get(handlers::dashboard::get_visitor_countries))
                 .route("/tags/{tag_id}", patch(handlers::dashboard::update_tag))
                 .route("/tags/{tag_id}", delete(handlers::dashboard::delete_tag))
                 .route("/backup", get(handlers::backup::download_backup))
@@ -314,6 +315,9 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     middlewares::auth::user_guard,
                 )),
         );
+
+    let analytics_routes =
+        Router::new().route("/visit", post(handlers::dashboard::track_visit));
 
     let mail_routes = Router::new().merge(
         Router::new()
@@ -354,6 +358,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/tags", tag_routes)
         .nest("/series", series_routes)
         .nest("/mail", mail_routes)
+        .nest("/analytics", analytics_routes)
         .nest("/dashboard", dashboard_routes)
         .merge(graphql_routes)
         .layer(TraceLayer::new_for_http())
