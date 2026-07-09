@@ -3,14 +3,19 @@ use std::sync::Arc;
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
+    http::HeaderMap,
     response::IntoResponse,
 };
-use serde::Deserialize;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     application::{commands::dashboard::*, services::dashboard::DashboardService},
     domain::{entities::secret::Claims, errors::user::UserError},
-    infrastructure::web::server::AppState,
+    infrastructure::web::{
+        api::middlewares::analytics::{normalize_country_code, path_group},
+        server::AppState,
+    },
 };
 
 #[derive(Deserialize)]
@@ -81,6 +86,21 @@ pub struct DashboardUsersQuery {
     pub role: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct VisitorCountriesQuery {
+    pub days: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct VisitorCountriesResponse {
+    pub countries: Vec<crate::infrastructure::persistence::analytics::VisitorCountryStat>,
+}
+
+#[derive(Deserialize)]
+pub struct TrackVisitBody {
+    pub path: Option<String>,
+}
+
 #[axum::debug_handler]
 pub async fn get_projects(
     State(state): State<Arc<AppState>>,
@@ -123,6 +143,34 @@ pub async fn get_users(
         .await?;
 
     Ok(Json(result))
+}
+
+pub async fn get_visitor_countries(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<VisitorCountriesQuery>,
+) -> Result<impl IntoResponse, UserError> {
+    let days = query.days.unwrap_or(30).clamp(1, 365);
+    let countries = state.analytics_service.get_country_stats(days).await?;
+
+    Ok(Json(VisitorCountriesResponse { countries }))
+}
+
+pub async fn track_visit(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<TrackVisitBody>,
+) -> Result<impl IntoResponse, UserError> {
+    let country_code = normalize_country_code(&headers);
+    let path = body.path.unwrap_or_else(|| "/".to_string());
+    let group = path_group(&path);
+    let day = Utc::now().date_naive().to_string();
+
+    state
+        .analytics_service
+        .record_country_visit(&day, &country_code, &group)
+        .await?;
+
+    Ok(())
 }
 
 #[derive(Deserialize)]
