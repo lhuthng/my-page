@@ -21,6 +21,7 @@
 		sending = false,
 		commandState,
 		mentionState,
+		suggestionPanel = null,
 		popoverTop = null,
 		showMarkdownHelp = false,
 		showKaomojiSearch = false,
@@ -144,6 +145,7 @@
 			<CommentAutocompletePopover
 				{commandState}
 				{mentionState}
+				{suggestionPanel}
 				{popoverTop}
 				{pickCommandItem}
 				{applyKaomojiSuggestion}

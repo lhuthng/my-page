@@ -1,9 +1,10 @@
 <script>
-	import CommentGifPopover from './CommentGifPopover.svelte';
-	import CommentKaomojiPopover from './CommentKaomojiPopover.svelte';
-	import { COMMENT_COMMANDS } from '$lib/features/comments/comment-syntax';
-
 	let { commandState, pickCommandItem, applyKaomojiSuggestion } = $props();
+	let popoverProps = $derived({
+		commandState,
+		pickCommandItem,
+		applyKaomojiSuggestion
+	});
 
 	let commandContainer = $state(null);
 
@@ -21,7 +22,7 @@
 <div class="max-h-72 overflow-y-scroll px-2 custom-scrollbar">
 	{#if commandState.loading}
 		<div class="flex items-center gap-2 px-2 py-2 text-sm font-medium text-dark/70">
-			<span>Searching {commandState.type === COMMENT_COMMANDS.GIF ? 'GIFs' : 'Kaomojis'}</span>
+			<span>Searching {commandState.meta?.loadingLabel ?? 'suggestions'}</span>
 			<div class="flex items-center gap-1">
 				<span
 					class="h-1.5 w-1.5 animate-bounce rounded-full bg-primary"
@@ -45,19 +46,14 @@
 
 	{#if !commandState.loading && !commandState.error && commandState.items.length === 0 && commandState.suggestions.length === 0}
 		<p class="px-2 py-2 text-sm italic font-medium text-dark/60">
-			{#if commandState.type === COMMENT_COMMANDS.GIF}
-				Type to search GIFs... (e.g. /gif cats)
-			{:else if commandState.type === COMMENT_COMMANDS.KAOMOJI}
-				Type a mood to search Kaomojis... (e.g. /kao joy)
-			{/if}
+			{commandState.meta?.emptyText ?? 'Type to search...'}
 		</p>
 	{/if}
 
 	<div bind:this={commandContainer} class="space-y-2">
-		{#if commandState.type === COMMENT_COMMANDS.KAOMOJI}
-			<CommentKaomojiPopover {commandState} {pickCommandItem} {applyKaomojiSuggestion} />
-		{:else if commandState.type === COMMENT_COMMANDS.GIF}
-			<CommentGifPopover {commandState} {pickCommandItem} />
+		{#if commandState.meta?.PopoverComponent}
+			{@const PopoverComponent = commandState.meta.PopoverComponent}
+			<PopoverComponent {...popoverProps} />
 		{/if}
 	</div>
 </div>
