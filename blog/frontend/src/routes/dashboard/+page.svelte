@@ -1,12 +1,35 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { gql } from '$lib/api/graphql';
 
 	let { data } = $props();
 
-	let overview = $state(data.overview);
-	let loading = $state(data.overview === null);
+	let overview = $state(untrack(() => data).overview);
+	let loading = $state(untrack(() => data).overview === null);
 	let activeTopTab = $state('views');
+	let visitorCountries = $derived(data.visitorCountries ?? []);
+	let visitorTotal = $derived(visitorCountries.reduce((sum, item) => sum + item.visits, 0));
+	let visitorUnknown = $derived(
+		visitorCountries
+			.filter((item) => item.country_code === 'XX')
+			.reduce((sum, item) => sum + item.visits, 0)
+	);
+	let topVisitorCountries = $derived(
+		Object.values(
+			visitorCountries.reduce((map, item) => {
+				const current = map[item.country_code] ?? {
+					country_code: item.country_code,
+					visits: 0
+				};
+				current.visits += item.visits;
+				map[item.country_code] = current;
+				return map;
+			}, {})
+		)
+			.sort((a, b) => b.visits - a.visits || a.country_code.localeCompare(b.country_code))
+			.slice(0, 8)
+	);
+	const countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
 
 	let topPosts = $derived(
 		activeTopTab === 'views'
@@ -18,6 +41,11 @@
 
 	function roleLabel(role) {
 		return role === 'admin' ? 'Admin' : role === 'moderator' ? 'Mod' : 'User';
+	}
+
+	function countryLabel(code) {
+		if (code === 'XX') return 'Unknown';
+		return countryNames.of(code) ?? code;
 	}
 
 	onMount(async () => {
@@ -176,6 +204,46 @@
 						</div>
 					{/each}
 				</div>
+			</div>
+		{/if}
+
+		{#if data.role === 'admin'}
+			<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
+				<div class="flex flex-wrap items-end justify-between gap-2">
+					<div>
+						<h2 class="text-2xl font-semibold">Visitor Countries</h2>
+						<p class="text-sm text-dark/50">Last 30 days, aggregated by Cloudflare country</p>
+					</div>
+					<div class="flex gap-4 text-sm text-dark/60">
+						<span><strong class="text-dark">{visitorTotal}</strong> visits</span>
+						<span><strong class="text-dark">{visitorUnknown}</strong> unknown</span>
+					</div>
+				</div>
+				{#if topVisitorCountries.length}
+					<div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
+						{#each topVisitorCountries as country}
+							{@const pct = visitorTotal
+								? Math.max(Math.round((country.visits / visitorTotal) * 100), 1)
+								: 0}
+							<div class="rounded-lg bg-background/40 p-3 flex flex-col gap-2">
+								<div class="flex items-center justify-between gap-2">
+									<span class="font-semibold truncate">{countryLabel(country.country_code)}</span>
+									<span class="text-xs rounded-full bg-white px-2 py-0.5 text-dark/60">
+										{country.country_code}
+									</span>
+								</div>
+								<div class="h-2 rounded-full bg-white overflow-hidden">
+									<div class="h-full rounded-full bg-primary" style="width:{pct}%"></div>
+								</div>
+								<span class="text-sm text-dark/60">{country.visits} visits</span>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<p class="text-dark/40 text-sm text-center py-4">
+						No visitor country data yet. Data appears after requests include CF-IPCountry.
+					</p>
+				{/if}
 			</div>
 		{/if}
 
