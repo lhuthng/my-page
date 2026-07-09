@@ -6,6 +6,7 @@
 	let {
 		commandState,
 		mentionState,
+		suggestionPanel = null,
 		popoverTop = null,
 		pickCommandItem,
 		applyKaomojiSuggestion,
@@ -13,12 +14,16 @@
 	} = $props();
 </script>
 
-{#if commandState.open}
-	<CommentAutocompletePopoverContainer open={commandState.open} top={popoverTop}>
+{#if suggestionPanel?.mode === 'command'}
+	<CommentAutocompletePopoverContainer open={suggestionPanel.open} top={suggestionPanel.top ?? popoverTop}>
 		<CommentCommandPopoverContent {commandState} {pickCommandItem} {applyKaomojiSuggestion} />
 	</CommentAutocompletePopoverContainer>
-{:else if mentionState.open}
-	<CommentAutocompletePopoverContainer open={mentionState.open} top={popoverTop} className="py-0">
+{:else if suggestionPanel?.mode === 'mention'}
+	<CommentAutocompletePopoverContainer
+		open={suggestionPanel.open}
+		top={suggestionPanel.top ?? popoverTop}
+		className="py-0"
+	>
 		<CommentMentionPopoverContent {mentionState} {pickMention} />
 	</CommentAutocompletePopoverContainer>
 {/if}

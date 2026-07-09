@@ -2,7 +2,6 @@
 	import { authState } from '$lib/auth/user.svelte.js';
 	import CommentEditor from './editor/CommentEditor.svelte';
 	import CommentFeed from './feed/CommentFeed.svelte';
-	import CommentIdentityPicker from './editor/CommentIdentityPicker.svelte';
 	import { getGuestIdentity, GUEST_IDENTITIES } from '$lib/features/comments/guest-identities.js';
 	import {
 		createCommentSectionRuntime,
@@ -28,8 +27,6 @@
 	let state = $state(createEmptyState());
 	const comments = state.comments;
 	const replyThreads = state.replyThreads;
-	const mentionState = state.mentionState;
-	const commandState = state.commandState;
 	const runtime = createCommentSectionRuntime(
 		state,
 		() => userAvatarUrl,
@@ -56,8 +53,6 @@
 	const toggleKaomojiDrawer = runtime.toggleKaomojiDrawer;
 	const toggleGifDrawer = runtime.toggleGifDrawer;
 	const closeMarkdownHelp = runtime.closeMarkdownHelp;
-	const insertAtCursor = runtime.insertAtCursor;
-	const wrapSelection = runtime.wrapSelection;
 	const pickCommandItem = runtime.pickCommandItem;
 	const applyKaomojiSuggestion = runtime.applyKaomojiSuggestion;
 	const pickMention = runtime.pickMention;
@@ -94,32 +89,33 @@
 					previewHtml={comments.current.trim().length > 0
 						? runtime.md.render(comments.current)
 						: ''}
-					replyTo={state.replyTo}
+					replyTo={state.composer.replyTo}
 					sending={comments.sending}
-					{commandState}
-					{mentionState}
-					popoverTop={state.popoverTop}
-					showMarkdownHelp={state.showMarkdownHelp}
-					showKaomojiSearch={state.showKaomojiSearch}
-					showGifSearch={state.showGifSearch}
-					gifQuery={state.gifQuery}
+					commandState={state.commandState}
+					mentionState={state.mentionState}
+					suggestionPanel={runtime.suggestionPanel}
+					popoverTop={state.ui.popoverTop}
+					showMarkdownHelp={state.ui.showMarkdownHelp}
+					showKaomojiSearch={state.drawers.showKaomojiSearch}
+					showGifSearch={state.drawers.showGifSearch}
+					gifQuery={state.drawers.gifQuery}
 					onGifQueryInput={(value) => {
-						state.gifQuery = value;
+						state.drawers.gifQuery = value;
 					}}
-					gifResults={state.gifResults}
-					gifLoading={state.gifLoading}
-					gifError={state.gifError}
+					gifResults={state.drawers.gifResults}
+					gifLoading={state.drawers.gifLoading}
+					gifError={state.drawers.gifError}
 					{fetchGifs}
 					{selectGif}
-					kaomojiMood={state.kaomojiMood}
+					kaomojiMood={state.drawers.kaomojiMood}
 					onKaomojiMoodInput={(value) => {
-						state.kaomojiMood = value;
+						state.drawers.kaomojiMood = value;
 					}}
-					kaomojiResults={state.kaomojiResults}
-					kaomojiSuggestions={state.kaomojiSuggestions}
-					kaomojiLoading={state.kaomojiLoading}
-					kaomojiTotal={state.kaomojiTotal}
-					kaomojiError={state.kaomojiError}
+					kaomojiResults={state.drawers.kaomojiResults}
+					kaomojiSuggestions={state.drawers.kaomojiSuggestions}
+					kaomojiLoading={state.drawers.kaomojiLoading}
+					kaomojiTotal={state.drawers.kaomojiTotal}
+					kaomojiError={state.drawers.kaomojiError}
 					{fetchKaomojis}
 					{selectKaomoji}
 					{applyKaomojiMoodSuggestion}
@@ -131,15 +127,15 @@
 					{applyKaomojiSuggestion}
 					{pickMention}
 					onToggleHelp={toggleMarkdownHelp}
-					onHeader={() => insertAtCursor('# ', 2)}
-					onBold={() => wrapSelection('**')}
-					onItalic={() => wrapSelection('_')}
-					onCode={() => wrapSelection('`')}
+					onHeader={runtime.insertHeader}
+					onBold={runtime.wrapBold}
+					onItalic={runtime.wrapItalic}
+					onCode={runtime.wrapCode}
 					onToggleKaomoji={toggleKaomojiDrawer}
 					onToggleGif={toggleGifDrawer}
 					onCloseMarkdownHelp={closeMarkdownHelp}
 					onCancelReply={() => {
-						state.replyTo = null;
+						state.composer.replyTo = null;
 					}}
 					onSubmit={submitComment}
 				/>
