@@ -42,7 +42,7 @@ use crate::{
         },
         errors::{media::MediaError, project::ProjectError},
     },
-    helper::string::replace_range_unicode,
+    helper::{string::replace_range_unicode, time::normalize_optional_utc_timestamp},
     infrastructure::web::{
         api::handlers::common::{
             CreateCoverUpload, MediumData, apply_created_cover_upload, extract_medium,
@@ -867,8 +867,8 @@ fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
         cover_video_url: project.cover_video_url,
         cover_video_type: project.cover_video_type,
         og_image_seconds: project.og_image_seconds,
-        published_at: project.published_at,
-        updated_at: project.updated_at,
+        published_at: normalize_optional_utc_timestamp(project.published_at),
+        updated_at: normalize_optional_utc_timestamp(project.updated_at),
         demo_type: project.demo.demo_type,
         raw_demo_url,
         demo_width: project.demo.width,

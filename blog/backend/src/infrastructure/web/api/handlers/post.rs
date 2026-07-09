@@ -34,7 +34,10 @@ use crate::{
         },
         errors::{media::MediaError, post::PostError},
     },
-    helper::string::replace_range_unicode,
+    helper::{
+        string::replace_range_unicode,
+        time::{normalize_optional_utc_timestamp, normalize_utc_timestamp},
+    },
     infrastructure::web::{
         api::handlers::common::{
             CreateCoverUpload, MediumData, apply_created_cover_upload, extract_medium,
@@ -517,8 +520,8 @@ pub async fn get_post_by_slug(
             .with_draft
             .and_then(|with_draft| with_draft.then_some(post.draft)),
         medium_urls: post.medium_urls,
-        published_at: post.published_at,
-        updated_at: post.updated_at,
+        published_at: normalize_optional_utc_timestamp(post.published_at),
+        updated_at: normalize_optional_utc_timestamp(post.updated_at),
         cover_media_type: post.cover_media_type,
         cover_video_url: post.cover_video_url,
         cover_video_type: post.cover_video_type,
@@ -1191,7 +1194,7 @@ pub async fn get_comments(
             parent_id: comment.parent_id,
             direct_reply_count: comment.direct_reply_count,
             content: comment.content,
-            created_at: comment.created_at,
+            created_at: normalize_utc_timestamp(comment.created_at),
             username: comment.username,
             display_name: comment.display_name,
             avatar_url: comment.avatar_url,
