@@ -27,6 +27,7 @@ use crate::{
         },
         errors::{media::MediaError, user::UserError},
     },
+    helper::time::normalize_utc_timestamp,
     infrastructure::web::{
         api::handlers::common::{MediumData, extract_medium},
         server::AppState,
@@ -317,7 +318,7 @@ pub async fn get_latest_comments(
                 id: comment.id,
                 parent_id: comment.parent_id,
                 content: comment.content,
-                created_at: comment.created_at,
+                created_at: normalize_utc_timestamp(comment.created_at),
                 post_title: comment.post_title,
                 post_slug: comment.post_slug,
                 avatar_url: comment.avatar_url,
