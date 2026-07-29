@@ -109,7 +109,7 @@
 		<ProjectDemo
 			{title}
 			demoType={demo_type}
-			demoUrl={demo_url}
+			 demoUrl={demo_url}
 			width={demo_width ?? '100%'}
 			height={demo_height ?? '520px'}
 		/>

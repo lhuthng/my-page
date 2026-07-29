@@ -16,6 +16,15 @@ pub struct ProjectDemo {
     pub height: Option<String>,
     pub config: Option<String>,
     pub demo_url: Option<String>,
+    pub jsdos_bundle: Option<JsDosBundle>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JsDosBundle {
+    pub storage_key: String,
+    pub original_file_name: String,
+    pub size_bytes: i64,
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -14,7 +14,7 @@ use crate::{
     domain::{
         entities::{
             post::PostStats,
-            project::{Project, ProjectDemo, ProjectLink, ProjectSnapshot, ProjectSnapshotPage},
+            project::{JsDosBundle, Project, ProjectDemo, ProjectLink, ProjectSnapshot, ProjectSnapshotPage},
         },
         errors::project::ProjectError,
     },
@@ -222,6 +222,18 @@ impl ProjectServiceImpl {
             medium_short_names[index] = medium.short_name;
         }
 
+        let jsdos_bundle = sqlx::query_as::<_, (String, String, i64, String)>(
+            "SELECT storage_key, original_file_name, size_bytes, sha256 FROM project_jsdos_bundles WHERE project_id = ?",
+        )
+        .bind(row.project_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|(storage_key, original_file_name, size_bytes, sha256)| JsDosBundle {
+            storage_key,
+            original_file_name,
+            size_bytes,
+            sha256,
+        });
         let cover_url = row.cover_url;
         let cover_media_type = row.cover_media_type;
         let og_image_url = Some(format!("media/i/.post.{}.thumbnail", row.post_id));
@@ -255,6 +267,7 @@ impl ProjectServiceImpl {
                 height: row.demo_height,
                 config: row.demo_config,
                 demo_url: row.demo_url,
+                jsdos_bundle,
             },
             links: self.links_for_project(row.project_id).await?,
             is_owner: viewing_user_id == Some(row.user_id),
