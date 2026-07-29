@@ -70,6 +70,9 @@ pub struct ProjectDemoConfig {
     pub max_archive_size: u64,
     pub max_extracted_size: u64,
     pub max_files: usize,
+    pub max_jsdos_size: u64,
+    pub jsdos_chunk_size: u64,
+    pub upload_session_ttl_hours: u64,
 }
 
 pub struct AppState {
@@ -161,12 +164,27 @@ impl ProjectDemoConfig {
             .unwrap_or_else(|_| "2000".to_string())
             .parse::<usize>()
             .expect("PROJECT_DEMO_MAX_FILES must be an integer");
+        let max_jsdos_size = env::var("PROJECT_JSDOS_MAX_BYTES")
+            .unwrap_or_else(|_| (500 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_JSDOS_MAX_BYTES must be an integer");
+        let jsdos_chunk_size = env::var("PROJECT_JSDOS_CHUNK_BYTES")
+            .unwrap_or_else(|_| (8 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_JSDOS_CHUNK_BYTES must be an integer");
+        let upload_session_ttl_hours = env::var("PROJECT_JSDOS_UPLOAD_TTL_HOURS")
+            .unwrap_or_else(|_| "24".to_string())
+            .parse::<u64>()
+            .expect("PROJECT_JSDOS_UPLOAD_TTL_HOURS must be an integer");
 
         Self {
             dir,
             max_archive_size,
             max_extracted_size,
             max_files,
+            max_jsdos_size,
+            jsdos_chunk_size,
+            upload_session_ttl_hours,
         }
     }
 }

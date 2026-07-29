@@ -15,6 +15,7 @@
 		{ value: 'html5', label: 'HTML5', disabled: false },
 		{ value: 'embed', label: 'Embed', disabled: false },
 		{ value: 'webgl', label: 'WebGL', disabled: false },
+		{ value: 'jsdos', label: 'js-dos', disabled: false },
 		{ value: 'download', label: 'Download', disabled: false },
 		{ value: 'video', label: 'Video', disabled: false }
 	];
@@ -204,6 +205,10 @@
 					};
 				}
 				break;
+			case 'jsdos':
+				if (mode === 'create' && !zip) return { valid: false, error: 'A .jsdos bundle is required for js-dos projects.' };
+				break;
+
 			case 'embed':
 				if (!url) {
 					return { valid: false, error: 'Demo URL is required for Embed projects.' };
@@ -297,7 +302,10 @@
 			new Blob([JSON.stringify(projectPayload)], { type: 'application/json' })
 		);
 		appendCreateCover(formData, editor.createCoverFile, editingData.ogImageSeconds);
-		if (editor.demoZip) {
+		// Legacy js-dos bundles are uploaded after the project is created so the
+		// chunked upload endpoint can handle large files. Do not include the file
+		// in the project-creation multipart request.
+		if (editor.demoZip && editingData.demoType !== 'jsdos') {
 			formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
 		}
 		appendInlineFiles(formData, offlineKeys);
@@ -312,6 +320,16 @@
 			editor.isCritical = false;
 			editor.status = 'OK!';
 			const { id } = await res.json();
+			try {
+				if (editingData.demoType === 'jsdos' && editor.demoZip) {
+					await uploadJsDosBundle(id, editor.demoZip);
+				}
+			} catch (error) {
+				await fetch(`/api/projects/id/${id}`, { method: 'DELETE', headers: { Authorization: auth() } }).catch(() => {});
+				editor.isCritical = true;
+				editor.status = error?.message ?? 'Game upload failed.';
+				return;
+			}
 			openCreatedDraftPrompt(editor, id);
 		} else {
 			editor.isCritical = true;
@@ -378,7 +396,9 @@
 			'project_data',
 			new Blob([JSON.stringify(projectData)], { type: 'application/json' })
 		);
-		if (editor.demoZip) formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
+		if (editor.demoZip && editingData.demoType !== 'jsdos') {
+			formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
+		}
 
 		const res = await fetch('/api/projects/id/' + data.id, {
 			method: 'PATCH',
@@ -390,6 +410,15 @@
 			editor.isCritical = false;
 			editor.status = 'OK!';
 			clearNewMedia(offlineKeys);
+			try {
+				if (editingData.demoType === 'jsdos' && editor.demoZip) {
+					await uploadJsDosBundle(data.id, editor.demoZip);
+				}
+			} catch (error) {
+				editor.isCritical = true;
+				editor.status = error?.message ?? 'Game upload failed.';
+				return;
+			}
 			editor.demoZip = undefined;
 			editor.demoZipName = '';
 		} else {
@@ -418,13 +447,57 @@
 	const setDemoZip = (file) => {
 		editor.demoZipError = '';
 		if (!file) return;
-		if (!file.name.toLowerCase().endsWith('.zip')) {
-			editor.demoZipError = 'Only zip archives are allowed.';
+		const isJsDos = editingData.demoType === 'jsdos';
+		if (!file.name.toLowerCase().endsWith(isJsDos ? '.jsdos' : '.zip')) {
+			editor.demoZipError = isJsDos ? 'Only .jsdos bundles are allowed.' : 'Only zip archives are allowed.';
+			return;
+		}
+		if (isJsDos && file.size > 524288000) {
+			editor.demoZipError = 'The js-dos bundle cannot exceed 500 MB.';
 			return;
 		}
 		editor.demoZip = file;
 		editor.demoZipName = file.name;
 	};
+
+	const uploadJsDosBundle = async (projectId, file) => {
+		const start = await fetch(`/api/projects/id/${projectId}/jsdos/upload`, {
+			method: 'POST',
+			headers: { Authorization: auth(), 'Content-Type': 'application/json' },
+			body: JSON.stringify({ file_name: file.name, size_bytes: file.size })
+		});
+		if (!start.ok) throw new Error(await start.text());
+		const session = await start.json();
+		editor.status = 'Uploading game…';
+		for (
+			let index = session.next_chunk_index;
+			index * session.chunk_size_bytes < file.size;
+			index++
+		) {
+			const startByte = index * session.chunk_size_bytes;
+			const chunk = file.slice(
+				startByte,
+				Math.min(startByte + session.chunk_size_bytes, file.size)
+			);
+			const chunkRes = await fetch(
+				`/api/projects/id/${projectId}/jsdos/upload/${session.upload_id}/chunk/${index}`,
+				{
+					method: 'PUT',
+					headers: { Authorization: auth(), 'Content-Type': 'application/octet-stream' },
+					body: chunk
+				}
+			);
+			if (!chunkRes.ok) throw new Error(await chunkRes.text());
+			const progress = Math.round(((startByte + chunk.size) / file.size) * 100);
+			editor.status = `Uploading game… ${progress}%`;
+		}
+		const complete = await fetch(
+			`/api/projects/id/${projectId}/jsdos/upload/${session.upload_id}/complete`,
+			{ method: 'POST', headers: { Authorization: auth() } }
+		);
+		if (!complete.ok) throw new Error(await complete.text());
+	};
+
 </script>
 
 {#snippet extraFields()}
@@ -465,7 +538,7 @@
 			</div>
 		</div>
 	{/if}
-	{#if editingData.demoType !== 'none' && editingData.demoType !== 'html5' && editingData.demoType !== 'webgl'}
+	{#if editingData.demoType !== 'none' && editingData.demoType !== 'html5' && editingData.demoType !== 'webgl' && editingData.demoType !== 'jsdos'}
 		<div class="flex flex-col">
 			<label for="demo-url">
 				{#if editingData.demoType === 'embed'}
@@ -491,7 +564,7 @@
 			/>
 		</div>
 	{/if}
-	{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl'}
+	{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl' || editingData.demoType === 'jsdos'}
 		<div
 			class="p-2 rounded-lg bg-white/70 border-2 border-dashed border-dark/30"
 			ondrop={(e) => {
@@ -502,12 +575,12 @@
 			role="none"
 		>
 			<label class="block font-semibold" for="demo-zip">
-				{editingData.demoType === 'html5' ? 'HTML5' : 'WebGL'} zip:
+				{editingData.demoType === 'jsdos' ? 'js-dos bundle:' : editingData.demoType === 'html5' ? 'HTML5 zip:' : 'WebGL zip:'}
 			</label>
 			<input
 				id="demo-zip"
 				type="file"
-				accept=".zip,application/zip"
+				accept={editingData.demoType === 'jsdos' ? '.jsdos' : '.zip,application/zip'}
 				disabled={!isOwner}
 				onchange={(e) => setDemoZip(e.currentTarget.files?.[0])}
 			/>

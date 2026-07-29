@@ -223,6 +223,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/new", post(handlers::project::new_project))
+                .route("/id/{project_id}/jsdos/upload", post(handlers::project::start_jsdos_upload))
+                .route("/id/{project_id}/jsdos/upload/{upload_id}/chunk/{chunk_index}", put(handlers::project::append_jsdos_chunk))
+                .route("/id/{project_id}/jsdos/upload/{upload_id}/complete", post(handlers::project::complete_jsdos_upload))
+                .route("/id/{project_id}/jsdos/upload/{upload_id}", delete(handlers::project::abort_jsdos_upload))
                 .route("/all", get(handlers::project::get_all_projects))
                 .route("/id/{project_id}", post(handlers::project::publish_project))
                 .route(
@@ -230,6 +234,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     get(handlers::project::get_project_details),
                 )
                 .route("/id/{project_id}", patch(handlers::project::update_project))
+                .route("/id/{project_id}", delete(handlers::project::delete_project_draft))
                 .route(
                     "/id/{project_id}/cover",
                     patch(handlers::project::change_cover),
@@ -257,6 +262,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // public routes
         .merge(
             Router::new()
+                .route("/s/{project_slug}/jsdos", get(handlers::project::get_jsdos_bundle))
                 .route("/latest", get(handlers::project::get_latest_projects))
                 .route("/featured", get(handlers::project::get_featured_projects))
                 .route("/check", get(handlers::project::check_project)),

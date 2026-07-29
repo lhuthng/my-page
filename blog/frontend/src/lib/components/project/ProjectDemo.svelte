@@ -1,6 +1,7 @@
 <script>
 	import { fade, fly } from 'svelte/transition';
 	import BackButton from '../ui/BackButton.svelte';
+	import JsDosPlayer from './JsDosPlayer.svelte';
 
 	let { title, demoType = 'html5', demoUrl, width = '100%', height = '520px' } = $props();
 	let loaded = $state(false);
@@ -20,7 +21,9 @@
 		style:max-width="100%"
 		style:height
 	>
-		{#if demoType === 'video'}
+		{#if demoType === 'jsdos'}
+			<JsDosPlayer {title} bundleUrl={demoUrl} />
+		{:else if demoType === 'video'}
 			<video class="block w-full h-full object-contain bg-black" src={demoUrl} controls {title}>
 				<track kind="captions" src="" srclang="en" label="English captions" default />
 			</video>

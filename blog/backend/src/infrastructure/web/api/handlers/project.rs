@@ -2,7 +2,7 @@ use std::{
     cmp::Reverse,
     collections::HashMap,
     fs,
-    io::{Cursor, Read, Write},
+    io::{Cursor, Read, Seek, Write},
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
@@ -11,10 +11,14 @@ use axum::{
     Extension, Json,
     body::Bytes,
     extract::{Multipart, Path as AxumPath, Query, State},
-    response::IntoResponse,
+    http::{HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use tokio::io::AsyncWriteExt;
+use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 use zip::ZipArchive;
 
@@ -109,6 +113,36 @@ struct ProjectPatchData {
     demo_config: Option<String>,
     demo_url: Option<String>,
     og_image_seconds: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct StartJsDosUploadRequest {
+    pub file_name: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Deserialize)]
+#[derive(Serialize)]
+pub struct StartJsDosUploadResponse {
+    pub upload_id: String,
+    pub chunk_size_bytes: u64,
+    pub next_chunk_index: u64,
+    pub expected_size_bytes: u64,
+}
+
+#[derive(Serialize)]
+pub struct JsDosUploadResponse {
+    pub received_size_bytes: u64,
+    pub next_chunk_index: u64,
+}
+
+#[derive(Serialize)]
+pub struct CompleteJsDosUploadResponse {
+    pub project_id: i64,
+    pub file_name: String,
+    pub size_bytes: u64,
+    pub sha256: String,
+    pub bundle_url: String,
 }
 
 struct FileData {
@@ -490,6 +524,286 @@ fn extract_demo_zip(
     Ok(())
 }
 
+fn validate_jsdos_bundle(path: &Path, max_files: usize) -> Result<(u64, String), ProjectError> {
+    let mut file = fs::File::open(path)?;
+    let size = file.metadata()?.len();
+    let mut has_manifest = false;
+    let mut archive = ZipArchive::new(file.try_clone()?)
+        .map_err(|e| ProjectError::InvalidDemo(format!("Invalid js-dos bundle: {e}")))?;
+    if archive.is_empty() || archive.len() > max_files {
+        return Err(ProjectError::InvalidDemo(
+            "Invalid js-dos bundle file count.".to_string(),
+        ));
+    }
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|e| ProjectError::InvalidDemo(e.to_string()))?;
+        if entry.name() == ".jsdos/jsdos.json" {
+            has_manifest = true;
+        }
+        if entry.enclosed_name().is_none() {
+            return Err(ProjectError::InvalidDemo(
+                "js-dos bundle contains an unsafe path.".to_string(),
+            ));
+        }
+        #[cfg(unix)]
+        if entry
+            .unix_mode()
+            .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
+            return Err(ProjectError::InvalidDemo(
+                "js-dos bundle cannot contain symlinks.".to_string(),
+            ));
+        }
+    }
+    if !has_manifest {
+        return Err(ProjectError::InvalidDemo(
+            "js-dos bundle must contain .jsdos/jsdos.json.".to_string(),
+        ));
+    }
+
+    file.rewind()?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 1024 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|e| ProjectError::InvalidDemo(e.to_string()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok((size, hex::encode(hasher.finalize())))
+}
+
+fn jsdos_temp_path(state: &AppState, upload_id: &str) -> PathBuf {
+    state
+        .project_demo_config
+        .dir
+        .join(".uploads")
+        .join("jsdos")
+        .join(format!("{upload_id}.part"))
+}
+
+fn jsdos_storage_key(project_id: i64, sha256: &str) -> String {
+    format!("jsdos/{project_id}/{sha256}.jsdos")
+}
+
+async fn require_project_owner(
+    state: &AppState,
+    project_id: i64,
+    user_id: i64,
+) -> Result<(), ProjectError> {
+    let owner: Option<i64> = sqlx::query_scalar(
+        "SELECT posts.user_id FROM projects JOIN posts ON posts.id = projects.post_id WHERE projects.id = ?",
+    )
+    .bind(project_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    match owner {
+        Some(id) if id == user_id => Ok(()),
+        Some(_) => Err(ProjectError::Forbidden),
+        None => Err(ProjectError::ProjectNotFound),
+    }
+}
+
+pub async fn start_jsdos_upload(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(project_id): AxumPath<i64>,
+    Json(request): Json<StartJsDosUploadRequest>,
+) -> Result<impl IntoResponse, ProjectError> {
+    let user_id = claims.user_id.parse::<i64>().map_err(|_| {
+        ProjectError::InternalError("Cannot parse user id".to_string())
+    })?;
+    require_project_owner(&state, project_id, user_id).await?;
+    if !request.file_name.to_ascii_lowercase().ends_with(".jsdos") {
+        return Err(ProjectError::InvalidDemo(
+            "Only .jsdos bundles are accepted.".to_string(),
+        ));
+    }
+    if request.size_bytes == 0 || request.size_bytes > state.project_demo_config.max_jsdos_size {
+        return Err(ProjectError::InvalidDemo(format!(
+            "js-dos bundles must be between 1 byte and {} bytes.",
+            state.project_demo_config.max_jsdos_size
+        )));
+    }
+
+    let upload_id = Uuid::new_v4().to_string();
+    let temp_path = jsdos_temp_path(&state, &upload_id);
+    if let Some(parent) = temp_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    tokio::fs::File::create(&temp_path).await?;
+    let ttl_hours = state.project_demo_config.upload_session_ttl_hours;
+    sqlx::query(
+        r#"INSERT INTO project_jsdos_upload_sessions
+           (id, project_id, uploader_id, original_file_name, expected_size_bytes,
+            chunk_size_bytes, temp_storage_key, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', ?))"#,
+    )
+    .bind(&upload_id)
+    .bind(project_id)
+    .bind(user_id)
+    .bind(&request.file_name)
+    .bind(request.size_bytes as i64)
+    .bind(state.project_demo_config.jsdos_chunk_size as i64)
+    .bind(temp_path.to_string_lossy().to_string())
+    .bind(format!("+{ttl_hours} hours"))
+    .execute(&state.project_service.pool)
+    .await?;
+
+    Ok(Json(StartJsDosUploadResponse {
+        upload_id,
+        chunk_size_bytes: state.project_demo_config.jsdos_chunk_size,
+        next_chunk_index: 0,
+        expected_size_bytes: request.size_bytes,
+    }))
+}
+
+pub async fn append_jsdos_chunk(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath((_project_id, upload_id, chunk_index)): AxumPath<(i64, String, u64)>,
+    body: Bytes,
+) -> Result<impl IntoResponse, ProjectError> {
+    let user_id = claims.user_id.parse::<i64>().map_err(|_| {
+        ProjectError::InternalError("Cannot parse user id".to_string())
+    })?;
+    let row: Option<(i64, i64, i64, i64, i64, String, String)> = sqlx::query_as(
+        "SELECT project_id, uploader_id, expected_size_bytes, received_size_bytes, next_chunk_index, temp_storage_key, status FROM project_jsdos_upload_sessions WHERE id = ?",
+    )
+    .bind(&upload_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    let (project_id, uploader_id, expected, received, next, temp_key, status) =
+        row.ok_or(ProjectError::ProjectNotFound)?;
+    if uploader_id != user_id || project_id != _project_id {
+        return Err(ProjectError::Forbidden);
+    }
+    if status != "active" || chunk_index != next as u64 {
+        return Err(ProjectError::InvalidDemo(
+            "Invalid or out-of-order js-dos upload chunk.".to_string(),
+        ));
+    }
+    let chunk_size = state.project_demo_config.jsdos_chunk_size;
+    if body.is_empty() || body.len() as u64 > chunk_size || received as u64 + body.len() as u64 > expected as u64 {
+        return Err(ProjectError::InvalidDemo(
+            "Invalid js-dos upload chunk size.".to_string(),
+        ));
+    }
+    let mut file = tokio::fs::OpenOptions::new().append(true).open(&temp_key).await?;
+    file.write_all(&body).await?;
+    file.flush().await?;
+    let received_size = received as u64 + body.len() as u64;
+    sqlx::query(
+        "UPDATE project_jsdos_upload_sessions SET received_size_bytes = ?, next_chunk_index = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    )
+    .bind(received_size as i64)
+    .bind((chunk_index + 1) as i64)
+    .bind(&upload_id)
+    .execute(&state.project_service.pool)
+    .await?;
+    Ok(Json(JsDosUploadResponse {
+        received_size_bytes: received_size,
+        next_chunk_index: chunk_index + 1,
+    }))
+}
+
+pub async fn complete_jsdos_upload(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath((project_id, upload_id)): AxumPath<(i64, String)>,
+) -> Result<impl IntoResponse, ProjectError> {
+    let user_id = claims.user_id.parse::<i64>().map_err(|_| {
+        ProjectError::InternalError("Cannot parse user id".to_string())
+    })?;
+    require_project_owner(&state, project_id, user_id).await?;
+    let row: Option<(String, i64, i64, String, String)> = sqlx::query_as(
+        "SELECT original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, status FROM project_jsdos_upload_sessions WHERE id = ? AND project_id = ? AND uploader_id = ?",
+    )
+    .bind(&upload_id)
+    .bind(project_id)
+    .bind(user_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    let (file_name, expected, received, temp_key, status) =
+        row.ok_or(ProjectError::ProjectNotFound)?;
+    if status != "active" || expected != received {
+        return Err(ProjectError::InvalidDemo(
+            "js-dos upload is incomplete.".to_string(),
+        ));
+    }
+    let temp_path = PathBuf::from(&temp_key);
+    let max_files = state.project_demo_config.max_files;
+    let (size, sha256) = tokio::task::spawn_blocking(move || validate_jsdos_bundle(&temp_path, max_files))
+        .await
+        .map_err(|e| ProjectError::InternalError(e.to_string()))??;
+    let storage_key = jsdos_storage_key(project_id, &sha256);
+    let final_path = state.project_demo_config.dir.join(&storage_key);
+    if let Some(parent) = final_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    tokio::fs::rename(&temp_key, &final_path).await?;
+
+    let mut tx = state.project_service.pool.begin().await?;
+    sqlx::query(
+        "INSERT INTO project_jsdos_bundles (project_id, storage_key, original_file_name, size_bytes, sha256) VALUES (?, ?, ?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET storage_key = excluded.storage_key, original_file_name = excluded.original_file_name, size_bytes = excluded.size_bytes, sha256 = excluded.sha256, updated_at = CURRENT_TIMESTAMP",
+    )
+    .bind(project_id)
+    .bind(&storage_key)
+    .bind(&file_name)
+    .bind(size as i64)
+    .bind(&sha256)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE projects SET demo_type = 'jsdos', demo_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE project_jsdos_upload_sessions SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(&upload_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    Ok(Json(CompleteJsDosUploadResponse {
+        project_id,
+        file_name,
+        size_bytes: size,
+        sha256,
+        bundle_url: format!("projects/id/{project_id}/jsdos"),
+    }))
+}
+
+pub async fn abort_jsdos_upload(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath((project_id, upload_id)): AxumPath<(i64, String)>,
+) -> Result<StatusCode, ProjectError> {
+    let user_id = claims.user_id.parse::<i64>().map_err(|_| {
+        ProjectError::InternalError("Cannot parse user id".to_string())
+    })?;
+    let temp_key: Option<String> = sqlx::query_scalar(
+        "SELECT temp_storage_key FROM project_jsdos_upload_sessions WHERE id = ? AND project_id = ? AND uploader_id = ? AND status = 'active'",
+    )
+    .bind(&upload_id)
+    .bind(project_id)
+    .bind(user_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    if let Some(temp_key) = temp_key {
+        sqlx::query("UPDATE project_jsdos_upload_sessions SET status = 'aborted', updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(&upload_id)
+            .execute(&state.project_service.pool)
+            .await?;
+        tokio::fs::remove_file(temp_key).await.ok();
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 fn normalize_links(links: Vec<ProjectLink>) -> Vec<ProjectLink> {
     links
         .into_iter()
@@ -499,6 +813,31 @@ fn normalize_links(links: Vec<ProjectLink>) -> Vec<ProjectLink> {
             url: link.url.trim().to_string(),
         })
         .collect()
+}
+
+pub async fn get_jsdos_bundle(
+    State(state): State<Arc<AppState>>,
+    AxumPath(slug): AxumPath<String>,
+) -> Result<Response, ProjectError> {
+    let storage_key: Option<String> = sqlx::query_scalar(
+        "SELECT b.storage_key FROM project_jsdos_bundles b JOIN projects p ON p.id = b.project_id JOIN posts ON posts.id = p.post_id WHERE posts.slug = ? AND posts.status = 'published' AND p.demo_type = 'jsdos'",
+    )
+    .bind(&slug)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
+    if Path::new(&storage_key).components().any(|component| matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
+        return Err(ProjectError::InternalError("Invalid js-dos storage key".to_string()));
+    }
+    let path = state.project_demo_config.dir.join(&storage_key);
+    let file = tokio::fs::File::open(&path).await.map_err(|_| ProjectError::ProjectNotFound)?;
+    let metadata = file.metadata().await?;
+    let mut response = Response::new(axum::body::Body::from_stream(ReaderStream::new(file)));
+    response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=31536000, immutable"));
+    response.headers_mut().insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    response.headers_mut().insert(header::CONTENT_LENGTH, HeaderValue::from_str(&metadata.len().to_string()).unwrap());
+    Ok(response)
 }
 
 #[axum::debug_handler]
@@ -513,6 +852,10 @@ pub async fn new_project(
         .map_err(|_| ProjectError::InternalError("Cannot parse id".to_string()))?;
     let parsed = parse_project_multipart::<ProjectData>(multipart, "project_data").await?;
     let mut data = parsed.data;
+
+    if state.post_service.check_slug(CheckSlugCommand { post_slug: data.slug.clone() }).await? {
+        return Err(ProjectError::InvalidDemo(format!("The project slug '{}' is already in use.", data.slug)));
+    }
 
     let demo_zip = parsed.demo_zip;
     let create_cover = parsed.create_cover;
@@ -545,6 +888,13 @@ pub async fn new_project(
                     "Demo URL is required for {} projects.",
                     data.demo_type
                 )));
+            }
+        }
+        "jsdos" => {
+            if has_demo_url || demo_zip.is_some() {
+                return Err(ProjectError::InvalidDemo(
+                    "js-dos bundles must be uploaded through the js-dos upload endpoint.".to_string(),
+                ));
             }
         }
         _ => {
@@ -615,6 +965,19 @@ pub async fn new_project(
     ))
 }
 
+pub async fn delete_project_draft(State(state): State<Arc<AppState>>, Extension(claims): Extension<Claims>, AxumPath(project_id): AxumPath<i64>) -> Result<StatusCode, ProjectError> {
+    let user_id = claims.user_id.parse::<i64>().map_err(|_| ProjectError::InternalError("Cannot parse id".to_string()))?;
+    require_project_owner(&state, project_id, user_id).await?;
+    let mut tx = state.project_service.pool.begin().await?;
+    let post_id: Option<i64> = sqlx::query_scalar("SELECT post_id FROM projects WHERE id=?").bind(project_id).fetch_optional(&mut *tx).await?;
+    let post_id = post_id.ok_or(ProjectError::ProjectNotFound)?;
+    let status: String = sqlx::query_scalar("SELECT status FROM posts WHERE id=?").bind(post_id).fetch_one(&mut *tx).await?;
+    if status != "draft" { return Err(ProjectError::InvalidDemo("Only draft projects can be automatically cleaned up.".to_string())); }
+    sqlx::query("DELETE FROM posts WHERE id=?").bind(post_id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[axum::debug_handler]
 pub async fn update_project(
     State(state): State<Arc<AppState>>,
@@ -661,6 +1024,13 @@ pub async fn update_project(
                             "Demo URL is required for {} projects.",
                             demo_type
                         )));
+                    }
+                }
+                "jsdos" => {
+                    if has_demo_url || parsed.demo_zip.is_some() {
+                        return Err(ProjectError::InvalidDemo(
+                            "js-dos bundles must be uploaded through the js-dos upload endpoint.".to_string(),
+                        ));
                     }
                 }
                 _ => {
@@ -735,6 +1105,8 @@ pub async fn update_project(
         demo_url = Some(local_demo_url.to_str().unwrap_or("").to_string());
     }
 
+    let keeps_jsdos_bundle = data.demo_type.as_deref() == Some("jsdos");
+
     state
         .project_service
         .update_project(UpdateProjectCommand {
@@ -749,6 +1121,24 @@ pub async fn update_project(
             links: data.links.map(normalize_links),
         })
         .await?;
+
+    if !keeps_jsdos_bundle {
+        if let Some(storage_key) = sqlx::query_scalar::<_, String>(
+            "SELECT storage_key FROM project_jsdos_bundles WHERE project_id = ?",
+        )
+        .bind(project_id)
+        .fetch_optional(&state.project_service.pool)
+        .await?
+        {
+            sqlx::query("DELETE FROM project_jsdos_bundles WHERE project_id = ?")
+                .bind(project_id)
+                .execute(&state.project_service.pool)
+                .await?;
+            tokio::fs::remove_file(state.project_demo_config.dir.join(storage_key))
+                .await
+                .ok();
+        }
+    }
 
     if let Some(zip) = parsed.demo_zip {
         extract_demo_zip(&state.project_demo_config, project_id, zip)?;
@@ -785,6 +1175,23 @@ pub async fn publish_project(
             required_author_id: Some(user_id),
         })
         .await?;
+    let demo_type: String = sqlx::query_scalar("SELECT demo_type FROM projects WHERE id = ?")
+        .bind(project_id)
+        .fetch_one(&state.project_service.pool)
+        .await?;
+    if demo_type == "jsdos" {
+        let has_bundle: Option<i64> = sqlx::query_scalar(
+            "SELECT project_id FROM project_jsdos_bundles WHERE project_id = ?",
+        )
+        .bind(project_id)
+        .fetch_optional(&state.project_service.pool)
+        .await?;
+        if has_bundle.is_none() {
+            return Err(ProjectError::InvalidDemo(
+                "A completed js-dos bundle is required before publishing.".to_string(),
+            ));
+        }
+    }
     state
         .post_service
         .publish(PublishCommand { user_id, post_id })
@@ -834,17 +1241,37 @@ pub struct ProjectResponse {
     pub demo_height: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub demo_config: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jsdos_bundle_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jsdos_bundle_file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jsdos_bundle_size_bytes: Option<i64>,
     pub links: Vec<ProjectLink>,
     pub is_owner: bool,
 }
 
 fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
-    let demo_url = project.demo.demo_url.clone().unwrap_or_default();
+    let mut demo_url = project.demo.demo_url.clone().unwrap_or_default();
     let raw_demo_url = if demo_url.contains("://") {
         Some(demo_url.clone())
     } else {
         None
     };
+    let jsdos_bundle_url = project
+        .demo
+        .jsdos_bundle
+        .as_ref()
+        .map(|_| format!("projects/s/{}/jsdos", project.slug));
+    let jsdos_bundle_file_name = project
+        .demo
+        .jsdos_bundle
+        .as_ref()
+        .map(|bundle| bundle.original_file_name.clone());
+    let jsdos_bundle_size_bytes = project.demo.jsdos_bundle.as_ref().map(|bundle| bundle.size_bytes);
+    if project.demo.demo_type == "jsdos" && jsdos_bundle_url.is_some() {
+        demo_url = format!("projects/s/{}/jsdos", project.slug);
+    }
 
     ProjectResponse {
         demo_url,
@@ -874,6 +1301,9 @@ fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
         demo_width: project.demo.width,
         demo_height: project.demo.height,
         demo_config: project.demo.config,
+        jsdos_bundle_url,
+        jsdos_bundle_file_name,
+        jsdos_bundle_size_bytes,
         links: project.links,
         is_owner: project.is_owner,
     }
