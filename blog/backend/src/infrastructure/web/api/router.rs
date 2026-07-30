@@ -336,6 +336,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 )
                 .route(
                     "/systems/upload/{upload_id}",
+                    get(handlers::v86::get_system_upload_status),
+                )
+                .route(
+                    "/systems/upload/{upload_id}",
                     delete(handlers::v86::abort_system_upload),
                 )
                 .route("/systems/{system_id}", patch(handlers::v86::update_system))

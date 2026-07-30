@@ -7,7 +7,7 @@
 	let replacingSystemId = $state('');
 	let image = $state();
 	let busy = $state(false);
-	let status = $state('');
+	let 	status = $state('');
 	let critical = $state(false);
 
 	const request = async (url, options = {}) => {
@@ -55,9 +55,25 @@
 				status = `Uploading image… ${Math.round(((start + chunk.size) / image.size) * 100)}%`;
 			}
 			status = 'Preparing immutable image chunks…';
+			const interval = setInterval(async () => {
+				try {
+					const res = await fetch(`/api/v86/systems/upload/${session.upload_id}`, {
+						headers: { Authorization: auth() }
+					});
+					if (res.ok) {
+						const data = await res.json();
+						if (data.chunk_progress) {
+							status = data.chunk_progress.message || `Compressing chunk ${data.chunk_progress.completed_chunks}/${data.chunk_progress.total_chunks}`;
+						} else if (data.status === 'failed') {
+							status = data.error_message ?? 'Image preparation failed.';
+						}
+					}
+				} catch {}
+			}, 800);
 			await request(`/api/v86/systems/upload/${session.upload_id}/complete`, {
 				method: 'POST'
 			});
+			clearInterval(interval);
 			status = 'System version ready.';
 			image = undefined;
 			await invalidateAll();

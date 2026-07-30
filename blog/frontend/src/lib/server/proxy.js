@@ -35,12 +35,23 @@ export function fixClientRoute(path) {
 
 export async function proxyFallback({ request, params, search, extraHeaders }) {
 	const url = `${env.API_URL}/${params.path}${search ?? ''}`;
+	const headers = { ...Object.fromEntries(request.headers), ...extraHeaders };
+
+	const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body != null;
+	if (!hasBody) {
+		delete headers['content-length'];
+		delete headers['content-type'];
+	}
+	let body;
+	if (hasBody) {
+		body = await request.arrayBuffer();
+	}
 
 	const proxyRequest = new Request(url, {
-		headers: { ...Object.fromEntries(request.headers), ...extraHeaders },
+		headers,
 		method: request.method,
-		body: request.body,
-		duplex: 'half',
+		body,
+		...(hasBody && { duplex: 'half' }),
 		cache: request.cache,
 		credentials: request.credentials,
 		integrity: request.integrity,

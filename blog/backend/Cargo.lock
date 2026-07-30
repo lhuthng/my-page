@@ -333,6 +333,7 @@ dependencies = [
  "uuid",
  "validator",
  "zip",
+ "zstd",
 ]
 
 [[package]]

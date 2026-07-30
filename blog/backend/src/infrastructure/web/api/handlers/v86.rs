@@ -4,7 +4,7 @@ use std::{
     io::{Read, Write},
     path::{Component, Path, PathBuf},
     process::Command,
-    sync::Arc,
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use axum::{
@@ -205,9 +205,18 @@ fn split_asset(
     destination: &Path,
     chunk_size: u64,
     extension: &str,
+    progress: Option<&Mutex<ChunkProgress>>,
 ) -> Result<u64, ProjectError> {
     fs::create_dir_all(destination)?;
     let mut input = File::open(source)?;
+    let file_len = input.metadata()?.len();
+    let total_chunks = file_len.div_ceil(chunk_size as u64);
+    if let Some(p) = progress {
+        let mut p = p.lock().unwrap();
+        p.total_chunks = total_chunks;
+        p.completed_chunks = 0;
+        p.message = format!("Compressing chunk 0/{total_chunks}");
+    }
     let mut start = 0_u64;
     let mut count = 0_u64;
     let mut buffer = vec![0_u8; chunk_size as usize];
@@ -220,10 +229,24 @@ fn split_asset(
             buffer[read..].fill(0);
         }
         let end = start + chunk_size;
-        let mut output = File::create(destination.join(format!("{start}-{end}.{extension}")))?;
-        output.write_all(&buffer)?;
+        let part_path = destination.join(format!("{start}-{end}.{extension}"));
+        let output = File::create(&part_path)?;
+        let mut encoder = zstd::stream::write::Encoder::new(output, 19)?;
+        encoder.write_all(&buffer)?;
+        encoder.finish()?;
         start = end;
         count += 1;
+        if let Some(p) = progress {
+            let mut p = p.lock().unwrap();
+            p.completed_chunks = count;
+            p.message = format!("Compressing chunk {count}/{total_chunks}");
+        }
+    }
+    if let Some(p) = progress {
+        let mut p = p.lock().unwrap();
+        p.completed_chunks = count;
+        p.total_chunks = total_chunks;
+        p.message = format!("Compressing chunk {total_chunks}/{total_chunks}");
     }
     Ok(count)
 }
@@ -873,77 +896,129 @@ pub async fn complete_system_upload(
     let name: String = row.get("name");
     let platform_key: String = row.get("platform_key");
     let original_file_name: String = row.get("original_file_name");
-    let mut tx = state.project_service.pool.begin().await?;
-    let (system_id, version_number) = if let Some(system_id) = system_id {
-        let current: i64 =
-            sqlx::query_scalar("SELECT current_version FROM v86_systems WHERE id = ?")
-                .bind(system_id)
-                .fetch_one(&mut *tx)
+
+    // Phase 1: Brief tx to reserve version slot
+    let (system_id, version_number) = {
+        let mut tx = state.project_service.pool.begin().await?;
+        let (sid, vn) = if let Some(system_id) = system_id {
+            let current: i64 =
+                sqlx::query_scalar("SELECT current_version FROM v86_systems WHERE id = ?")
+                    .bind(system_id)
+                    .fetch_one(&mut *tx)
+                    .await?;
+            if current != expected_version {
+                return Err(ProjectError::Conflict(
+                    "The system was replaced by another administrator.".to_string(),
+                ));
+            }
+            (system_id, current + 1)
+        } else {
+            let result = sqlx::query("INSERT INTO v86_systems (name, platform_key) VALUES (?, ?)")
+                .bind(&name)
+                .bind(&platform_key)
+                .execute(&mut *tx)
                 .await?;
-        if current != expected_version {
-            return Err(ProjectError::Conflict(
-                "The system was replaced by another administrator.".to_string(),
-            ));
-        }
-        (system_id, current + 1)
-    } else {
-        let result = sqlx::query("INSERT INTO v86_systems (name, platform_key) VALUES (?, ?)")
-            .bind(&name)
-            .bind(&platform_key)
-            .execute(&mut *tx)
-            .await?;
-        (result.last_insert_rowid(), 1)
+            (result.last_insert_rowid(), 1)
+        };
+        tx.commit().await?;
+        (sid, vn)
     };
+
     let storage_key = format!("v86/systems/{system_id}/{version_number}/{sha256}");
     let destination = state.project_demo_config.dir.join(&storage_key);
     let parts = destination.join("parts");
     let chunk_size = state.project_demo_config.v86_download_chunk_size;
     let source = PathBuf::from(&temp_key);
+
+    // Phase 2: Heavy compression (no DB lock held)
+    let total_chunks = size.div_ceil(chunk_size as u64);
     let parts_for_build = parts.clone();
     let source_for_build = source.clone();
-    let chunk_count = tokio::task::spawn_blocking(move || {
-        split_asset(&source_for_build, &parts_for_build, chunk_size, "img")
+    let progress = Arc::new(Mutex::new(ChunkProgress {
+        upload_id: upload_id.clone(),
+        kind: "system".to_string(),
+        total_chunks,
+        completed_chunks: 0,
+        message: "Starting compression…".to_string(),
+    }));
+    chunk_progress_map()
+        .lock()
+        .unwrap()
+        .insert(upload_id.clone(), progress.lock().unwrap().clone());
+    let progress_for_build = progress.clone();
+    let chunk_count = match tokio::task::spawn_blocking(move || {
+        split_asset(
+            &source_for_build,
+            &parts_for_build,
+            chunk_size,
+            "img.zst",
+            Some(&*progress_for_build),
+        )
     })
     .await
-    .map_err(|e| ProjectError::InternalError(e.to_string()))??;
+    {
+        Ok(Ok(count)) => count,
+        Ok(Err(e)) => {
+            chunk_progress_map().lock().unwrap().remove(&upload_id);
+            return Err(e);
+        }
+        Err(e) => {
+            chunk_progress_map().lock().unwrap().remove(&upload_id);
+            return Err(ProjectError::InternalError(e.to_string()));
+        }
+    };
+    {
+        let mut p = chunk_progress_map().lock().unwrap();
+        if let Some(entry) = p.get_mut(&upload_id) {
+            entry.message = "Finalizing…".to_string();
+        }
+    }
     fs::create_dir_all(&destination)?;
     fs::remove_file(&source)?;
-    let version_result = sqlx::query(
-        r#"INSERT INTO v86_system_versions
-           (system_id, version_number, original_file_name, storage_key, size_bytes,
-            sha256, chunk_size_bytes, chunk_count)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-    )
-    .bind(system_id)
-    .bind(version_number)
-    .bind(original_file_name)
-    .bind(&storage_key)
-    .bind(size as i64)
-    .bind(&sha256)
-    .bind(chunk_size as i64)
-    .bind(chunk_count as i64)
-    .execute(&mut *tx)
-    .await?;
-    let system_update = sqlx::query(
-        "UPDATE v86_systems SET current_version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND current_version = ?",
-    )
-    .bind(version_number)
-    .bind(system_id)
-    .bind(expected_version)
-    .execute(&mut *tx)
-    .await?;
-    if system_update.rows_affected() != 1 {
-        return Err(ProjectError::Conflict(
-            "The system was replaced by another administrator.".to_string(),
-        ));
-    }
-    sqlx::query(
-        "UPDATE v86_system_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    )
-    .bind(&upload_id)
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
+
+    // Phase 3: Brief tx to insert version, update system, mark consumed
+    let version_result = {
+        let mut tx = state.project_service.pool.begin().await?;
+        let result = sqlx::query(
+            r#"INSERT INTO v86_system_versions
+               (system_id, version_number, original_file_name, storage_key, size_bytes,
+                sha256, chunk_size_bytes, chunk_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(system_id)
+        .bind(version_number)
+        .bind(original_file_name)
+        .bind(&storage_key)
+        .bind(size as i64)
+        .bind(&sha256)
+        .bind(chunk_size as i64)
+        .bind(chunk_count as i64)
+        .execute(&mut *tx)
+        .await?;
+        let system_update = sqlx::query(
+            "UPDATE v86_systems SET current_version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND current_version = ?",
+        )
+        .bind(version_number)
+        .bind(system_id)
+        .bind(expected_version)
+        .execute(&mut *tx)
+        .await?;
+        if system_update.rows_affected() != 1 {
+            chunk_progress_map().lock().unwrap().remove(&upload_id);
+            return Err(ProjectError::Conflict(
+                "The system was replaced by another administrator.".to_string(),
+            ));
+        }
+        sqlx::query(
+            "UPDATE v86_system_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(&upload_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        result
+    };
+    chunk_progress_map().lock().unwrap().remove(&upload_id);
     let _ = version_result.last_insert_rowid();
     let Json(systems) = list_systems(State(state)).await?;
     systems
@@ -1016,6 +1091,57 @@ pub async fn update_system(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ChunkProgress {
+    pub upload_id: String,
+    pub kind: String,
+    pub total_chunks: u64,
+    pub completed_chunks: u64,
+    pub message: String,
+}
+
+fn chunk_progress_map() -> &'static Mutex<HashMap<String, ChunkProgress>> {
+    static MAP: OnceLock<Mutex<HashMap<String, ChunkProgress>>> = OnceLock::new();
+    MAP.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[derive(Serialize)]
+pub struct UploadStatusResponse {
+    pub status: String,
+    pub error_message: Option<String>,
+    pub chunk_progress: Option<ChunkProgress>,
+    pub active_uploads: Vec<ChunkProgress>,
+}
+
+pub async fn get_system_upload_status(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(upload_id): AxumPath<String>,
+) -> Result<Json<UploadStatusResponse>, ProjectError> {
+    let uploader_id = user_id(&claims)?;
+    let row = sqlx::query(
+        "SELECT status, error_message FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
+    )
+    .bind(&upload_id)
+    .bind(uploader_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    let progress = chunk_progress_map().lock().unwrap().get(&upload_id).cloned();
+    let active_uploads = chunk_progress_map()
+        .lock()
+        .unwrap()
+        .values()
+        .cloned()
+        .collect();
+    Ok(Json(UploadStatusResponse {
+        status: row.get("status"),
+        error_message: row.get("error_message"),
+        chunk_progress: progress,
+        active_uploads,
+    }))
+}
+
 pub async fn delete_system_version(
     State(state): State<Arc<AppState>>,
     AxumPath((system_id, version_id)): AxumPath<(i64, i64)>,
@@ -1043,6 +1169,12 @@ pub async fn delete_system_version(
             "The current system version cannot be deleted; replace it first.".to_string(),
         ));
     }
+    sqlx::query(
+        "DELETE FROM project_v86_upload_sessions WHERE system_version_id = ?",
+    )
+    .bind(version_id)
+    .execute(&state.project_service.pool)
+    .await?;
     let storage_key: String = row.get("storage_key");
     sqlx::query("DELETE FROM v86_system_versions WHERE id = ?")
         .bind(version_id)
@@ -1076,6 +1208,15 @@ pub async fn delete_system(
             .bind(system_id)
             .fetch_all(&state.project_service.pool)
             .await?;
+    sqlx::query(
+        r#"DELETE FROM project_v86_upload_sessions
+           WHERE system_version_id IN (
+             SELECT id FROM v86_system_versions WHERE system_id = ?
+           )"#,
+    )
+    .bind(system_id)
+    .execute(&state.project_service.pool)
+    .await?;
     let changed = sqlx::query("DELETE FROM v86_systems WHERE id = ?")
         .bind(system_id)
         .execute(&state.project_service.pool)
@@ -1307,10 +1448,40 @@ pub async fn complete_game_upload(
     let chunk_size = state.project_demo_config.v86_download_chunk_size;
     let iso_source = iso_dir.join("game.iso");
     let parts = iso_dir.join("parts");
-    let chunk_count =
-        tokio::task::spawn_blocking(move || split_asset(&iso_source, &parts, chunk_size, "iso"))
-            .await
-            .map_err(|e| ProjectError::InternalError(e.to_string()))??;
+    let total_chunks = iso_size.div_ceil(chunk_size as u64);
+    let progress = Arc::new(Mutex::new(ChunkProgress {
+        upload_id: upload_id.clone(),
+        kind: "game".to_string(),
+        total_chunks,
+        completed_chunks: 0,
+        message: "Starting compression…".to_string(),
+    }));
+    chunk_progress_map()
+        .lock()
+        .unwrap()
+        .insert(upload_id.clone(), progress.lock().unwrap().clone());
+    let progress_for_build = progress.clone();
+    let chunk_count = match tokio::task::spawn_blocking(move || {
+        split_asset(
+            &iso_source,
+            &parts,
+            chunk_size,
+            "iso.zst",
+            Some(&*progress_for_build),
+        )
+    })
+    .await
+    {
+        Ok(Ok(count)) => count,
+        Ok(Err(e)) => {
+            chunk_progress_map().lock().unwrap().remove(&upload_id);
+            return Err(e);
+        }
+        Err(e) => {
+            chunk_progress_map().lock().unwrap().remove(&upload_id);
+            return Err(ProjectError::InternalError(e.to_string()));
+        }
+    };
     sqlx::query(
         r#"UPDATE project_v86_upload_sessions
            SET status = 'ready', staged_zip_storage_key = ?, staged_zip_sha256 = ?,
@@ -1328,6 +1499,7 @@ pub async fn complete_game_upload(
     .bind(&upload_id)
     .execute(&state.project_service.pool)
     .await?;
+    chunk_progress_map().lock().unwrap().remove(&upload_id);
     let _ = original_file_name;
     Ok(Json(ReadyGameUploadResponse {
         upload_id,
@@ -1560,7 +1732,7 @@ pub async fn runtime_descriptor(
             chunk_size_bytes: row.get::<i64, _>("chunk_size_bytes") as u64,
             base_size_bytes: row.get::<i64, _>("base_size") as u64,
             base_sha256: base_sha.clone(),
-            base_url: format!("v86/assets/systems/{version_id}/{base_sha}/.img"),
+            base_url: format!("v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
             iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
             iso_sha256: iso_sha.clone(),
             iso_url: format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
@@ -1600,7 +1772,7 @@ pub async fn get_system_chunk(
     .fetch_optional(&state.project_service.pool)
     .await?;
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
-    if part == ".img" || part.contains('/') || !part.ends_with(".img") {
+    if part == ".img" || part.contains('/') || !(part.ends_with(".img") || part.ends_with(".img.zst")) {
         return Err(ProjectError::ProjectNotFound);
     }
     let bytes = tokio::fs::read(
@@ -1632,7 +1804,7 @@ pub async fn get_game_chunk(
     .fetch_optional(&state.project_service.pool)
     .await?;
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
-    if part == ".iso" || part.contains('/') || !part.ends_with(".iso") {
+    if part == ".iso" || part.contains('/') || !(part.ends_with(".iso") || part.ends_with(".iso.zst")) {
         return Err(ProjectError::ProjectNotFound);
     }
     let bytes = tokio::fs::read(
@@ -1757,15 +1929,23 @@ mod tests {
 
     #[test]
     fn immutable_parts_use_v86_range_names() {
+        use std::io::Read;
         let root = std::env::temp_dir().join(format!("v86-parts-test-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
         let source = root.join("disk.img");
         fs::write(&source, b"abcdefghij").unwrap();
         let parts = root.join("parts");
-        assert_eq!(split_asset(&source, &parts, 4, "img").ok().unwrap(), 3);
-        assert_eq!(fs::read(parts.join("0-4.img")).unwrap(), b"abcd");
-        assert_eq!(fs::read(parts.join("4-8.img")).unwrap(), b"efgh");
-        assert_eq!(fs::read(parts.join("8-12.img")).unwrap(), b"ij\0\0");
+        assert_eq!(split_asset(&source, &parts, 4, "img.zst", None).ok().unwrap(), 3);
+        let read_decompressed = |name| {
+            let compressed = fs::read(parts.join(name)).unwrap();
+            let mut decoder = zstd::stream::read::Decoder::new(&compressed[..]).unwrap();
+            let mut buf = Vec::new();
+            decoder.read_to_end(&mut buf).unwrap();
+            buf
+        };
+        assert_eq!(read_decompressed("0-4.img.zst"), b"abcd");
+        assert_eq!(read_decompressed("4-8.img.zst"), b"efgh");
+        assert_eq!(read_decompressed("8-12.img.zst"), b"ij\0\0");
         fs::remove_dir_all(root).ok();
     }
 
