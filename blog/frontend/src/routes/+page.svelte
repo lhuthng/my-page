@@ -1,17 +1,51 @@
 <script>
-	import { page } from '$app/state';
 	import App from '$lib/components/embeds/App.svelte';
 	import Introduction from '$lib/components/home/Introduction.svelte';
 	import PostDiscovery from '$lib/components/home/PostDiscovery.svelte';
 	import ProjectDiscovery from '$lib/components/home/ProjectDiscovery.svelte';
 	import Suggestion from '$lib/components/home/Suggestion.svelte';
+	import {
+		absoluteSiteUrl,
+		safeJsonLd,
+		SITE_DESCRIPTION,
+		SITE_NAME,
+		SITE_ORIGIN
+	} from '$lib/config/site.js';
 
 	const { data } = $props();
 
 	const featuredPosts = $derived(data.featured_posts || []);
 	const featuredProjects = $derived(data.featured_projects || []);
 
-	let imageUrl = $derived(page.url.origin + '/thinkcats.jpg');
+	const imageUrl = absoluteSiteUrl('/thinkcats.jpg');
+	const structuredData = {
+		'@context': 'https://schema.org',
+		'@graph': [
+			{
+				'@type': 'WebSite',
+				'@id': `${SITE_ORIGIN}/#website`,
+				url: `${SITE_ORIGIN}/`,
+				name: SITE_NAME,
+				alternateName: ["Thắng's Blog", "Huu Thang's Blog"],
+				description: SITE_DESCRIPTION,
+				inLanguage: 'en',
+				publisher: { '@id': `${SITE_ORIGIN}/#person` }
+			},
+			{
+				'@type': 'Person',
+				'@id': `${SITE_ORIGIN}/#person`,
+				name: 'Huu Thang Le',
+				alternateName: 'Thắng',
+				url: `${SITE_ORIGIN}/about`,
+				image: imageUrl,
+				sameAs: [
+					'https://github.com/lhuthng',
+					'https://www.linkedin.com/in/huuthangle/',
+					'https://portfolio.huuthangle.site'
+				]
+			}
+		]
+	};
 </script>
 
 <svelte:head>
@@ -22,7 +56,6 @@
 	/>
 
 	<meta property="og:type" content="website" />
-	<meta property="og:url" content={page.url.origin} />
 	<meta property="og:title" content="Home Sweet Home | Huu Thang's Blog" />
 	<meta
 		property="og:description"
@@ -36,8 +69,7 @@
 		name="twitter:description"
 		content="Deep dives into technical challenges and small creative sparks."
 	/>
-
-	<link rel="canonical" href={page.url.href} />
+	{@html `<script type="application/ld+json">${safeJsonLd(structuredData)}</script>`}
 </svelte:head>
 
 <div class="relative flex gap-4 z-5 *:h-fit pb-2 lg:pb-4">

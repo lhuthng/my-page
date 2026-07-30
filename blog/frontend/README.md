@@ -35,6 +35,8 @@ Three distinct paths depending on what's being requested:
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `API_URL`        | Backend URL for server-side calls. In Docker: `http://backend:3000`. Locally: `http://localhost:3000`. Never exposed to the browser.                                                                           |
 | `BACKEND_ORIGIN` | Public origin of the backend (e.g. `https://blog.huuthangle.site`). Tells `fixClientRoute()` to build direct browser-facing media URLs. Optional - omit it and media falls back to the `/api/media/...` proxy. |
+| `ALLOWED_HOSTS`  | Comma-separated additional hostnames accepted by the production frontend. The canonical blog hostname, localhost, and the current Fly app hostname are always accepted.                                     |
+| `TRUSTED_ORIGINS` | Comma-separated additional browser origins allowed to make state-changing requests. The blog, portfolio, and local development origins are included by default.                                             |
 | `PORT`           | Port the SvelteKit server listens on. Set to `8080` in `docker-compose.yml`.                                                                                                                                   |
 
 See `example.env` for a starting point.

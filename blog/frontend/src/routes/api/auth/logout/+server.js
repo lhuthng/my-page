@@ -3,7 +3,7 @@ export async function POST({ cookies }) {
 		path: '/',
 		httpOnly: true,
 		secure: true,
-		sameSite: 'strict'
+		sameSite: 'lax'
 	});
 	return new Response(null, { status: 204 });
 }

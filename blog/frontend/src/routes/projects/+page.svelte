@@ -73,7 +73,7 @@
 
 <svelte:head>
 	<title>Projects | Huu Thang's Blog</title>
-	<meta property="og:title" content="Projects" />
+	<meta property="og:title" content="Projects | Huu Thang's Blog" />
 	<meta name="description" content="Playable demos and project writeups." />
 	<meta property="og:description" content="Playable demos and project writeups." />
 	<meta property="og:type" content="website" />

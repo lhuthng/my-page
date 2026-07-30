@@ -5,10 +5,6 @@
 	let { data } = $props();
 
 	let series = $derived(data.series);
-
-	$effect(() => {
-		$inspect(series);
-	});
 </script>
 
 {#snippet postItem({
@@ -73,7 +69,13 @@
 
 <svelte:head>
 	<title>Series | Huu Thang's Blog</title>
-	<meta property="og:title" content="Posts" />
+	<meta property="og:title" content="Series | Huu Thang's Blog" />
+	<meta name="description" content="Browse connected series of posts from Huu Thang's Blog." />
+	<meta
+		property="og:description"
+		content="Browse connected series of posts from Huu Thang's Blog."
+	/>
+	<meta property="og:type" content="website" />
 </svelte:head>
 
 <section class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8">

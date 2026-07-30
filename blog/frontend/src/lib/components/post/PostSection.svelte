@@ -14,6 +14,7 @@
 	import X from '../svgs/X.svelte';
 	import Linkedin from '../svgs/Linkedin.svelte';
 	import BackButton from '../ui/BackButton.svelte';
+	import { canonicalUrl } from '$lib/config/site.js';
 
 	let {
 		id,
@@ -31,9 +32,10 @@
 	} = $props();
 
 	let copyDone = $state(false);
+	let shareUrl = $derived(canonicalUrl(page.url.pathname));
 
 	function copyLink() {
-		navigator.clipboard.writeText(page.url.href).then(() => {
+		navigator.clipboard.writeText(shareUrl).then(() => {
 			copyDone = true;
 			setTimeout(() => (copyDone = false), 2000);
 		});
@@ -159,7 +161,7 @@
 					</button>
 					<a
 						class="w-fit px-3 h-8 inline-flex gap-1 items-center rounded-lg border-2 border-black text-black bg-white hover:bg-black hover:text-white transition-colors hover:no-underline!"
-						href={`https://x.com/intent/post?url=${encodeURIComponent(page.url.href)}&text=${encodeURIComponent(title)}`}
+						href={`https://x.com/intent/post?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(title)}`}
 						target="_blank"
 						rel="noopener noreferrer"
 						title="Share on X"
@@ -169,7 +171,7 @@
 					</a>
 					<a
 						class="w-fit px-3 h-8 inline-flex gap-0.5 items-center rounded-lg border-2 border-accent-blue bg-accent-blue-light-2/20 text-accent-blue hover:bg-accent-blue hover:text-white transition-colors hover:no-underline!"
-						href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(page.url.href)}`}
+						href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
 						target="_blank"
 						rel="noopener noreferrer"
 						title="Share on LinkedIn"

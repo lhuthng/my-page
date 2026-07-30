@@ -39,7 +39,8 @@ export async function load(event) {
 			event.cookies.delete('refresh-token', {
 				path: '/',
 				httpOnly: true,
-				secure: true
+				secure: true,
+				sameSite: 'lax'
 			});
 			throw redirect(303, '/');
 		}

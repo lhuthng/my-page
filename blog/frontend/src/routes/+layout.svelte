@@ -10,11 +10,17 @@
 	import { fade } from 'svelte/transition';
 	import ToTop from '$lib/components/shell/ToTop.svelte';
 	import { win } from '$lib/dom/windows.svelte.js';
+	import { canonicalUrl, SITE_NAME, SITE_ORIGIN } from '$lib/config/site.js';
 	import { innerWidth } from 'svelte/reactivity/window';
 
 	let { data, children } = $props();
 
 	let route = $derived($page.url.pathname.split('/')[1]);
+	let noindex = $derived(
+		$page.status >= 400 ||
+			['api', 'dashboard', 'login', 'privacy', 'reset-password', 'verify-email'].includes(route)
+	);
+	let canonical = $derived(canonicalUrl($page.url.pathname));
 	let pDiv = $state();
 	let mDiv = $state();
 	let scrollTarget = $state();
@@ -45,9 +51,25 @@
 </script>
 
 <svelte:head>
-	<meta property="og:site_name" content="Huu Thang's Blog" />
+	<meta property="og:site_name" content={SITE_NAME} />
+	<meta property="og:url" content={canonical} />
+	<meta name="twitter:url" content={canonical} />
+	<meta name="theme-color" content="#ffffff" />
 
-	<link rel="icon" href="/favicon.ico" />
+	{#if noindex}
+		<meta name="robots" content="noindex, nofollow, noarchive" />
+	{:else}
+		<meta name="robots" content="index, follow, max-image-preview:large" />
+		<link rel="canonical" href={canonical} />
+	{/if}
+
+	<link rel="icon" href={`${SITE_ORIGIN}/favicon.ico`} />
+	<link
+		rel="alternate"
+		type="application/rss+xml"
+		title={`${SITE_NAME} RSS feed`}
+		href={`${SITE_ORIGIN}/rss.xml`}
+	/>
 </svelte:head>
 
 <div class="fixed w-dvw h-dvh pointer-events-none z-11" bind:this={mDiv}></div>

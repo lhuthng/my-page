@@ -1,7 +1,6 @@
-# allow crawling everything by default
 User-agent: *
 
-Disallow: /privacy
-Disallow: /dashboard
-Disallow: /api/private
 Allow: /
+Disallow: /api/
+
+Sitemap: https://blog.huuthangle.site/sitemap.xml
