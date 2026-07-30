@@ -23,6 +23,11 @@
 		demo_width: demoWidth,
 		demo_height: demoHeight,
 		raw_demo_url: rawDemoUrl,
+		v86_system_version_id: v86SystemVersionId,
+		v86_manifest: v86Manifest,
+		v86_artifact_revision: v86ArtifactRevision,
+		v86_game_file_name: v86GameFileName,
+		v86Systems,
 		links,
 		is_owner: isOwner = true
 	} = untrack(() => data);
@@ -31,6 +36,7 @@
 <ProjectEditor
 	mode="edit"
 	{isOwner}
+	{v86Systems}
 	data={{
 		id,
 		postId,
@@ -50,6 +56,10 @@
 		demoWidth,
 		demoHeight,
 		rawDemoUrl,
+		v86SystemVersionId,
+		v86Manifest,
+		v86ArtifactRevision,
+		v86GameFileName,
 		links
 	}}
 />

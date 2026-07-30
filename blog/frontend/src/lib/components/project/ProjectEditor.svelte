@@ -16,11 +16,12 @@
 		{ value: 'embed', label: 'Embed', disabled: false },
 		{ value: 'webgl', label: 'WebGL', disabled: false },
 		{ value: 'jsdos', label: 'js-dos', disabled: false },
+		{ value: 'v86', label: 'v86', disabled: false },
 		{ value: 'download', label: 'Download', disabled: false },
 		{ value: 'video', label: 'Video', disabled: false }
 	];
 
-	let { mode = 'create', data, isOwner = true } = $props();
+	let { mode = 'create', data, isOwner = true, v86Systems = [] } = $props();
 
 	let mediaDictionary = $state({});
 	let searchMedia = $state(async () => {});
@@ -53,6 +54,9 @@
 		demoWidth: '100%',
 		demoHeight: '520px',
 		demoUrl: '',
+		v86SystemVersionId: '',
+		v86Manifest: '',
+		v86ArtifactRevision: 0,
 		links: [{ label: 'GitHub', url: '' }],
 		author: {
 			username: authState.user?.username,
@@ -99,6 +103,9 @@
 		editingData.demoWidth = d.demoWidth ?? '100%';
 		editingData.demoHeight = d.demoHeight ?? '520px';
 		editingData.demoUrl = d.rawDemoUrl ?? '';
+		editingData.v86SystemVersionId = d.v86SystemVersionId?.toString() ?? '';
+		editingData.v86Manifest = d.v86Manifest ?? '';
+		editingData.v86ArtifactRevision = d.v86ArtifactRevision ?? 0;
 		editingData.links = d.links?.length ? d.links : [{ label: 'GitHub', url: '' }];
 		editor.view = 'public';
 	}
@@ -206,7 +213,15 @@
 				}
 				break;
 			case 'jsdos':
-				if (mode === 'create' && !zip) return { valid: false, error: 'A .jsdos bundle is required for js-dos projects.' };
+				if (mode === 'create' && !zip)
+					return { valid: false, error: 'A .jsdos bundle is required for js-dos projects.' };
+				break;
+			case 'v86':
+				if (!editingData.v86SystemVersionId) return { valid: false, error: 'Select a v86 system.' };
+				if ((mode === 'create' || data?.demoType !== 'v86') && !zip)
+					return { valid: false, error: 'A game ZIP is required for v86 projects.' };
+				if (new TextEncoder().encode(editingData.v86Manifest).length > 65536)
+					return { valid: false, error: 'The v86 manifest cannot exceed 64 KiB.' };
 				break;
 
 			case 'embed':
@@ -277,6 +292,16 @@
 		const offlineKeys = collectOfflineKeys([editingData.draft]);
 		if (!validateOfflineKeys(offlineKeys)) return;
 
+		let v86UploadId;
+		if (editingData.demoType === 'v86') {
+			try {
+				v86UploadId = await prepareV86Artifact();
+			} catch (error) {
+				editor.isCritical = true;
+				editor.status = error?.message ?? 'v86 package build failed.';
+				return;
+			}
+		}
 		const formData = new FormData();
 		const projectPayload = {
 			title: editingData.title,
@@ -290,10 +315,12 @@
 			demo_width: editingData.demoWidth,
 			demo_height: editingData.demoHeight
 		};
+		if (v86UploadId) projectPayload.v86_upload_id = v86UploadId;
 		if (
 			editingData.demoType !== 'none' &&
 			editingData.demoType !== 'html5' &&
-			editingData.demoType !== 'webgl'
+			editingData.demoType !== 'webgl' &&
+			editingData.demoType !== 'v86'
 		) {
 			projectPayload.demo_url = editingData.demoUrl;
 		}
@@ -305,7 +332,7 @@
 		// Legacy js-dos bundles are uploaded after the project is created so the
 		// chunked upload endpoint can handle large files. Do not include the file
 		// in the project-creation multipart request.
-		if (editor.demoZip && editingData.demoType !== 'jsdos') {
+		if (editor.demoZip && editingData.demoType !== 'jsdos' && editingData.demoType !== 'v86') {
 			formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
 		}
 		appendInlineFiles(formData, offlineKeys);
@@ -325,7 +352,10 @@
 					await uploadJsDosBundle(id, editor.demoZip);
 				}
 			} catch (error) {
-				await fetch(`/api/projects/id/${id}`, { method: 'DELETE', headers: { Authorization: auth() } }).catch(() => {});
+				await fetch(`/api/projects/id/${id}`, {
+					method: 'DELETE',
+					headers: { Authorization: auth() }
+				}).catch(() => {});
 				editor.isCritical = true;
 				editor.status = error?.message ?? 'Game upload failed.';
 				return;
@@ -345,6 +375,22 @@
 			return;
 		}
 
+		const v86Changed =
+			editingData.demoType === 'v86' &&
+			(editor.demoZip ||
+				editingData.v86SystemVersionId !== data.v86SystemVersionId?.toString() ||
+				editingData.v86Manifest !== (data.v86Manifest ?? '') ||
+				(data.demoType ?? 'html5') !== 'v86');
+		let v86UploadId;
+		if (v86Changed) {
+			try {
+				v86UploadId = await prepareV86Artifact(data.demoType === 'v86' ? data.id : undefined);
+			} catch (error) {
+				editor.isCritical = true;
+				editor.status = error?.message ?? 'v86 package build failed.';
+				return;
+			}
+		}
 		const formData = new FormData();
 		const projectData = { number_of_files: 0 };
 		let offlineKeys = [];
@@ -360,6 +406,7 @@
 		if (editingData.excerpt !== data.excerpt) projectData.excerpt = editingData.excerpt;
 		if (editingData.demoType !== (data.demoType ?? 'html5'))
 			projectData.demo_type = editingData.demoType;
+		if (v86UploadId) projectData.v86_upload_id = v86UploadId;
 		if (editingData.demoWidth !== (data.demoWidth ?? '100%'))
 			projectData.demo_width = editingData.demoWidth;
 		if (editingData.demoHeight !== (data.demoHeight ?? '520px'))
@@ -370,6 +417,7 @@
 			editingData.demoType !== 'none' &&
 			editingData.demoType !== 'html5' &&
 			editingData.demoType !== 'webgl' &&
+			editingData.demoType !== 'v86' &&
 			editingData.demoUrl !== (data.rawDemoUrl ?? '')
 		)
 			projectData.demo_url = editingData.demoUrl;
@@ -396,7 +444,7 @@
 			'project_data',
 			new Blob([JSON.stringify(projectData)], { type: 'application/json' })
 		);
-		if (editor.demoZip && editingData.demoType !== 'jsdos') {
+		if (editor.demoZip && editingData.demoType !== 'jsdos' && editingData.demoType !== 'v86') {
 			formData.append('demo_zip', editor.demoZip, editor.demoZip.name);
 		}
 
@@ -449,15 +497,76 @@
 		if (!file) return;
 		const isJsDos = editingData.demoType === 'jsdos';
 		if (!file.name.toLowerCase().endsWith(isJsDos ? '.jsdos' : '.zip')) {
-			editor.demoZipError = isJsDos ? 'Only .jsdos bundles are allowed.' : 'Only zip archives are allowed.';
+			editor.demoZipError = isJsDos
+				? 'Only .jsdos bundles are allowed.'
+				: 'Only zip archives are allowed.';
 			return;
 		}
 		if (isJsDos && file.size > 524288000) {
 			editor.demoZipError = 'The js-dos bundle cannot exceed 500 MB.';
 			return;
 		}
+		if (!isJsDos && file.size > 524288000) {
+			editor.demoZipError = 'The game ZIP cannot exceed 500 MiB.';
+			return;
+		}
 		editor.demoZip = file;
 		editor.demoZipName = file.name;
+	};
+
+	const prepareV86Artifact = async (sourceProjectId) => {
+		const file = editor.demoZip;
+		const request = {
+			source_project_id: sourceProjectId ?? null,
+			system_version_id: Number(editingData.v86SystemVersionId),
+			expected_artifact_revision: sourceProjectId ? editingData.v86ArtifactRevision : 0,
+			manifest: editingData.v86Manifest,
+			file_name: file?.name ?? null,
+			size_bytes: file?.size ?? null
+		};
+		const start = await fetch('/api/v86/games/upload', {
+			method: 'POST',
+			headers: { Authorization: auth(), 'Content-Type': 'application/json' },
+			body: JSON.stringify(request)
+		});
+		if (!start.ok) throw new Error(await start.text());
+		const session = await start.json();
+		try {
+			if (session.upload_required) {
+				editor.status = 'Uploading v86 game…';
+				for (
+					let index = session.next_chunk_index;
+					index * session.chunk_size_bytes < file.size;
+					index++
+				) {
+					const startByte = index * session.chunk_size_bytes;
+					const chunk = file.slice(
+						startByte,
+						Math.min(startByte + session.chunk_size_bytes, file.size)
+					);
+					const result = await fetch(`/api/v86/games/upload/${session.upload_id}/chunk/${index}`, {
+						method: 'PUT',
+						headers: { Authorization: auth(), 'Content-Type': 'application/octet-stream' },
+						body: chunk
+					});
+					if (!result.ok) throw new Error(await result.text());
+					editor.status = `Uploading v86 game… ${Math.round(((startByte + chunk.size) / file.size) * 100)}%`;
+				}
+			}
+			editor.status = 'Building v86 disc…';
+			const complete = await fetch(`/api/v86/games/upload/${session.upload_id}/complete`, {
+				method: 'POST',
+				headers: { Authorization: auth() }
+			});
+			if (!complete.ok) throw new Error(await complete.text());
+			return session.upload_id;
+		} catch (error) {
+			await fetch(`/api/v86/games/upload/${session.upload_id}`, {
+				method: 'DELETE',
+				headers: { Authorization: auth() }
+			}).catch(() => {});
+			throw error;
+		}
 	};
 
 	const uploadJsDosBundle = async (projectId, file) => {
@@ -497,7 +606,6 @@
 		);
 		if (!complete.ok) throw new Error(await complete.text());
 	};
-
 </script>
 
 {#snippet extraFields()}
@@ -538,7 +646,7 @@
 			</div>
 		</div>
 	{/if}
-	{#if editingData.demoType !== 'none' && editingData.demoType !== 'html5' && editingData.demoType !== 'webgl' && editingData.demoType !== 'jsdos'}
+	{#if editingData.demoType !== 'none' && editingData.demoType !== 'html5' && editingData.demoType !== 'webgl' && editingData.demoType !== 'jsdos' && editingData.demoType !== 'v86'}
 		<div class="flex flex-col">
 			<label for="demo-url">
 				{#if editingData.demoType === 'embed'}
@@ -564,7 +672,39 @@
 			/>
 		</div>
 	{/if}
-	{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl' || editingData.demoType === 'jsdos'}
+	{#if editingData.demoType === 'v86'}
+		<div class="space-y-2 rounded-lg bg-white/70 p-2">
+			<div class="flex flex-col">
+				<label for="v86-system">System:</label>
+				<select
+					id="v86-system"
+					class="px-1 min-w-0 bg-white rounded-sm"
+					bind:value={editingData.v86SystemVersionId}
+					disabled={!isOwner}
+				>
+					<option value="">Select a system</option>
+					{#each v86Systems as system}
+						{#each system.versions as version}
+							<option value={version.id}>
+								{system.name} v{version.version_number}{system.is_default ? ' (default)' : ''}
+							</option>
+						{/each}
+					{/each}
+				</select>
+			</div>
+			<div class="flex flex-col">
+				<label for="v86-manifest">Manifest:</label>
+				<textarea
+					id="v86-manifest"
+					rows="6"
+					class="px-1 min-w-0 bg-white rounded-sm font-mono"
+					bind:value={editingData.v86Manifest}
+					readonly={!isOwner}></textarea>
+				<p class="text-xs text-dark/60">Free-form platform configuration, maximum 64 KiB.</p>
+			</div>
+		</div>
+	{/if}
+	{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl' || editingData.demoType === 'jsdos' || editingData.demoType === 'v86'}
 		<div
 			class="p-2 rounded-lg bg-white/70 border-2 border-dashed border-dark/30"
 			ondrop={(e) => {
@@ -575,7 +715,13 @@
 			role="none"
 		>
 			<label class="block font-semibold" for="demo-zip">
-				{editingData.demoType === 'jsdos' ? 'js-dos bundle:' : editingData.demoType === 'html5' ? 'HTML5 zip:' : 'WebGL zip:'}
+				{editingData.demoType === 'jsdos'
+					? 'js-dos bundle:'
+					: editingData.demoType === 'v86'
+						? 'v86 game ZIP:'
+						: editingData.demoType === 'html5'
+							? 'HTML5 zip:'
+							: 'WebGL zip:'}
 			</label>
 			<input
 				id="demo-zip"

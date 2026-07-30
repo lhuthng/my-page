@@ -73,6 +73,13 @@ pub struct ProjectDemoConfig {
     pub max_jsdos_size: u64,
     pub jsdos_chunk_size: u64,
     pub upload_session_ttl_hours: u64,
+    pub max_v86_base_size: u64,
+    pub max_v86_game_zip_size: u64,
+    pub max_v86_game_extracted_size: u64,
+    pub max_v86_game_files: usize,
+    pub v86_upload_chunk_size: u64,
+    pub v86_download_chunk_size: u64,
+    pub xorriso_bin: String,
 }
 
 pub struct AppState {
@@ -176,6 +183,32 @@ impl ProjectDemoConfig {
             .unwrap_or_else(|_| "24".to_string())
             .parse::<u64>()
             .expect("PROJECT_JSDOS_UPLOAD_TTL_HOURS must be an integer");
+        let max_v86_base_size = env::var("PROJECT_V86_BASE_MAX_BYTES")
+            .unwrap_or_else(|_| (2 * 1024 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_V86_BASE_MAX_BYTES must be an integer");
+        let max_v86_game_zip_size = env::var("PROJECT_V86_GAME_ZIP_MAX_BYTES")
+            .unwrap_or_else(|_| (500 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_V86_GAME_ZIP_MAX_BYTES must be an integer");
+        let max_v86_game_extracted_size = env::var("PROJECT_V86_GAME_EXTRACTED_MAX_BYTES")
+            .unwrap_or_else(|_| (1024 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_V86_GAME_EXTRACTED_MAX_BYTES must be an integer");
+        let max_v86_game_files = env::var("PROJECT_V86_GAME_MAX_FILES")
+            .unwrap_or_else(|_| "10000".to_string())
+            .parse::<usize>()
+            .expect("PROJECT_V86_GAME_MAX_FILES must be an integer");
+        let v86_upload_chunk_size = env::var("PROJECT_V86_UPLOAD_CHUNK_BYTES")
+            .unwrap_or_else(|_| (8 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_V86_UPLOAD_CHUNK_BYTES must be an integer");
+        let v86_download_chunk_size = env::var("PROJECT_V86_DOWNLOAD_CHUNK_BYTES")
+            .unwrap_or_else(|_| (256 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_V86_DOWNLOAD_CHUNK_BYTES must be an integer");
+        let xorriso_bin =
+            env::var("PROJECT_V86_XORRISO_BIN").unwrap_or_else(|_| "xorriso".to_string());
 
         Self {
             dir,
@@ -185,6 +218,13 @@ impl ProjectDemoConfig {
             max_jsdos_size,
             jsdos_chunk_size,
             upload_session_ttl_hours,
+            max_v86_base_size,
+            max_v86_game_zip_size,
+            max_v86_game_extracted_size,
+            max_v86_game_files,
+            v86_upload_chunk_size,
+            v86_download_chunk_size,
+            xorriso_bin,
         }
     }
 }

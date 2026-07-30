@@ -70,22 +70,30 @@ function hardenHtml(html) {
 }
 
 function applySecurityHeaders(response, event, noindex) {
-	response.headers.set('Content-Security-Policy', "frame-ancestors 'self'");
-	response.headers.set('X-Frame-Options', 'SAMEORIGIN');
-	response.headers.set('X-Content-Type-Options', 'nosniff');
-	response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-	response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+	// Responses returned by the API proxy can carry immutable Undici headers.
+	// Always copy them into a new Response before applying site-wide headers.
+	const mutableResponse = new Response(response.body, {
+		status: response.status,
+		statusText: response.statusText,
+		headers: new Headers(response.headers)
+	});
+
+	mutableResponse.headers.set('Content-Security-Policy', "frame-ancestors 'self'");
+	mutableResponse.headers.set('X-Frame-Options', 'SAMEORIGIN');
+	mutableResponse.headers.set('X-Content-Type-Options', 'nosniff');
+	mutableResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	mutableResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
 	if (!dev && event.url.protocol === 'https:') {
-		response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+		mutableResponse.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 	}
 
 	if (noindex) {
-		response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
-		response.headers.set('Cache-Control', 'private, no-store');
+		mutableResponse.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+		mutableResponse.headers.set('Cache-Control', 'private, no-store');
 	}
 
-	return response;
+	return mutableResponse;
 }
 
 async function populateUser(event) {

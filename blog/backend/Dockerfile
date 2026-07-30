@@ -14,7 +14,7 @@ RUN cargo build --release --bin backend
 
 FROM alpine:3.21 AS runtime
 WORKDIR /app
-RUN apk add --no-cache ffmpeg ca-certificates
+RUN apk add --no-cache ffmpeg xorriso ca-certificates
 COPY --from=builder /app/target/release/backend /usr/local/bin/backend
 EXPOSE 3000
 CMD ["backend"]

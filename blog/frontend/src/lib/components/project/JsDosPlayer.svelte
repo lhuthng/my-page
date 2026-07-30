@@ -1,7 +1,8 @@
 <script>
 	import { onDestroy, onMount, tick } from 'svelte';
+	import Portal from '$lib/components/shell/Portal.svelte';
 
-	let { title, bundleUrl } = $props();
+	let { title, bundleUrl, beforeDemoPortal, afterDemoPortal } = $props();
 	let shell = $state();
 	let container = $state();
 	let player;
@@ -10,7 +11,6 @@
 	let normalLayoutTimer;
 	let fullscreenStateTimer;
 	let syncingFullscreenExit = false;
-	let captureOverlay;
 	let disposed = false;
 	let fullscreenComboLatched = false;
 	const pressedKeys = new Set();
@@ -55,22 +55,8 @@
 				element.classList.contains('pointer-events-none')
 		);
 		if (overlay) {
-			captureOverlay = overlay;
 			overlay.classList.add('jsdos-mouse-capture-overlay');
 			overlay.style.setProperty('background', 'rgb(58 75 119 / 92%)', 'important');
-			overlay.style.setProperty('border', '2px solid #c5b5e8', 'important');
-			overlay.style.setProperty('border-radius', '0.75rem', 'important');
-			overlay.style.setProperty('box-shadow', '0 0.4rem 1.2rem rgb(31 41 68 / 45%)', 'important');
-			let hint = overlay.querySelector('.jsdos-fullscreen-hint');
-			if (!hint) {
-				hint = document.createElement('div');
-				hint.className = 'jsdos-fullscreen-hint';
-				overlay.appendChild(hint);
-			}
-			const hintText = isGameFullscreen()
-				? 'Press F8 + F9 together to exit fullscreen'
-				: 'Press F8 + F9 together to enter fullscreen';
-			if (hint.textContent !== hintText) hint.textContent = hintText;
 		}
 	};
 
@@ -255,6 +241,15 @@
 	});
 </script>
 
+<Portal target={afterDemoPortal} class="text-dark/75 text-sm">
+	Click the game to capture the mouse. Press <kbd>Esc</kbd>
+	to release it. Press
+	<kbd>F8</kbd>
+	+
+	<kbd>F9</kbd>
+	 together to toggle fullscreen.
+</Portal>
+
 {#if mounted}
 	<div
 		bind:this={shell}
@@ -394,14 +389,5 @@
 		text-align: center;
 		text-shadow: 0 1px 2px rgb(31 41 68 / 80%);
 		z-index: 10;
-	}
-
-	:global(.jsdos-fullscreen-hint) {
-		margin-top: 0.4rem;
-		padding: 0.35rem 0.75rem;
-		border: 1px solid #c5b5e8;
-		border-radius: 0.45rem;
-		background: #4a5f91;
-		font-size: 0.85em;
 	}
 </style>

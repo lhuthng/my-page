@@ -45,6 +45,13 @@ export async function load(event) {
 	data.content = restoreShortNames(data.content, data.medium_short_names);
 	data.draft = restoreShortNames(data.draft, data.medium_short_names);
 	data.cover_url = fixClientRoute(data.cover_url);
+	const includeVersion = data.v86_system_version_id
+		? `?include_version_id=${data.v86_system_version_id}`
+		: '';
+	const systemsResponse = await event.fetch(route(`v86/systems/active${includeVersion}`), {
+		headers: { Authorization: `${type} ${token}` }
+	});
+	data.v86Systems = systemsResponse.ok ? await systemsResponse.json() : [];
 
 	return data;
 }
