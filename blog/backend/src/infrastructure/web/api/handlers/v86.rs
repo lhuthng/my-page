@@ -907,7 +907,7 @@ pub async fn complete_system_upload(
     .await
     .map_err(|e| ProjectError::InternalError(e.to_string()))??;
     fs::create_dir_all(&destination)?;
-    fs::rename(&source, destination.join("base.img"))?;
+    fs::remove_file(&source)?;
     let version_result = sqlx::query(
         r#"INSERT INTO v86_system_versions
            (system_id, version_number, original_file_name, storage_key, size_bytes,
