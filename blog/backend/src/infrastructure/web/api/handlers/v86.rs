@@ -897,28 +897,35 @@ pub async fn complete_system_upload(
     let platform_key: String = row.get("platform_key");
     let original_file_name: String = row.get("original_file_name");
 
-    // Phase 1: Brief tx to reserve version slot
+    // Phase 1: Brief tx to reserve version slot and set current_version
     let (system_id, version_number) = {
         let mut tx = state.project_service.pool.begin().await?;
         let (sid, vn) = if let Some(system_id) = system_id {
-            let current: i64 =
-                sqlx::query_scalar("SELECT current_version FROM v86_systems WHERE id = ?")
-                    .bind(system_id)
-                    .fetch_one(&mut *tx)
-                    .await?;
-            if current != expected_version {
+            let updated = sqlx::query(
+                "UPDATE v86_systems SET current_version = current_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND current_version = ?",
+            )
+            .bind(system_id)
+            .bind(expected_version)
+            .execute(&mut *tx)
+            .await?;
+            if updated.rows_affected() != 1 {
                 return Err(ProjectError::Conflict(
                     "The system was replaced by another administrator.".to_string(),
                 ));
             }
-            (system_id, current + 1)
+            (system_id, expected_version + 1)
         } else {
             let result = sqlx::query("INSERT INTO v86_systems (name, platform_key) VALUES (?, ?)")
                 .bind(&name)
                 .bind(&platform_key)
                 .execute(&mut *tx)
                 .await?;
-            (result.last_insert_rowid(), 1)
+            let new_id = result.last_insert_rowid();
+            sqlx::query("UPDATE v86_systems SET current_version = 1 WHERE id = ?")
+                .bind(new_id)
+                .execute(&mut *tx)
+                .await?;
+            (new_id, 1)
         };
         tx.commit().await?;
         (sid, vn)
@@ -976,7 +983,7 @@ pub async fn complete_system_upload(
     fs::create_dir_all(&destination)?;
     fs::remove_file(&source)?;
 
-    // Phase 3: Brief tx to insert version, update system, mark consumed
+    // Phase 3: Brief tx to insert version row and mark consumed
     let version_result = {
         let mut tx = state.project_service.pool.begin().await?;
         let result = sqlx::query(
@@ -995,20 +1002,6 @@ pub async fn complete_system_upload(
         .bind(chunk_count as i64)
         .execute(&mut *tx)
         .await?;
-        let system_update = sqlx::query(
-            "UPDATE v86_systems SET current_version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND current_version = ?",
-        )
-        .bind(version_number)
-        .bind(system_id)
-        .bind(expected_version)
-        .execute(&mut *tx)
-        .await?;
-        if system_update.rows_affected() != 1 {
-            chunk_progress_map().lock().unwrap().remove(&upload_id);
-            return Err(ProjectError::Conflict(
-                "The system was replaced by another administrator.".to_string(),
-            ));
-        }
         sqlx::query(
             "UPDATE v86_system_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
