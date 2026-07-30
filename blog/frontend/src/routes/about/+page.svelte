@@ -1,6 +1,6 @@
 <script>
-	import { page } from '$app/state';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
+	import { absoluteSiteUrl, safeJsonLd, SITE_ORIGIN } from '$lib/config/site.js';
 	import { isPointInTriangle, preventDefault } from '$lib/utils';
 	import { fly } from 'svelte/transition';
 
@@ -8,7 +8,26 @@
 	let locked = $state(false);
 	let lockedSelection = $state(-1);
 	const sqrt3o2 = 0.8660254037844386;
-	let imageUrl = $derived(page.url.origin + '/thinkcats.jpg');
+	const imageUrl = absoluteSiteUrl('/thinkcats.jpg');
+	const structuredData = {
+		'@context': 'https://schema.org',
+		'@type': 'ProfilePage',
+		'@id': `${SITE_ORIGIN}/about#profile`,
+		url: `${SITE_ORIGIN}/about`,
+		mainEntity: {
+			'@type': 'Person',
+			'@id': `${SITE_ORIGIN}/#person`,
+			name: 'Huu Thang Le',
+			alternateName: 'Thắng',
+			url: `${SITE_ORIGIN}/about`,
+			image: imageUrl,
+			sameAs: [
+				'https://github.com/lhuthng',
+				'https://www.linkedin.com/in/huuthangle/',
+				'https://portfolio.huuthangle.site'
+			]
+		}
+	};
 
 	function handleMouseMove(e) {
 		const rect = e.currentTarget.getBoundingClientRect();
@@ -54,7 +73,6 @@
 	/>
 
 	<meta property="og:type" content="website" />
-	<meta property="og:url" content={page.url.origin} />
 	<meta property="og:title" content="About | Huu Thang's Blog" />
 	<meta
 		property="og:description"
@@ -65,8 +83,7 @@
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:image" content={imageUrl} />
 	<meta name="twitter:description" content="Documenting experiments in tech and art." />
-
-	<link rel="canonical" href={page.url.href} />
+	{@html `<script type="application/ld+json">${safeJsonLd(structuredData)}</script>`}
 </svelte:head>
 
 {#snippet personaButton(src, alt, selection)}

@@ -6,7 +6,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use axum_extra::extract::cookie::{Cookie, CookieJar};
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -20,10 +20,9 @@ use crate::{
         services::auth::AuthService,
     },
     domain::{
-            entities::auth::{
-                LoginResult, RegisterCredentials, RequestPasswordResetResult,
-                ResendVerificationResult,
-            },
+        entities::auth::{
+            LoginResult, RegisterCredentials, RequestPasswordResetResult, ResendVerificationResult,
+        },
         errors::auth::AuthError,
     },
     infrastructure::{
@@ -63,6 +62,7 @@ pub async fn login(
                 Cookie::build(("refresh-token", auth_tokens.refresh_token))
                     .http_only(true)
                     .secure(true)
+                    .same_site(SameSite::Lax)
                     .path("/")
                     .build(),
             );
@@ -173,6 +173,7 @@ pub async fn refresh_token(
                 Cookie::build(("refresh-token", auth_tokens.refresh_token))
                     .http_only(true)
                     .secure(true)
+                    .same_site(SameSite::Lax)
                     .path("/")
                     .build(),
             );

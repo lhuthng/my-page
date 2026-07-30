@@ -73,8 +73,8 @@
 </script>
 
 <svelte:head>
-	<title>Posts</title>
-	<meta property="og:title" content="Posts" />
+	<title>Posts | Huu Thang's Blog</title>
+	<meta property="og:title" content="Posts | Huu Thang's Blog" />
 	<meta name="description" content="Recent posts, essays, and updates." />
 	<meta property="og:description" content="Recent posts, essays, and updates." />
 	<meta property="og:type" content="website" />

@@ -16,13 +16,19 @@
 		name="description"
 		content="Browse the recurring topics, experiments, and side quests across the blog."
 	/>
+	<meta property="og:title" content="Tags | Huu Thang's Blog" />
+	<meta
+		property="og:description"
+		content="Browse the recurring topics, experiments, and side quests across the blog."
+	/>
+	<meta property="og:type" content="website" />
 </svelte:head>
 
 <section class="bg-white rounded-xl p-4 mb-2 lg:mb-4 space-y-4">
 	<div class="flex not-md:flex-col justify-between gap-4">
 		<div class="space-y-2">
 			<BackButton href="/" text="Home" />
-			<h1 class="text-2xl font-semibold">Projects</h1>
+			<h1 class="text-2xl font-semibold">Tags</h1>
 			<p class="max-w-2xl text-dark/70">
 				Browse the recurring topics, rabbit holes, and experiments that keep showing up across the
 				blog.

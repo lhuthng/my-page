@@ -17,7 +17,7 @@
 	import PBody from '$lib/components/shell/PBody.svelte';
 	import Comment from '$lib/components/post/Comment.svelte';
 	import { preventDefault } from '$lib/utils';
-	import { page } from '$app/state';
+	import { canonicalUrl, safeJsonLd, SITE_ORIGIN } from '$lib/config/site.js';
 
 	const { data } = $props();
 
@@ -58,6 +58,23 @@
 	});
 
 	const hasPosts = $derived(role === 'moderator' || role === 'admin');
+	let profileUrl = $derived(canonicalUrl(`/profiles/${username}`));
+	let structuredData = $derived({
+		'@context': 'https://schema.org',
+		'@type': 'ProfilePage',
+		'@id': `${profileUrl}#profile`,
+		url: profileUrl,
+		mainEntity: {
+			'@type': 'Person',
+			'@id': `${profileUrl}#person`,
+			name: displayName,
+			alternateName: username,
+			description: bio,
+			image: avatarUrl,
+			url: profileUrl
+		},
+		isPartOf: { '@id': `${SITE_ORIGIN}/#website` }
+	});
 
 	let posts = $state({
 		status: 'initial',
@@ -129,14 +146,13 @@
 	<title>Profile of {displayName} | Huu Thang's Blog</title>
 	<meta name="description" content={bio} />
 	<meta property="og:type" content="website" />
-	<meta property="og:url" content={page.url.origin} />
 	<meta property="og:title" content={`Profile of ${displayName} | Huu Thang's Blog`} />
 	<meta property="og:description" content={bio} />
 	<meta property="og:image" content={avatarUrl} />
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:image" content={avatarUrl} />
 	<meta name="twitter:description" content={bio} />
-	<link rel="canonical" href={page.url.href} />
+	{@html `<script type="application/ld+json">${safeJsonLd(structuredData)}</script>`}
 </svelte:head>
 
 {#if editor.isChangingAvatar}

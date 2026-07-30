@@ -12,7 +12,8 @@ export function refreshAccessToken(event, refreshToken) {
 					event.cookies.delete('refresh-token', {
 						path: '/',
 						httpOnly: true,
-						secure: true
+						secure: true,
+						sameSite: 'lax'
 					});
 					event.locals.user = null;
 				};

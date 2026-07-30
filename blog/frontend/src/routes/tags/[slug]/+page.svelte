@@ -2,6 +2,7 @@
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { fade, fly } from 'svelte/transition';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
+	import { canonicalUrl, safeJsonLd, SITE_ORIGIN } from '$lib/config/site.js';
 
 	let { data } = $props();
 
@@ -14,11 +15,33 @@
 	);
 
 	const postLabel = $derived(tag.post_count === 1 ? 'item' : 'items');
+	let canonical = $derived(canonicalUrl(`/tags/${tag.slug}`));
+	let structuredData = $derived({
+		'@context': 'https://schema.org',
+		'@type': 'CollectionPage',
+		'@id': canonical,
+		url: canonical,
+		name: `#${tag.slug}`,
+		description: metaDescription,
+		isPartOf: { '@id': `${SITE_ORIGIN}/#website` },
+		breadcrumb: {
+			'@type': 'BreadcrumbList',
+			itemListElement: [
+				{ '@type': 'ListItem', position: 1, name: 'Home', item: `${SITE_ORIGIN}/` },
+				{ '@type': 'ListItem', position: 2, name: 'Tags', item: `${SITE_ORIGIN}/tags` },
+				{ '@type': 'ListItem', position: 3, name: `#${tag.slug}`, item: canonical }
+			]
+		}
+	});
 </script>
 
 <svelte:head>
 	<title>#{tag.slug} | Tags | Huu Thang's Blog</title>
 	<meta name="description" content={metaDescription} />
+	<meta property="og:title" content={`#${tag.slug} | Huu Thang's Blog`} />
+	<meta property="og:description" content={metaDescription} />
+	<meta property="og:type" content="website" />
+	{@html `<script type="application/ld+json">${safeJsonLd(structuredData)}</script>`}
 </svelte:head>
 
 <section class="bg-white space-y-4 rounded-xl p-4 mb-2 lg:mb-4">

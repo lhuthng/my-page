@@ -7,6 +7,13 @@
 	import CommentSection from '$lib/components/post/CommentSection.svelte';
 	import ProjectDemo from '$lib/components/project/ProjectDemo.svelte';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
+	import {
+		absoluteSiteUrl,
+		canonicalUrl,
+		safeJsonLd,
+		SITE_NAME,
+		SITE_ORIGIN
+	} from '$lib/config/site.js';
 
 	let { data } = $props();
 
@@ -42,21 +49,65 @@
 	let date = $derived(textToDate(published_at));
 	let updateTime = $derived(dateTillNow(updated_at, 'round'));
 	let imageUrl = $derived.by(() => {
-		if (cover_url) {
-			if (cover_url.includes('://')) return cover_url;
-			return page.url.origin + cover_url;
-		}
-		return page.url.origin + '/thinkcats.jpg';
+		return absoluteSiteUrl(cover_url, '/thinkcats.jpg');
 	});
 
 	let ogImageUrl = $derived.by(() => {
-		if (og_image_url) {
-			if (og_image_url.includes('://')) return og_image_url;
-			return page.url.origin + og_image_url;
-		}
-		return imageUrl;
+		return og_image_url ? absoluteSiteUrl(og_image_url) : imageUrl;
 	});
-	let canonicalLink = $derived(page.url.origin + page.url.pathname);
+	let canonicalLink = $derived(canonicalUrl(page.url.pathname));
+	let structuredData = $derived({
+		'@context': 'https://schema.org',
+		'@graph': [
+			{
+				'@type': 'CreativeWork',
+				'@id': `${canonicalLink}#project`,
+				mainEntityOfPage: canonicalLink,
+				url: canonicalLink,
+				name: title,
+				headline: title,
+				description: excerpt,
+				image: ogImageUrl,
+				datePublished: published_at,
+				dateModified: updated_at ?? published_at,
+				keywords: tags,
+				inLanguage: 'en',
+				author: {
+					'@type': 'Person',
+					name: author_name,
+					url: canonicalUrl(`/profiles/${author_slug}`)
+				},
+				isPartOf: {
+					'@type': 'WebSite',
+					'@id': `${SITE_ORIGIN}/#website`,
+					name: SITE_NAME
+				}
+			},
+			{
+				'@type': 'BreadcrumbList',
+				itemListElement: [
+					{
+						'@type': 'ListItem',
+						position: 1,
+						name: 'Home',
+						item: `${SITE_ORIGIN}/`
+					},
+					{
+						'@type': 'ListItem',
+						position: 2,
+						name: 'Projects',
+						item: `${SITE_ORIGIN}/projects`
+					},
+					{
+						'@type': 'ListItem',
+						position: 3,
+						name: title,
+						item: canonicalLink
+					}
+				]
+			}
+		]
+	});
 
 	let viewDelayTimeout = null;
 	$effect(() => {
@@ -81,17 +132,11 @@
 
 	<meta property="og:title" content={title} />
 	<meta property="og:type" content="website" />
-	<meta property="og:url" content={canonicalLink} />
 	<meta property="og:description" content={excerpt} />
 	<meta property="og:image" content={ogImageUrl} />
 
 	{#if cover_video_url}
-		<meta
-			property="og:video"
-			content={cover_video_url.includes('://')
-				? cover_video_url
-				: page.url.origin + cover_video_url}
-		/>
+		<meta property="og:video" content={absoluteSiteUrl(cover_video_url)} />
 		<meta property="og:video:type" content={cover_video_type} />
 	{/if}
 
@@ -100,8 +145,7 @@
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={excerpt} />
 	<meta name="twitter:image" content={ogImageUrl} />
-
-	<link rel="canonical" href={canonicalLink} />
+	{@html `<script type="application/ld+json">${safeJsonLd(structuredData)}</script>`}
 </svelte:head>
 
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
@@ -109,7 +153,7 @@
 		<ProjectDemo
 			{title}
 			demoType={demo_type}
-			 demoUrl={demo_url}
+			demoUrl={demo_url}
 			width={demo_width ?? '100%'}
 			height={demo_height ?? '520px'}
 		/>
