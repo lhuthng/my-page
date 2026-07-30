@@ -349,6 +349,7 @@ impl<'a> HTTPServer<'a> {
         )
         .await?;
         sqlx::migrate!().run(&pool).await?;
+        cleanup_orphaned_uploads(&pool).await?;
         let graphql_schema = crate::infrastructure::web::graphql::build_schema(pool.clone());
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
@@ -382,4 +383,46 @@ impl<'a> Default for HTTPServer<'a> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+async fn cleanup_orphaned_uploads(pool: &sqlx::SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
+    let rows: Vec<(String, i64, i64)> = sqlx::query_as(
+        r#"SELECT s.id, s.system_id, s.expected_current_version
+           FROM v86_system_upload_sessions s
+           WHERE s.system_id IS NOT NULL
+             AND (s.status = 'building'
+                  OR (s.status = 'active' AND s.expires_at < datetime('now')))"#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (session_id, system_id, expected_version) in &rows {
+        if *expected_version == 0 {
+            sqlx::query("DELETE FROM v86_systems WHERE id = ?")
+                .bind(system_id)
+                .execute(pool)
+                .await?;
+        } else {
+            sqlx::query(
+                "UPDATE v86_systems SET current_version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND current_version = ?",
+            )
+            .bind(expected_version)
+            .bind(system_id)
+            .bind(expected_version + 1)
+            .execute(pool)
+            .await?;
+        }
+        sqlx::query(
+            "UPDATE v86_system_upload_sessions SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+    }
+
+    if !rows.is_empty() {
+        println!("Cleaned up {} orphaned upload session(s)", rows.len());
+    }
+
+    Ok(())
 }

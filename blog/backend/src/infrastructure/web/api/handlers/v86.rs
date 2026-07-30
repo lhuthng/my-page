@@ -265,6 +265,37 @@ fn is_reserved_windows_name(component: &str) -> bool {
             && stem.as_bytes()[3] != b'0')
 }
 
+async fn rollback_system_version(
+    pool: &sqlx::SqlitePool,
+    upload_id: &str,
+    system_id: i64,
+    version_number: i64,
+    is_new_system: bool,
+) -> Result<(), sqlx::Error> {
+    if is_new_system {
+        sqlx::query("DELETE FROM v86_systems WHERE id = ?")
+            .bind(system_id)
+            .execute(pool)
+            .await?;
+    } else {
+        sqlx::query(
+            "UPDATE v86_systems SET current_version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND current_version = ?",
+        )
+        .bind(version_number - 1)
+        .bind(system_id)
+        .bind(version_number)
+        .execute(pool)
+        .await?;
+    }
+    sqlx::query(
+        "UPDATE v86_system_upload_sessions SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    )
+    .bind(upload_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 fn validate_and_extract_game_zip(
     zip_path: &Path,
     destination: &Path,
@@ -896,6 +927,7 @@ pub async fn complete_system_upload(
     let name: String = row.get("name");
     let platform_key: String = row.get("platform_key");
     let original_file_name: String = row.get("original_file_name");
+    let is_new_system = system_id.is_none();
 
     // Phase 1: Brief tx to reserve version slot and set current_version
     let (system_id, version_number) = {
@@ -930,6 +962,13 @@ pub async fn complete_system_upload(
         tx.commit().await?;
         (sid, vn)
     };
+
+    sqlx::query(
+        "UPDATE v86_system_upload_sessions SET status = 'building', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    )
+    .bind(&upload_id)
+    .execute(&state.project_service.pool)
+    .await?;
 
     let storage_key = format!("v86/systems/{system_id}/{version_number}/{sha256}");
     let destination = state.project_demo_config.dir.join(&storage_key);
@@ -967,10 +1006,24 @@ pub async fn complete_system_upload(
         Ok(Ok(count)) => count,
         Ok(Err(e)) => {
             chunk_progress_map().lock().unwrap().remove(&upload_id);
+            if let Err(rollback_err) = rollback_system_version(
+                &state.project_service.pool, &upload_id, system_id, version_number, is_new_system,
+            )
+            .await
+            {
+                tracing::error!("rollback failed after compression error: {rollback_err}");
+            }
             return Err(e);
         }
         Err(e) => {
             chunk_progress_map().lock().unwrap().remove(&upload_id);
+            if let Err(rollback_err) = rollback_system_version(
+                &state.project_service.pool, &upload_id, system_id, version_number, is_new_system,
+            )
+            .await
+            {
+                tracing::error!("rollback failed after spawn error: {rollback_err}");
+            }
             return Err(ProjectError::InternalError(e.to_string()));
         }
     };
