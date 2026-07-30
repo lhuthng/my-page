@@ -223,10 +223,26 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/new", post(handlers::project::new_project))
-                .route("/id/{project_id}/jsdos/upload", post(handlers::project::start_jsdos_upload))
-                .route("/id/{project_id}/jsdos/upload/{upload_id}/chunk/{chunk_index}", put(handlers::project::append_jsdos_chunk))
-                .route("/id/{project_id}/jsdos/upload/{upload_id}/complete", post(handlers::project::complete_jsdos_upload))
-                .route("/id/{project_id}/jsdos/upload/{upload_id}", delete(handlers::project::abort_jsdos_upload))
+                .route(
+                    "/id/{project_id}/jsdos/upload",
+                    post(handlers::project::start_jsdos_upload),
+                )
+                .route(
+                    "/id/{project_id}/jsdos/upload/{upload_id}/chunk/{chunk_index}",
+                    put(handlers::project::append_jsdos_chunk),
+                )
+                .route(
+                    "/id/{project_id}/jsdos/upload/{upload_id}/complete",
+                    post(handlers::project::complete_jsdos_upload),
+                )
+                .route(
+                    "/id/{project_id}/jsdos/upload/{upload_id}",
+                    delete(handlers::project::abort_jsdos_upload),
+                )
+                .route(
+                    "/id/{project_id}/v86/attach/{upload_id}",
+                    patch(handlers::v86::attach_ready_game),
+                )
                 .route("/all", get(handlers::project::get_all_projects))
                 .route("/id/{project_id}", post(handlers::project::publish_project))
                 .route(
@@ -234,7 +250,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     get(handlers::project::get_project_details),
                 )
                 .route("/id/{project_id}", patch(handlers::project::update_project))
-                .route("/id/{project_id}", delete(handlers::project::delete_project_draft))
+                .route(
+                    "/id/{project_id}",
+                    delete(handlers::project::delete_project_draft),
+                )
                 .route(
                     "/id/{project_id}/cover",
                     patch(handlers::project::change_cover),
@@ -262,10 +281,79 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // public routes
         .merge(
             Router::new()
-                .route("/s/{project_slug}/jsdos", get(handlers::project::get_jsdos_bundle))
+                .route(
+                    "/s/{project_slug}/jsdos",
+                    get(handlers::project::get_jsdos_bundle),
+                )
+                .route(
+                    "/s/{project_slug}/v86/{sha256}/full.iso",
+                    get(handlers::v86::get_game_iso),
+                )
+                .route(
+                    "/s/{project_slug}/v86/{sha256}/{part}",
+                    get(handlers::v86::get_game_chunk),
+                )
                 .route("/latest", get(handlers::project::get_latest_projects))
                 .route("/featured", get(handlers::project::get_featured_projects))
                 .route("/check", get(handlers::project::check_project)),
+        );
+
+    let v86_routes = Router::new()
+        .merge(
+            Router::new()
+                .route("/systems/active", get(handlers::v86::list_active_systems))
+                .route("/games/upload", post(handlers::v86::start_game_upload))
+                .route(
+                    "/games/upload/{upload_id}/chunk/{chunk_index}",
+                    put(handlers::v86::append_game_chunk),
+                )
+                .route(
+                    "/games/upload/{upload_id}/complete",
+                    post(handlers::v86::complete_game_upload),
+                )
+                .route(
+                    "/games/upload/{upload_id}",
+                    delete(handlers::v86::abort_game_upload),
+                )
+                .layer(middleware::from_fn(middlewares::auth::mod_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                ))
+                .layer(DefaultBodyLimit::max(9 * 1024 * 1024)),
+        )
+        .merge(
+            Router::new()
+                .route("/systems", get(handlers::v86::list_systems))
+                .route("/systems/upload", post(handlers::v86::start_system_upload))
+                .route(
+                    "/systems/upload/{upload_id}/chunk/{chunk_index}",
+                    put(handlers::v86::append_system_chunk),
+                )
+                .route(
+                    "/systems/upload/{upload_id}/complete",
+                    post(handlers::v86::complete_system_upload),
+                )
+                .route(
+                    "/systems/upload/{upload_id}",
+                    delete(handlers::v86::abort_system_upload),
+                )
+                .route("/systems/{system_id}", patch(handlers::v86::update_system))
+                .route("/systems/{system_id}", delete(handlers::v86::delete_system))
+                .route(
+                    "/systems/{system_id}/versions/{version_id}",
+                    delete(handlers::v86::delete_system_version),
+                )
+                .layer(middleware::from_fn(middlewares::auth::admin_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                ))
+                .layer(DefaultBodyLimit::max(9 * 1024 * 1024)),
+        )
+        .route(
+            "/assets/systems/{version_id}/{sha256}/{part}",
+            get(handlers::v86::get_system_chunk),
         );
 
     let tag_routes = Router::new()
@@ -311,7 +399,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         ))
         .merge(
             Router::new()
-                .route("/analytics/countries", get(handlers::dashboard::get_visitor_countries))
+                .route(
+                    "/analytics/countries",
+                    get(handlers::dashboard::get_visitor_countries),
+                )
                 .route("/tags/{tag_id}", patch(handlers::dashboard::update_tag))
                 .route("/tags/{tag_id}", delete(handlers::dashboard::delete_tag))
                 .route("/backup", get(handlers::backup::download_backup))
@@ -322,8 +413,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 )),
         );
 
-    let analytics_routes =
-        Router::new().route("/visit", post(handlers::dashboard::track_visit));
+    let analytics_routes = Router::new().route("/visit", post(handlers::dashboard::track_visit));
 
     let mail_routes = Router::new().merge(
         Router::new()
@@ -357,6 +447,11 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/users", user_routes)
         .nest("/posts", post_routes)
         .nest("/projects", project_routes)
+        .nest("/v86", v86_routes)
+        .route(
+            &format!("{project_demos_path}/v86/{{*path}}"),
+            get(|| async { axum::http::StatusCode::NOT_FOUND }),
+        )
         .nest_service(
             &project_demos_path,
             get_service(ServeDir::new(&state.project_demo_config.dir)),

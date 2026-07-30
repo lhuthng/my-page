@@ -47,6 +47,10 @@ export async function load({ fetch, params, setHeaders }) {
 	cover_video_url = fixClientRoute(cover_video_url);
 	og_image_url = fixClientRoute(og_image_url);
 	demo_url = fixClientRoute(demo_url);
+	if (rest.v86_runtime) {
+		rest.v86_runtime.base_url = fixClientRoute(rest.v86_runtime.base_url);
+		rest.v86_runtime.iso_url = fixClientRoute(rest.v86_runtime.iso_url);
+	}
 
 	const mediaDictionary = {};
 	medium_urls.forEach((url, index) => (mediaDictionary[index.toString()] = fixClientRoute(url)));

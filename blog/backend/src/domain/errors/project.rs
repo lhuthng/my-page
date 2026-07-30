@@ -11,6 +11,7 @@ pub enum ProjectError {
     Forbidden,
     UploadFailed(String),
     InvalidDemo(String),
+    Conflict(String),
     InternalError(String),
     Media(MediaError),
     Post(PostError),
@@ -32,6 +33,7 @@ impl IntoResponse for ProjectError {
             ProjectError::UploadFailed(msg) | ProjectError::InvalidDemo(msg) => {
                 (StatusCode::BAD_REQUEST, msg).into_response()
             }
+            ProjectError::Conflict(msg) => (StatusCode::CONFLICT, msg).into_response(),
             ProjectError::InternalError(msg) => {
                 error!("Internal project error: {}", msg);
                 if cfg!(debug_assertions) {

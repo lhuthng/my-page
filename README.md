@@ -302,6 +302,13 @@ Common backend variables live in `blog/backend/.env`.
 | `PROJECT_DEMO_MAX_ARCHIVE_BYTES` | Optional max uploaded demo archive size. |
 | `PROJECT_DEMO_MAX_EXTRACTED_BYTES` | Optional max extracted demo size. |
 | `PROJECT_DEMO_MAX_FILES` | Optional max extracted demo file count. |
+| `PROJECT_V86_BASE_MAX_BYTES` | Optional maximum raw v86 base IMG size; defaults to 2 GiB. |
+| `PROJECT_V86_GAME_ZIP_MAX_BYTES` | Optional maximum compressed v86 game ZIP size; defaults to 500 MiB. |
+| `PROJECT_V86_GAME_EXTRACTED_MAX_BYTES` | Optional maximum expanded game size; defaults to 1 GiB. |
+| `PROJECT_V86_GAME_MAX_FILES` | Optional maximum number of files in a v86 game ZIP; defaults to 10,000. |
+| `PROJECT_V86_UPLOAD_CHUNK_BYTES` | v86 upload chunk size; defaults to 8 MiB. |
+| `PROJECT_V86_DOWNLOAD_CHUNK_BYTES` | Immutable v86 disk-part size; defaults to 256 KiB. |
+| `PROJECT_V86_XORRISO_BIN` | Path to `xorriso`, used to build immutable game ISOs. |
 | `APP_BASE_URL` | Public app URL used by auth email flows. |
 | `ALLOWED_ORIGIN` or `ALLOWED_ORIGINS` | CORS allow list for restricted browser calls. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Optional SMTP email transport. |

@@ -8,3 +8,4 @@ pub mod post;
 pub mod project;
 pub mod series;
 pub mod user;
+pub mod v86;
