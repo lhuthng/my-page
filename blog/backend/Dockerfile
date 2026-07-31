@@ -16,5 +16,7 @@ FROM alpine:3.21 AS runtime
 WORKDIR /app
 RUN apk add --no-cache ffmpeg xorriso ca-certificates
 COPY --from=builder /app/target/release/backend /usr/local/bin/backend
+COPY --from=builder /app/assets /app/assets
+ENV PROJECT_V86_ASSETS_DIR=/app/assets
 EXPOSE 3000
 CMD ["backend"]
