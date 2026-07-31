@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub mail: Option<MailConfig>,
     pub app_base_url: String,
     pub database_source: DatabaseSource,
+    pub r2_public_url: Option<String>,
 }
 
 pub enum DatabaseSource {
@@ -87,6 +88,7 @@ pub struct AppState {
     pub config: AppConfig,
     pub media_config: MediaConfig,
     pub project_demo_config: ProjectDemoConfig,
+    pub r2: Option<crate::infrastructure::storage::r2::R2Client>,
     pub analytics_service: persistence::analytics::AnalyticsServiceImpl,
     pub auth_service: persistence::auth::AuthServiceImpl,
     pub user_service: persistence::user::UserServiceImpl,
@@ -312,6 +314,7 @@ impl AppConfig {
             app_base_url: env::var("APP_BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:5000".to_string()),
             database_source: DatabaseSource::from_env(),
+            r2_public_url: env::var("R2_PUBLIC_URL").ok(),
         }
     }
 }
@@ -354,12 +357,15 @@ impl<'a> HTTPServer<'a> {
         )
         .await?;
         sqlx::migrate!().run(&pool).await?;
-        cleanup_orphaned_uploads(&pool).await?;
+        let project_demo_config = ProjectDemoConfig::from_env();
+        let r2 = crate::infrastructure::storage::r2::R2Client::from_env();
+        cleanup_orphaned_uploads(&pool, &r2, &project_demo_config.dir).await?;
         let graphql_schema = crate::infrastructure::web::graphql::build_schema(pool.clone());
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
             media_config: MediaConfig::from_env(),
-            project_demo_config: ProjectDemoConfig::from_env(),
+            project_demo_config,
+            r2,
             analytics_service: persistence::analytics::AnalyticsServiceImpl::new(pool.clone()),
             auth_service: persistence::auth::AuthServiceImpl::new(pool.clone()),
             user_service: persistence::user::UserServiceImpl::new(pool.clone()),
@@ -390,7 +396,48 @@ impl<'a> Default for HTTPServer<'a> {
     }
 }
 
-async fn cleanup_orphaned_uploads(pool: &sqlx::SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
+async fn cleanup_orphaned_uploads(
+    pool: &sqlx::SqlitePool,
+    r2: &Option<crate::infrastructure::storage::r2::R2Client>,
+    demos_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    async fn clean_session(
+        pool: &sqlx::SqlitePool,
+        r2: &Option<crate::infrastructure::storage::r2::R2Client>,
+        demos_dir: &std::path::Path,
+        table: &str,
+        session_id: &str,
+    ) {
+        use sqlx::Row;
+        let row = sqlx::query(&format!(
+            "SELECT temp_storage_key, r2_upload_id FROM {table} WHERE id = ?"
+        ))
+        .bind(session_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        if let Some(row) = row {
+            if let Some(client) = r2 {
+                let temp_key: String = row.get("temp_storage_key");
+                if let Some(upload_id) = row.get::<Option<String>, _>("r2_upload_id") {
+                    let _ = client.abort_multipart(&temp_key, &upload_id).await;
+                }
+                let _ = client.delete_object(&temp_key).await;
+            }
+            let _ = tokio::fs::remove_file(
+                demos_dir.join("v86/tmp").join(table).join(format!("{session_id}.upload")),
+            )
+            .await;
+            let _ = tokio::fs::remove_dir_all(
+                demos_dir.join("v86/tmp").join(table).join(format!("{session_id}.parts")),
+            )
+            .await;
+            let _ = tokio::fs::remove_dir_all(demos_dir.join("v86/tmp/build").join(session_id))
+                .await;
+        }
+    }
+
     let rows: Vec<(String, i64, i64)> = sqlx::query_as(
         r#"SELECT s.id, s.system_id, s.expected_current_version
            FROM v86_system_upload_sessions s
@@ -402,6 +449,26 @@ async fn cleanup_orphaned_uploads(pool: &sqlx::SqlitePool) -> Result<(), Box<dyn
     .await?;
 
     for (session_id, system_id, expected_version) in &rows {
+        // Drop any version row a crashed build may have reserved before it finished.
+        let orphan_version_id: Option<i64> = sqlx::query_scalar(
+            "SELECT id FROM v86_system_versions WHERE system_id = ? AND version_number = ?",
+        )
+        .bind(system_id)
+        .bind(expected_version + 1)
+        .fetch_optional(pool)
+        .await?;
+        if let Some(version_id) = orphan_version_id {
+            sqlx::query("DELETE FROM v86_system_versions WHERE id = ?")
+                .bind(version_id)
+                .execute(pool)
+                .await?;
+            if let Some(client) = r2 {
+                let _ = client
+                    .delete_prefix(&format!("v86/assets/systems/{version_id}"))
+                    .await;
+            }
+        }
+
         if *expected_version == 0 {
             sqlx::query("DELETE FROM v86_systems WHERE id = ?")
                 .bind(system_id)
@@ -423,10 +490,32 @@ async fn cleanup_orphaned_uploads(pool: &sqlx::SqlitePool) -> Result<(), Box<dyn
         .bind(session_id)
         .execute(pool)
         .await?;
+        clean_session(pool, r2, demos_dir, "systems", session_id).await;
     }
 
-    if !rows.is_empty() {
-        println!("Cleaned up {} orphaned upload session(s)", rows.len());
+    let stale_games: Vec<String> = sqlx::query_scalar(
+        r#"SELECT id FROM project_v86_upload_sessions
+           WHERE status = 'building'
+              OR (status = 'active' AND expires_at < datetime('now'))"#,
+    )
+    .fetch_all(pool)
+    .await?;
+    for session_id in &stale_games {
+        sqlx::query(
+            "UPDATE project_v86_upload_sessions SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+        clean_session(pool, r2, demos_dir, "games", session_id).await;
+    }
+
+    let stale_systems = rows.len();
+    if stale_systems + stale_games.len() > 0 {
+        println!(
+            "Cleaned up {} orphaned upload session(s)",
+            stale_systems + stale_games.len()
+        );
     }
 
     Ok(())
