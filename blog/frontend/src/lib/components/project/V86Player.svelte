@@ -320,22 +320,31 @@
 			pressed.delete(event.code);
 			if (!pressed.has('F8') || !pressed.has('F9')) fullscreenComboLatched = false;
 		};
-		const preventWheel = (event) => {
-			if (!disableMouseWheel || !shell?.contains(event.target)) return;
+		let wheelCooldown = 0;
+		const handleWheel = (event) => {
+			if (!shell?.contains(event.target)) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
+			if (disableMouseWheel) return;
+			const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+			const direction = delta > 0 ? 1 : delta < 0 ? -1 : 0;
+			if (!direction) return;
+			const now = performance.now();
+			if (now - wheelCooldown < 25) return;
+			wheelCooldown = now;
+			emulator?.bus?.send?.('mouse-wheel', [direction, 0]);
 		};
 		window.addEventListener('keydown', keydown, true);
 		window.addEventListener('keyup', keyup, true);
 		window.addEventListener('mousemove', handleCapturedMouseMove, true);
-		window.addEventListener('wheel', preventWheel, { passive: false, capture: true });
+		window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
 		start();
 		return () => {
 			disposed = true;
 			window.removeEventListener('keydown', keydown, true);
 			window.removeEventListener('keyup', keyup, true);
 			window.removeEventListener('mousemove', handleCapturedMouseMove, true);
-			window.removeEventListener('wheel', preventWheel, { capture: true });
+			window.removeEventListener('wheel', handleWheel, { capture: true });
 			destroy();
 		};
 	});
@@ -362,7 +371,7 @@
 			<input type="checkbox" bind:checked={disableMouseWheel} class="accent-primary h-4 w-4" />
 			<span
 				class="underline decoration-dashed underline-offset-2 cursor-help"
-				title="Wheel could break the some games."
+				title="Wheel could break some games. So I disabled it, but it's not guaranteed, especially you do a Giga Scroll."
 			>
 				Disable mousewheel
 			</span>
@@ -434,6 +443,8 @@
 	}
 	.v86-shell {
 		grid-template-rows: 1fr;
+		overscroll-behavior: none;
+		touch-action: none;
 	}
 	.screen {
 		display: grid;
