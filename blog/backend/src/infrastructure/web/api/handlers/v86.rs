@@ -49,6 +49,7 @@ pub struct V86SystemResponse {
     pub is_active: bool,
     pub is_default: bool,
     pub current_version: i64,
+    pub pending_build: bool,
     pub project_count: i64,
     pub published_project_count: i64,
     pub versions: Vec<V86SystemVersionResponse>,
@@ -648,6 +649,14 @@ pub async fn list_systems(
     )
     .fetch_all(&state.project_service.pool)
     .await?;
+    let building: HashSet<i64> = sqlx::query_scalar(
+        "SELECT DISTINCT system_id FROM v86_system_upload_sessions WHERE status = 'building' AND system_id IS NOT NULL",
+    )
+    .fetch_all(&state.project_service.pool)
+    .await?
+    .into_iter()
+    .collect();
+
     let mut systems = Vec::with_capacity(rows.len());
     for row in rows {
         let system_id: i64 = row.get("id");
@@ -675,6 +684,7 @@ pub async fn list_systems(
             is_active: row.get::<i64, _>("is_active") != 0,
             is_default: row.get::<i64, _>("is_default") != 0,
             current_version: row.get("current_version"),
+            pending_build: building.contains(&system_id),
             project_count: row.get("project_count"),
             published_project_count: row.get::<Option<i64>, _>("published_count").unwrap_or(0),
             versions,
@@ -689,7 +699,7 @@ pub async fn list_active_systems(
 ) -> Result<Json<Vec<V86SystemResponse>>, ProjectError> {
     let Json(mut systems) = list_systems(State(state)).await?;
     systems.retain(|system| {
-        (system.is_active && system.current_version > 0)
+        (system.is_active && system.current_version > 0 && !system.versions.is_empty())
             || query.include_version_id.is_some_and(|version_id| {
                 system
                     .versions
@@ -721,6 +731,18 @@ pub async fn start_system_upload(
     if request.size_bytes == 0 || request.size_bytes > state.project_demo_config.max_v86_base_size {
         return Err(ProjectError::InvalidDemo(
             "The base IMG exceeds the configured limit.".to_string(),
+        ));
+    }
+    let existing: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM v86_systems WHERE name = ? AND id != COALESCE(?, 0)",
+    )
+    .bind(name)
+    .bind(request.system_id)
+    .fetch_one(&state.project_service.pool)
+    .await?;
+    if existing > 0 {
+        return Err(ProjectError::InvalidDemo(
+            "A system with this name already exists.".to_string(),
         ));
     }
     let upload_id = Uuid::new_v4().to_string();
@@ -895,7 +917,7 @@ pub async fn complete_system_upload(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     AxumPath(upload_id): AxumPath<String>,
-) -> Result<Json<V86SystemResponse>, ProjectError> {
+) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
         "SELECT system_id, name, platform_key, expected_current_version, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, status, expires_at FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
@@ -921,22 +943,35 @@ pub async fn complete_system_upload(
             "The base IMG does not contain a valid boot-sector signature.".to_string(),
         ));
     }
-    let (size, sha256) = sha256_file(Path::new(&temp_key))?;
-    let system_id: Option<i64> = row.get("system_id");
+    let system_id_opt: Option<i64> = row.get("system_id");
     let expected_version: i64 = row.get("expected_current_version");
     let name: String = row.get("name");
     let platform_key: String = row.get("platform_key");
     let original_file_name: String = row.get("original_file_name");
-    let is_new_system = system_id.is_none();
+    let is_new_system = system_id_opt.is_none();
+
+    // Guard: name must still be unique in case another upload was created after this session
+    let existing: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM v86_systems WHERE name = ? AND id != COALESCE(?, 0)",
+    )
+    .bind(&name)
+    .bind(system_id_opt)
+    .fetch_one(&state.project_service.pool)
+    .await?;
+    if existing > 0 {
+        return Err(ProjectError::InvalidDemo(
+            "A system with this name already exists.".to_string(),
+        ));
+    }
 
     // Phase 1: Brief tx to reserve version slot and set current_version
     let (system_id, version_number) = {
         let mut tx = state.project_service.pool.begin().await?;
-        let (sid, vn) = if let Some(system_id) = system_id {
+        let (sid, vn) = if let Some(sid) = system_id_opt {
             let updated = sqlx::query(
                 "UPDATE v86_systems SET current_version = current_version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND current_version = ?",
             )
-            .bind(system_id)
+            .bind(sid)
             .bind(expected_version)
             .execute(&mut *tx)
             .await?;
@@ -945,7 +980,7 @@ pub async fn complete_system_upload(
                     "The system was replaced by another administrator.".to_string(),
                 ));
             }
-            (system_id, expected_version + 1)
+            (sid, expected_version + 1)
         } else {
             let result = sqlx::query("INSERT INTO v86_systems (name, platform_key) VALUES (?, ?)")
                 .bind(&name)
@@ -964,114 +999,155 @@ pub async fn complete_system_upload(
     };
 
     sqlx::query(
-        "UPDATE v86_system_upload_sessions SET status = 'building', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE v86_system_upload_sessions SET status = 'building', system_id = COALESCE(system_id, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
+    .bind(system_id)
     .bind(&upload_id)
     .execute(&state.project_service.pool)
     .await?;
 
-    let storage_key = format!("v86/systems/{system_id}/{version_number}/{sha256}");
-    let destination = state.project_demo_config.dir.join(&storage_key);
-    let parts = destination.join("parts");
-    let chunk_size = state.project_demo_config.v86_download_chunk_size;
-    let source = PathBuf::from(&temp_key);
-
-    // Phase 2: Heavy compression (no DB lock held)
-    let total_chunks = size.div_ceil(chunk_size as u64);
-    let parts_for_build = parts.clone();
-    let source_for_build = source.clone();
     let progress = Arc::new(Mutex::new(ChunkProgress {
         upload_id: upload_id.clone(),
         kind: "system".to_string(),
-        total_chunks,
+        total_chunks: 0,
         completed_chunks: 0,
-        message: "Starting compression…".to_string(),
+        message: "Preparing…".to_string(),
     }));
     chunk_progress_map()
         .lock()
         .unwrap()
         .insert(upload_id.clone(), progress.lock().unwrap().clone());
-    let progress_for_build = progress.clone();
-    let chunk_count = match tokio::task::spawn_blocking(move || {
+
+    // Spawn background task for Phases 2-3 (sha256, compression, DB commit)
+    let pool = state.project_service.pool.clone();
+    let config_dir = state.project_demo_config.dir.clone();
+    let chunk_size = state.project_demo_config.v86_download_chunk_size;
+    let upload_id_c = upload_id.clone();
+    let temp_key_c = temp_key.clone();
+    let progress_c = progress.clone();
+    let original_file_name_c = original_file_name.clone();
+
+    tokio::spawn(async move {
+        let result = process_system_upload(
+            &pool,
+            &config_dir,
+            &upload_id_c,
+            &temp_key_c,
+            chunk_size,
+            progress_c,
+            system_id,
+            version_number,
+            is_new_system,
+            &original_file_name_c,
+        )
+        .await;
+        if let Err(e) = result {
+            tracing::error!("Background system upload failed for {upload_id_c}: {e}");
+            let _ = rollback_system_version(
+                &pool, &upload_id_c, system_id, version_number, is_new_system,
+            )
+            .await;
+            chunk_progress_map().lock().unwrap().remove(&upload_id_c);
+        }
+    });
+
+    Ok(StatusCode::ACCEPTED)
+}
+
+#[allow(unused_variables)]
+async fn process_system_upload(
+    pool: &sqlx::SqlitePool,
+    config_dir: &Path,
+    upload_id: &str,
+    temp_key: &str,
+    chunk_size: u64,
+    progress: Arc<Mutex<ChunkProgress>>,
+    system_id: i64,
+    version_number: i64,
+    is_new_system: bool,
+    original_file_name: &str,
+) -> Result<(), String> {
+    let source = PathBuf::from(temp_key);
+
+    // Phase 2a: Compute sha256 and file size (heavy I/O, offloaded)
+    let (size, sha256) = tokio::task::spawn_blocking({
+        let source = source.clone();
+        move || sha256_file(&source)
+    })
+    .await
+    .map_err(|e| format!("sha256 task panicked: {e}"))?
+    .map_err(|e| e.to_string())?;
+
+    let storage_key = format!("v86/systems/{system_id}/{version_number}/{sha256}");
+    let destination = config_dir.join(&storage_key);
+    let parts = destination.join("parts");
+    let total_chunks = size.div_ceil(chunk_size as u64);
+    {
+        let mut p = progress.lock().unwrap();
+        p.total_chunks = total_chunks;
+        p.message = format!("Compressing chunk 0/{total_chunks}");
+    }
+
+    // Phase 2b: Compression (heavy, offloaded via spawn_blocking inside split_asset)
+    let parts_for_build = parts.clone();
+    let source_for_build = source.clone();
+    let progress_for_compress = progress.clone();
+    let chunk_count = tokio::task::spawn_blocking(move || {
         split_asset(
             &source_for_build,
             &parts_for_build,
             chunk_size,
             "img.zst",
-            Some(&*progress_for_build),
+            Some(&*progress_for_compress),
         )
     })
     .await
+    .map_err(|e| format!("compression task panicked: {e}"))?
+    .map_err(|e| e.to_string())?;
+
     {
-        Ok(Ok(count)) => count,
-        Ok(Err(e)) => {
-            chunk_progress_map().lock().unwrap().remove(&upload_id);
-            if let Err(rollback_err) = rollback_system_version(
-                &state.project_service.pool, &upload_id, system_id, version_number, is_new_system,
-            )
-            .await
-            {
-                tracing::error!("rollback failed after compression error: {rollback_err}");
-            }
-            return Err(e);
-        }
-        Err(e) => {
-            chunk_progress_map().lock().unwrap().remove(&upload_id);
-            if let Err(rollback_err) = rollback_system_version(
-                &state.project_service.pool, &upload_id, system_id, version_number, is_new_system,
-            )
-            .await
-            {
-                tracing::error!("rollback failed after spawn error: {rollback_err}");
-            }
-            return Err(ProjectError::InternalError(e.to_string()));
-        }
-    };
-    {
-        let mut p = chunk_progress_map().lock().unwrap();
-        if let Some(entry) = p.get_mut(&upload_id) {
-            entry.message = "Finalizing…".to_string();
-        }
+        let mut p = progress.lock().unwrap();
+        p.message = "Finalizing…".to_string();
     }
-    fs::create_dir_all(&destination)?;
-    fs::remove_file(&source)?;
+
+    tokio::fs::create_dir_all(&destination)
+        .await
+        .map_err(|e| e.to_string())?;
+    tokio::fs::remove_file(&source)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Phase 3: Brief tx to insert version row and mark consumed
-    let version_result = {
-        let mut tx = state.project_service.pool.begin().await?;
-        let result = sqlx::query(
-            r#"INSERT INTO v86_system_versions
-               (system_id, version_number, original_file_name, storage_key, size_bytes,
-                sha256, chunk_size_bytes, chunk_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(system_id)
-        .bind(version_number)
-        .bind(original_file_name)
-        .bind(&storage_key)
-        .bind(size as i64)
-        .bind(&sha256)
-        .bind(chunk_size as i64)
-        .bind(chunk_count as i64)
-        .execute(&mut *tx)
-        .await?;
-        sqlx::query(
-            "UPDATE v86_system_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        )
-        .bind(&upload_id)
-        .execute(&mut *tx)
-        .await?;
-        tx.commit().await?;
-        result
-    };
-    chunk_progress_map().lock().unwrap().remove(&upload_id);
-    let _ = version_result.last_insert_rowid();
-    let Json(systems) = list_systems(State(state)).await?;
-    systems
-        .into_iter()
-        .find(|system| system.id == system_id)
-        .map(Json)
-        .ok_or(ProjectError::ProjectNotFound)
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    sqlx::query(
+        r#"INSERT INTO v86_system_versions
+           (system_id, version_number, original_file_name, storage_key, size_bytes,
+            sha256, chunk_size_bytes, chunk_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(system_id)
+    .bind(version_number)
+    .bind(original_file_name)
+    .bind(&storage_key)
+    .bind(size as i64)
+    .bind(&sha256)
+    .bind(chunk_size as i64)
+    .bind(chunk_count as i64)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    sqlx::query(
+        "UPDATE v86_system_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    )
+    .bind(upload_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    chunk_progress_map().lock().unwrap().remove(upload_id);
+
+    Ok(())
 }
 
 pub async fn update_system(

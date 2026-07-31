@@ -165,6 +165,7 @@ export async function handle({ event, resolve }) {
 	}
 
 	const accept = event.request.headers.get('accept') ?? '';
+
 	if (accept.includes('text/html')) {
 		event
 			.fetch(route('analytics/visit'), {
@@ -180,7 +181,9 @@ export async function handle({ event, resolve }) {
 			.catch((error) => {
 				console.warn('[analytics] failed to track visit:', error);
 			});
+	}
 
+	if (accept.includes('text/html') || accept.includes('application/sveltekit')) {
 		await populateUser(event);
 	}
 

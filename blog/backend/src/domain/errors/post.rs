@@ -4,6 +4,7 @@ use tracing::error;
 
 use crate::domain::errors::media::MediaError;
 
+#[derive(Debug)]
 pub enum PostError {
     PostNotFound,
     TagNotFound,

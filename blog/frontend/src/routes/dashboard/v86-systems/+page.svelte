@@ -1,8 +1,8 @@
 <script>
-	import { invalidateAll } from '$app/navigation';
 	import { auth } from '$lib/auth/user.svelte.js';
 
 	let { data } = $props();
+	let systems = $state(data.systems);
 	let name = $state('');
 	let replacingSystemId = $state('');
 	let image = $state();
@@ -24,8 +24,10 @@
 		busy = true;
 		critical = false;
 		let uploadId;
+		let interval;
 		try {
-			const existing = data.systems.find((system) => system.id === Number(replacingSystemId));
+			const existing = systems.find((system) => system.id === Number(replacingSystemId));
+			console.log('[upload] creating session', { name: name.trim(), replacingSystemId });
 			const response = await request('/api/v86/systems/upload', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -40,6 +42,7 @@
 			});
 			const session = await response.json();
 			uploadId = session.upload_id;
+			console.log('[upload] session created', uploadId);
 			for (
 				let index = session.next_chunk_index;
 				index * session.chunk_size_bytes < image.size;
@@ -54,30 +57,45 @@
 				});
 				status = `Uploading image… ${Math.round(((start + chunk.size) / image.size) * 100)}%`;
 			}
+			console.log('[upload] all chunks uploaded, calling /complete');
 			status = 'Preparing immutable image chunks…';
-			const interval = setInterval(async () => {
+			interval = setInterval(async () => {
 				try {
 					const res = await fetch(`/api/v86/systems/upload/${session.upload_id}`, {
 						headers: { Authorization: auth() }
 					});
 					if (res.ok) {
 						const data = await res.json();
+						console.log('[upload] poll', { status: data.status, progress: data.chunk_progress });
 						if (data.chunk_progress) {
 							status = data.chunk_progress.message || `Compressing chunk ${data.chunk_progress.completed_chunks}/${data.chunk_progress.total_chunks}`;
+						} else if (data.status === 'consumed') {
+							console.log('[upload] done — system ready');
+							clearInterval(interval);
+							busy = false;
+							status = 'System version ready.';
+							image = undefined;
+							const res = await fetch('/api/v86/systems', { headers: { Authorization: auth() } });
+							if (res.ok) systems = await res.json();
 						} else if (data.status === 'failed') {
+							console.log('[upload] failed:', data.error_message);
+							clearInterval(interval);
+							busy = false;
+							critical = true;
 							status = data.error_message ?? 'Image preparation failed.';
 						}
 					}
-				} catch {}
+				} catch (e) {
+					console.log('[upload] poll error', e);
+				}
 			}, 800);
 			await request(`/api/v86/systems/upload/${session.upload_id}/complete`, {
 				method: 'POST'
 			});
-			clearInterval(interval);
-			status = 'System version ready.';
-			image = undefined;
-			await invalidateAll();
+			console.log('[upload] /complete returned 202, background task running');
 		} catch (error) {
+			console.log('[upload] error in main flow', error);
+			if (interval) clearInterval(interval);
 			if (uploadId) {
 				await fetch(`/api/v86/systems/upload/${uploadId}`, {
 					method: 'DELETE',
@@ -86,7 +104,6 @@
 			}
 			critical = true;
 			status = error?.message ?? 'System upload failed.';
-		} finally {
 			busy = false;
 		}
 	};
@@ -101,7 +118,13 @@
 					expected_current_version: system.current_version
 				})
 			});
-			await invalidateAll();
+			if (patch.name !== undefined) system.name = patch.name;
+			if (patch.is_active !== undefined) system.is_active = patch.is_active;
+			if (patch.is_default === true) {
+				systems.forEach(s => { s.is_default = s.id === system.id; });
+			} else if (patch.is_default === false) {
+				system.is_default = false;
+			}
 		} catch (error) {
 			critical = true;
 			status = error?.message ?? 'System update failed.';
@@ -119,7 +142,7 @@
 			await request(`/api/v86/systems/${system.id}/versions/${version.id}`, {
 				method: 'DELETE'
 			});
-			await invalidateAll();
+			system.versions = system.versions.filter(v => v.id !== version.id);
 		} catch (error) {
 			critical = true;
 			status = error?.message ?? 'Version deletion failed.';
@@ -130,7 +153,7 @@
 		if (!confirm(`Delete ${system.name} and every unreferenced image version?`)) return;
 		try {
 			await request(`/api/v86/systems/${system.id}`, { method: 'DELETE' });
-			await invalidateAll();
+			systems = systems.filter(s => s.id !== system.id);
 		} catch (error) {
 			critical = true;
 			status = error?.message ?? 'System deletion failed.';
@@ -164,7 +187,7 @@
 			Action
 			<select class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark" bind:value={replacingSystemId}>
 				<option value="">Create new system</option>
-				{#each data.systems as system}
+				{#each systems as system}
 					<option value={system.id}>Replace {system.name}</option>
 				{/each}
 			</select>
@@ -190,11 +213,16 @@
 		</div>
 	</form>
 
-	{#each data.systems as system}
+	{#each systems as system}
 		<article class="rounded-xl bg-white p-4 drop-shadow-xl space-y-3">
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div>
-					<h2 class="text-xl font-semibold">{system.name}</h2>
+					<h2 class="text-xl font-semibold">
+						{system.name}
+						{#if system.pending_build && system.versions.length === 0}
+							<span class="text-sm font-normal text-amber-600">(building…)</span>
+						{/if}
+					</h2>
 					<p class="text-sm">
 						{system.platform_key} · current v{system.current_version} · {system.project_count}
 						project(s), {system.published_project_count} published
