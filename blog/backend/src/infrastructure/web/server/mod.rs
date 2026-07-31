@@ -79,6 +79,7 @@ pub struct ProjectDemoConfig {
     pub max_v86_game_files: usize,
     pub v86_upload_chunk_size: u64,
     pub v86_download_chunk_size: u64,
+    pub v86_assets_dir: PathBuf,
     pub xorriso_bin: String,
 }
 
@@ -209,6 +210,9 @@ impl ProjectDemoConfig {
             .expect("PROJECT_V86_DOWNLOAD_CHUNK_BYTES must be an integer");
         let xorriso_bin =
             env::var("PROJECT_V86_XORRISO_BIN").unwrap_or_else(|_| "xorriso".to_string());
+        let v86_assets_dir = env::var("PROJECT_V86_ASSETS_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"));
 
         Self {
             dir,
@@ -224,6 +228,7 @@ impl ProjectDemoConfig {
             max_v86_game_files,
             v86_upload_chunk_size,
             v86_download_chunk_size,
+            v86_assets_dir,
             xorriso_bin,
         }
     }

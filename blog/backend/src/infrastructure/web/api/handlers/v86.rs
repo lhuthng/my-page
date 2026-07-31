@@ -546,6 +546,7 @@ fn windows95_launcher_config(game_dir: &Path, manifest: &str) -> Result<String, 
 
 fn build_windows95_iso(
     state_dir: &Path,
+    assets_dir: &Path,
     xorriso_bin: &str,
     upload_id: &str,
     zip_path: &Path,
@@ -566,8 +567,7 @@ fn build_windows95_iso(
     fs::create_dir_all(&game_dir)?;
     validate_and_extract_game_zip(zip_path, &game_dir, max_files, max_extracted_size)?;
 
-    let launcher = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("assets")
+    let launcher = assets_dir
         .join("v86")
         .join("windows95")
         .join("LAUNCHER.EXE");
@@ -1481,6 +1481,7 @@ pub async fn append_game_chunk(
 async fn process_game_upload(
     pool: &sqlx::SqlitePool,
     config_dir: &Path,
+    assets_dir: &Path,
     xorriso_bin: &str,
     upload_id: &str,
     temp_key: &str,
@@ -1495,6 +1496,7 @@ async fn process_game_upload(
 
     let iso_path = {
         let state_dir = config_dir.to_path_buf();
+        let assets = assets_dir.to_path_buf();
         let xorriso = xorriso_bin.to_string();
         let uid = upload_id.to_string();
         let mf = manifest.to_string();
@@ -1502,6 +1504,7 @@ async fn process_game_upload(
         tokio::task::spawn_blocking(move || {
             build_windows95_iso(
                 &state_dir,
+                &assets,
                 &xorriso,
                 &uid,
                 &src,
@@ -1655,6 +1658,7 @@ pub async fn complete_game_upload(
 
     let pool = state.project_service.pool.clone();
     let config_dir = state.project_demo_config.dir.clone();
+    let assets_dir = state.project_demo_config.v86_assets_dir.clone();
     let upload_id_c = upload_id.clone();
     let temp_key_c = temp_key.clone();
     let manifest_c = manifest.clone();
@@ -1666,6 +1670,7 @@ pub async fn complete_game_upload(
         let result = process_game_upload(
             &pool,
             &config_dir,
+            &assets_dir,
             &xorriso_c,
             &upload_id_c,
             &temp_key_c,
@@ -2188,9 +2193,19 @@ mod tests {
         write_zip(&game_zip, &[("Doraemon.exe", b"game")]);
         let manifest =
             "[game]\r\nexecutable=D:\\GAME\\Doraemon.exe\r\narguments=-m\r\ndelay_ms=1000\r\n";
-        let iso = build_windows95_iso(&root, "xorriso", "proof", &game_zip, manifest, 10, 1024)
-            .ok()
-            .unwrap();
+        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
+        let iso = build_windows95_iso(
+            &root,
+            &assets_dir,
+            "xorriso",
+            "proof",
+            &game_zip,
+            manifest,
+            10,
+            1024,
+        )
+        .ok()
+        .unwrap();
         assert!(iso.is_file());
         let listing = Command::new("xorriso")
             .args(["-indev"])
