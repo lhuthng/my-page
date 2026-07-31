@@ -1,3 +1,5 @@
+use std::fmt::{self, Display};
+
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -6,6 +8,7 @@ use tracing::error;
 
 use crate::domain::errors::{media::MediaError, post::PostError};
 
+#[derive(Debug)]
 pub enum ProjectError {
     ProjectNotFound,
     Forbidden,
@@ -15,6 +18,21 @@ pub enum ProjectError {
     InternalError(String),
     Media(MediaError),
     Post(PostError),
+}
+
+impl Display for ProjectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProjectError::ProjectNotFound => write!(f, "Project not found"),
+            ProjectError::Forbidden => write!(f, "Forbidden"),
+            ProjectError::UploadFailed(msg) => write!(f, "Upload failed: {msg}"),
+            ProjectError::InvalidDemo(msg) => write!(f, "Invalid demo: {msg}"),
+            ProjectError::Conflict(msg) => write!(f, "Conflict: {msg}"),
+            ProjectError::InternalError(msg) => write!(f, "Internal error: {msg}"),
+            ProjectError::Media(_) => write!(f, "Media error"),
+            ProjectError::Post(_) => write!(f, "Post error"),
+        }
+    }
 }
 
 impl IntoResponse for ProjectError {
