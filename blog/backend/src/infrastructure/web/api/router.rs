@@ -313,6 +313,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 )
                 .route(
                     "/games/upload/{upload_id}",
+                    get(handlers::v86::get_game_upload_status),
+                )
+                .route(
+                    "/games/upload/{upload_id}",
                     delete(handlers::v86::abort_game_upload),
                 )
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
