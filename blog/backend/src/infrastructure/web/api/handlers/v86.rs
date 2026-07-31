@@ -18,14 +18,16 @@ use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Sqlite, Transaction};
-use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 use zip::ZipArchive;
 
 use crate::{
     domain::{entities::secret::Claims, errors::project::ProjectError},
-    infrastructure::web::server::AppState,
+    infrastructure::{
+        storage::r2::R2Client,
+        web::server::AppState,
+    },
 };
 
 const MANIFEST_MAX_BYTES: usize = 64 * 1024;
@@ -163,6 +165,43 @@ fn ensure_upload_not_expired(expires_at: &str) -> Result<(), ProjectError> {
         ));
     }
     Ok(())
+}
+
+fn require_r2(state: &AppState) -> Result<R2Client, ProjectError> {
+    state.r2.clone().ok_or_else(|| {
+        ProjectError::InternalError(
+            "R2 storage is not configured; cannot process v86 uploads.".to_string(),
+        )
+    })
+}
+
+fn r2_error(error: crate::infrastructure::storage::r2::R2Error) -> ProjectError {
+    ProjectError::InternalError(error.to_string())
+}
+
+fn transient_r2_key(kind: &str, upload_id: &str, extension: &str) -> String {
+    format!("v86/tmp/{kind}/{upload_id}.{extension}")
+}
+
+fn parse_r2_part_etags(etags: Option<&str>) -> Vec<(i32, String)> {
+    match etags {
+        Some(text) if !text.is_empty() => serde_json::from_str::<Vec<String>>(text)
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+            .map(|(index, etag)| ((index as i32) + 1, etag))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn append_r2_part_etag(existing: Option<&str>, etag: &str) -> String {
+    let mut etags: Vec<String> = match existing {
+        Some(text) if !text.is_empty() => serde_json::from_str(text).unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    etags.push(etag.to_string());
+    serde_json::to_string(&etags).unwrap_or_else(|_| "[]".to_string())
 }
 
 fn temp_upload_path(state: &AppState, kind: &str, upload_id: &str) -> PathBuf {
@@ -737,19 +776,26 @@ pub async fn start_system_upload(
         ));
     }
     let upload_id = Uuid::new_v4().to_string();
-    let temp_path = temp_upload_path(&state, "systems", &upload_id);
-    if let Some(parent) = temp_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
-    tokio::fs::File::create(&temp_path).await?;
+    let r2 = require_r2(&state)?;
+    let transient_key = transient_r2_key("systems", &upload_id, "img");
+    let multipart = r2
+        .create_multipart(&transient_key)
+        .await
+        .map_err(r2_error)?;
+    let r2_upload_id = multipart
+        .upload_id()
+        .ok_or_else(|| {
+            ProjectError::InternalError("R2 did not return a multipart upload id.".to_string())
+        })?
+        .to_string();
     let expires_at =
         Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
     sqlx::query(
         r#"INSERT INTO v86_system_upload_sessions
            (id, uploader_id, system_id, name, platform_key, expected_current_version,
             original_file_name, expected_size_bytes, upload_chunk_size_bytes,
-            temp_storage_key, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            temp_storage_key, r2_upload_id, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -760,10 +806,18 @@ pub async fn start_system_upload(
     .bind(&request.file_name)
     .bind(request.size_bytes as i64)
     .bind(state.project_demo_config.v86_upload_chunk_size as i64)
-    .bind(temp_path.to_string_lossy().as_ref())
+    .bind(&transient_key)
+    .bind(&r2_upload_id)
     .bind(expires_at.to_rfc3339())
     .execute(&state.project_service.pool)
-    .await?;
+    .await
+    .map_err(|error| {
+        let r2 = r2.clone();
+        tokio::spawn(async move {
+            let _ = r2.abort_multipart(&transient_key, &r2_upload_id).await;
+        });
+        error
+    })?;
     Ok(Json(StartUploadResponse {
         upload_id,
         chunk_size_bytes: state.project_demo_config.v86_upload_chunk_size,
@@ -782,7 +836,7 @@ async fn append_upload_chunk(
     bytes: Bytes,
 ) -> Result<ChunkUploadResponse, ProjectError> {
     let query = format!(
-        "SELECT expected_size_bytes, received_size_bytes, next_chunk_index, upload_chunk_size_bytes, temp_storage_key, status, expires_at FROM {table} WHERE id = ? AND uploader_id = ?"
+        "SELECT expected_size_bytes, received_size_bytes, next_chunk_index, upload_chunk_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags, status, expires_at FROM {table} WHERE id = ? AND uploader_id = ?"
     );
     let row = sqlx::query(&query)
         .bind(upload_id)
@@ -810,43 +864,44 @@ async fn append_upload_chunk(
             "Invalid upload chunk size.".to_string(),
         ));
     }
+
+    let r2 = require_r2(state)?;
+    let r2_upload_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
+        ProjectError::InternalError("Upload session is missing its R2 multipart id.".to_string())
+    })?;
+    let etag = r2
+        .upload_part(&temp_key, &r2_upload_id, (chunk_index as i32) + 1, bytes.to_vec())
+        .await
+        .map_err(r2_error)?;
+
     let new_received = received + bytes.len() as i64;
     let new_next = next + 1;
+    let new_etags = append_r2_part_etag(row.get::<Option<String>, _>("r2_part_etags").as_deref(), &etag);
     let update = format!(
-        "UPDATE {table} SET received_size_bytes = ?, next_chunk_index = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active' AND next_chunk_index = ?"
+        "UPDATE {table} SET received_size_bytes = ?, next_chunk_index = ?, r2_part_etags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active' AND next_chunk_index = ?"
     );
     let changed = sqlx::query(&update)
         .bind(new_received)
         .bind(new_next)
+        .bind(&new_etags)
         .bind(upload_id)
         .bind(next)
         .execute(&state.project_service.pool)
         .await?;
     if changed.rows_affected() != 1 {
-        return Err(ProjectError::Conflict(
-            "The upload was changed concurrently.".to_string(),
-        ));
-    }
-    let append_result = async {
-        let mut file = tokio::fs::OpenOptions::new()
-            .append(true)
-            .open(&temp_key)
-            .await?;
-        file.write_all(&bytes).await?;
-        file.flush().await
-    }
-    .await;
-    if let Err(error) = append_result {
+        let _ = r2.abort_multipart(&temp_key, &r2_upload_id).await;
         let failed = format!(
             "UPDATE {table} SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         );
         sqlx::query(&failed)
-            .bind("ISO build failed")
+            .bind("R2 chunk relay conflict")
             .bind(upload_id)
             .execute(&state.project_service.pool)
             .await
             .ok();
-        return Err(error.into());
+        return Err(ProjectError::Conflict(
+            "The upload was changed concurrently.".to_string(),
+        ));
     }
     Ok(ChunkUploadResponse {
         received_size_bytes: new_received as u64,
@@ -880,7 +935,7 @@ pub async fn abort_system_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT temp_storage_key, status FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT temp_storage_key, r2_upload_id, status FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -898,7 +953,14 @@ pub async fn abort_system_upload(
     .bind(&upload_id)
     .execute(&state.project_service.pool)
     .await?;
-    tokio::fs::remove_file(row.get::<String, _>("temp_storage_key"))
+    if let Some(r2) = &state.r2 {
+        let temp_key: String = row.get("temp_storage_key");
+        if let Some(r2_upload_id) = row.get::<Option<String>, _>("r2_upload_id") {
+            let _ = r2.abort_multipart(&temp_key, &r2_upload_id).await;
+        }
+        let _ = r2.delete_object(&temp_key).await;
+    }
+    tokio::fs::remove_file(temp_upload_path(&state, "systems", &upload_id))
         .await
         .ok();
     Ok(StatusCode::NO_CONTENT)
@@ -911,7 +973,7 @@ pub async fn complete_system_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT system_id, name, platform_key, expected_current_version, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, status, expires_at FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT system_id, name, platform_key, expected_current_version, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags, status, expires_at FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -926,10 +988,29 @@ pub async fn complete_system_upload(
             "The base IMG upload is incomplete.".to_string(),
         ));
     }
+    let r2 = require_r2(&state)?;
     let temp_key: String = row.get("temp_storage_key");
-    let mut signature = [0_u8; 512];
-    File::open(&temp_key)?.read_exact(&mut signature)?;
-    if signature[510..512] != [0x55, 0xaa] {
+    let r2_upload_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
+        ProjectError::InternalError("Upload session is missing its R2 multipart id.".to_string())
+    })?;
+    let etags = parse_r2_part_etags(row.get::<Option<String>, _>("r2_part_etags").as_deref());
+    r2.complete_multipart(&temp_key, &r2_upload_id, etags)
+        .await
+        .map_err(r2_error)?;
+    let signature = r2
+        .get_object_range(&temp_key, 0, 511)
+        .await
+        .map_err(r2_error)?;
+    if signature.len() < 512 || signature[510..512] != [0x55, 0xaa] {
+        let _ = r2.delete_object(&temp_key).await;
+        sqlx::query(
+            "UPDATE v86_system_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind("The base IMG does not contain a valid boot-sector signature.")
+        .bind(&upload_id)
+        .execute(&state.project_service.pool)
+        .await
+        .ok();
         return Err(ProjectError::InvalidDemo(
             "The base IMG does not contain a valid boot-sector signature.".to_string(),
         ));
@@ -1009,21 +1090,25 @@ pub async fn complete_system_upload(
         .unwrap()
         .insert(upload_id.clone(), progress.lock().unwrap().clone());
 
-    // Spawn background task for Phases 2-3 (sha256, compression, DB commit)
+    // Spawn background task for Phases 2-3 (sha256, compression, R2 push, DB commit)
     let pool = state.project_service.pool.clone();
+    let r2_c = r2.clone();
     let config_dir = state.project_demo_config.dir.clone();
     let chunk_size = state.project_demo_config.v86_download_chunk_size;
     let upload_id_c = upload_id.clone();
     let temp_key_c = temp_key.clone();
+    let local_download = temp_upload_path(&state, "systems", &upload_id);
     let progress_c = progress.clone();
     let original_file_name_c = original_file_name.clone();
 
     tokio::spawn(async move {
         let result = process_system_upload(
             &pool,
+            &r2_c,
             &config_dir,
             &upload_id_c,
             &temp_key_c,
+            &local_download,
             chunk_size,
             progress_c,
             system_id,
@@ -1045,20 +1130,45 @@ pub async fn complete_system_upload(
     Ok(StatusCode::ACCEPTED)
 }
 
-#[allow(unused_variables)]
+async fn push_dir_to_r2(r2: &R2Client, storage_key: &str, dir: &Path) -> Result<(), String> {
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        names.push(entry.file_name().to_string_lossy().to_string());
+    }
+    names.sort();
+    for name in names {
+        let key = format!("{storage_key}/{name}");
+        r2.put_object_from_file(&key, &dir.join(&name))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 async fn process_system_upload(
     pool: &sqlx::SqlitePool,
+    r2: &R2Client,
     config_dir: &Path,
     upload_id: &str,
-    temp_key: &str,
+    transient_key: &str,
+    local_download: &Path,
     chunk_size: u64,
     progress: Arc<Mutex<ChunkProgress>>,
     system_id: i64,
     version_number: i64,
-    is_new_system: bool,
+    _is_new_system: bool,
     original_file_name: &str,
 ) -> Result<(), String> {
-    let source = PathBuf::from(temp_key);
+    if let Some(parent) = local_download.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    r2.download_to_file(transient_key, local_download)
+        .await
+        .map_err(|e| e.to_string())?;
+    let source = local_download.to_path_buf();
 
     // Phase 2a: Compute sha256 and file size (heavy I/O, offloaded)
     let (size, sha256) = tokio::task::spawn_blocking({
@@ -1069,9 +1179,6 @@ async fn process_system_upload(
     .map_err(|e| format!("sha256 task panicked: {e}"))?
     .map_err(|e| e.to_string())?;
 
-    let storage_key = format!("v86/systems/{system_id}/{version_number}/{sha256}");
-    let destination = config_dir.join(&storage_key);
-    let parts = destination.join("parts");
     let total_chunks = size.div_ceil(chunk_size as u64);
     {
         let mut p = progress.lock().unwrap();
@@ -1079,19 +1186,26 @@ async fn process_system_upload(
         p.message = format!("Compressing chunk 0/{total_chunks}");
     }
 
-    // Phase 2b: Compression (heavy, offloaded via spawn_blocking inside split_asset)
-    let parts_for_build = parts.clone();
-    let source_for_build = source.clone();
-    let progress_for_compress = progress.clone();
-    let chunk_count = tokio::task::spawn_blocking(move || {
-        split_asset(
-            &source_for_build,
-            &parts_for_build,
-            chunk_size,
-            "img.zst",
-            Some(&*progress_for_compress),
-            19,
-        )
+    // Phase 2b: Compression into a transient local parts dir (offloaded)
+    let parts_dir = config_dir
+        .join("v86")
+        .join("tmp")
+        .join("systems")
+        .join(format!("{upload_id}.parts"));
+    let chunk_count = tokio::task::spawn_blocking({
+        let source = source.clone();
+        let parts = parts_dir.clone();
+        let progress_for_compress = progress.clone();
+        move || {
+            split_asset(
+                &source,
+                &parts,
+                chunk_size,
+                "img.zst",
+                Some(&*progress_for_compress),
+                19,
+            )
+        }
     })
     .await
     .map_err(|e| format!("compression task panicked: {e}"))?
@@ -1099,35 +1213,58 @@ async fn process_system_upload(
 
     {
         let mut p = progress.lock().unwrap();
-        p.message = "Finalizing…".to_string();
+        p.message = "Uploading to R2…".to_string();
     }
 
-    tokio::fs::create_dir_all(&destination)
+    // Reserve the version row first so we can key the parts by the version id.
+    let version_id = {
+        let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+        let placeholder = format!("v86/assets/systems/pending/{upload_id}");
+        let result = sqlx::query(
+            r#"INSERT INTO v86_system_versions
+               (system_id, version_number, original_file_name, storage_key, size_bytes,
+                sha256, chunk_size_bytes, chunk_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(system_id)
+        .bind(version_number)
+        .bind(original_file_name)
+        .bind(&placeholder)
+        .bind(size as i64)
+        .bind(&sha256)
+        .bind(chunk_size as i64)
+        .bind(chunk_count as i64)
+        .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
-    tokio::fs::remove_file(&source)
-        .await
-        .map_err(|e| e.to_string())?;
+        tx.commit().await.map_err(|e| e.to_string())?;
+        result.last_insert_rowid()
+    };
 
-    // Phase 3: Brief tx to insert version row and mark consumed
+    let storage_key = format!("v86/assets/systems/{version_id}/{sha256}");
+    if let Err(error) = push_dir_to_r2(r2, &storage_key, &parts_dir).await {
+        let _ = r2.delete_prefix(&storage_key).await;
+        sqlx::query("DELETE FROM v86_system_versions WHERE id = ?")
+            .bind(version_id)
+            .execute(pool)
+            .await
+            .ok();
+        return Err(error);
+    }
+
+    // The transient upload object is owned by this session; delete it now.
+    let _ = r2.delete_object(transient_key).await;
+    let _ = tokio::fs::remove_file(&source).await;
+    let _ = tokio::fs::remove_dir_all(&parts_dir).await;
+
+    // Phase 3: Point the version row at its real R2 key and mark the session consumed.
     let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-    sqlx::query(
-        r#"INSERT INTO v86_system_versions
-           (system_id, version_number, original_file_name, storage_key, size_bytes,
-            sha256, chunk_size_bytes, chunk_count)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-    )
-    .bind(system_id)
-    .bind(version_number)
-    .bind(original_file_name)
-    .bind(&storage_key)
-    .bind(size as i64)
-    .bind(&sha256)
-    .bind(chunk_size as i64)
-    .bind(chunk_count as i64)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
+    sqlx::query("UPDATE v86_system_versions SET storage_key = ? WHERE id = ?")
+        .bind(&storage_key)
+        .bind(version_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
     sqlx::query(
         "UPDATE v86_system_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
@@ -1294,6 +1431,9 @@ pub async fn delete_system_version(
         .bind(version_id)
         .execute(&state.project_service.pool)
         .await?;
+    if let Some(r2) = &state.r2 {
+        let _ = r2.delete_prefix(&format!("v86/assets/systems/{version_id}")).await;
+    }
     tokio::fs::remove_dir_all(state.project_demo_config.dir.join(storage_key))
         .await
         .ok();
@@ -1322,6 +1462,11 @@ pub async fn delete_system(
             .bind(system_id)
             .fetch_all(&state.project_service.pool)
             .await?;
+    let version_ids: Vec<i64> =
+        sqlx::query_scalar("SELECT id FROM v86_system_versions WHERE system_id = ?")
+            .bind(system_id)
+            .fetch_all(&state.project_service.pool)
+            .await?;
     sqlx::query(
         r#"DELETE FROM project_v86_upload_sessions
            WHERE system_version_id IN (
@@ -1337,6 +1482,13 @@ pub async fn delete_system(
         .await?;
     if changed.rows_affected() != 1 {
         return Err(ProjectError::ProjectNotFound);
+    }
+    if let Some(r2) = &state.r2 {
+        for version_id in version_ids {
+            let _ = r2
+                .delete_prefix(&format!("v86/assets/systems/{version_id}"))
+                .await;
+        }
     }
     for key in keys {
         tokio::fs::remove_dir_all(state.project_demo_config.dir.join(key))
@@ -1366,12 +1518,10 @@ pub async fn start_game_upload(
         ));
     }
     let upload_id = Uuid::new_v4().to_string();
-    let temp_path = temp_upload_path(&state, "games", &upload_id);
-    if let Some(parent) = temp_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
-    let (file_name, expected_size, upload_required) = if let Some(project_id) =
-        request.source_project_id
+    let r2 = require_r2(&state)?;
+    let mut r2_upload_id: Option<String> = None;
+    let (file_name, expected_size, upload_required, temp_storage_key, received_size) =
+        if let Some(project_id) = request.source_project_id
     {
         require_project_owner(&state, project_id, uploader_id).await?;
         let source = sqlx::query(
@@ -1393,15 +1543,21 @@ pub async fn start_game_upload(
                     "The game ZIP exceeds the configured limit.".to_string(),
                 ));
             }
-            tokio::fs::File::create(&temp_path).await?;
-            (file_name.clone(), size, true)
+            let transient_key = transient_r2_key("games", &upload_id, "zip");
+            let multipart = r2
+                .create_multipart(&transient_key)
+                .await
+                .map_err(r2_error)?;
+            r2_upload_id = multipart.upload_id().map(str::to_string);
+            (file_name.clone(), size, true, transient_key, 0)
         } else {
             let source_key: String = source.get("zip_storage_key");
-            tokio::fs::copy(state.project_demo_config.dir.join(source_key), &temp_path).await?;
             (
                 source.get::<String, _>("original_file_name"),
                 source.get::<i64, _>("zip_size_bytes") as u64,
                 false,
+                source_key,
+                source.get::<i64, _>("zip_size_bytes") as i64,
             )
         }
     } else {
@@ -1417,8 +1573,13 @@ pub async fn start_game_upload(
                 "The game ZIP exceeds the configured limit.".to_string(),
             ));
         }
-        tokio::fs::File::create(&temp_path).await?;
-        (file_name, size, true)
+        let transient_key = transient_r2_key("games", &upload_id, "zip");
+        let multipart = r2
+            .create_multipart(&transient_key)
+            .await
+            .map_err(r2_error)?;
+        r2_upload_id = multipart.upload_id().map(str::to_string);
+        (file_name, size, true, transient_key, 0)
     };
     let expires_at =
         Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
@@ -1427,8 +1588,8 @@ pub async fn start_game_upload(
            (id, uploader_id, source_project_id, system_version_id,
             expected_artifact_revision, manifest_text, manifest_sha256,
             original_file_name, expected_size_bytes, received_size_bytes,
-            upload_chunk_size_bytes, temp_storage_key, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            upload_chunk_size_bytes, temp_storage_key, r2_upload_id, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -1439,16 +1600,24 @@ pub async fn start_game_upload(
     .bind(manifest_sha)
     .bind(&file_name)
     .bind(expected_size as i64)
-    .bind(if upload_required {
-        0
-    } else {
-        expected_size as i64
-    })
+    .bind(received_size)
     .bind(state.project_demo_config.v86_upload_chunk_size as i64)
-    .bind(temp_path.to_string_lossy().as_ref())
+    .bind(&temp_storage_key)
+    .bind(&r2_upload_id)
     .bind(expires_at.to_rfc3339())
     .execute(&state.project_service.pool)
-    .await?;
+    .await
+    .map_err(|error| {
+        if let Some(upload_id) = &r2_upload_id {
+            let r2 = r2.clone();
+            let transient_key = temp_storage_key.clone();
+            let upload_id = upload_id.clone();
+            tokio::spawn(async move {
+                let _ = r2.abort_multipart(&transient_key, &upload_id).await;
+            });
+        }
+        error
+    })?;
     Ok(Json(StartUploadResponse {
         upload_id,
         chunk_size_bytes: state.project_demo_config.v86_upload_chunk_size,
@@ -1477,22 +1646,29 @@ pub async fn append_game_chunk(
     ))
 }
 
-#[allow(unused_variables)]
 async fn process_game_upload(
     pool: &sqlx::SqlitePool,
+    r2: &R2Client,
     config_dir: &Path,
     assets_dir: &Path,
     xorriso_bin: &str,
     upload_id: &str,
-    temp_key: &str,
+    transient_key: &str,
+    local_download: &Path,
     manifest: &str,
-    original_file_name: &str,
     max_files: usize,
     max_extracted_size: u64,
-    chunk_size: u64,
     progress: Arc<Mutex<ChunkProgress>>,
 ) -> Result<(), String> {
-    let source = PathBuf::from(temp_key);
+    if let Some(parent) = local_download.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    r2.download_to_file(transient_key, local_download)
+        .await
+        .map_err(|e| e.to_string())?;
+    let source = local_download.to_path_buf();
 
     let iso_path = {
         let state_dir = config_dir.to_path_buf();
@@ -1534,54 +1710,28 @@ async fn process_game_upload(
     .map_err(|e| format!("sha256 task panicked: {e}"))?
     .map_err(|e| e.to_string())?;
 
-    let storage_root = config_dir.join("v86").join("games").join(upload_id);
-    tokio::fs::create_dir_all(&storage_root)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let zip_key = format!("v86/games/{upload_id}/{zip_sha}.zip");
-    let iso_key = format!("v86/games/{upload_id}/{iso_sha}");
-    let zip_path = config_dir.join(&zip_key);
-    tokio::fs::rename(&source, &zip_path)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let iso_dir = config_dir.join(&iso_key);
-    tokio::fs::create_dir_all(&iso_dir)
-        .await
-        .map_err(|e| e.to_string())?;
-    tokio::fs::rename(&iso_path, iso_dir.join("game.iso"))
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let iso_source = iso_dir.join("game.iso");
-    let parts = iso_dir.join("parts");
-    let total_chunks = iso_size.div_ceil(chunk_size as u64);
     {
         let mut p = progress.lock().unwrap();
-        p.total_chunks = total_chunks;
-        p.message = format!("Compressing chunk 0/{total_chunks}");
+        p.message = "Uploading to R2…".to_string();
     }
 
-    let progress_for_compress = progress.clone();
-    let chunk_count = tokio::task::spawn_blocking(move || {
-        split_asset(
-            &iso_source,
-            &parts,
-            chunk_size,
-            "iso.zst",
-            Some(&*progress_for_compress),
-            3,
-        )
-    })
-    .await
-    .map_err(|e| format!("compression task panicked: {e}"))?
-    .map_err(|e| e.to_string())?;
+    // Content-addressed artifacts the browser serves straight from R2.
+    let zip_key = format!("v86/games/zips/{zip_sha}.zip");
+    let iso_key = format!("v86/games/{iso_sha}");
+    let iso_r2_key = format!("{iso_key}/full.iso");
+    r2.put_object_from_file(&zip_key, &source)
+        .await
+        .map_err(|e| e.to_string())?;
+    r2.put_object_from_file(&iso_r2_key, &iso_path)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    {
-        let mut p = progress.lock().unwrap();
-        p.message = "Finalizing…".to_string();
+    // Drop the session-owned transient ZIP (a reused source key is left alone).
+    if transient_key.starts_with("v86/tmp/games/") {
+        let _ = r2.delete_object(transient_key).await;
     }
+    let _ = tokio::fs::remove_file(&source).await;
+    let _ = tokio::fs::remove_dir_all(config_dir.join("v86/tmp/build").join(upload_id)).await;
 
     sqlx::query(
         r#"UPDATE project_v86_upload_sessions
@@ -1596,7 +1746,7 @@ async fn process_game_upload(
     .bind(&iso_key)
     .bind(&iso_sha)
     .bind(iso_size as i64)
-    .bind(chunk_count as i64)
+    .bind(1_i64)
     .bind(upload_id)
     .execute(pool)
     .await
@@ -1614,7 +1764,7 @@ pub async fn complete_game_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT manifest_text, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT manifest_text, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -1629,6 +1779,15 @@ pub async fn complete_game_upload(
             "The game ZIP upload is incomplete.".to_string(),
         ));
     }
+    let uploaded_transient = row.get::<Option<String>, _>("r2_upload_id").is_some();
+    if let Some(r2_upload_id) = row.get::<Option<String>, _>("r2_upload_id") {
+        let r2 = require_r2(&state)?;
+        let temp_key: String = row.get("temp_storage_key");
+        let etags = parse_r2_part_etags(row.get::<Option<String>, _>("r2_part_etags").as_deref());
+        r2.complete_multipart(&temp_key, &r2_upload_id, etags)
+            .await
+            .map_err(r2_error)?;
+    }
     sqlx::query(
         "UPDATE project_v86_upload_sessions SET status = 'building', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'",
     )
@@ -1638,11 +1797,9 @@ pub async fn complete_game_upload(
 
     let manifest: String = row.get("manifest_text");
     let temp_key: String = row.get("temp_storage_key");
-    let original_file_name: String = row.get("original_file_name");
     let xorriso = state.project_demo_config.xorriso_bin.clone();
     let max_files = state.project_demo_config.max_v86_game_files;
     let max_extracted = state.project_demo_config.max_v86_game_extracted_size;
-    let chunk_size = state.project_demo_config.v86_download_chunk_size;
 
     let progress = Arc::new(Mutex::new(ChunkProgress {
         upload_id: upload_id.clone(),
@@ -1657,33 +1814,42 @@ pub async fn complete_game_upload(
         .insert(upload_id.clone(), progress.lock().unwrap().clone());
 
     let pool = state.project_service.pool.clone();
+    let r2 = require_r2(&state)?;
+    let r2_c = r2.clone();
     let config_dir = state.project_demo_config.dir.clone();
     let assets_dir = state.project_demo_config.v86_assets_dir.clone();
     let upload_id_c = upload_id.clone();
     let temp_key_c = temp_key.clone();
+    let local_download = temp_upload_path(&state, "games", &upload_id);
+    let local_download_c = local_download.clone();
     let manifest_c = manifest.clone();
-    let original_file_name_c = original_file_name.clone();
     let xorriso_c = xorriso.clone();
     let progress_c = progress.clone();
 
     tokio::spawn(async move {
         let result = process_game_upload(
             &pool,
+            &r2_c,
             &config_dir,
             &assets_dir,
             &xorriso_c,
             &upload_id_c,
             &temp_key_c,
+            &local_download_c,
             &manifest_c,
-            &original_file_name_c,
             max_files,
             max_extracted,
-            chunk_size,
             progress_c,
         )
         .await;
         if let Err(e) = result {
             tracing::error!("Background game upload failed for {upload_id_c}: {e}");
+            if uploaded_transient {
+                let _ = r2_c.delete_object(&temp_key_c).await;
+            }
+            let _ = tokio::fs::remove_file(&local_download_c).await;
+            let _ = tokio::fs::remove_dir_all(config_dir.join("v86/tmp/build").join(&upload_id_c))
+                .await;
             let _ = sqlx::query(
                 "UPDATE project_v86_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             )
@@ -1835,7 +2001,7 @@ pub async fn abort_game_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT temp_storage_key, staged_zip_storage_key, staged_iso_storage_key, status FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT temp_storage_key, r2_upload_id, status FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -1854,18 +2020,16 @@ pub async fn abort_game_upload(
     .bind(&upload_id)
     .execute(&state.project_service.pool)
     .await?;
-    let temp: String = row.get("temp_storage_key");
-    tokio::fs::remove_file(temp).await.ok();
-    if let Some(zip_key) = row.get::<Option<String>, _>("staged_zip_storage_key") {
-        tokio::fs::remove_file(state.project_demo_config.dir.join(zip_key))
-            .await
-            .ok();
+    if let Some(r2) = &state.r2 {
+        let temp: String = row.get("temp_storage_key");
+        if let Some(r2_upload_id) = row.get::<Option<String>, _>("r2_upload_id") {
+            let _ = r2.abort_multipart(&temp, &r2_upload_id).await;
+        }
+        let _ = r2.delete_object(&temp).await;
     }
-    if let Some(iso_key) = row.get::<Option<String>, _>("staged_iso_storage_key") {
-        tokio::fs::remove_dir_all(state.project_demo_config.dir.join(iso_key))
-            .await
-            .ok();
-    }
+    tokio::fs::remove_file(temp_upload_path(&state, "games", &upload_id))
+        .await
+        .ok();
     tokio::fs::remove_dir_all(
         state
             .project_demo_config
@@ -1910,6 +2074,7 @@ pub async fn get_game_upload_status(
 pub async fn runtime_descriptor(
     pool: &sqlx::SqlitePool,
     slug: &str,
+    r2_public_url: Option<&str>,
 ) -> Result<Option<V86RuntimeDescriptor>, ProjectError> {
     let row = sqlx::query(
         r#"SELECT s.name AS system_name, s.platform_key, v.id AS system_version_id,
@@ -1931,6 +2096,16 @@ pub async fn runtime_descriptor(
         let version_id: i64 = row.get("system_version_id");
         let base_sha: String = row.get("base_sha");
         let iso_sha: String = row.get("iso_sha256");
+        let (base_url, iso_url) = match r2_public_url {
+            Some(r2) => (
+                format!("{}/v86/assets/systems/{version_id}/{base_sha}/.img.zst", r2.trim_end_matches('/')),
+                format!("{}/v86/games/{iso_sha}/full.iso", r2.trim_end_matches('/')),
+            ),
+            None => (
+                format!("v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
+                format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
+            ),
+        };
         V86RuntimeDescriptor {
             platform_key: row.get("platform_key"),
             system_name: row.get("system_name"),
@@ -1948,10 +2123,10 @@ pub async fn runtime_descriptor(
             chunk_size_bytes: row.get::<i64, _>("chunk_size_bytes") as u64,
             base_size_bytes: row.get::<i64, _>("base_size") as u64,
             base_sha256: base_sha.clone(),
-            base_url: format!("v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
+            base_url,
             iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
             iso_sha256: iso_sha.clone(),
-            iso_url: format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
+            iso_url,
         }
     }))
 }
@@ -1990,6 +2165,14 @@ pub async fn get_system_chunk(
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
     if part == ".img" || part.contains('/') || !(part.ends_with(".img") || part.ends_with(".img.zst")) {
         return Err(ProjectError::ProjectNotFound);
+    }
+    if let Some(r2) = &state.r2 {
+        let key = format!("v86/assets/systems/{version_id}/{sha256}/{part}");
+        let bytes = r2
+            .get_object(&key)
+            .await
+            .map_err(|_| ProjectError::ProjectNotFound)?;
+        return Ok(immutable_chunk_response(bytes, "application/octet-stream"));
     }
     let bytes = tokio::fs::read(
         state
@@ -2061,6 +2244,36 @@ pub async fn get_game_iso(
         return Err(ProjectError::InternalError(
             "Invalid v86 game storage key.".to_string(),
         ));
+    }
+
+    if let Some(r2) = &state.r2 {
+        let key = format!("v86/games/{sha256}/full.iso");
+        let size = r2
+            .object_size(&key)
+            .await
+            .map_err(r2_error)?
+            .ok_or(ProjectError::ProjectNotFound)?;
+        let reader = r2.get_object_reader(&key).await.map_err(r2_error)?;
+        let mut response = Response::new(axum::body::Body::from_stream(ReaderStream::new(reader)));
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/octet-stream"),
+        );
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        );
+        response.headers_mut().insert(
+            header::CONTENT_LENGTH,
+            HeaderValue::from_str(&size.to_string())
+                .map_err(|error| ProjectError::InternalError(error.to_string()))?,
+        );
+        response.headers_mut().insert(
+            header::ETAG,
+            HeaderValue::from_str(&format!("\"{sha256}\""))
+                .map_err(|error| ProjectError::InternalError(error.to_string()))?,
+        );
+        return Ok(response);
     }
 
     let file = tokio::fs::File::open(

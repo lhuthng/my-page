@@ -828,6 +828,35 @@ fn normalize_links(links: Vec<ProjectLink>) -> Vec<ProjectLink> {
         .collect()
 }
 
+/// Best-effort cleanup of a v86 game's R2 objects and any legacy local files.
+/// Content-addressed objects are only removed once no other project references them.
+async fn delete_v86_game_objects(state: &AppState, zip_key: &str, iso_key: &str) {
+    if let Some(r2) = &state.r2 {
+        let zip_refs: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM project_v86_games WHERE zip_storage_key = ?",
+        )
+        .bind(zip_key)
+        .fetch_one(&state.project_service.pool)
+        .await
+        .unwrap_or(1);
+        if zip_refs == 0 {
+            let _ = r2.delete_object(zip_key).await;
+        }
+        let iso_refs: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM project_v86_games WHERE iso_storage_key = ?",
+        )
+        .bind(iso_key)
+        .fetch_one(&state.project_service.pool)
+        .await
+        .unwrap_or(1);
+        if iso_refs == 0 {
+            let _ = r2.delete_prefix(iso_key).await;
+        }
+    }
+    let _ = tokio::fs::remove_file(state.project_demo_config.dir.join(zip_key)).await;
+    let _ = tokio::fs::remove_dir_all(state.project_demo_config.dir.join(iso_key)).await;
+}
+
 pub async fn get_jsdos_bundle(
     State(state): State<Arc<AppState>>,
     AxumPath(slug): AxumPath<String>,
@@ -1091,12 +1120,7 @@ pub async fn delete_project_draft(
         .await?;
     tx.commit().await?;
     if let Some((zip_key, iso_key)) = v86_storage {
-        tokio::fs::remove_file(state.project_demo_config.dir.join(zip_key))
-            .await
-            .ok();
-        tokio::fs::remove_dir_all(state.project_demo_config.dir.join(iso_key))
-            .await
-            .ok();
+        delete_v86_game_objects(&state, &zip_key, &iso_key).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1288,12 +1312,7 @@ pub async fn update_project(
         .await?;
         tx.commit().await?;
         if let Some((zip_key, iso_key)) = old_v86_storage.as_ref() {
-            tokio::fs::remove_file(state.project_demo_config.dir.join(zip_key))
-                .await
-                .ok();
-            tokio::fs::remove_dir_all(state.project_demo_config.dir.join(iso_key))
-                .await
-                .ok();
+            delete_v86_game_objects(&state, zip_key, iso_key).await;
         }
     }
 
@@ -1321,12 +1340,7 @@ pub async fn update_project(
             .execute(&state.project_service.pool)
             .await?;
         if let Some((zip_key, iso_key)) = old_v86_storage {
-            tokio::fs::remove_file(state.project_demo_config.dir.join(zip_key))
-                .await
-                .ok();
-            tokio::fs::remove_dir_all(state.project_demo_config.dir.join(iso_key))
-                .await
-                .ok();
+            delete_v86_game_objects(&state, &zip_key, &iso_key).await;
         }
     }
 
@@ -1557,8 +1571,12 @@ pub async fn get_project_by_slug(
         .await?;
     let mut response = project_response(project, include_draft);
     if response.demo_type == "v86" {
-        response.v86_runtime =
-            runtime_descriptor(&state.project_service.pool, &response.slug).await?;
+        response.v86_runtime = runtime_descriptor(
+            &state.project_service.pool,
+            &response.slug,
+            state.config.r2_public_url.as_deref(),
+        )
+        .await?;
         let game = sqlx::query(
             "SELECT system_version_id, manifest_text, artifact_revision, original_file_name FROM project_v86_games WHERE project_id = ?",
         )
