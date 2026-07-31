@@ -15,6 +15,10 @@
 	let mouseRemainderX = 0;
 	let mouseRemainderY = 0;
 	let mouseSensitivity = $state(0.4);
+	let noiseReductionStrength = $state(200);
+	let disableMouseWheel = $state(true);
+	let noiseChain = null;
+	let noiseChainPromise = null;
 
 	const loadRuntime = () =>
 		new Promise((resolve, reject) => {
@@ -89,7 +93,19 @@
 			status = `Booting ${runtime.system_name}…`;
 			emulator.add_listener?.('emulator-ready', () => {
 				status = 'Running';
+				applyNoiseFilter().catch(() => {});
 			});
+			emulator.add_listener?.('download-progress', (info) => {
+				if (info?.file_name !== runtime.iso_url) return;
+				const loaded = Math.floor((info.loaded ?? 0) / 1048576);
+				const total = Math.floor((info.total ?? 0) / 1048576);
+				if (info.loaded != null && info.total != null && info.loaded >= info.total) {
+					status = `Booting ${runtime.system_name}…`;
+				} else {
+					status = `Downloading ISO (${loaded} / ${total} MB)`;
+				}
+			});
+			applyNoiseFilter().catch(() => {});
 		} catch (cause) {
 			error = cause?.message ?? 'v86 failed to start.';
 			status = '';
@@ -121,6 +137,153 @@
 				if (shell?.contains(context)) context.remove();
 			}
 		}
+	};
+
+	const createNoiseGateWorkletUrl = () => {
+		const source = `
+			class NoiseGateProcessor extends AudioWorkletProcessor {
+				constructor() {
+					super();
+					this.envelope = 0;
+					this.threshold = 0.008;
+					this.attack = 0.004;
+					this.release = 0.18;
+					this.port.onmessage = (event) => {
+						if (event.data?.type === 'threshold') this.threshold = event.data.value;
+					};
+				}
+				process(inputs, outputs) {
+					const input = inputs[0];
+					const output = outputs[0];
+					if (!input || !input[0] || !output || !output[0]) return true;
+					const inL = input[0];
+					const inR = input[1] || inL;
+					const outL = output[0];
+					const outR = output[1] || outL;
+					const n = inL.length;
+					const atk = 1 - Math.exp(-1 / (this.attack * sampleRate));
+					const rel = 1 - Math.exp(-1 / (this.release * sampleRate));
+					for (let i = 0; i < n; i++) {
+						const peak = Math.abs(inL[i]) > Math.abs(inR[i]) ? Math.abs(inL[i]) : Math.abs(inR[i]);
+						const target = peak > this.threshold ? 1 : 0;
+						this.envelope =
+							target > this.envelope
+								? this.envelope + (1 - this.envelope) * atk
+								: this.envelope * (1 - rel);
+						outL[i] = inL[i] * this.envelope;
+						outR[i] = inR[i] * this.envelope;
+					}
+					return true;
+				}
+			}
+			registerProcessor('v86-noise-gate', NoiseGateProcessor);
+		`;
+		return URL.createObjectURL(new Blob([source], { type: 'application/javascript' }));
+	};
+
+	const buildNoiseChain = async (ctx) => {
+		let lowpass;
+		try {
+			lowpass = ctx.createBiquadFilter();
+			lowpass.type = 'lowpass';
+			lowpass.frequency.value = 8000;
+			lowpass.Q.value = 0.7;
+		} catch {
+			return null;
+		}
+		let gate = null;
+		try {
+			if (ctx.audioWorklet?.addModule) {
+				const url = createNoiseGateWorkletUrl();
+				await Promise.race([
+					ctx.audioWorklet.addModule(url),
+					new Promise((_, reject) =>
+						setTimeout(() => reject(new Error('worklet load timed out')), 1500)
+					)
+				]);
+				URL.revokeObjectURL(url);
+				gate = new AudioWorkletNode(ctx, 'v86-noise-gate', {
+					numberOfInputs: 1,
+					numberOfOutputs: 1,
+					outputChannelCount: [2]
+				});
+			}
+		} catch (cause) {
+			console.warn('v86 noise-gate worklet unavailable, falling back.', cause);
+		}
+		if (!gate && ctx.createScriptProcessor) {
+			gate = ctx.createScriptProcessor(4096, 2, 2);
+			gate.threshold = 0.008;
+			let envelope = 0;
+			const atk = 1 - Math.exp(-1 / (0.004 * ctx.sampleRate));
+			const rel = 1 - Math.exp(-1 / (0.18 * ctx.sampleRate));
+			gate.onaudioprocess = function (event) {
+				const inL = event.inputBuffer.getChannelData(0);
+				const inR = event.inputBuffer.getChannelData(1);
+				const outL = event.outputBuffer.getChannelData(0);
+				const outR = event.outputBuffer.getChannelData(1);
+				const threshold = this.threshold;
+				for (let i = 0; i < inL.length; i++) {
+					const peak = Math.abs(inL[i]) > Math.abs(inR[i]) ? Math.abs(inL[i]) : Math.abs(inR[i]);
+					const target = peak > threshold ? 1 : 0;
+					envelope = target > envelope ? envelope + (1 - envelope) * atk : envelope * (1 - rel);
+					outL[i] = inL[i] * envelope;
+					outR[i] = inR[i] * envelope;
+				}
+			};
+		}
+		if (gate) {
+			lowpass.connect(gate);
+			gate.connect(ctx.destination);
+		} else {
+			lowpass.connect(ctx.destination);
+		}
+		return { lowpass, gate };
+	};
+
+	const ensureNoiseChain = async (ctx) => {
+		if (noiseChain?.ctx === ctx) return noiseChain;
+		if (noiseChainPromise) {
+			await noiseChainPromise;
+			if (noiseChain?.ctx === ctx) return noiseChain;
+		}
+		noiseChainPromise = buildNoiseChain(ctx).then((chain) => {
+			noiseChain = chain ? { ctx, ...chain } : null;
+			return noiseChain;
+		});
+		try {
+			return await noiseChainPromise;
+		} finally {
+			noiseChainPromise = null;
+		}
+	};
+
+	const applyNoiseParams = (chain, strength) => {
+		if (!chain) return;
+		const t = Math.min(1, Math.max(0, strength / 200));
+		chain.lowpass.frequency.value = 11000 - t * 7000;
+		const threshold = 0.02 * Math.pow(0.1, t);
+		if (chain.gate?.port) chain.gate.port.postMessage({ type: 'threshold', value: threshold });
+		else if (chain.gate) chain.gate.threshold = threshold;
+	};
+
+	const applyNoiseFilter = async () => {
+		const speaker = emulator?.speaker_adapter;
+		const mixer = speaker?.mixer;
+		const ctx = speaker?.audio_context;
+		if (!mixer?.node_merger || !ctx || ctx.state === 'closed') return;
+		if (noiseReductionStrength <= 0) {
+			if (noiseChain) {
+				mixer.node_merger.disconnect();
+				mixer.node_merger.connect(ctx.destination);
+			}
+			return;
+		}
+		const chain = await ensureNoiseChain(ctx);
+		if (!chain) return;
+		applyNoiseParams(chain, noiseReductionStrength);
+		mixer.node_merger.disconnect();
+		mixer.node_merger.connect(chain.lowpass);
 	};
 
 	const handleCapturedMouseMove = (event) => {
@@ -157,40 +320,87 @@
 			pressed.delete(event.code);
 			if (!pressed.has('F8') || !pressed.has('F9')) fullscreenComboLatched = false;
 		};
+		const preventWheel = (event) => {
+			if (!disableMouseWheel || !shell?.contains(event.target)) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		};
 		window.addEventListener('keydown', keydown, true);
 		window.addEventListener('keyup', keyup, true);
 		window.addEventListener('mousemove', handleCapturedMouseMove, true);
+		window.addEventListener('wheel', preventWheel, { passive: false, capture: true });
 		start();
 		return () => {
 			disposed = true;
 			window.removeEventListener('keydown', keydown, true);
 			window.removeEventListener('keyup', keyup, true);
 			window.removeEventListener('mousemove', handleCapturedMouseMove, true);
+			window.removeEventListener('wheel', preventWheel, { capture: true });
 			destroy();
 		};
 	});
 </script>
 
 <Portal target={beforeDemoPortal} class="text-dark/75 text-base w-full flex flex-col">
-  <span>Status: {status}</span>
+	<span>Status: {status}</span>
 	<span>Click the game to capture the mouse.</span>
-	<span>Press <kbd>Esc</kbd> to release it. </span>
-	<span>Press	<kbd>F8</kbd>+	<kbd>F9</kbd>	together to toggle fullscreen.</span>
+	<span>
+		Press <kbd>Esc</kbd>
+		to release it.
+	</span>
+	<span>
+		Press <kbd>F8</kbd>
+		+
+		<kbd>F9</kbd>
+		together to toggle fullscreen.
+	</span>
 </Portal>
 
 <Portal target={afterDemoPortal}>
-  <label class="flex items-center gap-2 mt-1 text-dark/75">
-		<span>Mouse sensitivity:</span>
-		<input
-			type="range"
-			min="0.05"
-			max="1"
-			step="0.05"
-			bind:value={mouseSensitivity}
-			class="w-24"
-		/>
-		<span class="tabular-nums w-8">{mouseSensitivity.toFixed(2)}</span>
-	</label>
+	<div>
+		<label class="flex items-center gap-2 mt-1 text-dark/75">
+			<input type="checkbox" bind:checked={disableMouseWheel} class="accent-primary h-4 w-4" />
+			<span
+				class="underline decoration-dashed underline-offset-2 cursor-help"
+				title="Wheel could break the some games."
+			>
+				Disable mousewheel
+			</span>
+		</label>
+		<label class="flex items-center gap-2 mt-1 text-dark/75">
+			<span>Noise filter:</span>
+			<input
+				type="range"
+				min="0"
+				max="200"
+				step="10"
+				bind:value={noiseReductionStrength}
+				oninput={() => applyNoiseFilter().catch(() => {})}
+				class="w-24"
+			/>
+			<span class="tabular-nums w-14">
+				{noiseReductionStrength <= 0
+					? 'None'
+					: noiseReductionStrength <= 80
+						? 'Light'
+						: noiseReductionStrength <= 140
+							? 'Medium'
+							: 'Strong'}
+			</span>
+		</label>
+		<label class="flex items-center gap-2 mt-1 text-dark/75">
+			<span>Mouse sensitivity:</span>
+			<input
+				type="range"
+				min="0.05"
+				max="1"
+				step="0.05"
+				bind:value={mouseSensitivity}
+				class="w-24"
+			/>
+			<span class="tabular-nums w-8">{mouseSensitivity.toFixed(2)}</span>
+		</label>
+	</div>
 </Portal>
 
 <div class="v86-shell absolute inset-0 grid bg-black" bind:this={shell}>
@@ -217,11 +427,11 @@
 </div>
 
 <style lang="postcss">
-  @reference "../../../app.css";
+	@reference "../../../app.css";
 
-  kbd {
-    @apply font-bold;
-  }
+	kbd {
+		@apply font-bold;
+	}
 	.v86-shell {
 		grid-template-rows: 1fr;
 	}
@@ -251,7 +461,7 @@
 		height: 100vh;
 	}
 	.v86-shell:fullscreen :global(canvas) {
-	  @apply w-full! h-full! max-w-dvw max-h-dvh object-contain;
+		@apply h-full! max-h-dvh w-full! max-w-dvw object-contain;
 		image-rendering: auto;
 	}
 	input[type='range'] {
