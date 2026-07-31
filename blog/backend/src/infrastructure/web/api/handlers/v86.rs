@@ -90,16 +90,6 @@ pub struct ChunkUploadResponse {
     pub next_chunk_index: u64,
 }
 
-#[derive(Serialize)]
-pub struct ReadyGameUploadResponse {
-    pub upload_id: String,
-    pub status: String,
-    pub zip_sha256: String,
-    pub iso_sha256: String,
-    pub iso_size_bytes: u64,
-    pub chunk_count: u64,
-}
-
 #[derive(Deserialize)]
 pub struct UpdateSystemRequest {
     pub name: Option<String>,
@@ -207,6 +197,7 @@ fn split_asset(
     chunk_size: u64,
     extension: &str,
     progress: Option<&Mutex<ChunkProgress>>,
+    compression_level: i32,
 ) -> Result<u64, ProjectError> {
     fs::create_dir_all(destination)?;
     let mut input = File::open(source)?;
@@ -232,7 +223,7 @@ fn split_asset(
         let end = start + chunk_size;
         let part_path = destination.join(format!("{start}-{end}.{extension}"));
         let output = File::create(&part_path)?;
-        let mut encoder = zstd::stream::write::Encoder::new(output, 19)?;
+        let mut encoder = zstd::stream::write::Encoder::new(output, compression_level)?;
         encoder.write_all(&buffer)?;
         encoder.finish()?;
         start = end;
@@ -1099,6 +1090,7 @@ async fn process_system_upload(
             chunk_size,
             "img.zst",
             Some(&*progress_for_compress),
+            19,
         )
     })
     .await
@@ -1485,11 +1477,138 @@ pub async fn append_game_chunk(
     ))
 }
 
+#[allow(unused_variables)]
+async fn process_game_upload(
+    pool: &sqlx::SqlitePool,
+    config_dir: &Path,
+    xorriso_bin: &str,
+    upload_id: &str,
+    temp_key: &str,
+    manifest: &str,
+    original_file_name: &str,
+    max_files: usize,
+    max_extracted_size: u64,
+    chunk_size: u64,
+    progress: Arc<Mutex<ChunkProgress>>,
+) -> Result<(), String> {
+    let source = PathBuf::from(temp_key);
+
+    let iso_path = {
+        let state_dir = config_dir.to_path_buf();
+        let xorriso = xorriso_bin.to_string();
+        let uid = upload_id.to_string();
+        let mf = manifest.to_string();
+        let src = source.clone();
+        tokio::task::spawn_blocking(move || {
+            build_windows95_iso(
+                &state_dir,
+                &xorriso,
+                &uid,
+                &src,
+                &mf,
+                max_files,
+                max_extracted_size,
+            )
+        })
+        .await
+        .map_err(|e| format!("ISO build task panicked: {e}"))?
+        .map_err(|e| e.to_string())?
+    };
+
+    let (_zip_size, zip_sha) = tokio::task::spawn_blocking({
+        let source = source.clone();
+        move || sha256_file(&source)
+    })
+    .await
+    .map_err(|e| format!("sha256 task panicked: {e}"))?
+    .map_err(|e| e.to_string())?;
+
+    let (iso_size, iso_sha) = tokio::task::spawn_blocking({
+        let iso = iso_path.clone();
+        move || sha256_file(&iso)
+    })
+    .await
+    .map_err(|e| format!("sha256 task panicked: {e}"))?
+    .map_err(|e| e.to_string())?;
+
+    let storage_root = config_dir.join("v86").join("games").join(upload_id);
+    tokio::fs::create_dir_all(&storage_root)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let zip_key = format!("v86/games/{upload_id}/{zip_sha}.zip");
+    let iso_key = format!("v86/games/{upload_id}/{iso_sha}");
+    let zip_path = config_dir.join(&zip_key);
+    tokio::fs::rename(&source, &zip_path)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let iso_dir = config_dir.join(&iso_key);
+    tokio::fs::create_dir_all(&iso_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    tokio::fs::rename(&iso_path, iso_dir.join("game.iso"))
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let iso_source = iso_dir.join("game.iso");
+    let parts = iso_dir.join("parts");
+    let total_chunks = iso_size.div_ceil(chunk_size as u64);
+    {
+        let mut p = progress.lock().unwrap();
+        p.total_chunks = total_chunks;
+        p.message = format!("Compressing chunk 0/{total_chunks}");
+    }
+
+    let progress_for_compress = progress.clone();
+    let chunk_count = tokio::task::spawn_blocking(move || {
+        split_asset(
+            &iso_source,
+            &parts,
+            chunk_size,
+            "iso.zst",
+            Some(&*progress_for_compress),
+            3,
+        )
+    })
+    .await
+    .map_err(|e| format!("compression task panicked: {e}"))?
+    .map_err(|e| e.to_string())?;
+
+    {
+        let mut p = progress.lock().unwrap();
+        p.message = "Finalizing…".to_string();
+    }
+
+    sqlx::query(
+        r#"UPDATE project_v86_upload_sessions
+           SET status = 'ready', staged_zip_storage_key = ?, staged_zip_sha256 = ?,
+               staged_iso_storage_key = ?, staged_iso_sha256 = ?,
+               staged_iso_size_bytes = ?, staged_iso_chunk_count = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND status = 'building'"#,
+    )
+    .bind(&zip_key)
+    .bind(&zip_sha)
+    .bind(&iso_key)
+    .bind(&iso_sha)
+    .bind(iso_size as i64)
+    .bind(chunk_count as i64)
+    .bind(upload_id)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    chunk_progress_map().lock().unwrap().remove(upload_id);
+
+    Ok(())
+}
+
 pub async fn complete_game_upload(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     AxumPath(upload_id): AxumPath<String>,
-) -> Result<Json<ReadyGameUploadResponse>, ProjectError> {
+) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
         "SELECT manifest_text, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
@@ -1513,124 +1632,65 @@ pub async fn complete_game_upload(
     .bind(&upload_id)
     .execute(&state.project_service.pool)
     .await?;
+
     let manifest: String = row.get("manifest_text");
     let temp_key: String = row.get("temp_storage_key");
     let original_file_name: String = row.get("original_file_name");
-    let state_dir = state.project_demo_config.dir.clone();
     let xorriso = state.project_demo_config.xorriso_bin.clone();
     let max_files = state.project_demo_config.max_v86_game_files;
     let max_extracted = state.project_demo_config.max_v86_game_extracted_size;
-    let upload_for_build = upload_id.clone();
-    let temp_for_build = PathBuf::from(&temp_key);
-    let manifest_for_build = manifest.clone();
-    let build_result = tokio::task::spawn_blocking(move || {
-        build_windows95_iso(
-            &state_dir,
-            &xorriso,
-            &upload_for_build,
-            &temp_for_build,
-            &manifest_for_build,
-            max_files,
-            max_extracted,
-        )
-    })
-    .await
-    .map_err(|e| ProjectError::InternalError(e.to_string()))
-    .and_then(|result| result);
-    let iso_path = match build_result {
-        Ok(path) => path,
-        Err(error) => {
-            sqlx::query(
-                "UPDATE project_v86_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            )
-            .bind("ISO build failed")
-            .bind(&upload_id)
-            .execute(&state.project_service.pool)
-            .await
-            .ok();
-            return Err(error);
-        }
-    };
-    let (_zip_size, zip_sha) = sha256_file(Path::new(&temp_key))?;
-    let (iso_size, iso_sha) = sha256_file(&iso_path)?;
-    let storage_root = state
-        .project_demo_config
-        .dir
-        .join("v86")
-        .join("games")
-        .join(&upload_id);
-    fs::create_dir_all(&storage_root)?;
-    let zip_key = format!("v86/games/{upload_id}/{zip_sha}.zip");
-    let iso_key = format!("v86/games/{upload_id}/{iso_sha}");
-    let zip_path = state.project_demo_config.dir.join(&zip_key);
-    fs::rename(&temp_key, &zip_path)?;
-    let iso_dir = state.project_demo_config.dir.join(&iso_key);
-    fs::create_dir_all(&iso_dir)?;
-    fs::rename(&iso_path, iso_dir.join("game.iso"))?;
     let chunk_size = state.project_demo_config.v86_download_chunk_size;
-    let iso_source = iso_dir.join("game.iso");
-    let parts = iso_dir.join("parts");
-    let total_chunks = iso_size.div_ceil(chunk_size as u64);
+
     let progress = Arc::new(Mutex::new(ChunkProgress {
         upload_id: upload_id.clone(),
         kind: "game".to_string(),
-        total_chunks,
+        total_chunks: 0,
         completed_chunks: 0,
-        message: "Starting compression…".to_string(),
+        message: "Preparing…".to_string(),
     }));
     chunk_progress_map()
         .lock()
         .unwrap()
         .insert(upload_id.clone(), progress.lock().unwrap().clone());
-    let progress_for_build = progress.clone();
-    let chunk_count = match tokio::task::spawn_blocking(move || {
-        split_asset(
-            &iso_source,
-            &parts,
+
+    let pool = state.project_service.pool.clone();
+    let config_dir = state.project_demo_config.dir.clone();
+    let upload_id_c = upload_id.clone();
+    let temp_key_c = temp_key.clone();
+    let manifest_c = manifest.clone();
+    let original_file_name_c = original_file_name.clone();
+    let xorriso_c = xorriso.clone();
+    let progress_c = progress.clone();
+
+    tokio::spawn(async move {
+        let result = process_game_upload(
+            &pool,
+            &config_dir,
+            &xorriso_c,
+            &upload_id_c,
+            &temp_key_c,
+            &manifest_c,
+            &original_file_name_c,
+            max_files,
+            max_extracted,
             chunk_size,
-            "iso.zst",
-            Some(&*progress_for_build),
+            progress_c,
         )
-    })
-    .await
-    {
-        Ok(Ok(count)) => count,
-        Ok(Err(e)) => {
-            chunk_progress_map().lock().unwrap().remove(&upload_id);
-            return Err(e);
+        .await;
+        if let Err(e) = result {
+            tracing::error!("Background game upload failed for {upload_id_c}: {e}");
+            let _ = sqlx::query(
+                "UPDATE project_v86_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
+            .bind(&e)
+            .bind(&upload_id_c)
+            .execute(&pool)
+            .await;
+            chunk_progress_map().lock().unwrap().remove(&upload_id_c);
         }
-        Err(e) => {
-            chunk_progress_map().lock().unwrap().remove(&upload_id);
-            return Err(ProjectError::InternalError(e.to_string()));
-        }
-    };
-    sqlx::query(
-        r#"UPDATE project_v86_upload_sessions
-           SET status = 'ready', staged_zip_storage_key = ?, staged_zip_sha256 = ?,
-               staged_iso_storage_key = ?, staged_iso_sha256 = ?,
-               staged_iso_size_bytes = ?, staged_iso_chunk_count = ?,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE id = ? AND status = 'building'"#,
-    )
-    .bind(&zip_key)
-    .bind(&zip_sha)
-    .bind(&iso_key)
-    .bind(&iso_sha)
-    .bind(iso_size as i64)
-    .bind(chunk_count as i64)
-    .bind(&upload_id)
-    .execute(&state.project_service.pool)
-    .await?;
-    chunk_progress_map().lock().unwrap().remove(&upload_id);
-    let _ = original_file_name;
-    Ok(Json(ReadyGameUploadResponse {
-        upload_id,
-        status: "ready".to_string(),
-        zip_sha256: zip_sha,
-        iso_sha256: iso_sha,
-        iso_size_bytes: iso_size,
-        chunk_count,
-    }))
+    });
+
+    Ok(StatusCode::ACCEPTED)
 }
 
 pub async fn attach_ready_game_tx(
@@ -1811,6 +1871,35 @@ pub async fn abort_game_upload(
     .await
     .ok();
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn get_game_upload_status(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(upload_id): AxumPath<String>,
+) -> Result<Json<UploadStatusResponse>, ProjectError> {
+    let uploader_id = user_id(&claims)?;
+    let row = sqlx::query(
+        "SELECT status, error_message FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
+    )
+    .bind(&upload_id)
+    .bind(uploader_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    let progress = chunk_progress_map().lock().unwrap().get(&upload_id).cloned();
+    let active_uploads = chunk_progress_map()
+        .lock()
+        .unwrap()
+        .values()
+        .cloned()
+        .collect();
+    Ok(Json(UploadStatusResponse {
+        status: row.get("status"),
+        error_message: row.get("error_message"),
+        chunk_progress: progress,
+        active_uploads,
+    }))
 }
 
 pub async fn runtime_descriptor(
@@ -2057,7 +2146,7 @@ mod tests {
         let source = root.join("disk.img");
         fs::write(&source, b"abcdefghij").unwrap();
         let parts = root.join("parts");
-        assert_eq!(split_asset(&source, &parts, 4, "img.zst", None).ok().unwrap(), 3);
+        assert_eq!(split_asset(&source, &parts, 4, "img.zst", None, 19).ok().unwrap(), 3);
         let read_decompressed = |name| {
             let compressed = fs::read(parts.join(name)).unwrap();
             let mut decoder = zstd::stream::read::Decoder::new(&compressed[..]).unwrap();

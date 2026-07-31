@@ -559,7 +559,26 @@
 				headers: { Authorization: auth() }
 			});
 			if (!complete.ok) throw new Error(await complete.text());
-			return session.upload_id;
+			const uploadId = session.upload_id;
+			await new Promise((resolve, reject) => {
+				const interval = setInterval(async () => {
+					try {
+						const res = await fetch(`/api/v86/games/upload/${uploadId}`, {
+							headers: { Authorization: auth() }
+						});
+						if (!res.ok) { clearInterval(interval); reject(new Error(await res.text())); return; }
+						const data = await res.json();
+						if (data.chunk_progress?.message) editor.status = data.chunk_progress.message;
+						if (data.status === 'ready') { clearInterval(interval); resolve(); }
+						if (data.status === 'failed') {
+							clearInterval(interval);
+							await fetch(`/api/v86/games/upload/${uploadId}`, { method: 'DELETE', headers: { Authorization: auth() } }).catch(() => {});
+							reject(new Error(data.error_message ?? 'Game build failed.'));
+						}
+					} catch (e) { clearInterval(interval); reject(e); }
+				}, 800);
+			});
+			return uploadId;
 		} catch (error) {
 			await fetch(`/api/v86/games/upload/${session.upload_id}`, {
 				method: 'DELETE',
