@@ -23,7 +23,7 @@
 	);
 </script>
 
-<section class="bg-white p-4 drop-shadow-xl">
+<section class="bg-white rounded-xl p-4 drop-shadow-xl">
 	<div class="space-y-2">
 		<BackButton href="/projects" text="All projects" />
 		<div class="flex items-center gap-3 mb-3">
@@ -31,15 +31,11 @@
 			<hr class="grow border" />
 		</div>
 	</div>
-	<div
-		bind:this={beforeDemoPortal}
-		class="flex min-h-6 items-center justify-center text-center"
-	></div>
+	<div class="mx-auto max-w-full" bind:this={beforeDemoPortal} style:width></div>
 
 	<div
-		class="relative mx-auto overflow-hidden rounded-xl bg-background"
+		class="relative max-w-full mx-auto overflow-hidden rounded-xl bg-background"
 		style:width
-		style:max-width="100%"
 		style:height
 	>
 		{#if startsOnDemand && !loaded}
@@ -89,8 +85,5 @@
 		{/if}
 	</div>
 
-	<div
-		bind:this={afterDemoPortal}
-		class="flex min-h-8 items-center justify-center px-3 pt-2 text-center"
-	></div>
+	<div bind:this={afterDemoPortal} class="mx-auto max-w-full" style:width></div>
 </section>
