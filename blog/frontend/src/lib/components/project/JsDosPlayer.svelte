@@ -1,243 +1,14 @@
 <script>
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onMount } from 'svelte';
 	import Portal from '$lib/components/shell/Portal.svelte';
+	import { JsDosPlayer } from '$lib/players/JsDosPlayer.svelte.js';
 
 	let { title, bundleUrl, beforeDemoPortal, afterDemoPortal } = $props();
-	let shell = $state();
-	let container = $state();
-	let player;
-	let overlayObserver;
-	let layoutObserver;
-	let normalLayoutTimer;
-	let fullscreenStateTimer;
-	let syncingFullscreenExit = false;
-	let disposed = false;
-	let fullscreenComboLatched = false;
-	const pressedKeys = new Set();
-	let mounted = $state(false);
-	let fullscreenActive = $state(false);
-	let state = $state('loading');
-	let errorMessage = $state('');
+	const player = new JsDosPlayer({ bundleUrl });
 
-	const isGameFullscreen = () =>
-		!!document.fullscreenElement &&
-		(document.fullscreenElement === shell || shell?.contains(document.fullscreenElement));
-
-	const loadRuntime = () =>
-		new Promise((resolve, reject) => {
-			if (window.Dos) return resolve(window.Dos);
-			const existing = document.querySelector('script[data-jsdos-runtime]');
-			if (existing) {
-				existing.addEventListener('load', () => resolve(window.Dos), { once: true });
-				existing.addEventListener(
-					'error',
-					() => reject(new Error('js-dos runtime failed to load')),
-					{
-						once: true
-					}
-				);
-				return;
-			}
-			const script = document.createElement('script');
-			script.src = 'https://v8.js-dos.com/latest/js-dos.js';
-			script.async = true;
-			script.dataset.jsdosRuntime = 'true';
-			script.onload = () =>
-				window.Dos ? resolve(window.Dos) : reject(new Error('js-dos runtime unavailable'));
-			script.onerror = () => reject(new Error('js-dos runtime failed to load'));
-			document.head.appendChild(script);
-		});
-
-	const styleMouseCaptureOverlay = () => {
-		const overlay = [...(container?.querySelectorAll('div') ?? [])].find(
-			(element) =>
-				element.textContent?.includes('Click to capture mouse') &&
-				element.classList.contains('pointer-events-none')
-		);
-		if (overlay) {
-			overlay.classList.add('jsdos-mouse-capture-overlay');
-			overlay.style.setProperty('background', 'rgb(58 75 119 / 92%)', 'important');
-		}
-	};
-
-	const toggleFullscreen = () => {
-		if (!player) return;
-		try {
-			const entering = !isGameFullscreen();
-			if (!entering) fullscreenActive = false;
-			player.setFullScreen(entering);
-			if (entering) {
-				setTimeout(() => {
-					if (!isGameFullscreen()) {
-						fullscreenActive = false;
-						scheduleNormalCanvasLayout();
-					}
-				}, 500);
-			} else {
-				scheduleNormalCanvasLayout();
-			}
-		} catch (error) {
-			console.warn('Unable to toggle game fullscreen', error);
-		}
-	};
-
-	const handleKeyDown = (event) => {
-		if (event.code !== 'F8' && event.code !== 'F9') return;
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		pressedKeys.add(event.code);
-		if (pressedKeys.has('F8') && pressedKeys.has('F9') && !fullscreenComboLatched) {
-			fullscreenComboLatched = true;
-			toggleFullscreen();
-		}
-	};
-
-	const handleKeyUp = (event) => {
-		if (event.code !== 'F8' && event.code !== 'F9') return;
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		pressedKeys.delete(event.code);
-		fullscreenComboLatched = false;
-	};
-
-	const restoreNormalCanvasLayout = () => {
-		if (disposed || isGameFullscreen() || !shell) return;
-		fullscreenActive = false;
-		const shellRect = shell.getBoundingClientRect();
-		const width = shellRect.width;
-		const height = shellRect.height;
-		if (!width || !height) return;
-		container?.querySelectorAll('canvas').forEach((canvas) => {
-			canvas.style.position = 'relative';
-			canvas.style.inset = 'auto';
-			canvas.style.top = '0px';
-			canvas.style.left = '0px';
-			canvas.style.width = `${width}px`;
-			canvas.style.height = `${height}px`;
-			canvas.style.objectFit = 'fill';
-		});
-	};
-
-	const scheduleNormalCanvasLayout = () => {
-		clearInterval(normalLayoutTimer);
-		normalLayoutTimer = setInterval(() => {
-			restoreNormalCanvasLayout();
-		}, 100);
-		setTimeout(() => {
-			clearInterval(normalLayoutTimer);
-			normalLayoutTimer = undefined;
-		}, 4000);
-	};
-
-	const handleFullscreenChange = () => {
-		if (!document.fullscreenElement && player && fullscreenActive && !syncingFullscreenExit) {
-			syncingFullscreenExit = true;
-			try {
-				player.setFullScreen(false);
-			} catch {
-				// js-dos may already have completed the exit transition.
-			}
-			setTimeout(() => (syncingFullscreenExit = false), 0);
-		}
-		fullscreenActive = isGameFullscreen();
-		styleMouseCaptureOverlay();
-		requestAnimationFrame(() => {
-			window.dispatchEvent(new Event('resize'));
-			if (!isGameFullscreen()) {
-				scheduleNormalCanvasLayout();
-			}
-		});
-	};
-
-	onMount(async () => {
-		mounted = true;
-		await tick();
-		if (disposed) return;
-		window.addEventListener('keydown', handleKeyDown, true);
-		window.addEventListener('keyup', handleKeyUp, true);
-		document.addEventListener('fullscreenchange', handleFullscreenChange);
-		fullscreenStateTimer = setInterval(() => {
-			if (fullscreenActive && !isGameFullscreen()) {
-				fullscreenActive = false;
-				scheduleNormalCanvasLayout();
-			}
-		}, 250);
-		if (!bundleUrl || !container) {
-			state = 'error';
-			errorMessage = 'The game bundle is unavailable.';
-			return;
-		}
-		try {
-			const Dos = await loadRuntime();
-			if (disposed || !container) return;
-			let options = {
-				backend: 'dosboxX',
-				workerThread: true,
-				renderBackend: 'webgl',
-				offscreenCanvas: true,
-				imageRendering: 'smooth',
-				renderAspect: 'Fit',
-				kiosk: true,
-				autoStart: true,
-				mouseCapture: true,
-				onEvent: (event) => {
-					if (event === 'emu-ready' || event === 'bnd-play') state = 'ready';
-					if (event === 'fullscreen-change') handleFullscreenChange();
-				}
-			};
-			options.url = bundleUrl;
-			player = Dos(container, options);
-			styleMouseCaptureOverlay();
-			requestAnimationFrame(styleMouseCaptureOverlay);
-			overlayObserver = new MutationObserver(styleMouseCaptureOverlay);
-			overlayObserver.observe(container, { childList: true, subtree: true });
-			layoutObserver = new MutationObserver(() => {
-				if (
-					!isGameFullscreen() &&
-					[...container.querySelectorAll('canvas')].some((canvas) => canvas.style.width === '0px')
-				) {
-					restoreNormalCanvasLayout();
-				}
-			});
-			layoutObserver.observe(container, {
-				attributes: true,
-				attributeFilter: ['style'],
-				subtree: true
-			});
-			state = 'ready';
-		} catch (error) {
-			state = 'error';
-			errorMessage = error?.message ?? 'The game could not be loaded.';
-		}
-	});
-
-	onDestroy(() => {
-		disposed = true;
-		overlayObserver?.disconnect();
-		layoutObserver?.disconnect();
-		clearInterval(normalLayoutTimer);
-		clearInterval(fullscreenStateTimer);
-		pressedKeys.clear();
-		if (typeof window !== 'undefined') {
-			window.removeEventListener('keydown', handleKeyDown, true);
-			window.removeEventListener('keyup', handleKeyUp, true);
-			document.removeEventListener('fullscreenchange', handleFullscreenChange);
-			if (document.pointerLockElement && shell?.contains(document.pointerLockElement)) {
-				document.exitPointerLock();
-			}
-		}
-		// js-dos owns an emulator worker and audio pipeline; exit it before the
-		// component is removed so navigation cannot leave sound behind.
-		Promise.resolve(player?.stop?.()).catch(() => {
-			// The runtime may already have stopped during a failed load.
-		});
-		container?.querySelectorAll('audio, video').forEach((media) => {
-			media.pause();
-			media.removeAttribute('src');
-			media.load();
-		});
-		container?.replaceChildren();
-		player = undefined;
+	onMount(() => {
+		player.mount();
+		return () => player.unmount();
 	});
 </script>
 
@@ -247,21 +18,21 @@
 	<kbd>F8</kbd>
 	+
 	<kbd>F9</kbd>
-	 together to toggle fullscreen.
+	together to toggle fullscreen.
 </Portal>
 
-{#if mounted}
+{#if player.mounted}
 	<div
-		bind:this={shell}
+		bind:this={player.shell}
 		class="jsdos-shell"
-		class:jsdos-fullscreen={fullscreenActive}
+		class:jsdos-fullscreen={player.fullscreenActive}
 		aria-label={`${title} game`}
 	>
-		<div bind:this={container} class="jsdos-canvas"></div>
-		{#if state === 'loading'}
+		<div bind:this={player.container} class="jsdos-canvas"></div>
+		{#if player.state === 'loading'}
 			<div class="jsdos-status" role="status">Loading game…</div>
-		{:else if state === 'error'}
-			<div class="jsdos-status jsdos-error" role="alert">{errorMessage}</div>
+		{:else if player.state === 'error'}
+			<div class="jsdos-status jsdos-error" role="alert">{player.errorMessage}</div>
 		{/if}
 	</div>
 {/if}
