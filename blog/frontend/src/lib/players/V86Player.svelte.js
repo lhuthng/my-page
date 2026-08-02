@@ -5,6 +5,8 @@ export class V86Player {
 	mouseSensitivity = $state(0.4);
 	noiseReductionStrength = $state(200);
 	disableMouseWheel = $state(true);
+	audioEnabled = $state(true);
+	downloadProgress = $state(null);
 	screenContainer = $state();
 	shell = $state();
 
@@ -96,14 +98,18 @@ export class V86Player {
 			this.#emulator.add_listener?.('emulator-ready', () => {
 				this.status = 'Running';
 				this.applyNoiseFilter().catch(() => {});
+				this.applyAudioState();
 			});
 			this.#emulator.add_listener?.('download-progress', (info) => {
 				if (info?.file_name !== this.runtime.iso_url) return;
-				const loaded = Math.floor((info.loaded ?? 0) / 1048576);
-				const total = Math.floor((info.total ?? 0) / 1048576);
-				if (info.loaded != null && info.total != null && info.loaded >= info.total) {
+				if (info.loaded == null || info.total == null) return;
+				this.downloadProgress = Math.min(100, (info.loaded / info.total) * 100);
+				if (info.loaded >= info.total) {
+					this.downloadProgress = null;
 					this.status = `Booting ${this.runtime.system_name}…`;
 				} else {
+					const loaded = Math.floor(info.loaded / 1048576);
+					const total = Math.floor(info.total / 1048576);
 					this.status = `Downloading ISO (${loaded} / ${total} MB)`;
 				}
 			});
@@ -139,6 +145,13 @@ export class V86Player {
 				if (this.shell?.contains(context)) context.remove();
 			}
 		}
+	};
+
+	restart = async () => {
+		if (!this.runtime || this.#disposed) return;
+		this.destroy();
+		this.downloadProgress = null;
+		await this.start();
 	};
 
 	static createNoiseGateWorkletUrl() {
@@ -286,6 +299,16 @@ export class V86Player {
 		this.applyNoiseParams(chain, this.noiseReductionStrength);
 		mixer.node_merger.disconnect();
 		mixer.node_merger.connect(chain.lowpass);
+	};
+
+	applyAudioState = () => {
+		const ctx = this.#emulator?.speaker_adapter?.audio_context;
+		if (!ctx || ctx.state === 'closed') return;
+		if (this.audioEnabled) {
+			if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+		} else if (ctx.state === 'running') {
+			ctx.suspend().catch(() => {});
+		}
 	};
 
 	handleMiddleClick = (event) => {
