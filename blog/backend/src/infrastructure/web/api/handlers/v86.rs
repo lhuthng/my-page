@@ -32,6 +32,13 @@ use crate::{
 
 const MANIFEST_MAX_BYTES: usize = 64 * 1024;
 
+/// Capacity of the 1.44 MB FAT12 floppy used as the save transport box.
+const V86_SAVE_FLOPPY_BYTES: usize = 1474560;
+/// Hard cap for a floppy save upload so the body limit stays bounded.
+const V86_SAVE_MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024;
+/// Per-user cooldown between cloud saves (matches the client).
+const V86_SAVE_RATE_LIMIT_MS: u64 = 30_000;
+
 #[derive(Serialize)]
 pub struct V86SystemVersionResponse {
     pub id: i64,
@@ -112,6 +119,7 @@ pub struct V86RuntimeDescriptor {
     pub system_version_id: i64,
     pub artifact_revision: i64,
     pub manifest_sha256: String,
+    pub slug: String,
     pub memory_size: u64,
     pub vga_memory_size: u64,
     pub display_width: String,
@@ -120,9 +128,14 @@ pub struct V86RuntimeDescriptor {
     pub base_size_bytes: u64,
     pub base_sha256: String,
     pub base_url: String,
+    pub game_size_bytes: u64,
+    pub game_sha256: String,
+    pub game_url: String,
     pub iso_size_bytes: u64,
     pub iso_sha256: String,
     pub iso_url: String,
+    pub save_supported: bool,
+    pub save_max_bytes: u64,
 }
 
 fn user_id(claims: &Claims) -> Result<i64, ProjectError> {
@@ -327,6 +340,17 @@ async fn rollback_system_version(
     Ok(())
 }
 
+/// Skips macOS-created junk that carries no game data: the `__MACOSX/`
+/// resource-fork tree and `.DS_Store` metadata files.
+fn is_macos_junk(normalized: &str) -> bool {
+    let first = normalized.split('/').next().unwrap_or("");
+    if first.eq_ignore_ascii_case("__MACOSX") {
+        return true;
+    }
+    let name = normalized.rsplit('/').next().unwrap_or("");
+    name.eq_ignore_ascii_case(".DS_Store")
+}
+
 fn validate_and_extract_game_zip(
     zip_path: &Path,
     destination: &Path,
@@ -344,6 +368,7 @@ fn validate_and_extract_game_zip(
     fs::create_dir_all(destination)?;
     let mut seen = HashSet::new();
     let mut expanded = 0_u64;
+    let mut extracted_files = 0_u64;
 
     for index in 0..archive.len() {
         let mut entry = archive
@@ -354,6 +379,9 @@ fn validate_and_extract_game_zip(
             return Err(ProjectError::InvalidDemo(
                 "The game ZIP contains an unsafe path.".to_string(),
             ));
+        }
+        if is_macos_junk(&normalized) {
+            continue;
         }
         let relative = Path::new(&normalized);
         if relative.components().any(|part| {
@@ -388,7 +416,7 @@ fn validate_and_extract_game_zip(
                 }
             }
         }
-        if format!(r"D:\GAME\{}", normalized).len() >= 260 {
+        if format!(r"D:\{}", normalized).len() >= 260 {
             return Err(ProjectError::InvalidDemo(
                 "The game ZIP contains a path longer than Windows 95 supports.".to_string(),
             ));
@@ -427,12 +455,18 @@ fn validate_and_extract_game_zip(
         if entry.is_dir() {
             fs::create_dir_all(&output_path)?;
         } else {
+            extracted_files += 1;
             if let Some(parent) = output_path.parent() {
                 fs::create_dir_all(parent)?;
             }
             let mut output = File::create(output_path)?;
             std::io::copy(&mut entry, &mut output)?;
         }
+    }
+    if extracted_files == 0 {
+        return Err(ProjectError::InvalidDemo(
+            "The game ZIP contains no game files.".to_string(),
+        ));
     }
     Ok(())
 }
@@ -462,6 +496,63 @@ fn collect_game_files(
     Ok(())
 }
 
+fn unwrap_single_top_level_dir(game_dir: &Path) -> Result<(), ProjectError> {
+    loop {
+        let entries: Vec<PathBuf> = fs::read_dir(game_dir)?.flatten().map(|e| e.path()).collect();
+        if entries.len() != 1 {
+            return Ok(());
+        }
+        let only = &entries[0];
+        if !only.is_dir() {
+            return Ok(());
+        }
+        let only_name = only
+            .file_name()
+            .ok_or_else(|| {
+                ProjectError::InternalError(
+                    "Could not unwrap an extracted game folder.".to_string(),
+                )
+            })?
+            .to_owned();
+        let inner = fs::read_dir(only)?
+            .flatten()
+            .map(|e| e.path())
+            .collect::<Vec<_>>();
+        let mut same_named_child = None;
+        for item in inner {
+            let name = item
+                .file_name()
+                .ok_or_else(|| {
+                    ProjectError::InternalError(
+                        "Could not unwrap an extracted game folder.".to_string(),
+                    )
+                })?;
+            if name == only_name {
+                // A child directory sharing the wrapper's name (Game/Game): it
+                // cannot be renamed onto the wrapper it lives in, so bubble it
+                // up once the wrapper is gone.
+                same_named_child = Some(item);
+                continue;
+            }
+            let target = game_dir.join(name);
+            if target.exists() {
+                return Err(ProjectError::InvalidDemo(
+                    "The game ZIP contains conflicting top-level paths.".to_string(),
+                ));
+            }
+            fs::rename(&item, &target)?;
+        }
+        if let Some(child) = same_named_child {
+            let temp = game_dir.join(format!(".__unwrap_{}", Uuid::new_v4()));
+            fs::rename(&child, &temp)?;
+            fs::remove_dir(only)?;
+            fs::rename(&temp, game_dir.join(only_name))?;
+        } else {
+            fs::remove_dir(only)?;
+        }
+    }
+}
+
 fn normalize_manifest_path(value: &str) -> Result<String, ProjectError> {
     let mut normalized = value.trim().trim_matches('"').replace('\\', "/");
     let upper = normalized.to_ascii_uppercase();
@@ -488,6 +579,92 @@ fn normalize_manifest_path(value: &str) -> Result<String, ProjectError> {
         ));
     }
     Ok(normalized)
+}
+
+const SAVE_FILE_MAX_LEN: usize = 260;
+const SAVE_FILE_MAX_COUNT: usize = 64;
+
+/// Validates a single save entry from the manifest: a relative path under the
+/// D:\ game drive with `/` or `\` separators, e.g. `Save0001.dat` or
+/// `A\save0001.dat`. No absolute paths, no `.`/`..` components, and none of the
+/// INI-dividing chars.
+fn validate_save_file(entry: &str) -> Result<(), &'static str> {
+    if entry.is_empty() {
+        return Err("empty");
+    }
+    if entry.len() > SAVE_FILE_MAX_LEN {
+        return Err("too long");
+    }
+    for component in entry.split(['/', '\\']) {
+        if component.is_empty() {
+            return Err("empty path component");
+        }
+        if component == ".." || component == "." {
+            return Err("unsafe path component");
+        }
+        for byte in component.bytes() {
+            if !(b'!'..=b'~').contains(&byte) {
+                return Err("unsupported character");
+            }
+            if matches!(
+                byte,
+                b',' | b';' | b'=' | b':' | b'"' | b'<' | b'>' | b'|' | b'?' | b'*'
+            ) {
+                return Err("unsupported character");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resolves the manifest's `save_paths`/`save_path`/`saves` into the exact save
+/// entries to collect (e.g. `Save0001.dat; A/save0001.dat; backup/what.bak`).
+/// An entry with no separator matches that *basename* anywhere under the D:\
+/// game drive root; an entry with a folder matches that exact relative path.
+/// The in-guest launcher walks the whole game tree and collects whatever
+/// matches, so the save layout never has to be known in advance.
+fn save_files_from_manifest(manifest: &str) -> Result<Vec<String>, ProjectError> {
+    let mut fields = HashMap::new();
+    for line in manifest.lines() {
+        let line = line.trim();
+        if line.is_empty()
+            || line.starts_with('#')
+            || line.starts_with(';')
+            || (line.starts_with('[') && line.ends_with(']'))
+        {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            fields.insert(key.trim().to_ascii_lowercase(), value.trim().to_string());
+        }
+    }
+    let raw = fields
+        .get("save_paths")
+        .or_else(|| fields.get("save_path"))
+        .or_else(|| fields.get("saves"))
+        .map(String::as_str)
+        .unwrap_or("");
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+    for entry in raw.split(|ch| ch == ',' || ch == ';').map(str::trim) {
+        let entry = entry.trim_matches('"');
+        if entry.is_empty() {
+            continue;
+        }
+        validate_save_file(entry).map_err(|reason| {
+            ProjectError::InvalidDemo(format!(
+                "Invalid Windows 95 save entry '{entry}': {reason}."
+            ))
+        })?;
+        let normalized = entry.replace('/', "\\");
+        if seen.insert(normalized.to_ascii_lowercase()) {
+            files.push(normalized);
+            if files.len() >= SAVE_FILE_MAX_COUNT {
+                break;
+            }
+        }
+    }
+    Ok(files)
 }
 
 fn windows95_launcher_config(game_dir: &Path, manifest: &str) -> Result<String, ProjectError> {
@@ -523,22 +700,31 @@ fn windows95_launcher_config(game_dir: &Path, manifest: &str) -> Result<String, 
 
     let mut files = Vec::new();
     collect_game_files(game_dir, game_dir, &mut files)?;
-    let requested_lower = requested.to_ascii_lowercase();
+    let requested_basename = requested.rsplit('/').next().unwrap_or(&requested);
     let requested_has_directory = requested.contains('/');
-    let matches = files
-        .iter()
-        .filter(|relative| {
-            let candidate = relative.to_string_lossy().replace('\\', "/");
-            if requested_has_directory {
-                candidate.eq_ignore_ascii_case(&requested)
-            } else {
-                relative.file_name().is_some_and(|name| {
-                    name.to_string_lossy()
-                        .eq_ignore_ascii_case(&requested_lower)
-                })
-            }
-        })
-        .collect::<Vec<_>>();
+    let resolve = |folder_qualified: bool| -> Vec<&PathBuf> {
+        files
+            .iter()
+            .filter(|relative| {
+                let candidate = relative.to_string_lossy().replace('\\', "/");
+                if folder_qualified {
+                    candidate.eq_ignore_ascii_case(&requested)
+                } else {
+                    relative.file_name().is_some_and(|name| {
+                        name.to_string_lossy()
+                            .eq_ignore_ascii_case(requested_basename)
+                    })
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut matches = resolve(requested_has_directory);
+    if matches.is_empty() && requested_has_directory {
+        // The single top-level wrapper folder was unwrapped, so a previously
+        // folder-qualified path now sits at the drive root. Fall back to a
+        // basename match to keep older manifests working.
+        matches = resolve(false);
+    }
 
     let relative = match matches.as_slice() {
         [relative] => (*relative).clone(),
@@ -555,7 +741,7 @@ fn windows95_launcher_config(game_dir: &Path, manifest: &str) -> Result<String, 
     };
 
     let relative_windows = relative.to_string_lossy().replace('/', "\\");
-    let executable = format!(r"D:\GAME\{relative_windows}");
+    let executable = format!(r"D:\{relative_windows}");
     if executable.len() >= 260 {
         return Err(ProjectError::InvalidDemo(
             "The resolved Windows 95 executable path is too long.".to_string(),
@@ -564,8 +750,8 @@ fn windows95_launcher_config(game_dir: &Path, manifest: &str) -> Result<String, 
     let working_directory = relative
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
-        .map(|parent| format!(r"D:\GAME\{}", parent.to_string_lossy().replace('/', "\\")))
-        .unwrap_or_else(|| r"D:\GAME".to_string());
+        .map(|parent| format!(r"D:\{}", parent.to_string_lossy().replace('/', "\\")))
+        .unwrap_or_else(|| r"D:\".to_string());
     let arguments = fields
         .get("args")
         .or_else(|| fields.get("arguments"))
@@ -578,34 +764,163 @@ fn windows95_launcher_config(game_dir: &Path, manifest: &str) -> Result<String, 
         ));
     }
 
-    Ok(format!(
+    let save_files = save_files_from_manifest(manifest)?;
+    let mut config = String::new();
+    config.push_str(&format!(
         "[game]\r\nexecutable={executable}\r\nworking_directory={working_directory}\r\narguments={arguments}\r\ndelay_ms={delay_ms}\r\n"
-    ))
+    ));
+    if !save_files.is_empty() {
+        config.push_str("[saves]\r\n");
+        for file in &save_files {
+            config.push_str(&format!("file={file}\r\n"));
+        }
+    }
+    Ok(config)
 }
 
-fn build_windows95_iso(
-    state_dir: &Path,
-    assets_dir: &Path,
-    xorriso_bin: &str,
-    upload_id: &str,
+/// Resolves an mtools binary name through the optional tool prefix dir.
+fn mtool(prefix: &str, name: &str) -> String {
+    if prefix.is_empty() {
+        name.to_string()
+    } else {
+        let base = prefix.trim_end_matches('/');
+        let name = name.trim_start_matches('/');
+        format!("{base}/{name}")
+    }
+}
+
+/// Returns the mtools command, pushing `prefix/name` args so callers just pass
+/// their `-i ...` flags. The command is resolved through `mtools_bin`.
+fn run_mtool(mtools_bin: &str, name: &str, args: &[&str]) -> Result<(), ProjectError> {
+    let binary = mtool(mtools_bin, name);
+    let output = Command::new(&binary)
+        .args(args)
+        .output()
+        .map_err(|e| {
+            ProjectError::InternalError(format!("Could not start mtools {name} ({binary}): {e}"))
+        })?;
+    if !output.status.success() {
+        return Err(ProjectError::UploadFailed(format!(
+            "mtools {name} failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    Ok(())
+}
+
+/// Computes a total byte size (rounded up to a whole sector) for a FAT image
+/// that comfortably holds `payload_bytes`, leaving `slack_fraction` of free
+/// space so the game has room for save files without repartitioning.
+fn fat_image_size(payload_bytes: u64) -> u64 {
+    const BLOCK: u64 = 512;
+    // The game disk is capped well below 2GiB so it stays FAT16-compatible.
+    let slack = payload_bytes / 2;
+    let raw = payload_bytes + slack + 8 * 1024 * 1024;
+    let raw = raw.min(1536 * 1024 * 1024);
+    raw.div_ceil(BLOCK) * BLOCK
+}
+
+/// Extracts (skipping macOS junk) and unwraps the game ZIP into `build_dir`,
+/// returning the game tree path and its total byte size.
+fn prepare_game_tree(
+    build_dir: &Path,
     zip_path: &Path,
-    manifest: &str,
     max_files: usize,
     max_extracted_size: u64,
-) -> Result<PathBuf, ProjectError> {
-    let build_dir = state_dir
-        .join("v86")
-        .join("tmp")
-        .join("build")
-        .join(upload_id);
-    if build_dir.exists() {
-        fs::remove_dir_all(&build_dir)?;
-    }
-    let disc_dir = build_dir.join("disc");
-    let game_dir = disc_dir.join("GAME");
-    fs::create_dir_all(&game_dir)?;
+) -> Result<(PathBuf, u64), ProjectError> {
+    let game_dir = build_dir.join("game");
     validate_and_extract_game_zip(zip_path, &game_dir, max_files, max_extracted_size)?;
+    // A ZIP that wraps its payload in a single top-level folder is common; drop
+    // the wrapper so the game lands at the drive root instead of a doubled path.
+    unwrap_single_top_level_dir(&game_dir)?;
+    let extracted_bytes = dir_size(&game_dir);
+    Ok((game_dir, extracted_bytes))
+}
 
+/// Writes a classic MBR with one bootable FAT16 (0x06) partition starting at
+/// sector 63, mirroring the base Win95 disk layout that v86 mounts reliably.
+fn write_mbr_partition(image_path: &Path, total_sectors: u64) -> Result<(), ProjectError> {
+    use std::io::{Seek, SeekFrom, Write};
+    let part_sectors = total_sectors
+        .checked_sub(63)
+        .ok_or_else(|| ProjectError::UploadFailed("Game disk is too small.".to_string()))?;
+    let part_sectors: u32 = part_sectors
+        .try_into()
+        .map_err(|_| ProjectError::UploadFailed("Game disk partition is too large.".to_string()))?;
+    // End CHS from the whole-disk LBA with 255 heads / 63 sectors per track.
+    let end_lba = 63 + part_sectors - 1;
+    let heads: u32 = 255;
+    let sectors_per_track: u32 = 63;
+    let end_cyl = end_lba / (heads * sectors_per_track);
+    let remainder = end_lba % (heads * sectors_per_track);
+    let end_head = (remainder / sectors_per_track) as u8;
+    let end_sector = (remainder % sectors_per_track + 1) as u8;
+    let end_cyl = end_cyl as u8;
+    let mut entry = [0u8; 16];
+    entry[0] = 0x80; // bootable
+    entry[1] = 0; // start CHS head
+    entry[2] = 1; // start CHS sector
+    entry[3] = 0; // start CHS cylinder
+    entry[4] = 0x06; // FAT16
+    entry[5] = end_head;
+    entry[6] = end_sector;
+    entry[7] = end_cyl;
+    entry[8..12].copy_from_slice(&63u32.to_le_bytes());
+    entry[12..16].copy_from_slice(&part_sectors.to_le_bytes());
+    let mut file = fs::OpenOptions::new().write(true).open(image_path)?;
+    file.seek(SeekFrom::Start(446))?;
+    file.write_all(&entry)?;
+    file.seek(SeekFrom::Start(510))?;
+    file.write_all(&[0x55, 0xAA])?;
+    file.flush()?;
+    Ok(())
+}
+
+/// Builds the partitioned FAT16 game disk (D:) from an extracted game tree.
+fn build_game_disk(
+    mtools_bin: &str,
+    image_path: &Path,
+    game_dir: &Path,
+    extracted_bytes: u64,
+) -> Result<(), ProjectError> {
+    let total_bytes = fat_image_size(extracted_bytes);
+    let total_sectors = total_bytes / 512;
+    // Create a partitioned FAT16 disk image so classic Windows 95 mounts the
+    // whole game drive reliably (a raw superfloppy with mformat's phantom MBR
+    // entry can show up as inaccessible). This mirrors the base disk's proven
+    // MBR + FAT16 partition layout: C: (base) → D: (game) → E: (cdrom).
+    {
+        let image = fs::File::create(image_path)?;
+        image.set_len(total_bytes)?;
+    }
+    write_mbr_partition(image_path, total_sectors)?;
+    // mtools `@@N` offsets are in bytes, so partition sector 63 is byte 32256.
+    let partition_arg = format!("{}@@{}", image_path.to_str().unwrap(), 63 * 512);
+    run_mtool(mtools_bin, "mformat", &["-i", &partition_arg, "::"])?;
+    // Copy each top-level entry by name so the unwrapped game lands at the
+    // drive root (no GAME folder) instead of mcopy nesting a source dir.
+    let mut sources: Vec<PathBuf> = fs::read_dir(game_dir)?.flatten().map(|e| e.path()).collect();
+    sources.sort();
+    if !sources.is_empty() {
+        let mut args = vec!["-i", &partition_arg, "-s", "-o"];
+        args.extend(sources.iter().map(|path| path.to_str().unwrap()));
+        args.push("::/");
+        run_mtool(mtools_bin, "mcopy", &args)?;
+    }
+    Ok(())
+}
+
+/// Builds the tiny autorun CD (E:). The launcher + config live here (read-only),
+/// so the shared Win95 base never needs an auto-run-on-fixed-drive hack.
+fn build_game_cdrom(
+    xorriso_bin: &str,
+    assets_dir: &Path,
+    game_dir: &Path,
+    manifest: &str,
+    disc_dir: &Path,
+    cdrom_path: &Path,
+) -> Result<(), ProjectError> {
+    fs::create_dir_all(disc_dir)?;
     let launcher = assets_dir
         .join("v86")
         .join("windows95")
@@ -623,15 +938,14 @@ fn build_windows95_iso(
     )?;
     fs::write(
         disc_dir.join("V86GAME.INI"),
-        windows95_launcher_config(&game_dir, manifest)?.as_bytes(),
+        windows95_launcher_config(game_dir, manifest)?.as_bytes(),
     )?;
     fs::write(disc_dir.join("V86GAME.MANIFEST"), manifest.as_bytes())?;
 
-    let iso_path = build_dir.join("game.iso");
     let output = Command::new(xorriso_bin)
         .args(["-as", "mkisofs", "-J", "-V", "V86GAME", "-o"])
-        .arg(&iso_path)
-        .arg(&disc_dir)
+        .arg(cdrom_path)
+        .arg(disc_dir)
         .output()
         .map_err(|e| {
             ProjectError::InternalError(format!("Could not start xorriso ({xorriso_bin}): {e}"))
@@ -642,7 +956,98 @@ fn build_windows95_iso(
             String::from_utf8_lossy(&output.stderr).trim()
         )));
     }
-    Ok(iso_path)
+    Ok(())
+}
+
+/// Builds a writable FAT16 game disk (partitioned, mounted as D: by the guest)
+/// plus a tiny read-only autorun CD (mounted as E:) that launches the game
+/// launcher. Game files sit at the D: drive root with no wrapper folder.
+/// Returns (disk_image_path, cdrom_iso_path, extracted_game_bytes).
+#[allow(clippy::too_many_arguments)]
+fn build_windows95_disk(
+    state_dir: &Path,
+    assets_dir: &Path,
+    xorriso_bin: &str,
+    mtools_bin: &str,
+    upload_id: &str,
+    zip_path: &Path,
+    manifest: &str,
+    max_files: usize,
+    max_extracted_size: u64,
+) -> Result<(PathBuf, PathBuf, u64), ProjectError> {
+    let build_dir = state_dir
+        .join("v86")
+        .join("tmp")
+        .join("build")
+        .join(upload_id);
+    if build_dir.exists() {
+        fs::remove_dir_all(&build_dir)?;
+    }
+    let (game_dir, extracted_bytes) =
+        prepare_game_tree(&build_dir, zip_path, max_files, max_extracted_size)?;
+    let image_path = build_dir.join("game.img");
+    build_game_disk(mtools_bin, &image_path, &game_dir, extracted_bytes)?;
+    let cdrom_path = build_dir.join("boot.iso");
+    build_game_cdrom(
+        xorriso_bin,
+        assets_dir,
+        &game_dir,
+        manifest,
+        &build_dir.join("disc"),
+        &cdrom_path,
+    )?;
+    Ok((image_path, cdrom_path, extracted_bytes))
+}
+
+/// Rebuilds only the autorun CD from a (re-)extracted game tree. Used when the
+/// game ZIP is unchanged but the manifest changed, so the disk can be reused.
+#[allow(clippy::too_many_arguments)]
+fn build_windows95_cdrom_only(
+    state_dir: &Path,
+    assets_dir: &Path,
+    xorriso_bin: &str,
+    upload_id: &str,
+    zip_path: &Path,
+    manifest: &str,
+    max_files: usize,
+    max_extracted_size: u64,
+) -> Result<PathBuf, ProjectError> {
+    let build_dir = state_dir
+        .join("v86")
+        .join("tmp")
+        .join("build")
+        .join(upload_id);
+    if build_dir.exists() {
+        fs::remove_dir_all(&build_dir)?;
+    }
+    let (game_dir, _) = prepare_game_tree(&build_dir, zip_path, max_files, max_extracted_size)?;
+    let cdrom_path = build_dir.join("boot.iso");
+    build_game_cdrom(
+        xorriso_bin,
+        assets_dir,
+        &game_dir,
+        manifest,
+        &build_dir.join("disc"),
+        &cdrom_path,
+    )?;
+    Ok(cdrom_path)
+}
+
+#[allow(dead_code)]
+fn dir_size(root: &Path) -> u64 {
+    let mut total = 0_u64;
+    if let Ok(entries) = fs::read_dir(root) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_dir() {
+                    total = total.saturating_add(dir_size(&entry.path()));
+                } else {
+                    total = total.saturating_add(meta.len());
+                }
+            }
+        }
+    }
+    total
 }
 
 async fn require_project_owner(
@@ -1552,6 +1957,14 @@ pub async fn start_game_upload(
             (file_name.clone(), size, true, transient_key, 0)
         } else {
             let source_key: String = source.get("zip_storage_key");
+            // Manifest-only edits rebuild from the project's stored ZIP, so it
+            // must still exist. Fail fast with a clear message instead of a
+            // confusing background build failure when it has been evicted.
+            if r2.object_size(&source_key).await.map_err(r2_error)?.is_none() {
+                return Err(ProjectError::InvalidDemo(
+                    "The existing game ZIP is missing from storage. Re-upload the game ZIP to continue editing this v86 project.".to_string(),
+                ));
+            }
             (
                 source.get::<String, _>("original_file_name"),
                 source.get::<i64, _>("zip_size_bytes") as u64,
@@ -1583,6 +1996,22 @@ pub async fn start_game_upload(
     };
     let expires_at =
         Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
+    // Manifest-only edits reuse the project's permanent zip_storage_key as the
+    // temp_storage_key. That column is UNIQUE and stale session rows are never
+    // deleted, so drop any row already holding the key before inserting, and
+    // clear out the project's finished sessions so they cannot pile up.
+    sqlx::query("DELETE FROM project_v86_upload_sessions WHERE temp_storage_key = ?")
+        .bind(&temp_storage_key)
+        .execute(&state.project_service.pool)
+        .await?;
+    if let Some(project_id) = request.source_project_id {
+        sqlx::query(
+            "DELETE FROM project_v86_upload_sessions WHERE source_project_id = ? AND status != 'active'",
+        )
+        .bind(project_id)
+        .execute(&state.project_service.pool)
+        .await?;
+    }
     sqlx::query(
         r#"INSERT INTO project_v86_upload_sessions
            (id, uploader_id, source_project_id, system_version_id,
@@ -1646,18 +2075,98 @@ pub async fn append_game_chunk(
     ))
 }
 
+/// The stored artifact of a project, used to decide whether a rebuild is
+/// needed when only the manifest changed.
+struct StoredGameArtifact {
+    zip_storage_key: String,
+    zip_sha256: String,
+    manifest_sha256: String,
+    disk_storage_key: String,
+    disk_sha256: String,
+    disk_size_bytes: i64,
+    iso_storage_key: String,
+    iso_sha256: String,
+    iso_size_bytes: i64,
+    chunk_count: i64,
+}
+
+async fn fetch_stored_game_artifact(
+    pool: &sqlx::SqlitePool,
+    project_id: i64,
+) -> Result<Option<StoredGameArtifact>, String> {
+    let row = sqlx::query(
+        r#"SELECT zip_storage_key, zip_sha256, manifest_sha256,
+                  disk_storage_key, disk_sha256, disk_size_bytes,
+                  iso_storage_key, iso_sha256, iso_size_bytes, chunk_count
+           FROM project_v86_games WHERE project_id = ?"#,
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(row.map(|row| StoredGameArtifact {
+        zip_storage_key: row.get("zip_storage_key"),
+        zip_sha256: row.get("zip_sha256"),
+        manifest_sha256: row.get("manifest_sha256"),
+        disk_storage_key: row.get("disk_storage_key"),
+        disk_sha256: row.get("disk_sha256"),
+        disk_size_bytes: row.get("disk_size_bytes"),
+        iso_storage_key: row.get("iso_storage_key"),
+        iso_sha256: row.get("iso_sha256"),
+        iso_size_bytes: row.get("iso_size_bytes"),
+        chunk_count: row.get("chunk_count"),
+    }))
+}
+
+/// Looks up any project that already has a game disk for the given ZIP sha.
+/// Enables cross-project dedup: multiple projects can share the same content-
+/// addressed game artifacts.
+async fn fetch_shared_game_artifact(
+    pool: &sqlx::SqlitePool,
+    zip_sha: &str,
+) -> Result<Option<StoredGameArtifact>, String> {
+    let row = sqlx::query(
+        r#"SELECT zip_storage_key, zip_sha256, manifest_sha256,
+                  disk_storage_key, disk_sha256, disk_size_bytes,
+                  iso_storage_key, iso_sha256, iso_size_bytes, chunk_count
+           FROM project_v86_games
+           WHERE zip_sha256 = ? AND disk_storage_key IS NOT NULL
+           LIMIT 1"#,
+    )
+    .bind(zip_sha)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(row.map(|row| StoredGameArtifact {
+        zip_storage_key: row.get("zip_storage_key"),
+        zip_sha256: row.get("zip_sha256"),
+        manifest_sha256: row.get("manifest_sha256"),
+        disk_storage_key: row.get("disk_storage_key"),
+        disk_sha256: row.get("disk_sha256"),
+        disk_size_bytes: row.get("disk_size_bytes"),
+        iso_storage_key: row.get("iso_storage_key"),
+        iso_sha256: row.get("iso_sha256"),
+        iso_size_bytes: row.get("iso_size_bytes"),
+        chunk_count: row.get("chunk_count"),
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn process_game_upload(
     pool: &sqlx::SqlitePool,
     r2: &R2Client,
     config_dir: &Path,
     assets_dir: &Path,
     xorriso_bin: &str,
+    mtools_bin: &str,
     upload_id: &str,
     transient_key: &str,
     local_download: &Path,
     manifest: &str,
     max_files: usize,
     max_extracted_size: u64,
+    chunk_size: u64,
+    source_project_id: Option<i64>,
     progress: Arc<Mutex<ChunkProgress>>,
 ) -> Result<(), String> {
     if let Some(parent) = local_download.parent() {
@@ -1670,30 +2179,6 @@ async fn process_game_upload(
         .map_err(|e| e.to_string())?;
     let source = local_download.to_path_buf();
 
-    let iso_path = {
-        let state_dir = config_dir.to_path_buf();
-        let assets = assets_dir.to_path_buf();
-        let xorriso = xorriso_bin.to_string();
-        let uid = upload_id.to_string();
-        let mf = manifest.to_string();
-        let src = source.clone();
-        tokio::task::spawn_blocking(move || {
-            build_windows95_iso(
-                &state_dir,
-                &assets,
-                &xorriso,
-                &uid,
-                &src,
-                &mf,
-                max_files,
-                max_extracted_size,
-            )
-        })
-        .await
-        .map_err(|e| format!("ISO build task panicked: {e}"))?
-        .map_err(|e| e.to_string())?
-    };
-
     let (_zip_size, zip_sha) = tokio::task::spawn_blocking({
         let source = source.clone();
         move || sha256_file(&source)
@@ -1702,51 +2187,211 @@ async fn process_game_upload(
     .map_err(|e| format!("sha256 task panicked: {e}"))?
     .map_err(|e| e.to_string())?;
 
-    let (iso_size, iso_sha) = tokio::task::spawn_blocking({
-        let iso = iso_path.clone();
-        move || sha256_file(&iso)
-    })
-    .await
-    .map_err(|e| format!("sha256 task panicked: {e}"))?
-    .map_err(|e| e.to_string())?;
+    let stored = match source_project_id {
+        Some(project_id) => fetch_stored_game_artifact(pool, project_id).await?,
+        None => None,
+    };
+    // Also look for an existing project with the same ZIP content to enable
+    // cross-project dedup. Only consider rows that already have a game disk.
+    let shared = fetch_shared_game_artifact(pool, &zip_sha).await?;
+    // Manifest-only edits reuse the stored ZIP, so its sha always matches and
+    // the game disk never has to be rebuilt. When the manifest is also
+    // unchanged, the entire build is a no-op.
+    let reuse_disk = stored
+        .as_ref()
+        .is_some_and(|artifact| artifact.zip_sha256 == zip_sha)
+        || shared.is_some();
+    let manifest_sha = hex::encode(Sha256::digest(manifest.as_bytes()));
 
-    {
-        let mut p = progress.lock().unwrap();
-        p.message = "Uploading to R2…".to_string();
+    let (zip_key, disk_key, disk_sha, disk_size, disk_chunk_count, iso_key, iso_sha, iso_size);
+    let build_dir = config_dir.join("v86").join("tmp").join("build").join(upload_id);
+
+    if reuse_disk {
+        let artifact = stored
+            .as_ref()
+            .filter(|a| a.zip_sha256 == zip_sha)
+            .or(shared.as_ref())
+            .expect("reuse_disk implies a stored or shared artifact");
+        zip_key = artifact.zip_storage_key.clone();
+        disk_key = artifact.disk_storage_key.clone();
+        disk_sha = artifact.disk_sha256.clone();
+        disk_size = artifact.disk_size_bytes;
+        disk_chunk_count = artifact.chunk_count;
+        if artifact.manifest_sha256 == manifest_sha {
+            // No-op: reuse the stored ISO as well; nothing to build or upload.
+            {
+                let mut p = progress.lock().unwrap();
+                p.message = "No changes to rebuild.".to_string();
+            }
+            iso_key = artifact.iso_storage_key.clone();
+            iso_sha = artifact.iso_sha256.clone();
+            iso_size = artifact.iso_size_bytes;
+        } else {
+            // ISO-only: the manifest changed, so rebuild just the launcher CD.
+            {
+                let mut p = progress.lock().unwrap();
+                p.message = "Rebuilding launcher…".to_string();
+            }
+            let (state_dir, assets, xorriso, uid, mf, src) = (
+                config_dir.to_path_buf(),
+                assets_dir.to_path_buf(),
+                xorriso_bin.to_string(),
+                upload_id.to_string(),
+                manifest.to_string(),
+                source.clone(),
+            );
+            let cdrom_path = tokio::task::spawn_blocking(move || {
+                build_windows95_cdrom_only(
+                    &state_dir,
+                    &assets,
+                    &xorriso,
+                    &uid,
+                    &src,
+                    &mf,
+                    max_files,
+                    max_extracted_size,
+                )
+            })
+            .await
+            .map_err(|e| format!("cdrom build task panicked: {e}"))?
+            .map_err(|e| e.to_string())?;
+            let (iso_size_raw, iso_sha_raw) = tokio::task::spawn_blocking({
+                let cdrom = cdrom_path.clone();
+                move || sha256_file(&cdrom)
+            })
+            .await
+            .map_err(|e| format!("sha256 task panicked: {e}"))?
+            .map_err(|e| e.to_string())?;
+            iso_sha = iso_sha_raw;
+            iso_size = iso_size_raw as i64;
+            iso_key = format!("v86/games/{iso_sha}");
+            r2.put_object_from_file(&format!("{iso_key}/full.iso"), &cdrom_path)
+                .await
+                .map_err(|e| e.to_string())?;
+            let _ = tokio::fs::remove_file(&cdrom_path).await;
+            let _ = tokio::fs::remove_dir_all(&build_dir).await;
+        }
+    } else {
+        // Full build: a new or changed ZIP. Extract, partition the disk, split
+        // it into zstd chunks and upload everything.
+        {
+            let mut p = progress.lock().unwrap();
+            p.message = "Building game disc…".to_string();
+        }
+        let (disk_path, cdrom_path, _extracted_bytes) = {
+            let state_dir = config_dir.to_path_buf();
+            let assets = assets_dir.to_path_buf();
+            let xorriso = xorriso_bin.to_string();
+            let mtools = mtools_bin.to_string();
+            let uid = upload_id.to_string();
+            let mf = manifest.to_string();
+            let src = source.clone();
+            tokio::task::spawn_blocking(move || {
+                build_windows95_disk(
+                    &state_dir,
+                    &assets,
+                    &xorriso,
+                    &mtools,
+                    &uid,
+                    &src,
+                    &mf,
+                    max_files,
+                    max_extracted_size,
+                )
+            })
+            .await
+            .map_err(|e| format!("disk build task panicked: {e}"))?
+            .map_err(|e| e.to_string())?
+        };
+
+        let (disk_size_raw, disk_sha_raw) = tokio::task::spawn_blocking({
+            let disk = disk_path.clone();
+            move || sha256_file(&disk)
+        })
+        .await
+        .map_err(|e| format!("sha256 task panicked: {e}"))?
+        .map_err(|e| e.to_string())?;
+        disk_sha = disk_sha_raw;
+        disk_size = disk_size_raw as i64;
+
+        let (iso_size_raw, iso_sha_raw) = tokio::task::spawn_blocking({
+            let cdrom = cdrom_path.clone();
+            move || sha256_file(&cdrom)
+        })
+        .await
+        .map_err(|e| format!("sha256 task panicked: {e}"))?
+        .map_err(|e| e.to_string())?;
+        iso_sha = iso_sha_raw;
+        iso_size = iso_size_raw as i64;
+
+        // Split the raw FAT image into the same zstd chunk layout as the base
+        // disk so the browser can stream it with use_parts.
+        let parts_dir = config_dir
+            .join("v86")
+            .join("tmp")
+            .join("games")
+            .join(format!("{upload_id}.diskparts"));
+        disk_chunk_count = tokio::task::spawn_blocking({
+            let disk = disk_path.clone();
+            let parts = parts_dir.clone();
+            move || split_asset(&disk, &parts, chunk_size, "img.zst", None, 6)
+        })
+        .await
+        .map_err(|e| format!("disk split task panicked: {e}"))?
+        .map_err(|e| e.to_string())?
+        .try_into()
+        .unwrap();
+
+        {
+            let mut p = progress.lock().unwrap();
+            p.message = "Uploading to R2…".to_string();
+        }
+
+        // Content-addressed artifacts the browser serves straight from R2.
+        zip_key = format!("v86/games/zips/{zip_sha}.zip");
+        disk_key = format!("v86/games/{disk_sha}");
+        iso_key = format!("v86/games/{iso_sha}");
+        r2.put_object_from_file(&zip_key, &source)
+            .await
+            .map_err(|e| e.to_string())?;
+        if let Err(error) = push_dir_to_r2(r2, &disk_key, &parts_dir).await {
+            let _ = r2.delete_prefix(&disk_key).await;
+            return Err(error);
+        }
+        r2.put_object_from_file(&format!("{iso_key}/full.iso"), &cdrom_path)
+            .await
+            .map_err(|e| e.to_string())?;
+        let _ = tokio::fs::remove_file(&disk_path).await;
+        let _ = tokio::fs::remove_file(&cdrom_path).await;
+        let _ = tokio::fs::remove_dir_all(&parts_dir).await;
+        let _ = tokio::fs::remove_dir_all(&build_dir).await;
     }
-
-    // Content-addressed artifacts the browser serves straight from R2.
-    let zip_key = format!("v86/games/zips/{zip_sha}.zip");
-    let iso_key = format!("v86/games/{iso_sha}");
-    let iso_r2_key = format!("{iso_key}/full.iso");
-    r2.put_object_from_file(&zip_key, &source)
-        .await
-        .map_err(|e| e.to_string())?;
-    r2.put_object_from_file(&iso_r2_key, &iso_path)
-        .await
-        .map_err(|e| e.to_string())?;
 
     // Drop the session-owned transient ZIP (a reused source key is left alone).
     if transient_key.starts_with("v86/tmp/games/") {
         let _ = r2.delete_object(transient_key).await;
     }
     let _ = tokio::fs::remove_file(&source).await;
-    let _ = tokio::fs::remove_dir_all(config_dir.join("v86/tmp/build").join(upload_id)).await;
 
     sqlx::query(
         r#"UPDATE project_v86_upload_sessions
-           SET status = 'ready', staged_zip_storage_key = ?, staged_zip_sha256 = ?,
-               staged_iso_storage_key = ?, staged_iso_sha256 = ?,
-               staged_iso_size_bytes = ?, staged_iso_chunk_count = ?,
+           SET status = 'ready',
+               staged_zip_storage_key = ?, staged_zip_sha256 = ?,
+               staged_disk_storage_key = ?, staged_disk_sha256 = ?, staged_disk_size_bytes = ?,
+               staged_iso_storage_key = ?, staged_iso_sha256 = ?, staged_iso_size_bytes = ?,
+               staged_iso_chunk_count = ?,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = ? AND status = 'building'"#,
     )
     .bind(&zip_key)
     .bind(&zip_sha)
+    .bind(&disk_key)
+    .bind(&disk_sha)
+    .bind(disk_size)
     .bind(&iso_key)
     .bind(&iso_sha)
-    .bind(iso_size as i64)
-    .bind(1_i64)
+    .bind(iso_size)
+    .bind(disk_chunk_count)
     .bind(upload_id)
     .execute(pool)
     .await
@@ -1764,7 +2409,7 @@ pub async fn complete_game_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT manifest_text, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT manifest_text, source_project_id, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -1798,6 +2443,8 @@ pub async fn complete_game_upload(
     let manifest: String = row.get("manifest_text");
     let temp_key: String = row.get("temp_storage_key");
     let xorriso = state.project_demo_config.xorriso_bin.clone();
+    let mtools = state.project_demo_config.mtools_bin.clone();
+    let chunk_size = state.project_demo_config.v86_download_chunk_size;
     let max_files = state.project_demo_config.max_v86_game_files;
     let max_extracted = state.project_demo_config.max_v86_game_extracted_size;
 
@@ -1820,10 +2467,12 @@ pub async fn complete_game_upload(
     let assets_dir = state.project_demo_config.v86_assets_dir.clone();
     let upload_id_c = upload_id.clone();
     let temp_key_c = temp_key.clone();
+    let source_project_id: Option<i64> = row.get("source_project_id");
     let local_download = temp_upload_path(&state, "games", &upload_id);
     let local_download_c = local_download.clone();
     let manifest_c = manifest.clone();
     let xorriso_c = xorriso.clone();
+    let mtools_c = mtools.clone();
     let progress_c = progress.clone();
 
     tokio::spawn(async move {
@@ -1833,12 +2482,15 @@ pub async fn complete_game_upload(
             &config_dir,
             &assets_dir,
             &xorriso_c,
+            &mtools_c,
             &upload_id_c,
             &temp_key_c,
             &local_download_c,
             &manifest_c,
             max_files,
             max_extracted,
+            chunk_size,
+            source_project_id,
             progress_c,
         )
         .await;
@@ -1875,6 +2527,7 @@ pub async fn attach_ready_game_tx(
         r#"SELECT source_project_id, system_version_id, expected_artifact_revision,
                   manifest_text, manifest_sha256, original_file_name,
                   expected_size_bytes, staged_zip_storage_key, staged_zip_sha256,
+                  staged_disk_storage_key, staged_disk_sha256, staged_disk_size_bytes,
                   staged_iso_storage_key, staged_iso_sha256, staged_iso_size_bytes,
                   staged_iso_chunk_count, status, expires_at
            FROM project_v86_upload_sessions
@@ -1912,9 +2565,10 @@ pub async fn attach_ready_game_tx(
         r#"INSERT INTO project_v86_games
            (project_id, system_version_id, manifest_text, manifest_sha256,
             original_file_name, zip_storage_key, zip_size_bytes, zip_sha256,
+            disk_storage_key, disk_size_bytes, disk_sha256,
             iso_storage_key, iso_size_bytes, iso_sha256, chunk_size_bytes,
             chunk_count, artifact_revision)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(project_id) DO UPDATE SET
              system_version_id = excluded.system_version_id,
              manifest_text = excluded.manifest_text,
@@ -1923,6 +2577,9 @@ pub async fn attach_ready_game_tx(
              zip_storage_key = excluded.zip_storage_key,
              zip_size_bytes = excluded.zip_size_bytes,
              zip_sha256 = excluded.zip_sha256,
+             disk_storage_key = excluded.disk_storage_key,
+             disk_size_bytes = excluded.disk_size_bytes,
+             disk_sha256 = excluded.disk_sha256,
              iso_storage_key = excluded.iso_storage_key,
              iso_size_bytes = excluded.iso_size_bytes,
              iso_sha256 = excluded.iso_sha256,
@@ -1940,6 +2597,9 @@ pub async fn attach_ready_game_tx(
     .bind(row.get::<String, _>("staged_zip_storage_key"))
     .bind(row.get::<i64, _>("expected_size_bytes"))
     .bind(row.get::<String, _>("staged_zip_sha256"))
+    .bind(row.get::<String, _>("staged_disk_storage_key"))
+    .bind(row.get::<i64, _>("staged_disk_size_bytes"))
+    .bind(row.get::<String, _>("staged_disk_sha256"))
     .bind(row.get::<String, _>("staged_iso_storage_key"))
     .bind(row.get::<i64, _>("staged_iso_size_bytes"))
     .bind(row.get::<String, _>("staged_iso_sha256"))
@@ -2079,7 +2739,8 @@ pub async fn runtime_descriptor(
     let row = sqlx::query(
         r#"SELECT s.name AS system_name, s.platform_key, v.id AS system_version_id,
                   v.size_bytes AS base_size, v.sha256 AS base_sha,
-                  g.iso_size_bytes, g.iso_sha256, g.manifest_sha256,
+                  g.disk_size_bytes, g.disk_sha256,
+                  g.iso_size_bytes, g.iso_sha256, g.manifest_text, g.manifest_sha256,
                   g.chunk_size_bytes, g.artifact_revision,
                   p.demo_width, p.demo_height
            FROM project_v86_games g
@@ -2095,14 +2756,21 @@ pub async fn runtime_descriptor(
     Ok(row.map(|row| {
         let version_id: i64 = row.get("system_version_id");
         let base_sha: String = row.get("base_sha");
+        let game_sha: String = row.get("disk_sha256");
         let iso_sha: String = row.get("iso_sha256");
-        let (base_url, iso_url) = match r2_public_url {
-            Some(r2) => (
-                format!("{}/v86/assets/systems/{version_id}/{base_sha}/.img.zst", r2.trim_end_matches('/')),
-                format!("{}/v86/games/{iso_sha}/full.iso", r2.trim_end_matches('/')),
-            ),
+        let save_supported = has_save_paths(&row.get::<String, _>("manifest_text"));
+        let (base_url, game_url, iso_url) = match r2_public_url {
+            Some(r2) => {
+                let base = r2.trim_end_matches('/');
+                (
+                    format!("{base}/v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
+                    format!("{base}/v86/games/{game_sha}/.img.zst"),
+                    format!("{base}/v86/games/{iso_sha}/full.iso"),
+                )
+            }
             None => (
                 format!("v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
+                format!("projects/s/{slug}/v86/disk/{game_sha}/.img.zst"),
                 format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
             ),
         };
@@ -2112,6 +2780,7 @@ pub async fn runtime_descriptor(
             system_version_id: version_id,
             artifact_revision: row.get("artifact_revision"),
             manifest_sha256: row.get("manifest_sha256"),
+            slug: slug.to_string(),
             memory_size: 64 * 1024 * 1024,
             vga_memory_size: 8 * 1024 * 1024,
             display_width: row
@@ -2124,11 +2793,22 @@ pub async fn runtime_descriptor(
             base_size_bytes: row.get::<i64, _>("base_size") as u64,
             base_sha256: base_sha.clone(),
             base_url,
+            game_size_bytes: row.get::<i64, _>("disk_size_bytes") as u64,
+            game_sha256: game_sha.clone(),
+            game_url,
             iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
             iso_sha256: iso_sha.clone(),
             iso_url,
+            save_supported,
+            save_max_bytes: V86_SAVE_FLOPPY_BYTES as u64,
         }
     }))
+}
+
+fn has_save_paths(manifest: &str) -> bool {
+    !save_files_from_manifest(manifest)
+        .map(|files| files.is_empty())
+        .unwrap_or(true)
 }
 
 fn immutable_chunk_response(bytes: Vec<u8>, content_type: &'static str) -> Response {
@@ -2212,6 +2892,46 @@ pub async fn get_game_chunk(
             .dir
             .join(storage_key)
             .join("parts")
+            .join(part),
+    )
+    .await
+    .map_err(|_| ProjectError::ProjectNotFound)?;
+    Ok(immutable_chunk_response(bytes, "application/octet-stream"))
+}
+
+pub async fn get_game_disk_chunk(
+    State(state): State<Arc<AppState>>,
+    AxumPath((slug, sha256, part)): AxumPath<(String, String, String)>,
+) -> Result<Response, ProjectError> {
+    let storage_key: Option<String> = sqlx::query_scalar(
+        r#"SELECT g.disk_storage_key FROM project_v86_games g
+           JOIN projects p ON p.id = g.project_id
+           JOIN posts ON posts.id = p.post_id
+           WHERE posts.slug = ? AND posts.status = 'published'
+             AND p.demo_type = 'v86' AND g.disk_sha256 = ?"#,
+    )
+    .bind(&slug)
+    .bind(&sha256)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
+    if part == ".img" || part.contains('/') || !(part.ends_with(".img") || part.ends_with(".img.zst"))
+    {
+        return Err(ProjectError::ProjectNotFound);
+    }
+    if let Some(r2) = &state.r2 {
+        let key = format!("{storage_key}/{part}");
+        let bytes = r2
+            .get_object(&key)
+            .await
+            .map_err(|_| ProjectError::ProjectNotFound)?;
+        return Ok(immutable_chunk_response(bytes, "application/octet-stream"));
+    }
+    let bytes = tokio::fs::read(
+        state
+            .project_demo_config
+            .dir
+            .join(storage_key)
             .join(part),
     )
     .await
@@ -2308,6 +3028,188 @@ pub async fn get_game_iso(
     Ok(response)
 }
 
+fn zstd_compress(data: &[u8]) -> Result<Vec<u8>, ProjectError> {
+    let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), 19)
+        .map_err(|e| ProjectError::InternalError(format!("zstd encode start: {e}")))?;
+    std::io::Write::write_all(&mut encoder, data)
+        .map_err(|e| ProjectError::InternalError(format!("zstd encode: {e}")))?;
+    encoder
+        .finish()
+        .map_err(|e| ProjectError::InternalError(format!("zstd encode finish: {e}")))
+}
+
+#[allow(dead_code)]
+fn zstd_decode(data: &[u8]) -> Result<Vec<u8>, ProjectError> {
+    use std::io::Read;
+    let mut output = Vec::with_capacity(V86_SAVE_FLOPPY_BYTES);
+    zstd::stream::read::Decoder::new(data)
+        .map_err(|e| ProjectError::InternalError(format!("zstd decode start: {e}")))?
+        .read_to_end(&mut output)
+        .map_err(|e| ProjectError::InternalError(format!("zstd decode: {e}")))?;
+    Ok(output)
+}
+
+fn save_rate_limit_key(user_id: i64, project_id: i64) -> String {
+    format!("{user_id}:{project_id}")
+}
+
+fn save_rate_limited(key: &str) -> bool {
+    let now = Utc::now().timestamp_millis();
+    static MAP: OnceLock<Mutex<HashMap<String, i64>>> = OnceLock::new();
+    let map = MAP.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut map = map.lock().unwrap();
+    if let Some(&last) = map.get(key)
+        && now - last < V86_SAVE_RATE_LIMIT_MS as i64
+    {
+        return true;
+    }
+    map.insert(key.to_string(), now);
+    false
+}
+
+async fn save_project_id(
+    state: &AppState,
+    slug: &str,
+) -> Result<i64, ProjectError> {
+    sqlx::query_scalar(
+        r#"SELECT p.id FROM projects p
+           JOIN posts ON posts.id = p.post_id
+           WHERE posts.slug = ? AND posts.status = 'published' AND p.demo_type = 'v86'"#,
+    )
+    .bind(slug)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)
+}
+
+pub async fn get_game_save(
+    State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    AxumPath(slug): AxumPath<String>,
+) -> Result<Response, ProjectError> {
+    let Some(claims) = opt_claims else {
+        return Err(ProjectError::ProjectNotFound);
+    };
+    let user_id = user_id(&claims)?;
+    let project_id = save_project_id(&state, &slug).await?;
+    let row = sqlx::query(
+        "SELECT storage_key, size_bytes FROM v86_saves WHERE project_id = ? AND user_id = ?",
+    )
+    .bind(project_id)
+    .bind(user_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    let (storage_key, size) = match row {
+        Some(row) => (row.get::<String, _>("storage_key"), row.get::<i64, _>("size_bytes")),
+        None => return Err(ProjectError::SaveNotFound),
+    };
+    let compressed = match &state.r2 {
+        Some(r2) => r2.get_object(&storage_key).await.map_err(r2_error)?,
+        None => {
+            tokio::fs::read(
+                state
+                    .project_demo_config
+                    .dir
+                    .join(&storage_key),
+            )
+            .await
+            .map_err(|_| ProjectError::SaveNotFound)?
+        }
+    };
+    let mut response = Response::new(axum::body::Body::from(compressed));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&size.to_string())
+            .map_err(|error| ProjectError::InternalError(error.to_string()))?,
+    );
+    Ok(response)
+}
+
+pub async fn put_game_save(
+    State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    AxumPath(slug): AxumPath<String>,
+    bytes: Bytes,
+) -> Result<StatusCode, ProjectError> {
+    let user_id = user_id(&opt_claims.ok_or(ProjectError::Forbidden)?)?;
+    let project_id = save_project_id(&state, &slug).await?;
+    if bytes.is_empty() || bytes.len() > V86_SAVE_MAX_UPLOAD_BYTES {
+        return Err(ProjectError::InvalidDemo(
+            "The save image exceeds the allowed size.".to_string(),
+        ));
+    }
+    let key = save_rate_limit_key(user_id, project_id);
+    if save_rate_limited(&key) {
+        return Err(ProjectError::Conflict(
+            "Please wait before saving again.".to_string(),
+        ));
+    }
+    let compressed = zstd_compress(&bytes)?;
+    let storage_key = format!("v86/saves/{user_id}/{project_id}/save.zst");
+    if let Some(r2) = &state.r2 {
+        r2.put_object_bytes(&storage_key, compressed.clone())
+            .await
+            .map_err(r2_error)?;
+    } else {
+        let path = state.project_demo_config.dir.join(&storage_key);
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(&path, &compressed).await?;
+    }
+    let sha = hex::encode(Sha256::digest(&compressed));
+    sqlx::query(
+        r#"INSERT INTO v86_saves (project_id, user_id, storage_key, size_bytes, sha256)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(project_id, user_id) DO UPDATE SET
+             storage_key = excluded.storage_key,
+             size_bytes = excluded.size_bytes,
+             sha256 = excluded.sha256,
+             updated_at = CURRENT_TIMESTAMP"#,
+    )
+    .bind(project_id)
+    .bind(user_id)
+    .bind(&storage_key)
+    .bind(compressed.len() as i64)
+    .bind(&sha)
+    .execute(&state.project_service.pool)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_game_save(
+    State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    AxumPath(slug): AxumPath<String>,
+) -> Result<StatusCode, ProjectError> {
+    let user_id = user_id(&opt_claims.ok_or(ProjectError::Forbidden)?)?;
+    let project_id = save_project_id(&state, &slug).await?;
+    let row = sqlx::query(
+        "SELECT storage_key FROM v86_saves WHERE project_id = ? AND user_id = ?",
+    )
+    .bind(project_id)
+    .bind(user_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    if let Some(row) = row {
+        let storage_key: String = row.get("storage_key");
+        if let Some(r2) = &state.r2 {
+            let _ = r2.delete_object(&storage_key).await;
+        }
+        let _ = tokio::fs::remove_file(state.project_demo_config.dir.join(&storage_key)).await;
+        sqlx::query("DELETE FROM v86_saves WHERE project_id = ? AND user_id = ?")
+            .bind(project_id)
+            .bind(user_id)
+            .execute(&state.project_service.pool)
+            .await?;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2364,7 +3266,7 @@ mod tests {
         let source = root.join("disk.img");
         fs::write(&source, b"abcdefghij").unwrap();
         let parts = root.join("parts");
-        assert_eq!(split_asset(&source, &parts, 4, "img.zst", None, 19).ok().unwrap(), 3);
+        assert_eq!(split_asset(&source, &parts, 4, "img.zst", None, 6).ok().unwrap(), 3);
         let read_decompressed = |name| {
             let compressed = fs::read(parts.join(name)).unwrap();
             let mut decoder = zstd::stream::read::Decoder::new(&compressed[..]).unwrap();
@@ -2379,46 +3281,161 @@ mod tests {
     }
 
     #[test]
+    fn save_files_parse_and_validate() {
+        assert_eq!(
+            save_files_from_manifest(
+                "exe=a.exe\nsave_paths=Save0001.dat; A/save0001.dat; backup/what.bak"
+            )
+            .ok()
+            .unwrap(),
+            vec![
+                "Save0001.dat".to_string(),
+                r"A\save0001.dat".to_string(),
+                r"backup\what.bak".to_string(),
+            ]
+        );
+        assert_eq!(
+            save_files_from_manifest("exe=a.exe\nsaves=Save0001.dat,save0001.dat")
+                .ok()
+                .unwrap(),
+            vec!["Save0001.dat".to_string()]
+        );
+        assert_eq!(
+            save_files_from_manifest("exe=a.exe\nsaves=").ok().unwrap().len(),
+            0
+        );
+        for bad in [
+            "save_paths=/abs.dat",
+            "save_paths=a\\b\\",
+            "save_paths=a//b.dat",
+            "save_paths=../x.dat",
+            "save_paths=./x.dat",
+            "save_paths=a\\b\\..\\c.dat",
+            "save_paths=a=b.dat",
+            "save_paths=a:b.dat",
+            "save_paths=*.dat",
+            "save_paths=?.dat",
+            "save_paths=a b.dat",
+        ] {
+            assert!(
+                save_files_from_manifest(&format!("exe=a.exe\n{bad}")).is_err(),
+                "{bad} should be rejected"
+            );
+        }
+    }
+
+    #[test]
     fn windows95_manifest_resolves_a_unique_nested_executable() {
         let root = std::env::temp_dir().join(format!("v86-manifest-test-{}", Uuid::new_v4()));
         let game = root.join("Doraemon");
         fs::create_dir_all(&game).unwrap();
         fs::write(game.join("Doraemon.exe"), b"game").unwrap();
 
-        let config = windows95_launcher_config(&root, "exe=Doraemon.exe\nargs=-m")
-            .ok()
-            .unwrap();
-        assert!(config.contains(r"executable=D:\GAME\Doraemon\Doraemon.exe"));
-        assert!(config.contains(r"working_directory=D:\GAME\Doraemon"));
+        let config = windows95_launcher_config(
+            &root,
+            "exe=Doraemon.exe\nargs=-m\nsave_paths=Save0001.dat; A/save0001.dat; backup/what.bak",
+        )
+        .ok()
+        .unwrap();
+        assert!(config.contains(r"executable=D:\Doraemon\Doraemon.exe"));
+        assert!(config.contains(r"working_directory=D:\Doraemon"));
         assert!(config.contains("arguments=-m"));
         assert!(config.contains("delay_ms=1000"));
+        assert!(config.contains("[saves]\r\n"));
+        assert!(config.contains(r"file=Save0001.dat"));
+        assert!(config.contains(r"file=A\save0001.dat"));
+        assert!(config.contains(r"file=backup\what.bak"));
         fs::remove_dir_all(root).ok();
     }
 
     #[test]
-    fn windows95_strategy_builds_launcher_manifest_and_game_iso() {
+    fn manifest_folder_qualified_exe_falls_back_to_root_after_unwrap() {
+        let root = std::env::temp_dir().join(format!("v86-manifest-fallback-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("Doraemon.exe"), b"game").unwrap();
+
+        // The ZIP was unwrapped to the root, so the old folder-qualified path no
+        // longer exists; the basename fallback keeps the manifest working.
+        let config = windows95_launcher_config(&root, "exe=Game/Doraemon.exe")
+            .ok()
+            .unwrap();
+        assert!(config.contains(r"executable=D:\Doraemon.exe"));
+        assert!(config.contains(r"working_directory=D:\"));
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn unwrap_single_top_level_folder_flattens_nested_wrappers() {
+        let root = std::env::temp_dir().join(format!("v86-unwrap-test-{}", Uuid::new_v4()));
+        let nested = root.join("Game").join("Game");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join("Doraemon.exe"), b"game").unwrap();
+        unwrap_single_top_level_dir(&root).unwrap();
+        assert!(fs::read(root.join("Doraemon.exe")).is_ok());
+        assert!(!root.join("Game").exists());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn zip_extraction_skips_macos_junk_and_unwraps_single_folder() {
+        let root = std::env::temp_dir().join(format!("v86-junk-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let zip_path = root.join("game.zip");
+        let out = root.join("out");
+        write_zip(
+            &zip_path,
+            &[
+                ("Doraemon/Doraemon.exe", b"game"),
+                ("__MACOSX/._Doraemon.exe", b"junk"),
+                ("Doraemon/.DS_Store", b"junk"),
+            ],
+        );
+        validate_and_extract_game_zip(&zip_path, &out, 10, 1024).unwrap();
+        assert!(out.join("Doraemon").join("Doraemon.exe").is_file());
+        assert!(!out.join("__MACOSX").exists());
+        assert!(!out.join("Doraemon").join(".DS_Store").exists());
+        unwrap_single_top_level_dir(&out).unwrap();
+        assert!(out.join("Doraemon.exe").is_file());
+        assert!(!out.join("Doraemon").exists());
+
+        let junk_only = root.join("junk.zip");
+        write_zip(&junk_only, &[("__MACOSX/x", b"junk"), ("a/.DS_Store", b"junk")]);
+        assert!(validate_and_extract_game_zip(&junk_only, &root.join("junk_out"), 10, 1024).is_err());
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn windows95_strategy_builds_disk_launcher_manifest_and_cd() {
         if Command::new("xorriso").arg("-version").output().is_err() {
             return;
         }
-        let root = std::env::temp_dir().join(format!("v86-iso-test-{}", Uuid::new_v4()));
+        if Command::new("mformat").arg("-h").output().is_err() {
+            return;
+        }
+        if Command::new("mcopy").arg("-h").output().is_err() {
+            return;
+        }
+        let root = std::env::temp_dir().join(format!("v86-disk-test-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).unwrap();
         let game_zip = root.join("game.zip");
         write_zip(&game_zip, &[("Doraemon.exe", b"game")]);
-        let manifest =
-            "[game]\r\nexecutable=D:\\GAME\\Doraemon.exe\r\narguments=-m\r\ndelay_ms=1000\r\n";
+        let manifest = "[game]\r\nexecutable=D:\\Doraemon.exe\r\narguments=-m\r\ndelay_ms=1000\r\n";
         let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
-        let iso = build_windows95_iso(
+        let (disk, iso, extracted) = build_windows95_disk(
             &root,
             &assets_dir,
             "xorriso",
+            "",
             "proof",
             &game_zip,
             manifest,
             10,
             1024,
         )
-        .ok()
+        .map_err(|error| panic!("build_windows95_disk failed: {error:?}"))
         .unwrap();
+        assert_eq!(extracted, 4);
+        assert!(disk.is_file());
         assert!(iso.is_file());
         let listing = Command::new("xorriso")
             .args(["-indev"])
@@ -2430,7 +3447,25 @@ mod tests {
         assert!(listed.contains("AUTORUN.INF"));
         assert!(listed.contains("LAUNCHER.EXE"));
         assert!(listed.contains("V86GAME.INI"));
-        assert!(listed.contains("Doraemon.exe"));
+        assert!(!listed.contains("Doraemon.exe"));
+        let mbr = fs::read(&disk).unwrap();
+        assert_ne!(mbr[450], 0, "MBR partition type byte must be set");
+        let disk_listing = Command::new("mdir")
+            .arg("-i")
+            .arg(format!("{}@@{}", disk.display(), 63 * 512))
+            .arg("-/")
+            .arg("::/")
+            .output()
+            .unwrap();
+        let disk_listed = String::from_utf8_lossy(&disk_listing.stdout);
+        assert!(disk_listed.contains("Doraemon.exe"));
+        assert!(disk_listed.contains("DORAEMON EXE"));
+        // The game must sit at the drive root: no wrapper subdirectory like
+        // `Directory for ::/game` may appear in the recursive listing.
+        assert!(
+            !disk_listed.to_ascii_lowercase().contains("directory for ::/game"),
+            "game files must not be nested under a wrapper folder"
+        );
         fs::remove_dir_all(root).ok();
     }
 }

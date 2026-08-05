@@ -828,33 +828,82 @@ fn normalize_links(links: Vec<ProjectLink>) -> Vec<ProjectLink> {
         .collect()
 }
 
-/// Best-effort cleanup of a v86 game's R2 objects and any legacy local files.
-/// Content-addressed objects are only removed once no other project references them.
-async fn delete_v86_game_objects(state: &AppState, zip_key: &str, iso_key: &str) {
+/// Best-effort cleanup of a v86 game's R2 objects, its local mirror, and the
+/// per-user cloud saves. Content-addressed objects are only removed once no
+/// other project references them.
+async fn delete_v86_game_objects(
+    state: &AppState,
+    project_id: i64,
+    keys: &(Option<String>, Option<String>, Option<String>),
+) {
+    let (zip_key, iso_key, disk_key) = keys;
     if let Some(r2) = &state.r2 {
-        let zip_refs: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM project_v86_games WHERE zip_storage_key = ?",
-        )
-        .bind(zip_key)
-        .fetch_one(&state.project_service.pool)
-        .await
-        .unwrap_or(1);
-        if zip_refs == 0 {
-            let _ = r2.delete_object(zip_key).await;
+        if let Some(zip) = zip_key {
+            let refs: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM project_v86_games WHERE zip_storage_key = ?",
+            )
+            .bind(zip)
+            .fetch_one(&state.project_service.pool)
+            .await
+            .unwrap_or(1);
+            if refs == 0 {
+                let _ = r2.delete_object(zip).await;
+            }
         }
-        let iso_refs: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM project_v86_games WHERE iso_storage_key = ?",
-        )
-        .bind(iso_key)
-        .fetch_one(&state.project_service.pool)
-        .await
-        .unwrap_or(1);
-        if iso_refs == 0 {
-            let _ = r2.delete_prefix(iso_key).await;
+        if let Some(disk) = disk_key {
+            let refs: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM project_v86_games WHERE disk_storage_key = ?",
+            )
+            .bind(disk)
+            .fetch_one(&state.project_service.pool)
+            .await
+            .unwrap_or(1);
+            if refs == 0 {
+                let _ = r2.delete_prefix(disk).await;
+            }
+        }
+        if let Some(iso) = iso_key {
+            let refs: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM project_v86_games WHERE iso_storage_key = ?",
+            )
+            .bind(iso)
+            .fetch_one(&state.project_service.pool)
+            .await
+            .unwrap_or(1);
+            if refs == 0 {
+                let _ = r2.delete_prefix(iso).await;
+            }
         }
     }
-    let _ = tokio::fs::remove_file(state.project_demo_config.dir.join(zip_key)).await;
-    let _ = tokio::fs::remove_dir_all(state.project_demo_config.dir.join(iso_key)).await;
+    if let Some(zip) = zip_key {
+        let _ = tokio::fs::remove_file(state.project_demo_config.dir.join(zip)).await;
+    }
+    if let Some(disk) = disk_key {
+        let _ = tokio::fs::remove_dir_all(state.project_demo_config.dir.join(disk)).await;
+    }
+    if let Some(iso) = iso_key {
+        let _ = tokio::fs::remove_dir_all(state.project_demo_config.dir.join(iso)).await;
+    }
+    // Cloud saves are per-user; remove them along with the project.
+    let save_keys: Vec<String> =
+        sqlx::query_scalar("SELECT storage_key FROM v86_saves WHERE project_id = ?")
+            .bind(project_id)
+            .fetch_all(&state.project_service.pool)
+            .await
+            .unwrap_or_default();
+    if let Some(r2) = &state.r2 {
+        for key in save_keys.iter() {
+            let _ = r2.delete_object(key).await;
+        }
+    } else {
+        for key in save_keys.iter() {
+            let _ = tokio::fs::remove_file(state.project_demo_config.dir.join(key)).await;
+        }
+    }
+    let _ = sqlx::query("DELETE FROM v86_saves WHERE project_id = ?")
+        .bind(project_id)
+        .execute(&state.project_service.pool)
+        .await;
 }
 
 pub async fn get_jsdos_bundle(
@@ -1108,8 +1157,8 @@ pub async fn delete_project_draft(
             "Only draft projects can be automatically cleaned up.".to_string(),
         ));
     }
-    let v86_storage = sqlx::query_as::<_, (String, String)>(
-        "SELECT zip_storage_key, iso_storage_key FROM project_v86_games WHERE project_id = ?",
+    let v86_storage = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
+        "SELECT zip_storage_key, iso_storage_key, disk_storage_key FROM project_v86_games WHERE project_id = ?",
     )
     .bind(project_id)
     .fetch_optional(&mut *tx)
@@ -1119,8 +1168,8 @@ pub async fn delete_project_draft(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
-    if let Some((zip_key, iso_key)) = v86_storage {
-        delete_v86_game_objects(&state, &zip_key, &iso_key).await;
+    if let Some(keys) = v86_storage {
+        delete_v86_game_objects(&state, project_id, &keys).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1149,11 +1198,11 @@ pub async fn update_project(
         .as_deref()
         .unwrap_or(current_demo_type.as_str())
         .to_string();
-    let old_v86_storage = sqlx::query_as::<_, (String, String)>(
-        "SELECT zip_storage_key, iso_storage_key FROM project_v86_games WHERE project_id = ?",
+    let old_v86_storage = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
+        "SELECT zip_storage_key, iso_storage_key, disk_storage_key FROM project_v86_games WHERE project_id = ?",
     )
     .bind(project_id)
-    .fetch_optional(&state.project_service.pool)
+    .fetch_one(&state.project_service.pool)
     .await?;
 
     let has_demo_url = data.demo_url.as_ref().is_some_and(|u| !u.trim().is_empty());
@@ -1311,8 +1360,8 @@ pub async fn update_project(
         )
         .await?;
         tx.commit().await?;
-        if let Some((zip_key, iso_key)) = old_v86_storage.as_ref() {
-            delete_v86_game_objects(&state, zip_key, iso_key).await;
+        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some() {
+            delete_v86_game_objects(&state, project_id, &old_v86_storage).await;
         }
     }
 
@@ -1339,8 +1388,8 @@ pub async fn update_project(
             .bind(project_id)
             .execute(&state.project_service.pool)
             .await?;
-        if let Some((zip_key, iso_key)) = old_v86_storage {
-            delete_v86_game_objects(&state, &zip_key, &iso_key).await;
+        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some() {
+            delete_v86_game_objects(&state, project_id, &old_v86_storage).await;
         }
     }
 

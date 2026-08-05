@@ -155,6 +155,19 @@ impl R2Client {
         Ok(())
     }
 
+    /// Uploads an in-memory blob (used for the small per-user floppy saves).
+    pub async fn put_object_bytes(&self, key: &str, bytes: Vec<u8>) -> Result<(), R2Error> {
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .body(ByteStream::from(bytes))
+            .send()
+            .await
+            .map_err(|e| R2Error(format!("put_object_bytes {key}: {e}")))?;
+        Ok(())
+    }
+
     /// Reads a byte range of an object (used for the boot-sector signature check).
     pub async fn get_object_range(
         &self,
@@ -237,14 +250,27 @@ impl R2Client {
 
     /// Downloads an entire object to a transient local file for the build step.
     pub async fn download_to_file(&self, key: &str, path: &Path) -> Result<(), R2Error> {
-        let output = self
+        let output = match self
             .client
             .get_object()
             .bucket(&self.bucket)
             .key(key)
             .send()
             .await
-            .map_err(|e| R2Error(format!("download_to_file {key}: {e}")))?;
+        {
+            Ok(output) => output,
+            Err(error) => {
+                let status = error
+                    .raw_response()
+                    .map(|raw| raw.status().as_u16().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let detail = error
+                    .as_service_error()
+                    .map(|service| format!("service error (HTTP {status}): {service}"))
+                    .unwrap_or_else(|| format!("{error} (HTTP {status})"));
+                return Err(R2Error(format!("download_to_file {key}: {detail}")));
+            }
+        };
         let mut stream = output.body.into_async_read();
         let mut file = tokio::fs::File::create(path)
             .await

@@ -1,3 +1,5 @@
+import { loadSave, saveGame, clearSave, SAVE_BYTES, loadBlankFloppy } from './v86-saves.js';
+
 export class V86Player {
 	status = $state('Loading emulator…');
 	error = $state('');
@@ -9,6 +11,8 @@ export class V86Player {
 	downloadProgress = $state(null);
 	screenContainer = $state();
 	shell = $state();
+	saveBusy = $state(false);
+	saveMessage = $state('');
 
 	#emulator;
 	#pressed = new Set();
@@ -19,6 +23,10 @@ export class V86Player {
 	#noiseChain = null;
 	#noiseChainPromise = null;
 	#wheelCooldown = 0;
+	#saveFloppy = null;
+	#lastSaveAt = 0;
+
+	saveAvailable = $derived(this.runtime?.save_supported === true);
 
 	constructor({ runtime }) {
 		this.runtime = runtime;
@@ -45,6 +53,7 @@ export class V86Player {
 		if (this.running || !this.runtime) return;
 		this.error = '';
 		this.status = 'Loading emulator…';
+		this.saveMessage = '';
 		try {
 			if ('serviceWorker' in navigator) {
 				await navigator.serviceWorker.register('/v86-cache-worker.js', { scope: '/' });
@@ -54,6 +63,13 @@ export class V86Player {
 			if (this.#disposed) return;
 			const V86Constructor = window.V86 ?? window.V86Starter;
 			if (!V86Constructor) throw new Error('The local v86 constructor is unavailable.');
+			if (this.runtime.save_supported) {
+				this.status = 'Loading your save…';
+				this.#saveFloppy =
+					(await loadSave(this.runtime.slug).catch(() => null)) ??
+					(await loadBlankFloppy().catch(() => null));
+				if (this.#disposed) return;
+			}
 			this.#emulator = new V86Constructor({
 				wasm_path: '/v86/build/v86.wasm',
 				screen: {
@@ -64,7 +80,7 @@ export class V86Player {
 				autostart: true,
 				memory_size: this.runtime.memory_size,
 				vga_memory_size: this.runtime.vga_memory_size,
-				boot_order: 0,
+				boot_order: 786,
 				bios: { url: '/v86/bios/seabios.bin' },
 				vga_bios: { url: '/v86/bios/vgabios.bin' },
 				hda: {
@@ -74,11 +90,19 @@ export class V86Player {
 					fixed_chunk_size: this.runtime.chunk_size_bytes,
 					use_parts: true
 				},
+				hdb: {
+					url: this.runtime.game_url,
+					size: this.runtime.game_size_bytes,
+					async: true,
+					fixed_chunk_size: this.runtime.chunk_size_bytes,
+					use_parts: true
+				},
 				cdrom: {
 					url: this.runtime.iso_url,
 					size: this.runtime.iso_size_bytes,
 					async: false
 				},
+				...((this.#saveFloppy && { fda: { buffer: this.#saveFloppy.buffer } }) ?? {}),
 				acpi: false,
 				disable_speaker: false,
 				net_device: {
@@ -86,8 +110,7 @@ export class V86Player {
 					relay_url: undefined,
 					cors_proxy: undefined,
 					mtu: 1500
-				},
-				filesystem: {}
+				}
 			});
 			if (this.#disposed) {
 				this.destroy();
@@ -101,7 +124,11 @@ export class V86Player {
 				this.applyAudioState();
 			});
 			this.#emulator.add_listener?.('download-progress', (info) => {
-				if (info?.file_name !== this.runtime.iso_url) return;
+				const fileUrl = new URL(info?.file_name ?? '', window.location.origin);
+				const gameAsset = fileUrl.pathname.includes(`/${this.runtime.game_sha256}/`);
+				const isIso =
+					fileUrl.pathname === new URL(this.runtime.iso_url, window.location.origin).pathname;
+				if (!gameAsset && !isIso) return;
 				if (info.loaded == null || info.total == null) return;
 				this.downloadProgress = Math.min(100, (info.loaded / info.total) * 100);
 				if (info.loaded >= info.total) {
@@ -110,7 +137,7 @@ export class V86Player {
 				} else {
 					const loaded = Math.floor(info.loaded / 1048576);
 					const total = Math.floor(info.total / 1048576);
-					this.status = `Downloading ISO (${loaded} / ${total} MB)`;
+					this.status = `Downloading game (${loaded} / ${total} MB)`;
 				}
 			});
 			this.applyNoiseFilter().catch(() => {});
@@ -152,6 +179,46 @@ export class V86Player {
 		this.destroy();
 		this.downloadProgress = null;
 		await this.start();
+	};
+
+	saveNow = async () => {
+		if (!this.runtime?.save_supported || !this.running) return;
+		const now = Date.now();
+		if (now - this.#lastSaveAt < 30000) {
+			this.saveMessage = 'Please wait 30 seconds between saves.';
+			return;
+		}
+		const floppy = this.#emulator?.get_disk_fda?.();
+		if (!floppy || floppy.length !== SAVE_BYTES || floppy[510] !== 0x55 || floppy[511] !== 0xaa) {
+			this.saveMessage = 'The save floppy is not ready yet.';
+			return;
+		}
+		this.saveBusy = true;
+		this.saveMessage = 'Saving…';
+		try {
+			await saveGame(this.runtime.slug, floppy);
+			this.#lastSaveAt = now;
+			this.saveMessage = 'Game saved to your account.';
+		} catch (cause) {
+			this.saveMessage = cause?.message ?? 'Could not save the game.';
+		} finally {
+			this.saveBusy = false;
+		}
+	};
+
+	clearNow = async () => {
+		if (!this.runtime?.save_supported || this.saveBusy) return;
+		this.saveBusy = true;
+		this.saveMessage = 'Clearing…';
+		try {
+			await clearSave(this.runtime.slug);
+			this.#lastSaveAt = 0;
+			this.saveMessage = 'Save cleared.';
+		} catch (cause) {
+			this.saveMessage = cause?.message ?? 'Could not clear the save.';
+		} finally {
+			this.saveBusy = false;
+		}
 	};
 
 	static createNoiseGateWorkletUrl() {

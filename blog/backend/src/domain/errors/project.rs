@@ -11,6 +11,7 @@ use crate::domain::errors::{media::MediaError, post::PostError};
 #[derive(Debug)]
 pub enum ProjectError {
     ProjectNotFound,
+    SaveNotFound,
     Forbidden,
     UploadFailed(String),
     InvalidDemo(String),
@@ -24,6 +25,7 @@ impl Display for ProjectError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProjectError::ProjectNotFound => write!(f, "Project not found"),
+            ProjectError::SaveNotFound => write!(f, "No save exists for this game yet"),
             ProjectError::Forbidden => write!(f, "Forbidden"),
             ProjectError::UploadFailed(msg) => write!(f, "Upload failed: {msg}"),
             ProjectError::InvalidDemo(msg) => write!(f, "Invalid demo: {msg}"),
@@ -42,6 +44,10 @@ impl IntoResponse for ProjectError {
             ProjectError::Post(inner) => inner.into_response(),
             ProjectError::ProjectNotFound => {
                 (StatusCode::NOT_FOUND, "Project not found".to_string()).into_response()
+            }
+            ProjectError::SaveNotFound => {
+                (StatusCode::NOT_FOUND, "No save exists for this game yet".to_string())
+                    .into_response()
             }
             ProjectError::Forbidden => (
                 StatusCode::FORBIDDEN,

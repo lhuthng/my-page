@@ -719,7 +719,10 @@
 					class="px-1 min-w-0 bg-white rounded-sm font-mono"
 					bind:value={editingData.v86Manifest}
 					readonly={!isOwner}></textarea>
-				<p class="text-xs text-dark/60">Free-form platform configuration, maximum 64 KiB.</p>
+				<p class="text-xs text-dark/60">
+					v86 manifest keys: exe (required), plus optional args, delay_ms and save_paths. Paths are
+					relative to the game drive root.
+				</p>
 			</div>
 		</div>
 	{/if}

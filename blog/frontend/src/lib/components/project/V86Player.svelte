@@ -15,6 +15,7 @@
 
 	let soundOpen = $state(false);
 	let mouseOpen = $state(false);
+	let clearOpen = $state(false);
 
 	let phase = $derived.by(() => {
 		if (player.error) return 'error';
@@ -160,6 +161,87 @@
 		>
 			<Restart class="h-6 w-6" />
 		</button>
+
+		{#if player.saveAvailable}
+			<button
+				type="button"
+				class="icon-toggle"
+				class:toggled={false}
+				aria-label="Save game"
+				title="Save game"
+				disabled={!player.running || player.saveBusy}
+				onclick={() => player.saveNow()}
+			>
+				<svg
+					class="h-6 w-6"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"></path>
+					<polyline points="17 21 17 13 7 13 7 21"></polyline>
+					<polyline points="7 3 7 8 15 8"></polyline>
+				</svg>
+			</button>
+
+			<Popover
+				bind:open={clearOpen}
+				position="bottom"
+				align={win.isLg ? 'center' : 'right'}
+				offset={8}
+			>
+				{#snippet anchor()}
+					<button
+						type="button"
+						class="icon-toggle"
+						class:toggled={clearOpen}
+						aria-label="Clear save"
+						title="Clear save"
+						disabled={player.saveBusy}
+						onclick={() => (clearOpen = true)}
+					>
+						<svg
+							class="h-6 w-6"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<polyline points="3 6 5 6 21 6"></polyline>
+							<path
+								d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+							></path>
+							<line x1="10" x2="10" y1="11" y2="17"></line>
+							<line x1="14" x2="14" y1="11" y2="17"></line>
+						</svg>
+					</button>
+				{/snippet}
+
+				<div class="flex min-w-56 flex-col gap-3 bg-white border-dark border-2 p-4 rounded-xl">
+					<p class="m-0 text-dark/80">Clear your saved game?</p>
+					<div class="flex justify-end gap-2">
+						<button type="button" class="duo-btn px-3 py-1" onclick={() => (clearOpen = false)}>
+							Cancel
+						</button>
+						<button
+							type="button"
+							class="duo-btn px-3 py-1"
+							onclick={() => {
+								clearOpen = false;
+								player.clearNow();
+							}}
+						>
+							Clear
+						</button>
+					</div>
+				</div>
+			</Popover>
+		{/if}
 	</div>
 </Portal>
 
@@ -176,6 +258,12 @@
 				style:width={`${player.downloadProgress}%`}
 			></div>
 		</div>
+	{/if}
+
+	{#if player.saveMessage}
+		<p class="rounded-lg border border-dark/15 bg-dark/5 px-3 py-2 text-dark/80">
+			{player.saveMessage}
+		</p>
 	{/if}
 
 	<dl class="v86-keys">
@@ -203,7 +291,7 @@
 		Avoid scrolling hard while booting or playing - it's fragile and could break the game.
 	</p>
 	<p class="text-dark/60">
-		Saving &amp; loading aren't available yet, but they're on my to-do list.
+		Saves travel on a virtual floppy: play the game, quit it, then press the save button.
 	</p>
 </Portal>
 
@@ -284,6 +372,10 @@
 
 	.icon-toggle.toggled {
 		@apply bg-dark text-white;
+	}
+
+	.icon-toggle:disabled {
+		@apply cursor-not-allowed opacity-40;
 	}
 
 	.v86-shell {
