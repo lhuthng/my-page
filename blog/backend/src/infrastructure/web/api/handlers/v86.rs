@@ -471,31 +471,6 @@ fn validate_and_extract_game_zip(
     Ok(())
 }
 
-fn collect_game_files(
-    root: &Path,
-    directory: &Path,
-    files: &mut Vec<PathBuf>,
-) -> Result<(), ProjectError> {
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_game_files(root, &path, files)?;
-        } else if path.is_file() {
-            files.push(
-                path.strip_prefix(root)
-                    .map_err(|_| {
-                        ProjectError::InternalError(
-                            "Could not resolve an extracted game path.".to_string(),
-                        )
-                    })?
-                    .to_path_buf(),
-            );
-        }
-    }
-    Ok(())
-}
-
 fn unwrap_single_top_level_dir(game_dir: &Path) -> Result<(), ProjectError> {
     loop {
         let entries: Vec<PathBuf> = fs::read_dir(game_dir)?.flatten().map(|e| e.path()).collect();
@@ -667,7 +642,7 @@ fn save_files_from_manifest(manifest: &str) -> Result<Vec<String>, ProjectError>
     Ok(files)
 }
 
-fn windows95_launcher_config(game_dir: &Path, manifest: &str) -> Result<String, ProjectError> {
+fn windows95_launcher_config(manifest: &str) -> Result<String, ProjectError> {
     let mut fields = HashMap::new();
     for line in manifest.lines() {
         let line = line.trim();
@@ -698,60 +673,20 @@ fn windows95_launcher_config(game_dir: &Path, manifest: &str) -> Result<String, 
         ));
     }
 
-    let mut files = Vec::new();
-    collect_game_files(game_dir, game_dir, &mut files)?;
-    let requested_basename = requested.rsplit('/').next().unwrap_or(&requested);
-    let requested_has_directory = requested.contains('/');
-    let resolve = |folder_qualified: bool| -> Vec<&PathBuf> {
-        files
-            .iter()
-            .filter(|relative| {
-                let candidate = relative.to_string_lossy().replace('\\', "/");
-                if folder_qualified {
-                    candidate.eq_ignore_ascii_case(&requested)
-                } else {
-                    relative.file_name().is_some_and(|name| {
-                        name.to_string_lossy()
-                            .eq_ignore_ascii_case(requested_basename)
-                    })
-                }
-            })
-            .collect::<Vec<_>>()
-    };
-    let mut matches = resolve(requested_has_directory);
-    if matches.is_empty() && requested_has_directory {
-        // The single top-level wrapper folder was unwrapped, so a previously
-        // folder-qualified path now sits at the drive root. Fall back to a
-        // basename match to keep older manifests working.
-        matches = resolve(false);
-    }
-
-    let relative = match matches.as_slice() {
-        [relative] => (*relative).clone(),
-        [] => {
-            return Err(ProjectError::InvalidDemo(format!(
-                "The Windows 95 manifest executable '{requested}' was not found in the game ZIP."
-            )));
-        }
-        _ => {
-            return Err(ProjectError::InvalidDemo(format!(
-                "The Windows 95 manifest executable '{requested}' is ambiguous; include its folder path."
-            )));
-        }
-    };
-
-    let relative_windows = relative.to_string_lossy().replace('/', "\\");
+    // The executable path is taken verbatim from the manifest: the game tree is
+    // baked into the disk at full-build time, so manifest-only edits do not need
+    // to re-extract the ZIP to resolve or verify the path.
+    let relative_windows = requested.replace('/', "\\");
     let executable = format!(r"D:\{relative_windows}");
     if executable.len() >= 260 {
         return Err(ProjectError::InvalidDemo(
             "The resolved Windows 95 executable path is too long.".to_string(),
         ));
     }
-    let working_directory = relative
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .map(|parent| format!(r"D:\{}", parent.to_string_lossy().replace('/', "\\")))
-        .unwrap_or_else(|| r"D:\".to_string());
+    let working_directory = match requested.rfind('/') {
+        Some(index) if index > 0 => format!(r"D:\{}", requested[..index].replace('/', "\\")),
+        _ => r"D:\".to_string(),
+    };
     let arguments = fields
         .get("args")
         .or_else(|| fields.get("arguments"))
@@ -915,7 +850,6 @@ fn build_game_disk(
 fn build_game_cdrom(
     xorriso_bin: &str,
     assets_dir: &Path,
-    game_dir: &Path,
     manifest: &str,
     disc_dir: &Path,
     cdrom_path: &Path,
@@ -938,7 +872,7 @@ fn build_game_cdrom(
     )?;
     fs::write(
         disc_dir.join("V86GAME.INI"),
-        windows95_launcher_config(game_dir, manifest)?.as_bytes(),
+        windows95_launcher_config(manifest)?.as_bytes(),
     )?;
     fs::write(disc_dir.join("V86GAME.MANIFEST"), manifest.as_bytes())?;
 
@@ -991,7 +925,6 @@ fn build_windows95_disk(
     build_game_cdrom(
         xorriso_bin,
         assets_dir,
-        &game_dir,
         manifest,
         &build_dir.join("disc"),
         &cdrom_path,
@@ -999,18 +932,15 @@ fn build_windows95_disk(
     Ok((image_path, cdrom_path, extracted_bytes))
 }
 
-/// Rebuilds only the autorun CD from a (re-)extracted game tree. Used when the
-/// game ZIP is unchanged but the manifest changed, so the disk can be reused.
-#[allow(clippy::too_many_arguments)]
+/// Rebuilds only the autorun CD when the manifest changed. The game ZIP is not
+/// needed: the launcher, config and manifest are static/small and the disk is
+/// reused as-is.
 fn build_windows95_cdrom_only(
     state_dir: &Path,
     assets_dir: &Path,
     xorriso_bin: &str,
     upload_id: &str,
-    zip_path: &Path,
     manifest: &str,
-    max_files: usize,
-    max_extracted_size: u64,
 ) -> Result<PathBuf, ProjectError> {
     let build_dir = state_dir
         .join("v86")
@@ -1020,12 +950,10 @@ fn build_windows95_cdrom_only(
     if build_dir.exists() {
         fs::remove_dir_all(&build_dir)?;
     }
-    let (game_dir, _) = prepare_game_tree(&build_dir, zip_path, max_files, max_extracted_size)?;
     let cdrom_path = build_dir.join("boot.iso");
     build_game_cdrom(
         xorriso_bin,
         assets_dir,
-        &game_dir,
         manifest,
         &build_dir.join("disc"),
         &cdrom_path,
@@ -1957,14 +1885,9 @@ pub async fn start_game_upload(
             (file_name.clone(), size, true, transient_key, 0)
         } else {
             let source_key: String = source.get("zip_storage_key");
-            // Manifest-only edits rebuild from the project's stored ZIP, so it
-            // must still exist. Fail fast with a clear message instead of a
-            // confusing background build failure when it has been evicted.
-            if r2.object_size(&source_key).await.map_err(r2_error)?.is_none() {
-                return Err(ProjectError::InvalidDemo(
-                    "The existing game ZIP is missing from storage. Re-upload the game ZIP to continue editing this v86 project.".to_string(),
-                ));
-            }
+            // Manifest-only edit: the stored disk is reused and the launcher CD
+            // is regenerated from static assets, so the ZIP object itself is
+            // never required (it is no longer persisted at all).
             (
                 source.get::<String, _>("original_file_name"),
                 source.get::<i64, _>("zip_size_bytes") as u64,
@@ -2167,52 +2090,28 @@ async fn process_game_upload(
     max_extracted_size: u64,
     chunk_size: u64,
     source_project_id: Option<i64>,
+    manifest_only: bool,
     progress: Arc<Mutex<ChunkProgress>>,
 ) -> Result<(), String> {
-    if let Some(parent) = local_download.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    r2.download_to_file(transient_key, local_download)
-        .await
-        .map_err(|e| e.to_string())?;
-    let source = local_download.to_path_buf();
-
-    let (_zip_size, zip_sha) = tokio::task::spawn_blocking({
-        let source = source.clone();
-        move || sha256_file(&source)
-    })
-    .await
-    .map_err(|e| format!("sha256 task panicked: {e}"))?
-    .map_err(|e| e.to_string())?;
-
     let stored = match source_project_id {
         Some(project_id) => fetch_stored_game_artifact(pool, project_id).await?,
         None => None,
     };
-    // Also look for an existing project with the same ZIP content to enable
-    // cross-project dedup. Only consider rows that already have a game disk.
-    let shared = fetch_shared_game_artifact(pool, &zip_sha).await?;
-    // Manifest-only edits reuse the stored ZIP, so its sha always matches and
-    // the game disk never has to be rebuilt. When the manifest is also
-    // unchanged, the entire build is a no-op.
-    let reuse_disk = stored
-        .as_ref()
-        .is_some_and(|artifact| artifact.zip_sha256 == zip_sha)
-        || shared.is_some();
+
     let manifest_sha = hex::encode(Sha256::digest(manifest.as_bytes()));
 
-    let (zip_key, disk_key, disk_sha, disk_size, disk_chunk_count, iso_key, iso_sha, iso_size);
+    let (zip_key, zip_sha, disk_key, disk_sha, disk_size, disk_chunk_count, iso_key, iso_sha, iso_size);
     let build_dir = config_dir.join("v86").join("tmp").join("build").join(upload_id);
 
-    if reuse_disk {
+    if manifest_only {
+        // Manifest-only edit: the stored disk is reused as-is; the ZIP is never
+        // downloaded. Only the launcher CD is (re)generated from static assets
+        // when the manifest changed, so tagging it onto an empty source.
         let artifact = stored
             .as_ref()
-            .filter(|a| a.zip_sha256 == zip_sha)
-            .or(shared.as_ref())
-            .expect("reuse_disk implies a stored or shared artifact");
+            .ok_or_else(|| "source project artifact missing".to_string())?;
         zip_key = artifact.zip_storage_key.clone();
+        zip_sha = artifact.zip_sha256.clone();
         disk_key = artifact.disk_storage_key.clone();
         disk_sha = artifact.disk_sha256.clone();
         disk_size = artifact.disk_size_bytes;
@@ -2232,25 +2131,15 @@ async fn process_game_upload(
                 let mut p = progress.lock().unwrap();
                 p.message = "Rebuilding launcher…".to_string();
             }
-            let (state_dir, assets, xorriso, uid, mf, src) = (
+            let (state_dir, assets, xorriso, uid, mf) = (
                 config_dir.to_path_buf(),
                 assets_dir.to_path_buf(),
                 xorriso_bin.to_string(),
                 upload_id.to_string(),
                 manifest.to_string(),
-                source.clone(),
             );
             let cdrom_path = tokio::task::spawn_blocking(move || {
-                build_windows95_cdrom_only(
-                    &state_dir,
-                    &assets,
-                    &xorriso,
-                    &uid,
-                    &src,
-                    &mf,
-                    max_files,
-                    max_extracted_size,
-                )
+                build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf)
             })
             .await
             .map_err(|e| format!("cdrom build task panicked: {e}"))?
@@ -2272,106 +2161,197 @@ async fn process_game_upload(
             let _ = tokio::fs::remove_dir_all(&build_dir).await;
         }
     } else {
-        // Full build: a new or changed ZIP. Extract, partition the disk, split
-        // it into zstd chunks and upload everything.
-        {
-            let mut p = progress.lock().unwrap();
-            p.message = "Building game disc…".to_string();
+        if let Some(parent) = local_download.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| e.to_string())?;
         }
-        let (disk_path, cdrom_path, _extracted_bytes) = {
-            let state_dir = config_dir.to_path_buf();
-            let assets = assets_dir.to_path_buf();
-            let xorriso = xorriso_bin.to_string();
-            let mtools = mtools_bin.to_string();
-            let uid = upload_id.to_string();
-            let mf = manifest.to_string();
-            let src = source.clone();
-            tokio::task::spawn_blocking(move || {
-                build_windows95_disk(
-                    &state_dir,
-                    &assets,
-                    &xorriso,
-                    &mtools,
-                    &uid,
-                    &src,
-                    &mf,
-                    max_files,
-                    max_extracted_size,
-                )
+        r2.download_to_file(transient_key, local_download)
+            .await
+            .map_err(|e| e.to_string())?;
+        let source = local_download.to_path_buf();
+
+        let (_zip_size, computed_zip_sha) = tokio::task::spawn_blocking({
+            let source = source.clone();
+            move || sha256_file(&source)
+        })
+        .await
+        .map_err(|e| format!("sha256 task panicked: {e}"))?
+        .map_err(|e| e.to_string())?;
+        zip_sha = computed_zip_sha;
+
+        // Also look for an existing project with the same ZIP content to enable
+        // cross-project dedup. Only consider rows that already have a game disk.
+        let shared = fetch_shared_game_artifact(pool, &zip_sha).await?;
+        // Reuse the stored disk when this source project already built it from
+        // the same ZIP, or another project has a game disk for this content.
+        let reuse_disk = stored
+            .as_ref()
+            .is_some_and(|artifact| artifact.zip_sha256 == zip_sha)
+            || shared.is_some();
+
+        if reuse_disk {
+            let artifact = stored
+                .as_ref()
+                .filter(|a| a.zip_sha256 == zip_sha)
+                .or(shared.as_ref())
+                .expect("reuse_disk implies a stored or shared artifact");
+            zip_key = format!("v86/games/zips/{zip_sha}.zip");
+            disk_key = artifact.disk_storage_key.clone();
+            disk_sha = artifact.disk_sha256.clone();
+            disk_size = artifact.disk_size_bytes;
+            disk_chunk_count = artifact.chunk_count;
+            if artifact.manifest_sha256 == manifest_sha {
+                // No-op: reuse the stored ISO as well; nothing to build or upload.
+                {
+                    let mut p = progress.lock().unwrap();
+                    p.message = "No changes to rebuild.".to_string();
+                }
+                iso_key = artifact.iso_storage_key.clone();
+                iso_sha = artifact.iso_sha256.clone();
+                iso_size = artifact.iso_size_bytes;
+            } else {
+                // ISO-only: the manifest changed, so rebuild just the launcher CD.
+                {
+                    let mut p = progress.lock().unwrap();
+                    p.message = "Rebuilding launcher…".to_string();
+                }
+                let (state_dir, assets, xorriso, uid, mf) = (
+                    config_dir.to_path_buf(),
+                    assets_dir.to_path_buf(),
+                    xorriso_bin.to_string(),
+                    upload_id.to_string(),
+                    manifest.to_string(),
+                );
+                let cdrom_path = tokio::task::spawn_blocking(move || {
+                    build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf)
+                })
+                .await
+                .map_err(|e| format!("cdrom build task panicked: {e}"))?
+                .map_err(|e| e.to_string())?;
+                let (iso_size_raw, iso_sha_raw) = tokio::task::spawn_blocking({
+                    let cdrom = cdrom_path.clone();
+                    move || sha256_file(&cdrom)
+                })
+                .await
+                .map_err(|e| format!("sha256 task panicked: {e}"))?
+                .map_err(|e| e.to_string())?;
+                iso_sha = iso_sha_raw;
+                iso_size = iso_size_raw as i64;
+                iso_key = format!("v86/games/{iso_sha}");
+                r2.put_object_from_file(&format!("{iso_key}/full.iso"), &cdrom_path)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let _ = tokio::fs::remove_file(&cdrom_path).await;
+                let _ = tokio::fs::remove_dir_all(&build_dir).await;
+            }
+        } else {
+            // Full build: a new or changed ZIP. Extract, partition the disk,
+            // split it into zstd chunks and upload everything.
+            {
+                let mut p = progress.lock().unwrap();
+                p.message = "Building game disc…".to_string();
+            }
+            let (disk_path, cdrom_path, _extracted_bytes) = {
+                let state_dir = config_dir.to_path_buf();
+                let assets = assets_dir.to_path_buf();
+                let xorriso = xorriso_bin.to_string();
+                let mtools = mtools_bin.to_string();
+                let uid = upload_id.to_string();
+                let mf = manifest.to_string();
+                let src = source.clone();
+                tokio::task::spawn_blocking(move || {
+                    build_windows95_disk(
+                        &state_dir,
+                        &assets,
+                        &xorriso,
+                        &mtools,
+                        &uid,
+                        &src,
+                        &mf,
+                        max_files,
+                        max_extracted_size,
+                    )
+                })
+                .await
+                .map_err(|e| format!("disk build task panicked: {e}"))?
+                .map_err(|e| e.to_string())?
+            };
+
+            let (disk_size_raw, disk_sha_raw) = tokio::task::spawn_blocking({
+                let disk = disk_path.clone();
+                move || sha256_file(&disk)
             })
             .await
-            .map_err(|e| format!("disk build task panicked: {e}"))?
+            .map_err(|e| format!("sha256 task panicked: {e}"))?
+            .map_err(|e| e.to_string())?;
+            disk_sha = disk_sha_raw;
+            disk_size = disk_size_raw as i64;
+
+            let (iso_size_raw, iso_sha_raw) = tokio::task::spawn_blocking({
+                let cdrom = cdrom_path.clone();
+                move || sha256_file(&cdrom)
+            })
+            .await
+            .map_err(|e| format!("sha256 task panicked: {e}"))?
+            .map_err(|e| e.to_string())?;
+            iso_sha = iso_sha_raw;
+            iso_size = iso_size_raw as i64;
+
+            // Split the raw FAT image into the same zstd chunk layout as the
+            // base disk so the browser can stream it with use_parts.
+            let parts_dir = config_dir
+                .join("v86")
+                .join("tmp")
+                .join("games")
+                .join(format!("{upload_id}.diskparts"));
+            disk_chunk_count = tokio::task::spawn_blocking({
+                let disk = disk_path.clone();
+                let parts = parts_dir.clone();
+                move || split_asset(&disk, &parts, chunk_size, "img.zst", None, 6)
+            })
+            .await
+            .map_err(|e| format!("disk split task panicked: {e}"))?
             .map_err(|e| e.to_string())?
-        };
+            .try_into()
+            .unwrap();
 
-        let (disk_size_raw, disk_sha_raw) = tokio::task::spawn_blocking({
-            let disk = disk_path.clone();
-            move || sha256_file(&disk)
-        })
-        .await
-        .map_err(|e| format!("sha256 task panicked: {e}"))?
-        .map_err(|e| e.to_string())?;
-        disk_sha = disk_sha_raw;
-        disk_size = disk_size_raw as i64;
+            {
+                let mut p = progress.lock().unwrap();
+                p.message = "Uploading to R2…".to_string();
+            }
 
-        let (iso_size_raw, iso_sha_raw) = tokio::task::spawn_blocking({
-            let cdrom = cdrom_path.clone();
-            move || sha256_file(&cdrom)
-        })
-        .await
-        .map_err(|e| format!("sha256 task panicked: {e}"))?
-        .map_err(|e| e.to_string())?;
-        iso_sha = iso_sha_raw;
-        iso_size = iso_size_raw as i64;
-
-        // Split the raw FAT image into the same zstd chunk layout as the base
-        // disk so the browser can stream it with use_parts.
-        let parts_dir = config_dir
-            .join("v86")
-            .join("tmp")
-            .join("games")
-            .join(format!("{upload_id}.diskparts"));
-        disk_chunk_count = tokio::task::spawn_blocking({
-            let disk = disk_path.clone();
-            let parts = parts_dir.clone();
-            move || split_asset(&disk, &parts, chunk_size, "img.zst", None, 6)
-        })
-        .await
-        .map_err(|e| format!("disk split task panicked: {e}"))?
-        .map_err(|e| e.to_string())?
-        .try_into()
-        .unwrap();
-
-        {
-            let mut p = progress.lock().unwrap();
-            p.message = "Uploading to R2…".to_string();
+            // Content-addressed artifacts the browser serves straight from R2.
+            // The ZIP itself is no longer persisted: only the disk chunks and
+            // launcher CD are stored, keyed by their own content hashes.
+            zip_key = format!("v86/games/zips/{zip_sha}.zip");
+            disk_key = format!("v86/games/{disk_sha}");
+            iso_key = format!("v86/games/{iso_sha}");
+            if let Err(error) = push_dir_to_r2(r2, &disk_key, &parts_dir).await {
+                let _ = r2.delete_prefix(&disk_key).await;
+                return Err(error);
+            }
+            r2.put_object_from_file(&format!("{iso_key}/full.iso"), &cdrom_path)
+                .await
+                .map_err(|e| e.to_string())?;
+            let _ = tokio::fs::remove_file(&disk_path).await;
+            let _ = tokio::fs::remove_file(&cdrom_path).await;
+            let _ = tokio::fs::remove_dir_all(&parts_dir).await;
+            let _ = tokio::fs::remove_dir_all(&build_dir).await;
         }
-
-        // Content-addressed artifacts the browser serves straight from R2.
-        zip_key = format!("v86/games/zips/{zip_sha}.zip");
-        disk_key = format!("v86/games/{disk_sha}");
-        iso_key = format!("v86/games/{iso_sha}");
-        r2.put_object_from_file(&zip_key, &source)
-            .await
-            .map_err(|e| e.to_string())?;
-        if let Err(error) = push_dir_to_r2(r2, &disk_key, &parts_dir).await {
-            let _ = r2.delete_prefix(&disk_key).await;
-            return Err(error);
-        }
-        r2.put_object_from_file(&format!("{iso_key}/full.iso"), &cdrom_path)
-            .await
-            .map_err(|e| e.to_string())?;
-        let _ = tokio::fs::remove_file(&disk_path).await;
-        let _ = tokio::fs::remove_file(&cdrom_path).await;
-        let _ = tokio::fs::remove_dir_all(&parts_dir).await;
-        let _ = tokio::fs::remove_dir_all(&build_dir).await;
     }
 
-    // Drop the session-owned transient ZIP (a reused source key is left alone).
+    // Drop the session-owned transient ZIP. Manifest-only edits reuse the
+    // stored disk key as the session key, which is not a transient object, so
+    // it is never removed here.
     if transient_key.starts_with("v86/tmp/games/") {
         let _ = r2.delete_object(transient_key).await;
     }
-    let _ = tokio::fs::remove_file(&source).await;
+    if manifest_only {
+        let _ = tokio::fs::remove_dir_all(&build_dir).await;
+    } else {
+        let _ = tokio::fs::remove_file(&local_download).await;
+    }
 
     sqlx::query(
         r#"UPDATE project_v86_upload_sessions
@@ -2468,6 +2448,10 @@ pub async fn complete_game_upload(
     let upload_id_c = upload_id.clone();
     let temp_key_c = temp_key.clone();
     let source_project_id: Option<i64> = row.get("source_project_id");
+    // A source project with no fresh ZIP upload means a manifest-only edit:
+    // the stored disk is reused and the launcher CD is rebuilt from static
+    // assets — the ZIP is neither downloaded nor stored.
+    let manifest_only = source_project_id.is_some() && !uploaded_transient;
     let local_download = temp_upload_path(&state, "games", &upload_id);
     let local_download_c = local_download.clone();
     let manifest_c = manifest.clone();
@@ -2491,6 +2475,7 @@ pub async fn complete_game_upload(
             max_extracted,
             chunk_size,
             source_project_id,
+            manifest_only,
             progress_c,
         )
         .await;
@@ -3327,18 +3312,16 @@ mod tests {
     #[test]
     fn windows95_manifest_resolves_a_unique_nested_executable() {
         let root = std::env::temp_dir().join(format!("v86-manifest-test-{}", Uuid::new_v4()));
-        let game = root.join("Doraemon");
-        fs::create_dir_all(&game).unwrap();
-        fs::write(game.join("Doraemon.exe"), b"game").unwrap();
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("Doraemon.exe"), b"game").unwrap();
 
         let config = windows95_launcher_config(
-            &root,
-            "exe=Doraemon.exe\nargs=-m\nsave_paths=Save0001.dat; A/save0001.dat; backup/what.bak",
+            "exe=Game/Doraemon.exe\nargs=-m\nsave_paths=Save0001.dat; A/save0001.dat; backup/what.bak",
         )
         .ok()
         .unwrap();
-        assert!(config.contains(r"executable=D:\Doraemon\Doraemon.exe"));
-        assert!(config.contains(r"working_directory=D:\Doraemon"));
+        assert!(config.contains(r"executable=D:\Game\Doraemon.exe"));
+        assert!(config.contains(r"working_directory=D:\Game"));
         assert!(config.contains("arguments=-m"));
         assert!(config.contains("delay_ms=1000"));
         assert!(config.contains("[saves]\r\n"));
@@ -3349,19 +3332,13 @@ mod tests {
     }
 
     #[test]
-    fn manifest_folder_qualified_exe_falls_back_to_root_after_unwrap() {
-        let root = std::env::temp_dir().join(format!("v86-manifest-fallback-{}", Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("Doraemon.exe"), b"game").unwrap();
-
-        // The ZIP was unwrapped to the root, so the old folder-qualified path no
-        // longer exists; the basename fallback keeps the manifest working.
-        let config = windows95_launcher_config(&root, "exe=Game/Doraemon.exe")
+    fn manifest_root_exe_uses_drive_root_as_working_directory() {
+        // A bare exe at the drive root resolves with no working directory.
+        let config = windows95_launcher_config("exe=Doraemon.exe")
             .ok()
             .unwrap();
         assert!(config.contains(r"executable=D:\Doraemon.exe"));
         assert!(config.contains(r"working_directory=D:\"));
-        fs::remove_dir_all(root).ok();
     }
 
     #[test]
