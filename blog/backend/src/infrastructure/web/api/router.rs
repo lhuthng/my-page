@@ -214,10 +214,17 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     "/s/{project_slug}",
                     get(handlers::project::get_project_by_slug),
                 )
+                .route(
+                    "/s/{project_slug}/v86/saves",
+                    get(handlers::v86::get_game_save)
+                        .put(handlers::v86::put_game_save)
+                        .delete(handlers::v86::delete_game_save),
+                )
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::optional_user_guard,
-                )),
+                ))
+                .layer(DefaultBodyLimit::max(3 * 1024 * 1024)),
         )
         // mod-protected routes
         .merge(
@@ -292,6 +299,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route(
                     "/s/{project_slug}/v86/{sha256}/{part}",
                     get(handlers::v86::get_game_chunk),
+                )
+                .route(
+                    "/s/{project_slug}/v86/disk/{sha256}/{part}",
+                    get(handlers::v86::get_game_disk_chunk),
                 )
                 .route("/latest", get(handlers::project::get_latest_projects))
                 .route("/featured", get(handlers::project::get_featured_projects))

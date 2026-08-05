@@ -82,6 +82,7 @@ pub struct ProjectDemoConfig {
     pub v86_download_chunk_size: u64,
     pub v86_assets_dir: PathBuf,
     pub xorriso_bin: String,
+    pub mtools_bin: String,
 }
 
 pub struct AppState {
@@ -212,6 +213,7 @@ impl ProjectDemoConfig {
             .expect("PROJECT_V86_DOWNLOAD_CHUNK_BYTES must be an integer");
         let xorriso_bin =
             env::var("PROJECT_V86_XORRISO_BIN").unwrap_or_else(|_| "xorriso".to_string());
+        let mtools_bin = env::var("PROJECT_V86_MTOOLS_BIN").unwrap_or_default();
         let v86_assets_dir = env::var("PROJECT_V86_ASSETS_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"));
@@ -232,6 +234,7 @@ impl ProjectDemoConfig {
             v86_download_chunk_size,
             v86_assets_dir,
             xorriso_bin,
+            mtools_bin,
         }
     }
 }
@@ -508,6 +511,22 @@ async fn cleanup_orphaned_uploads(
         .execute(pool)
         .await?;
         clean_session(pool, r2, demos_dir, "games", session_id).await;
+    }
+
+    // Finished sessions (consumed/aborted/ready/expired) are never removed
+    // otherwise; once they age out of the TTL they are safe to drop.
+    let terminal_games: Vec<String> = sqlx::query_scalar(
+        r#"SELECT id FROM project_v86_upload_sessions
+           WHERE status != 'active' AND status != 'building'
+             AND expires_at < datetime('now')"#,
+    )
+    .fetch_all(pool)
+    .await?;
+    for session_id in &terminal_games {
+        sqlx::query("DELETE FROM project_v86_upload_sessions WHERE id = ?")
+            .bind(session_id)
+            .execute(pool)
+            .await?;
     }
 
     let stale_systems = rows.len();

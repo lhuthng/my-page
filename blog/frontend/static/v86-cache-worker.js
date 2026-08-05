@@ -1,4 +1,4 @@
-const CACHE_NAME = 'v86-runtime-v2';
+const CACHE_NAME = 'v86-runtime-v3';
 
 const isV86ImmutableAsset = (pathname) => {
 	if (pathname.includes('/v86/assets/systems/')) return true;
@@ -11,9 +11,7 @@ self.addEventListener('activate', (event) => {
 	event.waitUntil(
 		(async () => {
 			const keys = await caches.keys();
-			await Promise.all(
-				keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-			);
+			await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
 			await self.clients.claim();
 		})()
 	);
