@@ -50,6 +50,7 @@ export async function load({ fetch, params, setHeaders }) {
 	if (rest.v86_runtime) {
 		rest.v86_runtime.base_url = fixClientRoute(rest.v86_runtime.base_url);
 		rest.v86_runtime.iso_url = fixClientRoute(rest.v86_runtime.iso_url);
+		rest.v86_runtime.game_url = fixClientRoute(rest.v86_runtime.game_url);
 	}
 
 	const mediaDictionary = {};
