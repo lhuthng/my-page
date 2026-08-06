@@ -39,6 +39,7 @@
 		demo_height,
 		demo_type,
 		v86_runtime,
+		initialVariant,
 		links
 	} = $derived(data);
 
@@ -156,6 +157,7 @@
 			demoType={demo_type}
 			demoUrl={demo_url}
 			v86Runtime={v86_runtime}
+			{initialVariant}
 			width={demo_width ?? '100%'}
 			height={demo_height ?? '520px'}
 		/>

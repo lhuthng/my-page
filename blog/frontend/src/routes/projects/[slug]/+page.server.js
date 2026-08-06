@@ -15,7 +15,7 @@ import MarkdownIt from 'markdown-it';
 import mkKatex from 'markdown-it-katex';
 import anchor from 'markdown-it-anchor';
 
-export async function load({ fetch, params, setHeaders }) {
+export async function load({ fetch, params, url, setHeaders }) {
 	const res = await fetch(route(`projects/s/${params.slug}`), {
 		method: 'GET'
 	});
@@ -84,6 +84,7 @@ export async function load({ fetch, params, setHeaders }) {
 		cover_video_type,
 		og_image_url,
 		demo_url,
+		initialVariant: url.searchParams.get('variant'),
 		...rest
 	};
 }

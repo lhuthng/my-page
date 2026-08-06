@@ -10,7 +10,7 @@
 	import { V86Player } from '$lib/players/V86Player.svelte.js';
 	import { win } from '$lib/dom/windows.svelte.js';
 
-	let { title, runtime, beforeDemoPortal, afterDemoPortal } = $props();
+	let { title, runtime, initialVariant = null, beforeDemoPortal, afterDemoPortal } = $props();
 	const player = new V86Player({ runtime });
 
 	let soundOpen = $state(false);
@@ -28,6 +28,19 @@
 	});
 
 	onMount(() => {
+		if (initialVariant) {
+			const match = player.variants.find(
+				(v) => (v.name || '').toLowerCase() === initialVariant.toLowerCase()
+			);
+			if (match) player.selectedVariant = match.index;
+			const params = new URLSearchParams(window.location.search);
+			if (params.has('variant')) {
+				params.delete('variant');
+				const query = params.toString();
+				const url = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+				history.replaceState(history.state, '', url);
+			}
+		}
 		player.mount();
 		return () => player.unmount();
 	});

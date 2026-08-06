@@ -10,7 +10,8 @@
 		demoUrl,
 		v86Runtime,
 		width = '100%',
-		height = '520px'
+		height = '520px',
+		...rest
 	} = $props();
 
 	let loaded = $state(false);
@@ -50,7 +51,7 @@
 			</div>
 		{:else if demoType === 'v86'}
 			<div in:fade={{ duration: 250 }} class="h-full w-full">
-				<V86Player {title} runtime={v86Runtime} {beforeDemoPortal} {afterDemoPortal} />
+				<V86Player {title} runtime={v86Runtime} {...rest} {beforeDemoPortal} {afterDemoPortal} />
 			</div>
 		{:else if demoType === 'video'}
 			<video class="block h-full w-full bg-black object-contain" src={demoUrl} controls {title}>
