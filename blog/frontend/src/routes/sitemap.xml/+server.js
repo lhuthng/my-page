@@ -1,7 +1,14 @@
 import { canonicalUrl, SITE_ORIGIN } from '$lib/config/site.js';
 import { route } from '$lib/server/proxy.js';
 
-const STATIC_PATHS = ['/', '/about', '/posts', '/projects', '/series', '/tags'];
+const STATIC_PATHS = [
+	{ path: '/', priority: 1.0, changefreq: 'daily' },
+	{ path: '/posts', priority: 0.6, changefreq: 'daily' },
+	{ path: '/projects', priority: 0.6, changefreq: 'weekly' },
+	{ path: '/series', priority: 0.5, changefreq: 'monthly' },
+	{ path: '/tags', priority: 0.5, changefreq: 'weekly' },
+	{ path: '/about', priority: 0.6, changefreq: 'monthly' }
+];
 
 function escapeXml(value) {
 	return String(value)
@@ -28,25 +35,70 @@ export async function GET({ fetch }) {
 		fetchJson(fetch, 'tags?size=50000&offset=0', { tags: [] })
 	]);
 
-	const paths = new Set(STATIC_PATHS);
+	const entries = new Map();
+
+	for (const item of STATIC_PATHS) {
+		entries.set(item.path, {
+			path: item.path,
+			priority: item.priority,
+			changefreq: item.changefreq
+		});
+	}
 
 	for (const post of postsData.featured_posts ?? []) {
-		if (post.slug) paths.add(`/posts/${encodeURIComponent(post.slug)}`);
-		if (post.author_slug) paths.add(`/profiles/${encodeURIComponent(post.author_slug)}`);
+		if (post.slug) {
+			entries.set(`/posts/${encodeURIComponent(post.slug)}`, {
+				path: `/posts/${encodeURIComponent(post.slug)}`,
+				lastmod: post.updated_at ?? post.published_at,
+				priority: 0.8,
+				changefreq: 'weekly'
+			});
+		}
+		if (post.author_slug) {
+			entries.set(`/profiles/${encodeURIComponent(post.author_slug)}`, {
+				path: `/profiles/${encodeURIComponent(post.author_slug)}`,
+				priority: 0.6,
+				changefreq: 'monthly'
+			});
+		}
 	}
 
 	for (const project of projectsData.projects ?? []) {
-		if (project.slug) paths.add(`/projects/${encodeURIComponent(project.slug)}`);
-		if (project.author_slug) paths.add(`/profiles/${encodeURIComponent(project.author_slug)}`);
+		if (project.slug) {
+			entries.set(`/projects/${encodeURIComponent(project.slug)}`, {
+				path: `/projects/${encodeURIComponent(project.slug)}`,
+				lastmod: project.updated_at ?? project.published_at,
+				priority: 0.8,
+				changefreq: 'monthly'
+			});
+		}
+		if (project.author_slug) {
+			entries.set(`/profiles/${encodeURIComponent(project.author_slug)}`, {
+				path: `/profiles/${encodeURIComponent(project.author_slug)}`,
+				priority: 0.6,
+				changefreq: 'monthly'
+			});
+		}
 	}
 
 	for (const tag of tagsData.tags ?? []) {
-		if (tag.slug && tag.post_count > 0) paths.add(`/tags/${encodeURIComponent(tag.slug)}`);
+		if (tag.slug && tag.post_count > 0) {
+			entries.set(`/tags/${encodeURIComponent(tag.slug)}`, {
+				path: `/tags/${encodeURIComponent(tag.slug)}`,
+				priority: 0.4,
+				changefreq: 'weekly'
+			});
+		}
 	}
 
-	const urls = [...paths]
-		.sort()
-		.map((path) => `  <url><loc>${escapeXml(canonicalUrl(path))}</loc></url>`)
+	const urls = [...entries.values()]
+		.sort((a, b) => a.path.localeCompare(b.path))
+		.map(({ path, lastmod, priority, changefreq }) => {
+			const lastmodTag = lastmod ? `\n    <lastmod>${escapeXml(lastmod)}</lastmod>` : '';
+			const priorityTag = priority != null ? `\n    <priority>${priority}</priority>` : '';
+			const changefreqTag = changefreq ? `\n    <changefreq>${changefreq}</changefreq>` : '';
+			return `  <url>\n    <loc>${escapeXml(canonicalUrl(path))}</loc>${lastmodTag}${priorityTag}${changefreqTag}\n  </url>`;
+		})
 		.join('\n');
 
 	const body = `<?xml version="1.0" encoding="UTF-8"?>

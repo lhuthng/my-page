@@ -1,0 +1,31 @@
+{
+	"name": "Huu Thang's Blog",
+	"short_name": "Thang's Blog",
+	"description": "Thắng's digital garden for software architecture, creative coding, and hands-on experiments.",
+	"lang": "en",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"background_color": "#ffffff",
+	"theme_color": "#ffffff",
+	"icons": [
+		{
+			"src": "/favicon.ico",
+			"sizes": "32x32",
+			"type": "image/x-icon",
+			"purpose": "any"
+		},
+		{
+			"src": "/logo.png",
+			"sizes": "112x76",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/logo.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any"
+		}
+	]
+}

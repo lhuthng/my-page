@@ -1,6 +1,6 @@
 <script>
 	import BackButton from '$lib/components/ui/BackButton.svelte';
-	import { absoluteSiteUrl, safeJsonLd, SITE_ORIGIN } from '$lib/config/site.js';
+	import { absoluteSiteUrl, SITE_AUTHOR, safeJsonLd, SITE_ORIGIN } from '$lib/config/site.js';
 	import { isPointInTriangle, preventDefault } from '$lib/utils';
 	import { fly } from 'svelte/transition';
 
@@ -11,22 +11,32 @@
 	const imageUrl = absoluteSiteUrl('/thinkcats.jpg');
 	const structuredData = {
 		'@context': 'https://schema.org',
-		'@type': 'ProfilePage',
-		'@id': `${SITE_ORIGIN}/about#profile`,
-		url: `${SITE_ORIGIN}/about`,
-		mainEntity: {
-			'@type': 'Person',
-			'@id': `${SITE_ORIGIN}/#person`,
-			name: 'Huu Thang Le',
-			alternateName: 'Thắng',
-			url: `${SITE_ORIGIN}/about`,
-			image: imageUrl,
-			sameAs: [
-				'https://github.com/lhuthng',
-				'https://www.linkedin.com/in/huuthangle/',
-				'https://portfolio.huuthangle.site'
-			]
-		}
+		'@graph': [
+			{
+				'@type': 'ProfilePage',
+				'@id': `${SITE_ORIGIN}/about#profile`,
+				url: `${SITE_ORIGIN}/about`,
+				mainEntity: { '@id': `${SITE_ORIGIN}/#person` },
+				'@id': `${SITE_ORIGIN}/about#profile`,
+				isPartOf: { '@id': `${SITE_ORIGIN}/#website` }
+			},
+			{
+				'@type': 'Person',
+				'@id': `${SITE_ORIGIN}/#person`,
+				name: SITE_AUTHOR.name,
+				alternateName: SITE_AUTHOR.alternateName,
+				url: SITE_AUTHOR.url,
+				image: SITE_AUTHOR.image,
+				sameAs: SITE_AUTHOR.sameAs,
+				knowsAbout: [
+					'software architecture',
+					'systems design',
+					'creative coding',
+					'3D animation',
+					'game development'
+				]
+			}
+		]
 	};
 
 	function handleMouseMove(e) {

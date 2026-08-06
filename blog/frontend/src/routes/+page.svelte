@@ -7,6 +7,7 @@
 	import {
 		absoluteSiteUrl,
 		safeJsonLd,
+		SITE_AUTHOR,
 		SITE_DESCRIPTION,
 		SITE_NAME,
 		SITE_ORIGIN
@@ -29,19 +30,30 @@
 				alternateName: ["Thắng's Blog", "Huu Thang's Blog"],
 				description: SITE_DESCRIPTION,
 				inLanguage: 'en',
+				publisher: { '@id': `${SITE_ORIGIN}/#organization` }
+			},
+			{
+				'@type': 'Organization',
+				'@id': `${SITE_ORIGIN}/#organization`,
+				name: SITE_NAME,
+				url: `${SITE_ORIGIN}/`,
+				logo: { '@type': 'ImageObject', url: imageUrl },
 				publisher: { '@id': `${SITE_ORIGIN}/#person` }
 			},
 			{
 				'@type': 'Person',
 				'@id': `${SITE_ORIGIN}/#person`,
-				name: 'Huu Thang Le',
-				alternateName: 'Thắng',
-				url: `${SITE_ORIGIN}/about`,
-				image: imageUrl,
-				sameAs: [
-					'https://github.com/lhuthng',
-					'https://www.linkedin.com/in/huuthangle/',
-					'https://portfolio.huuthangle.site'
+				name: SITE_AUTHOR.name,
+				alternateName: SITE_AUTHOR.alternateName,
+				url: SITE_AUTHOR.url,
+				image: SITE_AUTHOR.image,
+				sameAs: SITE_AUTHOR.sameAs,
+				knowsAbout: [
+					'software architecture',
+					'systems design',
+					'creative coding',
+					'3D animation',
+					'game development'
 				]
 			}
 		]
