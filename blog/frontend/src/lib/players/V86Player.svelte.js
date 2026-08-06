@@ -25,8 +25,28 @@ export class V86Player {
 	#wheelCooldown = 0;
 	#saveFloppy = null;
 	#lastSaveAt = 0;
+	#launcherBuffers = new Map();
 
 	saveAvailable = $derived(this.runtime?.save_supported === true);
+
+	variants = $derived(
+		Array.isArray(this.runtime?.variants) && this.runtime.variants.length > 0
+			? this.runtime.variants
+			: [
+					{
+						index: 1,
+						name: '',
+						iso_url: this.runtime?.iso_url,
+						iso_size_bytes: this.runtime?.iso_size_bytes,
+						iso_sha256: this.runtime?.iso_sha256
+					}
+				]
+	);
+	selectedVariant = $state(1);
+
+	selected = $derived(
+		this.variants.find((variant) => variant.index === this.selectedVariant) ?? this.variants[0]
+	);
 
 	constructor({ runtime }) {
 		this.runtime = runtime;
@@ -98,8 +118,8 @@ export class V86Player {
 					use_parts: true
 				},
 				cdrom: {
-					url: this.runtime.iso_url,
-					size: this.runtime.iso_size_bytes,
+					url: this.selected?.iso_url ?? this.runtime.iso_url,
+					size: this.selected?.iso_size_bytes ?? this.runtime.iso_size_bytes,
 					async: false
 				},
 				...((this.#saveFloppy && { fda: { buffer: this.#saveFloppy.buffer } }) ?? {}),
@@ -122,11 +142,16 @@ export class V86Player {
 				this.status = 'Running';
 				this.applyNoiseFilter().catch(() => {});
 				this.applyAudioState();
+				this.preloadLaunchers().catch(() => {});
 			});
 			this.#emulator.add_listener?.('download-progress', (info) => {
 				const fileUrl = new URL(info?.file_name ?? '', window.location.origin);
 				const gameAsset = fileUrl.pathname.includes(`/${this.runtime.game_sha256}/`);
+				const isoPaths = this.variants.map(
+					(variant) => new URL(variant.iso_url, window.location.origin).pathname
+				);
 				const isIso =
+					isoPaths.includes(fileUrl.pathname) ||
 					fileUrl.pathname === new URL(this.runtime.iso_url, window.location.origin).pathname;
 				if (!gameAsset && !isIso) return;
 				if (info.loaded == null || info.total == null) return;
@@ -179,6 +204,72 @@ export class V86Player {
 		this.destroy();
 		this.downloadProgress = null;
 		await this.start();
+	};
+
+	/** Fetches every variant's small launcher CD into memory up front so
+	 *  switching variants is an instant, offline-capable hot-swap that never
+	 *  touches the network or reboots the guest. */
+	preloadLaunchers = async () => {
+		const jobs = this.variants.map(async (variant) => {
+			if (this.#launcherBuffers.has(variant.index)) return;
+			try {
+				const res = await fetch(variant.iso_url);
+				if (!res.ok) return;
+				this.#launcherBuffers.set(variant.index, await res.arrayBuffer());
+			} catch {
+				// fall back to a url-based swap in selectVariant
+			}
+		});
+		await Promise.allSettled(jobs);
+	};
+
+	/** Switches to another launch variant by swapping the in-memory launcher CD
+	 *  while the drive stays "present". No eject is used: ejecting latches the
+	 *  guest into an empty-tray state that a later timed insert can't reliably
+	 *  recover from (v86 exposes no "guest acknowledged eject" signal, so a
+	 *  scripted eject→insert is a race). Swapping buffers keeps the medium
+	 *  continuously readable. The guest keeps running; the game disk stays
+	 *  cached in RAM. */
+	selectVariant = async (index) => {
+		const variant = this.variants.find((v) => v.index === index);
+		if (!variant || variant.index === this.selectedVariant) return;
+		this.selectedVariant = index;
+		if (!this.#emulator || !this.running) {
+			await this.restart();
+			return;
+		}
+		try {
+			this.status = 'Saving game…';
+			if (this.runtime?.save_supported) {
+				const floppy = this.#emulator.get_disk_fda?.();
+				if (
+					floppy &&
+					floppy.length === SAVE_BYTES &&
+					floppy[510] === 0x55 &&
+					floppy[511] === 0xaa
+				) {
+					await saveGame(this.runtime.slug, floppy).catch(() => {});
+				}
+			}
+			const buffer = this.#launcherBuffers.get(variant.index);
+			this.status = `Loading ${variant.name || 'variant'}…`;
+			if (buffer) {
+				await this.#emulator.set_cdrom?.({ buffer });
+			} else {
+				await this.#emulator.set_cdrom?.({
+					url: variant.iso_url,
+					async: false
+				});
+			}
+			// Soft guest reboot: swap the CD, then cold-boot Windows so it
+			// reliably mounts the new launcher. reboot_internal resets the CPU
+			// only — memory (and the in-RAM save floppy) is kept, and the game
+			// disk buffers are NOT re-downloaded.
+			this.#emulator.restart?.();
+			this.status = 'Running';
+		} catch (cause) {
+			this.error = cause?.message ?? 'Could not switch variant.';
+		}
 	};
 
 	saveNow = async () => {

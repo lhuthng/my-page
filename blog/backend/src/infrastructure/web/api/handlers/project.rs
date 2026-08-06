@@ -828,13 +828,26 @@ fn normalize_links(links: Vec<ProjectLink>) -> Vec<ProjectLink> {
         .collect()
 }
 
+/// Collects the per-variant autorun CD storage keys for a project. Called
+/// *before* the variant rows are deleted so cleanup can reach them.
+async fn v86_variant_iso_keys(state: &AppState, project_id: i64) -> Vec<String> {
+    sqlx::query_scalar("SELECT iso_storage_key FROM project_v86_variants WHERE project_id = ?")
+        .bind(project_id)
+        .fetch_all(&state.project_service.pool)
+        .await
+        .unwrap_or_default()
+}
+
 /// Best-effort cleanup of a v86 game's R2 objects, its local mirror, and the
 /// per-user cloud saves. Content-addressed objects are only removed once no
-/// other project references them.
+/// other project references them. `variant_iso_keys` are the per-variant autorun
+/// CD keys (from project_v86_variants) that are about to be removed alongside
+/// the primary `keys` (from project_v86_games).
 async fn delete_v86_game_objects(
     state: &AppState,
     project_id: i64,
     keys: &(Option<String>, Option<String>, Option<String>),
+    variant_iso_keys: &[String],
 ) {
     let (zip_key, iso_key, disk_key) = keys;
     if let Some(r2) = &state.r2 {
@@ -862,16 +875,28 @@ async fn delete_v86_game_objects(
                 let _ = r2.delete_prefix(disk).await;
             }
         }
+        let mut iso_keys = Vec::new();
         if let Some(iso) = iso_key {
-            let refs: i64 = sqlx::query_scalar(
+            iso_keys.push(iso.clone());
+        }
+        iso_keys.extend(variant_iso_keys.iter().cloned());
+        for iso in iso_keys {
+            let refs_a: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM project_v86_games WHERE iso_storage_key = ?",
             )
-            .bind(iso)
+            .bind(&iso)
             .fetch_one(&state.project_service.pool)
             .await
             .unwrap_or(1);
-            if refs == 0 {
-                let _ = r2.delete_prefix(iso).await;
+            let refs_v: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM project_v86_variants WHERE iso_storage_key = ?",
+            )
+            .bind(&iso)
+            .fetch_one(&state.project_service.pool)
+            .await
+            .unwrap_or(1);
+            if refs_a + refs_v == 0 {
+                let _ = r2.delete_prefix(&iso).await;
             }
         }
     }
@@ -1163,13 +1188,14 @@ pub async fn delete_project_draft(
     .bind(project_id)
     .fetch_optional(&mut *tx)
     .await?;
+    let v86_variant_keys = v86_variant_iso_keys(&state, project_id).await;
     sqlx::query("DELETE FROM posts WHERE id=?")
         .bind(post_id)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
     if let Some(keys) = v86_storage {
-        delete_v86_game_objects(&state, project_id, &keys).await;
+        delete_v86_game_objects(&state, project_id, &keys, &v86_variant_keys).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1204,6 +1230,7 @@ pub async fn update_project(
     .bind(project_id)
     .fetch_one(&state.project_service.pool)
     .await?;
+    let old_v86_variant_keys = v86_variant_iso_keys(&state, project_id).await;
 
     let has_demo_url = data.demo_url.as_ref().is_some_and(|u| !u.trim().is_empty());
     let has_demo_attachments = parsed.demo_zip.is_some() || has_demo_url;
@@ -1361,7 +1388,7 @@ pub async fn update_project(
         .await?;
         tx.commit().await?;
         if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some() {
-            delete_v86_game_objects(&state, project_id, &old_v86_storage).await;
+            delete_v86_game_objects(&state, project_id, &old_v86_storage, &old_v86_variant_keys).await;
         }
     }
 
@@ -1389,7 +1416,7 @@ pub async fn update_project(
             .execute(&state.project_service.pool)
             .await?;
         if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some() {
-            delete_v86_game_objects(&state, project_id, &old_v86_storage).await;
+            delete_v86_game_objects(&state, project_id, &old_v86_storage, &old_v86_variant_keys).await;
         }
     }
 

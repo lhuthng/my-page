@@ -195,6 +195,53 @@
 		return true;
 	};
 
+	const parseV86Fields = (manifest) => {
+		const fields = {};
+		for (const rawLine of (manifest ?? '').split('\n')) {
+			const line = rawLine.trim();
+			if (!line || line.startsWith('#') || line.startsWith(';')) continue;
+			if (line.startsWith('[') && line.endsWith(']')) continue;
+			const eq = line.indexOf('=');
+			if (eq === -1) continue;
+			const key = line.slice(0, eq).trim().toLowerCase();
+			const value = line.slice(eq + 1).trim();
+			if (key) fields[key] = value;
+		}
+		return fields;
+	};
+
+	const v86VariantError = (manifest) => {
+		const fields = parseV86Fields(manifest);
+		const nameIndices = new Set();
+		for (const key of Object.keys(fields)) {
+			const m = key.match(/^name(\d+)?$/);
+			if (m) nameIndices.add(m[1] ? Number(m[1]) : 1);
+		}
+		const maxName = nameIndices.size ? Math.max(...nameIndices) : 0;
+		let explicitMax = 0;
+		for (const key of Object.keys(fields)) {
+			const m = key.match(/^(name|exe|args)(\d+)?$/);
+			if (m) explicitMax = Math.max(explicitMax, m[2] ? Number(m[2]) : 1);
+		}
+		const k = maxName || (explicitMax > 1 ? 0 : 1);
+		if (maxName === 0 && explicitMax > 1) {
+			return 'Variant keys (nameN/exeN/argsN) require a name for variant 1.';
+		}
+		for (let i = 1; i <= k; i++) {
+			const named = i === 1 ? 'name' in fields || 'name1' in fields : `name${i}` in fields;
+			if (!named) return `Missing name for variant ${i} (names must be contiguous).`;
+			const exe = fields[`exe${i}`] ?? fields.exe;
+			if (!exe) return `Variant ${i} requires an executable (exe${i} or exe).`;
+			if (!exe.trim().toLowerCase().endsWith('.exe')) {
+				return `Variant ${i} executable must be an .exe file.`;
+			}
+		}
+		if (explicitMax > k) {
+			return `Variant keys reference index ${explicitMax} but only ${k} named variant(s) exist.`;
+		}
+		return null;
+	};
+
 	const validateDemoFields = () => {
 		const type = editingData.demoType;
 		const url = editingData.demoUrl;
@@ -222,6 +269,8 @@
 					return { valid: false, error: 'A game ZIP is required for v86 projects.' };
 				if (new TextEncoder().encode(editingData.v86Manifest).length > 65536)
 					return { valid: false, error: 'The v86 manifest cannot exceed 64 KiB.' };
+				const variantIssue = v86VariantError(editingData.v86Manifest);
+				if (variantIssue) return { valid: false, error: variantIssue };
 				break;
 
 			case 'embed':
@@ -566,16 +615,29 @@
 						const res = await fetch(`/api/v86/games/upload/${uploadId}`, {
 							headers: { Authorization: auth() }
 						});
-						if (!res.ok) { clearInterval(interval); reject(new Error(await res.text())); return; }
+						if (!res.ok) {
+							clearInterval(interval);
+							reject(new Error(await res.text()));
+							return;
+						}
 						const data = await res.json();
 						if (data.chunk_progress?.message) editor.status = data.chunk_progress.message;
-						if (data.status === 'ready') { clearInterval(interval); resolve(); }
+						if (data.status === 'ready') {
+							clearInterval(interval);
+							resolve();
+						}
 						if (data.status === 'failed') {
 							clearInterval(interval);
-							await fetch(`/api/v86/games/upload/${uploadId}`, { method: 'DELETE', headers: { Authorization: auth() } }).catch(() => {});
+							await fetch(`/api/v86/games/upload/${uploadId}`, {
+								method: 'DELETE',
+								headers: { Authorization: auth() }
+							}).catch(() => {});
 							reject(new Error(data.error_message ?? 'Game build failed.'));
 						}
-					} catch (e) { clearInterval(interval); reject(e); }
+					} catch (e) {
+						clearInterval(interval);
+						reject(e);
+					}
 				}, 800);
 			});
 			return uploadId;
@@ -722,6 +784,10 @@
 				<p class="text-xs text-dark/60">
 					v86 manifest keys: exe (required), plus optional args, delay_ms and save_paths. Paths are
 					relative to the game drive root.
+				</p>
+				<p class="text-xs text-dark/60">
+					Variants: name / name1, name2, name3… define launch variants (names must be contiguous).
+					Each variant's exe2/args2 falls back to the root exe/args when omitted.
 				</p>
 			</div>
 		</div>
