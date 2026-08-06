@@ -39,6 +39,26 @@ const V86_SAVE_MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024;
 /// Per-user cooldown between cloud saves (matches the client).
 const V86_SAVE_RATE_LIMIT_MS: u64 = 30_000;
 
+/// A single launch variant resolved from the manifest. `name` is the display
+/// label and the "source of truth" for how many variants exist; `exe`/`args`
+/// are that variant's coalesced values (falling back to the root keys).
+#[derive(Debug, Clone)]
+struct VariantSpec {
+    index: i32,
+    name: String,
+    exe: String,
+    args: String,
+}
+
+/// A variant that has been built into autorun CD and stored content-addressed.
+#[derive(Debug, Clone)]
+struct BuiltVariant {
+    spec: VariantSpec,
+    iso_storage_key: String,
+    iso_size_bytes: i64,
+    iso_sha256: String,
+}
+
 #[derive(Serialize)]
 pub struct V86SystemVersionResponse {
     pub id: i64,
@@ -134,8 +154,20 @@ pub struct V86RuntimeDescriptor {
     pub iso_size_bytes: u64,
     pub iso_sha256: String,
     pub iso_url: String,
+    pub variants: Vec<VariantDescriptor>,
     pub save_supported: bool,
     pub save_max_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VariantDescriptor {
+    pub index: i32,
+    pub name: String,
+    pub exe: String,
+    pub args: String,
+    pub iso_url: String,
+    pub iso_size_bytes: u64,
+    pub iso_sha256: String,
 }
 
 fn user_id(claims: &Claims) -> Result<i64, ProjectError> {
@@ -556,6 +588,145 @@ fn normalize_manifest_path(value: &str) -> Result<String, ProjectError> {
     Ok(normalized)
 }
 
+/// Parses a manifest into a lower-cased key -> value map. Line comments and
+/// bare `[section]` headers are ignored, matching INI-style manifests.
+fn parse_manifest_fields(manifest: &str) -> HashMap<String, String> {
+    let mut fields = HashMap::new();
+    for line in manifest.lines() {
+        let line = line.trim();
+        if line.is_empty()
+            || line.starts_with('#')
+            || line.starts_with(';')
+            || (line.starts_with('[') && line.ends_with(']'))
+        {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            fields.insert(key.trim().to_ascii_lowercase(), value.trim().to_string());
+        }
+    }
+    fields
+}
+
+/// Lowest suffix index (`name1` -> 1, `exe3` -> 3) for a `{base}{digits}` key,
+/// or `None` when the key carries no numeric suffix.
+fn key_index(base: &str, key: &str) -> Option<i32> {
+    let rest = key.strip_prefix(base)?;
+    if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    rest.parse::<i32>().ok()
+}
+
+/// Resolves the manifest's launch variants. Names are the source of truth:
+/// the variant count comes from the highest named index, names must be
+/// contiguous from 1..K, and every variant must resolve an executable.
+/// Projects with no `name` keys inherit a single (unnamed) variant so existing
+/// manifests keep working unchanged.
+fn parse_variants(manifest: &str) -> Result<Vec<VariantSpec>, ProjectError> {
+    let fields = parse_manifest_fields(manifest);
+
+    // Names define the variant set.
+    let mut name_indices = HashSet::new();
+    for key in fields.keys() {
+        if key == "name" || key == "name1" {
+            name_indices.insert(1);
+        } else if let Some(index) = key_index("name", key) {
+            name_indices.insert(index.max(1));
+        }
+    }
+    let max_name = name_indices.iter().copied().max();
+
+    // Highest index referenced by ANY variant-scoped key (name/exe/args).
+    let mut explicit_max = 0;
+    for key in fields.keys() {
+        for base in ["name", "exe", "args"] {
+            if let Some(i) = key_index(base, key) {
+                explicit_max = explicit_max.max(i);
+            }
+        }
+    }
+
+    let k: i32 = match max_name {
+        Some(m) => m,
+        None => {
+            // No named variants.
+            if explicit_max > 1 {
+                return Err(ProjectError::InvalidDemo(
+                    "Variant keys (nameN/exeN/argsN) require a name for variant 1.".to_string(),
+                ));
+            }
+            1 // a single, unnamed (legacy) variant
+        }
+    };
+
+    // Names must be contiguous 1..=K.
+    for i in 1..=k {
+        let named = if i == 1 {
+            fields.contains_key("name") || fields.contains_key("name1")
+        } else {
+            fields.contains_key(&format!("name{i}"))
+        };
+        if !named {
+            return Err(ProjectError::InvalidDemo(format!(
+                "The v86 manifest must name each variant contiguously (missing name for variant {i})."
+            )));
+        }
+    }
+    // No key may reference an index beyond the named set.
+    if explicit_max > k {
+        return Err(ProjectError::InvalidDemo(format!(
+            "Variant keys reference index {explicit_max} but only {k} named variants exist."
+        )));
+    }
+
+    let mut variants = Vec::new();
+    for i in 1..=k {
+        let name = resolve_for(&fields, "name", i, false).unwrap_or_default();
+        let exe = resolve_for(&fields, "exe", i, true)
+            .ok_or_else(|| {
+                ProjectError::InvalidDemo(format!(
+                    "Variant {i} requires an executable (exe{i} or exe)."
+                ))
+            })?
+            .trim()
+            .to_string();
+        if exe.is_empty() {
+            return Err(ProjectError::InvalidDemo(format!(
+                "Variant {i} requires an executable (exe{i} or exe)."
+            )));
+        }
+        let exe = normalize_manifest_path(&exe)?;
+        if !exe.to_ascii_lowercase().ends_with(".exe") {
+            return Err(ProjectError::InvalidDemo(format!(
+                "The Windows 95 manifest executable for variant {i} must be an .exe file."
+            )));
+        }
+        let args = resolve_for(&fields, "args", i, true).unwrap_or_default();
+        variants.push(VariantSpec { index: i, name, exe, args });
+    }
+    Ok(variants)
+}
+
+fn resolve_for(
+    fields: &HashMap<String, String>,
+    base: &str,
+    index: i32,
+    fallback_root: bool,
+) -> Option<String> {
+    let base = base.to_string();
+    if index > 1 {
+        return fields
+            .get(&format!("{base}{index}"))
+            .or_else(|| fallback_root.then(|| fields.get(&base)).flatten())
+            .cloned();
+    }
+    fields
+        .get(&base)
+        .or_else(|| fields.get(&format!("{base}1")))
+        .cloned()
+}
+
 const SAVE_FILE_MAX_LEN: usize = 260;
 const SAVE_FILE_MAX_COUNT: usize = 64;
 
@@ -599,20 +770,7 @@ fn validate_save_file(entry: &str) -> Result<(), &'static str> {
 /// The in-guest launcher walks the whole game tree and collects whatever
 /// matches, so the save layout never has to be known in advance.
 fn save_files_from_manifest(manifest: &str) -> Result<Vec<String>, ProjectError> {
-    let mut fields = HashMap::new();
-    for line in manifest.lines() {
-        let line = line.trim();
-        if line.is_empty()
-            || line.starts_with('#')
-            || line.starts_with(';')
-            || (line.starts_with('[') && line.ends_with(']'))
-        {
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            fields.insert(key.trim().to_ascii_lowercase(), value.trim().to_string());
-        }
-    }
+    let fields = parse_manifest_fields(manifest);
     let raw = fields
         .get("save_paths")
         .or_else(|| fields.get("save_path"))
@@ -642,56 +800,24 @@ fn save_files_from_manifest(manifest: &str) -> Result<Vec<String>, ProjectError>
     Ok(files)
 }
 
-fn windows95_launcher_config(manifest: &str) -> Result<String, ProjectError> {
-    let mut fields = HashMap::new();
-    for line in manifest.lines() {
-        let line = line.trim();
-        if line.is_empty()
-            || line.starts_with('#')
-            || line.starts_with(';')
-            || (line.starts_with('[') && line.ends_with(']'))
-        {
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            fields.insert(key.trim().to_ascii_lowercase(), value.trim().to_string());
-        }
-    }
-
-    let requested = fields
-        .get("exe")
-        .or_else(|| fields.get("executable"))
-        .ok_or_else(|| {
-            ProjectError::InvalidDemo(
-                "The Windows 95 manifest must contain exe=<game executable>.".to_string(),
-            )
-        })?;
-    let requested = normalize_manifest_path(requested)?;
-    if !requested.to_ascii_lowercase().ends_with(".exe") {
-        return Err(ProjectError::InvalidDemo(
-            "The Windows 95 manifest executable must be an .exe file.".to_string(),
-        ));
-    }
-
-    // The executable path is taken verbatim from the manifest: the game tree is
-    // baked into the disk at full-build time, so manifest-only edits do not need
-    // to re-extract the ZIP to resolve or verify the path.
-    let relative_windows = requested.replace('/', "\\");
+/// Builds the in-guest launcher `[game]` config for a single variant. The
+/// executable path is taken verbatim from the resolved variant: the game tree
+/// is baked into the disk at full-build time, so manifest-only edits do not
+/// need to re-extract the ZIP to resolve or verify the path.
+fn launcher_config_for(manifest: &str, variant: &VariantSpec) -> Result<String, ProjectError> {
+    let fields = parse_manifest_fields(manifest);
+    let relative_windows = variant.exe.replace('/', "\\");
     let executable = format!(r"D:\{relative_windows}");
     if executable.len() >= 260 {
         return Err(ProjectError::InvalidDemo(
             "The resolved Windows 95 executable path is too long.".to_string(),
         ));
     }
-    let working_directory = match requested.rfind('/') {
-        Some(index) if index > 0 => format!(r"D:\{}", requested[..index].replace('/', "\\")),
+    let working_directory = match variant.exe.rfind('/') {
+        Some(index) if index > 0 => format!(r"D:\{}", variant.exe[..index].replace('/', "\\")),
         _ => r"D:\".to_string(),
     };
-    let arguments = fields
-        .get("args")
-        .or_else(|| fields.get("arguments"))
-        .map(String::as_str)
-        .unwrap_or("");
+    let arguments = &variant.args;
     let delay_ms = fields.get("delay_ms").map(String::as_str).unwrap_or("1000");
     if !delay_ms.chars().all(|character| character.is_ascii_digit()) {
         return Err(ProjectError::InvalidDemo(
@@ -845,12 +971,16 @@ fn build_game_disk(
     Ok(())
 }
 
-/// Builds the tiny autorun CD (E:). The launcher + config live here (read-only),
-/// so the shared Win95 base never needs an auto-run-on-fixed-drive hack.
+/// Builds the tiny autorun CD (E:) for a single variant. The launcher + config
+/// live here (read-only), so the shared Win95 base never needs an auto-run-on-
+/// fixed-drive hack. Each variant gets its own CD whose V86GAME.INI points the
+/// game disk at that variant's executable; the full manifest is also copied for
+/// reference and a small marker records the variant index/name.
 fn build_game_cdrom(
     xorriso_bin: &str,
     assets_dir: &Path,
     manifest: &str,
+    variant: &VariantSpec,
     disc_dir: &Path,
     cdrom_path: &Path,
 ) -> Result<(), ProjectError> {
@@ -872,12 +1002,23 @@ fn build_game_cdrom(
     )?;
     fs::write(
         disc_dir.join("V86GAME.INI"),
-        windows95_launcher_config(manifest)?.as_bytes(),
+        launcher_config_for(manifest, variant)?.as_bytes(),
     )?;
     fs::write(disc_dir.join("V86GAME.MANIFEST"), manifest.as_bytes())?;
+    fs::write(
+        disc_dir.join("V86VARIANT.INI"),
+        format!("[variant]\r\nindex={}\r\nname={}\r\n", variant.index, variant.name).as_bytes(),
+    )?;
 
+    let volume_id = if variant.index <= 1 {
+        "V86GAME".to_string()
+    } else {
+        format!("V86GAME{}", variant.index)
+    };
     let output = Command::new(xorriso_bin)
-        .args(["-as", "mkisofs", "-J", "-V", "V86GAME", "-o"])
+        .args(["-as", "mkisofs", "-J", "-V"])
+        .arg(&volume_id)
+        .arg("-o")
         .arg(cdrom_path)
         .arg(disc_dir)
         .output()
@@ -894,9 +1035,9 @@ fn build_game_cdrom(
 }
 
 /// Builds a writable FAT16 game disk (partitioned, mounted as D: by the guest)
-/// plus a tiny read-only autorun CD (mounted as E:) that launches the game
-/// launcher. Game files sit at the D: drive root with no wrapper folder.
-/// Returns (disk_image_path, cdrom_iso_path, extracted_game_bytes).
+/// plus one tiny read-only autorun CD (mounted as E:) per variant that launches
+/// the game launcher. Game files sit at the D: drive root with no wrapper folder.
+/// Returns (disk_image_path, cdrom_iso_paths, extracted_game_bytes).
 #[allow(clippy::too_many_arguments)]
 fn build_windows95_disk(
     state_dir: &Path,
@@ -906,9 +1047,10 @@ fn build_windows95_disk(
     upload_id: &str,
     zip_path: &Path,
     manifest: &str,
+    variants: &[VariantSpec],
     max_files: usize,
     max_extracted_size: u64,
-) -> Result<(PathBuf, PathBuf, u64), ProjectError> {
+) -> Result<(PathBuf, Vec<PathBuf>, u64), ProjectError> {
     let build_dir = state_dir
         .join("v86")
         .join("tmp")
@@ -921,27 +1063,33 @@ fn build_windows95_disk(
         prepare_game_tree(&build_dir, zip_path, max_files, max_extracted_size)?;
     let image_path = build_dir.join("game.img");
     build_game_disk(mtools_bin, &image_path, &game_dir, extracted_bytes)?;
-    let cdrom_path = build_dir.join("boot.iso");
-    build_game_cdrom(
-        xorriso_bin,
-        assets_dir,
-        manifest,
-        &build_dir.join("disc"),
-        &cdrom_path,
-    )?;
-    Ok((image_path, cdrom_path, extracted_bytes))
+    let mut cdrom_paths = Vec::new();
+    for variant in variants {
+        let cdrom_path = build_dir.join(format!("boot_{}.iso", variant.index));
+        build_game_cdrom(
+            xorriso_bin,
+            assets_dir,
+            manifest,
+            variant,
+            &build_dir.join("disc"),
+            &cdrom_path,
+        )?;
+        cdrom_paths.push(cdrom_path);
+    }
+    Ok((image_path, cdrom_paths, extracted_bytes))
 }
 
-/// Rebuilds only the autorun CD when the manifest changed. The game ZIP is not
+/// Rebuilds only the autorun CDs when the manifest changed. The game ZIP is not
 /// needed: the launcher, config and manifest are static/small and the disk is
-/// reused as-is.
+/// reused as-is. Returns one CD path per variant.
 fn build_windows95_cdrom_only(
     state_dir: &Path,
     assets_dir: &Path,
     xorriso_bin: &str,
     upload_id: &str,
     manifest: &str,
-) -> Result<PathBuf, ProjectError> {
+    variants: &[VariantSpec],
+) -> Result<Vec<PathBuf>, ProjectError> {
     let build_dir = state_dir
         .join("v86")
         .join("tmp")
@@ -950,15 +1098,20 @@ fn build_windows95_cdrom_only(
     if build_dir.exists() {
         fs::remove_dir_all(&build_dir)?;
     }
-    let cdrom_path = build_dir.join("boot.iso");
-    build_game_cdrom(
-        xorriso_bin,
-        assets_dir,
-        manifest,
-        &build_dir.join("disc"),
-        &cdrom_path,
-    )?;
-    Ok(cdrom_path)
+    let mut cdrom_paths = Vec::new();
+    for variant in variants {
+        let cdrom_path = build_dir.join(format!("boot_{}.iso", variant.index));
+        build_game_cdrom(
+            xorriso_bin,
+            assets_dir,
+            manifest,
+            variant,
+            &build_dir.join("disc"),
+            &cdrom_path,
+        )?;
+        cdrom_paths.push(cdrom_path);
+    }
+    Ok(cdrom_paths)
 }
 
 #[allow(dead_code)]
@@ -2074,6 +2227,76 @@ async fn fetch_shared_game_artifact(
     }))
 }
 
+/// Loads the already-built variant CDs for a project so a manifest-only edit
+/// that produced no changes can reuse them without rebuilding.
+async fn fetch_stored_variants(
+    pool: &sqlx::SqlitePool,
+    project_id: i64,
+) -> Result<Vec<BuiltVariant>, String> {
+    let rows = sqlx::query(
+        r#"SELECT variant_index, name, exe, args,
+                  iso_storage_key, iso_sha256, iso_size_bytes
+           FROM project_v86_variants WHERE project_id = ? ORDER BY variant_index"#,
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|row| BuiltVariant {
+            spec: VariantSpec {
+                index: row.get("variant_index"),
+                name: row.get("name"),
+                exe: row.get("exe"),
+                args: row.get("args"),
+            },
+            iso_storage_key: row.get("iso_storage_key"),
+            iso_size_bytes: row.get("iso_size_bytes"),
+            iso_sha256: row.get("iso_sha256"),
+        })
+        .collect())
+}
+
+/// Hashes and uploads a set of built autorun CDs (one per variant), returning
+/// the content-addressed artifacts. Also cleans up the transient build dir.
+async fn build_and_store_variants(
+    r2: &R2Client,
+    build_dir: &Path,
+    variants: &[VariantSpec],
+    cdrom_paths: &[PathBuf],
+) -> Result<Vec<BuiltVariant>, String> {
+    let mut out = Vec::new();
+    for (variant, cdrom) in variants.iter().zip(cdrom_paths.iter()) {
+        let (idx, name, exe, args) = (
+            variant.index,
+            variant.name.clone(),
+            variant.exe.clone(),
+            variant.args.clone(),
+        );
+        let (size_raw, sha) = tokio::task::spawn_blocking({
+            let cdrom = cdrom.clone();
+            move || sha256_file(&cdrom)
+        })
+        .await
+        .map_err(|e| format!("sha256 task panicked: {e}"))?
+        .map_err(|e| e.to_string())?;
+        let key = format!("v86/games/{sha}");
+        r2.put_object_from_file(&format!("{key}/full.iso"), cdrom)
+            .await
+            .map_err(|e| e.to_string())?;
+        let _ = tokio::fs::remove_file(cdrom).await;
+        out.push(BuiltVariant {
+            spec: VariantSpec { index: idx, name, exe, args },
+            iso_storage_key: key,
+            iso_size_bytes: size_raw as i64,
+            iso_sha256: sha,
+        });
+    }
+    let _ = tokio::fs::remove_dir_all(build_dir).await;
+    Ok(out)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn process_game_upload(
     pool: &sqlx::SqlitePool,
@@ -2099,13 +2322,17 @@ async fn process_game_upload(
     };
 
     let manifest_sha = hex::encode(Sha256::digest(manifest.as_bytes()));
+    let variants = parse_variants(manifest).map_err(|e| e.to_string())?;
 
-    let (zip_key, zip_sha, disk_key, disk_sha, disk_size, disk_chunk_count, iso_key, iso_sha, iso_size);
+    let (zip_key, zip_sha, disk_key, disk_sha, disk_size, disk_chunk_count);
     let build_dir = config_dir.join("v86").join("tmp").join("build").join(upload_id);
+    let mut built_variants: Option<Vec<BuiltVariant>> = None;
+    // When true, no ISO was rebuilt and the stored variants should be reused.
+    let mut reuse_variants = false;
 
     if manifest_only {
         // Manifest-only edit: the stored disk is reused as-is; the ZIP is never
-        // downloaded. Only the launcher CD is (re)generated from static assets
+        // downloaded. Only the launcher CDs are (re)generated from static assets
         // when the manifest changed, so tagging it onto an empty source.
         let artifact = stored
             .as_ref()
@@ -2117,48 +2344,34 @@ async fn process_game_upload(
         disk_size = artifact.disk_size_bytes;
         disk_chunk_count = artifact.chunk_count;
         if artifact.manifest_sha256 == manifest_sha {
-            // No-op: reuse the stored ISO as well; nothing to build or upload.
+            // No-op: reuse the stored variant CDs as well; nothing to build or upload.
             {
                 let mut p = progress.lock().unwrap();
                 p.message = "No changes to rebuild.".to_string();
             }
-            iso_key = artifact.iso_storage_key.clone();
-            iso_sha = artifact.iso_sha256.clone();
-            iso_size = artifact.iso_size_bytes;
+            reuse_variants = true;
         } else {
-            // ISO-only: the manifest changed, so rebuild just the launcher CD.
+            // ISO-only: the manifest changed, so rebuild just the launcher CDs.
             {
                 let mut p = progress.lock().unwrap();
                 p.message = "Rebuilding launcher…".to_string();
             }
-            let (state_dir, assets, xorriso, uid, mf) = (
+            let (state_dir, assets, xorriso, uid, mf, vv) = (
                 config_dir.to_path_buf(),
                 assets_dir.to_path_buf(),
                 xorriso_bin.to_string(),
                 upload_id.to_string(),
                 manifest.to_string(),
+                variants.clone(),
             );
-            let cdrom_path = tokio::task::spawn_blocking(move || {
-                build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf)
+            let cdrom_paths = tokio::task::spawn_blocking(move || {
+                build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf, &vv)
             })
             .await
             .map_err(|e| format!("cdrom build task panicked: {e}"))?
             .map_err(|e| e.to_string())?;
-            let (iso_size_raw, iso_sha_raw) = tokio::task::spawn_blocking({
-                let cdrom = cdrom_path.clone();
-                move || sha256_file(&cdrom)
-            })
-            .await
-            .map_err(|e| format!("sha256 task panicked: {e}"))?
-            .map_err(|e| e.to_string())?;
-            iso_sha = iso_sha_raw;
-            iso_size = iso_size_raw as i64;
-            iso_key = format!("v86/games/{iso_sha}");
-            r2.put_object_from_file(&format!("{iso_key}/full.iso"), &cdrom_path)
-                .await
-                .map_err(|e| e.to_string())?;
-            let _ = tokio::fs::remove_file(&cdrom_path).await;
-            let _ = tokio::fs::remove_dir_all(&build_dir).await;
+            built_variants =
+                Some(build_and_store_variants(r2, &build_dir, &variants, &cdrom_paths).await?);
         }
     } else {
         if let Some(parent) = local_download.parent() {
@@ -2192,58 +2405,45 @@ async fn process_game_upload(
 
         if reuse_disk {
             let artifact = stored
-                .as_ref()
                 .filter(|a| a.zip_sha256 == zip_sha)
-                .or(shared.as_ref())
-                .expect("reuse_disk implies a stored or shared artifact");
+                .or(shared);
+            let Some(artifact) = artifact.as_ref() else {
+                return Err("reuse_disk implies a stored or shared artifact".to_string());
+            };
             zip_key = format!("v86/games/zips/{zip_sha}.zip");
             disk_key = artifact.disk_storage_key.clone();
             disk_sha = artifact.disk_sha256.clone();
             disk_size = artifact.disk_size_bytes;
             disk_chunk_count = artifact.chunk_count;
             if artifact.manifest_sha256 == manifest_sha {
-                // No-op: reuse the stored ISO as well; nothing to build or upload.
+                // No-op: reuse the stored variant CDs as well; nothing to build or upload.
                 {
                     let mut p = progress.lock().unwrap();
                     p.message = "No changes to rebuild.".to_string();
                 }
-                iso_key = artifact.iso_storage_key.clone();
-                iso_sha = artifact.iso_sha256.clone();
-                iso_size = artifact.iso_size_bytes;
+                reuse_variants = true;
             } else {
-                // ISO-only: the manifest changed, so rebuild just the launcher CD.
+                // ISO-only: the manifest changed, so rebuild just the launcher CDs.
                 {
                     let mut p = progress.lock().unwrap();
                     p.message = "Rebuilding launcher…".to_string();
                 }
-                let (state_dir, assets, xorriso, uid, mf) = (
+                let (state_dir, assets, xorriso, uid, mf, vv) = (
                     config_dir.to_path_buf(),
                     assets_dir.to_path_buf(),
                     xorriso_bin.to_string(),
                     upload_id.to_string(),
                     manifest.to_string(),
+                    variants.clone(),
                 );
-                let cdrom_path = tokio::task::spawn_blocking(move || {
-                    build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf)
+                let cdrom_paths = tokio::task::spawn_blocking(move || {
+                    build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf, &vv)
                 })
                 .await
                 .map_err(|e| format!("cdrom build task panicked: {e}"))?
                 .map_err(|e| e.to_string())?;
-                let (iso_size_raw, iso_sha_raw) = tokio::task::spawn_blocking({
-                    let cdrom = cdrom_path.clone();
-                    move || sha256_file(&cdrom)
-                })
-                .await
-                .map_err(|e| format!("sha256 task panicked: {e}"))?
-                .map_err(|e| e.to_string())?;
-                iso_sha = iso_sha_raw;
-                iso_size = iso_size_raw as i64;
-                iso_key = format!("v86/games/{iso_sha}");
-                r2.put_object_from_file(&format!("{iso_key}/full.iso"), &cdrom_path)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                let _ = tokio::fs::remove_file(&cdrom_path).await;
-                let _ = tokio::fs::remove_dir_all(&build_dir).await;
+                built_variants =
+                    Some(build_and_store_variants(r2, &build_dir, &variants, &cdrom_paths).await?);
             }
         } else {
             // Full build: a new or changed ZIP. Extract, partition the disk,
@@ -2252,25 +2452,19 @@ async fn process_game_upload(
                 let mut p = progress.lock().unwrap();
                 p.message = "Building game disc…".to_string();
             }
-            let (disk_path, cdrom_path, _extracted_bytes) = {
+            let (disk_path, cdrom_paths, _extracted_bytes) = {
                 let state_dir = config_dir.to_path_buf();
                 let assets = assets_dir.to_path_buf();
                 let xorriso = xorriso_bin.to_string();
                 let mtools = mtools_bin.to_string();
                 let uid = upload_id.to_string();
                 let mf = manifest.to_string();
+                let vv = variants.clone();
                 let src = source.clone();
                 tokio::task::spawn_blocking(move || {
                     build_windows95_disk(
-                        &state_dir,
-                        &assets,
-                        &xorriso,
-                        &mtools,
-                        &uid,
-                        &src,
-                        &mf,
-                        max_files,
-                        max_extracted_size,
+                        &state_dir, &assets, &xorriso, &mtools, &uid, &src, &mf, &vv,
+                        max_files, max_extracted_size,
                     )
                 })
                 .await
@@ -2287,16 +2481,6 @@ async fn process_game_upload(
             .map_err(|e| e.to_string())?;
             disk_sha = disk_sha_raw;
             disk_size = disk_size_raw as i64;
-
-            let (iso_size_raw, iso_sha_raw) = tokio::task::spawn_blocking({
-                let cdrom = cdrom_path.clone();
-                move || sha256_file(&cdrom)
-            })
-            .await
-            .map_err(|e| format!("sha256 task panicked: {e}"))?
-            .map_err(|e| e.to_string())?;
-            iso_sha = iso_sha_raw;
-            iso_size = iso_size_raw as i64;
 
             // Split the raw FAT image into the same zstd chunk layout as the
             // base disk so the browser can stream it with use_parts.
@@ -2323,22 +2507,84 @@ async fn process_game_upload(
 
             // Content-addressed artifacts the browser serves straight from R2.
             // The ZIP itself is no longer persisted: only the disk chunks and
-            // launcher CD are stored, keyed by their own content hashes.
+            // the per-variant launcher CDs are stored, keyed by content hash.
             zip_key = format!("v86/games/zips/{zip_sha}.zip");
             disk_key = format!("v86/games/{disk_sha}");
-            iso_key = format!("v86/games/{iso_sha}");
             if let Err(error) = push_dir_to_r2(r2, &disk_key, &parts_dir).await {
                 let _ = r2.delete_prefix(&disk_key).await;
                 return Err(error);
             }
-            r2.put_object_from_file(&format!("{iso_key}/full.iso"), &cdrom_path)
-                .await
-                .map_err(|e| e.to_string())?;
+            built_variants =
+                Some(build_and_store_variants(r2, &build_dir, &variants, &cdrom_paths).await?);
             let _ = tokio::fs::remove_file(&disk_path).await;
-            let _ = tokio::fs::remove_file(&cdrom_path).await;
             let _ = tokio::fs::remove_dir_all(&parts_dir).await;
-            let _ = tokio::fs::remove_dir_all(&build_dir).await;
         }
+    }
+
+    // Holdover check: the full/reuse branches always produce variant ISOs. If
+    // none were built we must reuse the existing stored variants for the source
+    // project (falling back to a fresh rebuild when they do not match).
+    if built_variants.is_none() {
+        if reuse_variants {
+            if let Some(pid) = source_project_id {
+                let existing = fetch_stored_variants(pool, pid).await?;
+                if existing.len() == variants.len() {
+                    built_variants = Some(existing);
+                }
+            }
+        }
+        if built_variants.is_none() {
+            {
+                let mut p = progress.lock().unwrap();
+                p.message = "Rebuilding launcher…".to_string();
+            }
+            let (state_dir, assets, xorriso, uid, mf, vv) = (
+                config_dir.to_path_buf(),
+                assets_dir.to_path_buf(),
+                xorriso_bin.to_string(),
+                upload_id.to_string(),
+                manifest.to_string(),
+                variants.clone(),
+            );
+            let cdrom_paths = tokio::task::spawn_blocking(move || {
+                build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf, &vv)
+            })
+            .await
+            .map_err(|e| format!("cdrom build task panicked: {e}"))?
+            .map_err(|e| e.to_string())?;
+            built_variants =
+                Some(build_and_store_variants(r2, &build_dir, &variants, &cdrom_paths).await?);
+        }
+    }
+    let built_variants = built_variants.ok_or_else(|| "no variants produced".to_string())?;
+    let first = built_variants.first().ok_or_else(|| "no variants produced".to_string())?;
+    let iso_key = first.iso_storage_key.clone();
+    let iso_sha = first.iso_sha256.clone();
+    let iso_size = first.iso_size_bytes;
+
+    // Stage every built variant for the attach step.
+    sqlx::query("DELETE FROM project_v86_staged_variants WHERE upload_id = ?")
+        .bind(upload_id)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    for v in &built_variants {
+        sqlx::query(
+            r#"INSERT INTO project_v86_staged_variants
+               (upload_id, variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(upload_id)
+        .bind(v.spec.index)
+        .bind(&v.spec.name)
+        .bind(&v.spec.exe)
+        .bind(&v.spec.args)
+        .bind(&v.iso_storage_key)
+        .bind(v.iso_size_bytes)
+        .bind(&v.iso_sha256)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
     }
 
     // Drop the session-owned transient ZIP. Manifest-only edits reuse the
@@ -2599,6 +2845,22 @@ pub async fn attach_ready_game_tx(
             "The v86 artifact changed while this package was building.".to_string(),
         ));
     }
+    // Replace the project's variant CDs with the newly staged set. Variant 1
+    // mirrors the iso_* columns on project_v86_games (kept for compatibility).
+    sqlx::query("DELETE FROM project_v86_variants WHERE project_id = ?")
+        .bind(project_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query(
+        r#"INSERT INTO project_v86_variants
+           (project_id, variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256)
+           SELECT ?, variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256
+           FROM project_v86_staged_variants WHERE upload_id = ?"#,
+    )
+    .bind(project_id)
+    .bind(upload_id)
+    .execute(&mut **tx)
+    .await?;
     let changed = sqlx::query(
         "UPDATE project_v86_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'ready'",
     )
@@ -2724,7 +2986,7 @@ pub async fn runtime_descriptor(
     let row = sqlx::query(
         r#"SELECT s.name AS system_name, s.platform_key, v.id AS system_version_id,
                   v.size_bytes AS base_size, v.sha256 AS base_sha,
-                  g.disk_size_bytes, g.disk_sha256,
+                  g.project_id, g.disk_size_bytes, g.disk_sha256,
                   g.iso_size_bytes, g.iso_sha256, g.manifest_text, g.manifest_sha256,
                   g.chunk_size_bytes, g.artifact_revision,
                   p.demo_width, p.demo_height
@@ -2738,55 +3000,104 @@ pub async fn runtime_descriptor(
     .bind(slug)
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|row| {
-        let version_id: i64 = row.get("system_version_id");
-        let base_sha: String = row.get("base_sha");
-        let game_sha: String = row.get("disk_sha256");
-        let iso_sha: String = row.get("iso_sha256");
-        let save_supported = has_save_paths(&row.get::<String, _>("manifest_text"));
-        let (base_url, game_url, iso_url) = match r2_public_url {
-            Some(r2) => {
-                let base = r2.trim_end_matches('/');
-                (
-                    format!("{base}/v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
-                    format!("{base}/v86/games/{game_sha}/.img.zst"),
-                    format!("{base}/v86/games/{iso_sha}/full.iso"),
-                )
-            }
-            None => (
-                format!("v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
-                format!("projects/s/{slug}/v86/disk/{game_sha}/.img.zst"),
-                format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
-            ),
-        };
-        V86RuntimeDescriptor {
-            platform_key: row.get("platform_key"),
-            system_name: row.get("system_name"),
-            system_version_id: version_id,
-            artifact_revision: row.get("artifact_revision"),
-            manifest_sha256: row.get("manifest_sha256"),
-            slug: slug.to_string(),
-            memory_size: 64 * 1024 * 1024,
-            vga_memory_size: 8 * 1024 * 1024,
-            display_width: row
-                .get::<Option<String>, _>("demo_width")
-                .unwrap_or_else(|| "100%".to_string()),
-            display_height: row
-                .get::<Option<String>, _>("demo_height")
-                .unwrap_or_else(|| "520px".to_string()),
-            chunk_size_bytes: row.get::<i64, _>("chunk_size_bytes") as u64,
-            base_size_bytes: row.get::<i64, _>("base_size") as u64,
-            base_sha256: base_sha.clone(),
-            base_url,
-            game_size_bytes: row.get::<i64, _>("disk_size_bytes") as u64,
-            game_sha256: game_sha.clone(),
-            game_url,
-            iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
-            iso_sha256: iso_sha.clone(),
-            iso_url,
-            save_supported,
-            save_max_bytes: V86_SAVE_FLOPPY_BYTES as u64,
+    let Some(row) = row else { return Ok(None) };
+    let version_id: i64 = row.get("system_version_id");
+    let base_sha: String = row.get("base_sha");
+    let game_sha: String = row.get("disk_sha256");
+    let iso_sha: String = row.get("iso_sha256");
+    let project_id: i64 = row.get("project_id");
+    let save_supported = has_save_paths(&row.get::<String, _>("manifest_text"));
+
+    // Per-variant autorun CDs. Always at least one row (backfilled on migrate).
+    let variant_rows = sqlx::query(
+        r#"SELECT variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256
+           FROM project_v86_variants WHERE project_id = ? ORDER BY variant_index"#,
+    )
+    .bind(project_id)
+    .fetch_all(pool)
+    .await?;
+    let iso_url_for = |sha: &str| match r2_public_url {
+        Some(r2) => {
+            let base = r2.trim_end_matches('/');
+            format!("{base}/v86/games/{sha}/full.iso")
         }
+        None => format!("projects/s/{slug}/v86/{sha}/full.iso"),
+    };
+    let variants: Vec<VariantDescriptor> = variant_rows
+        .iter()
+        .skip(1)
+        .map(|row| VariantDescriptor {
+            index: row.get("variant_index"),
+            name: row.get("name"),
+            exe: row.get("exe"),
+            args: row.get("args"),
+            iso_url: iso_url_for(row.get::<String, _>("iso_sha256").as_str()),
+            iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
+            iso_sha256: row.get("iso_sha256"),
+        })
+        .collect();
+    // Variant 1 is the default and is represented both by project_v86_games'
+    // legacy iso_* columns and by the top of the variants list.
+    let default_variant = variant_rows.first().map(|row| VariantDescriptor {
+        index: row.get("variant_index"),
+        name: row.get("name"),
+        exe: row.get("exe"),
+        args: row.get("args"),
+        iso_url: iso_url_for(&row.get::<String, _>("iso_sha256")),
+        iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
+        iso_sha256: row.get("iso_sha256"),
+    });
+
+    let (base_url, game_url, iso_url) = match r2_public_url {
+        Some(r2) => {
+            let base = r2.trim_end_matches('/');
+            (
+                format!("{base}/v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
+                format!("{base}/v86/games/{game_sha}/.img.zst"),
+                format!("{base}/v86/games/{iso_sha}/full.iso"),
+            )
+        }
+        None => (
+            format!("v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
+            format!("projects/s/{slug}/v86/disk/{game_sha}/.img.zst"),
+            format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
+        ),
+    };
+    Ok(Some(V86RuntimeDescriptor {
+        platform_key: row.get("platform_key"),
+        system_name: row.get("system_name"),
+        system_version_id: version_id,
+        artifact_revision: row.get("artifact_revision"),
+        manifest_sha256: row.get("manifest_sha256"),
+        slug: slug.to_string(),
+        memory_size: 64 * 1024 * 1024,
+        vga_memory_size: 8 * 1024 * 1024,
+        display_width: row
+            .get::<Option<String>, _>("demo_width")
+            .unwrap_or_else(|| "100%".to_string()),
+        display_height: row
+            .get::<Option<String>, _>("demo_height")
+            .unwrap_or_else(|| "520px".to_string()),
+        chunk_size_bytes: row.get::<i64, _>("chunk_size_bytes") as u64,
+        base_size_bytes: row.get::<i64, _>("base_size") as u64,
+        base_sha256: base_sha.clone(),
+        base_url,
+        game_size_bytes: row.get::<i64, _>("disk_size_bytes") as u64,
+        game_sha256: game_sha.clone(),
+        game_url,
+        iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
+        iso_sha256: iso_sha.clone(),
+        iso_url,
+        variants: match default_variant {
+            Some(v) => {
+                let mut all = vec![v];
+                all.extend(variants);
+                all
+            }
+            None => variants,
+        },
+        save_supported,
+        save_max_bytes: V86_SAVE_FLOPPY_BYTES as u64,
     }))
 }
 
@@ -2857,12 +3168,23 @@ pub async fn get_game_chunk(
     AxumPath((slug, sha256, part)): AxumPath<(String, String, String)>,
 ) -> Result<Response, ProjectError> {
     let storage_key: Option<String> = sqlx::query_scalar(
-        r#"SELECT g.iso_storage_key FROM project_v86_games g
-           JOIN projects p ON p.id = g.project_id
-           JOIN posts ON posts.id = p.post_id
-           WHERE posts.slug = ? AND posts.status = 'published'
-             AND p.demo_type = 'v86' AND g.iso_sha256 = ?"#,
+        r#"SELECT iso_storage_key
+           FROM (
+                SELECT g.iso_storage_key FROM project_v86_games g
+                JOIN projects p ON p.id = g.project_id
+                JOIN posts ON posts.id = p.post_id
+                WHERE posts.slug = ? AND posts.status = 'published'
+                  AND p.demo_type = 'v86' AND g.iso_sha256 = ?
+             UNION
+                SELECT v.iso_storage_key FROM project_v86_variants v
+                JOIN projects p ON p.id = v.project_id
+                JOIN posts ON posts.id = p.post_id
+                WHERE posts.slug = ? AND posts.status = 'published'
+                  AND p.demo_type = 'v86' AND v.iso_sha256 = ?
+           ) LIMIT 1"#,
     )
+    .bind(&slug)
+    .bind(&sha256)
     .bind(&slug)
     .bind(&sha256)
     .fetch_optional(&state.project_service.pool)
@@ -2929,12 +3251,23 @@ pub async fn get_game_iso(
     AxumPath((slug, sha256)): AxumPath<(String, String)>,
 ) -> Result<Response, ProjectError> {
     let storage_key: Option<String> = sqlx::query_scalar(
-        r#"SELECT g.iso_storage_key FROM project_v86_games g
-           JOIN projects p ON p.id = g.project_id
-           JOIN posts ON posts.id = p.post_id
-           WHERE posts.slug = ? AND posts.status = 'published'
-             AND p.demo_type = 'v86' AND g.iso_sha256 = ?"#,
+        r#"SELECT iso_storage_key
+           FROM (
+                SELECT g.iso_storage_key FROM project_v86_games g
+                JOIN projects p ON p.id = g.project_id
+                JOIN posts ON posts.id = p.post_id
+                WHERE posts.slug = ? AND posts.status = 'published'
+                  AND p.demo_type = 'v86' AND g.iso_sha256 = ?
+             UNION
+                SELECT v.iso_storage_key FROM project_v86_variants v
+                JOIN projects p ON p.id = v.project_id
+                JOIN posts ON posts.id = p.post_id
+                WHERE posts.slug = ? AND posts.status = 'published'
+                  AND p.demo_type = 'v86' AND v.iso_sha256 = ?
+           ) LIMIT 1"#,
     )
+    .bind(&slug)
+    .bind(&sha256)
     .bind(&slug)
     .bind(&sha256)
     .fetch_optional(&state.project_service.pool)

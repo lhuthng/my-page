@@ -16,6 +16,7 @@
 	let soundOpen = $state(false);
 	let mouseOpen = $state(false);
 	let clearOpen = $state(false);
+	let pendingVariant = $state(null);
 
 	let phase = $derived.by(() => {
 		if (player.error) return 'error';
@@ -167,6 +168,7 @@
 				type="button"
 				class="icon-toggle"
 				class:toggled={false}
+				data-color="green"
 				aria-label="Save game"
 				title="Save game"
 				disabled={!player.running || player.saveBusy}
@@ -198,6 +200,7 @@
 						type="button"
 						class="icon-toggle"
 						class:toggled={clearOpen}
+						data-color="red"
 						aria-label="Clear save"
 						title="Clear save"
 						disabled={player.saveBusy}
@@ -246,6 +249,60 @@
 </Portal>
 
 <Portal target={afterDemoPortal} class="text-dark text-base w-full flex flex-col gap-3 pt-6">
+	{#if player.variants.length > 1}
+		<Popover
+			bind:open={pendingVariant}
+			position="top"
+			align="left"
+			offset={8}
+			panelClass="min-w-64"
+		>
+			{#snippet anchor()}
+				<div class="flex flex-wrap items-center gap-2" role="group" aria-label="Game variant">
+					<span class="font-semibold text-dark/60">Variant:</span>
+					{#each player.variants as variant (variant.index)}
+						<button
+							type="button"
+							class="variant-chip"
+							class:active={player.selectedVariant === variant.index}
+							disabled={player.selectedVariant === variant.index}
+							onclick={() => (pendingVariant = variant.index)}
+						>
+							{variant.name || `Variant ${variant.index}`}
+						</button>
+					{/each}
+				</div>
+			{/snippet}
+
+			<div
+				class="flex flex-col gap-3 w-full max-w-lg mx-auto rounded-xl border-2 border-dark bg-white p-4 shadow-lg"
+			>
+				<p class="m-0 text-dark">
+					Switching will do a <b>soft-reboot</b>
+					(no re-download). Your progress will
+					<b class="text-accent-red">be lost</b>
+					- though a save-sync is attempted first. Continue?
+				</p>
+				<div class="flex justify-end gap-2">
+					<div class="duo-btn" data-duo-color="green">
+						<button
+							type="button"
+							onclick={() => {
+								const target = pendingVariant;
+								pendingVariant = null;
+								player.selectVariant(target);
+							}}
+						>
+							Reboot anyway
+						</button>
+					</div>
+					<div class="duo-btn" data-duo-color="red">
+						<button type="button" onclick={() => (pendingVariant = null)}>Hell nah</button>
+					</div>
+				</div>
+			</div>
+		</Popover>
+	{/if}
 	<div class="flex items-center gap-2" aria-live="polite">
 		<span class="status-dot {phase}" aria-hidden="true"></span>
 		<span class="font-semibold">{player.error || player.status || 'Idle'}</span>
@@ -367,11 +424,48 @@
 	}
 
 	.icon-toggle {
-		@apply grid h-9 w-9 place-items-center rounded-lg border-2 border-dark bg-white text-dark transition-colors duration-100;
+		--icon-color: var(--color-dark);
+		--icon-toggled-color: var(--color-white);
+		--icon-background: var(--color-white);
+		--icon-toggled-background: var(--color-dark);
+
+		@apply grid h-9 w-9 place-items-center rounded-lg border-2 border-dark transition-colors duration-100;
+
+		color: var(--icon-color);
+		border-color: var(--icon-color);
+		background-color: var(--icon-background);
+	}
+
+	.icon-toggle[data-color='red'] {
+		--icon-color: var(--color-accent-red);
+		--icon-toggled-color: var(--color-accent-red-light-4);
+		--icon-background: var(--color-accent-red-light-4);
+		--icon-toggled-background: var(--color-accent-red);
+	}
+
+	.icon-toggle[data-color='green'] {
+		--icon-color: var(--color-accent-green);
+		--icon-toggled-color: var(--color-accent-green-light-4);
+		--icon-background: var(--color-accent-green-light-4);
+		--icon-toggled-background: var(--color-accent-green);
+	}
+
+	.variant-chip {
+		@apply rounded-full border-2 border-dark/30 bg-white px-3 py-1 text-sm font-semibold text-dark/70 transition-colors duration-100;
+	}
+
+	.variant-chip:hover:not(:disabled) {
+		@apply border-primary text-primary;
+	}
+
+	.variant-chip.active {
+		@apply border-dark bg-dark text-white;
 	}
 
 	.icon-toggle.toggled {
 		@apply bg-dark text-white;
+		background-color: var(--color-dark);
+		color: var(--color-white);
 	}
 
 	.icon-toggle:disabled {
