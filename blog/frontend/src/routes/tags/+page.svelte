@@ -1,11 +1,13 @@
 <script>
 	import BackButton from '$lib/components/ui/BackButton.svelte';
 	import { untrack } from 'svelte';
+	import { SITE_OG_IMAGE } from '$lib/config/site.js';
 
 	const { data } = $props();
 
 	const tags = untrack(() => data).tags ?? [];
 	const term = untrack(() => data).term ?? '';
+	const imageUrl = SITE_OG_IMAGE;
 
 	const tagLabel = $derived(tags.length === 1 ? 'tag' : 'tags');
 </script>
@@ -22,6 +24,14 @@
 		content="Browse the recurring topics, experiments, and side quests across the blog."
 	/>
 	<meta property="og:type" content="website" />
+	<meta property="og:image" content={imageUrl} />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Tags | Huu Thang's Blog" />
+	<meta
+		name="twitter:description"
+		content="Browse the recurring topics, experiments, and side quests across the blog."
+	/>
+	<meta name="twitter:image" content={imageUrl} />
 </svelte:head>
 
 <section class="bg-white rounded-xl p-4 mb-2 lg:mb-4 space-y-4">

@@ -17,7 +17,7 @@
 	import PBody from '$lib/components/shell/PBody.svelte';
 	import Comment from '$lib/components/post/Comment.svelte';
 	import { preventDefault } from '$lib/utils';
-	import { canonicalUrl, safeJsonLd, SITE_ORIGIN } from '$lib/config/site.js';
+	import { canonicalUrl, safeJsonLd, SITE_AUTHOR, SITE_ORIGIN } from '$lib/config/site.js';
 
 	const { data } = $props();
 
@@ -71,7 +71,8 @@
 			alternateName: username,
 			description: bio,
 			image: avatarUrl,
-			url: profileUrl
+			url: profileUrl,
+			...(username === 'lhuthng' ? { sameAs: SITE_AUTHOR.sameAs } : {})
 		},
 		isPartOf: { '@id': `${SITE_ORIGIN}/#website` }
 	});

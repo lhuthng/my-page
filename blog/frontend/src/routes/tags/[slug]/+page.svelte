@@ -2,9 +2,11 @@
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import { fade, fly } from 'svelte/transition';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
-	import { canonicalUrl, safeJsonLd, SITE_ORIGIN } from '$lib/config/site.js';
+	import { canonicalUrl, safeJsonLd, SITE_OG_IMAGE, SITE_ORIGIN } from '$lib/config/site.js';
 
 	let { data } = $props();
+
+	const imageUrl = SITE_OG_IMAGE;
 
 	const tag = $derived(data.tag);
 	const posts = $derived(data.posts ?? []);
@@ -41,6 +43,11 @@
 	<meta property="og:title" content={`#${tag.slug} | Huu Thang's Blog`} />
 	<meta property="og:description" content={metaDescription} />
 	<meta property="og:type" content="website" />
+	<meta property="og:image" content={imageUrl} />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={`#${tag.slug} | Huu Thang's Blog`} />
+	<meta name="twitter:description" content={metaDescription} />
+	<meta name="twitter:image" content={imageUrl} />
 	{@html `<script type="application/ld+json">${safeJsonLd(structuredData)}</script>`}
 </svelte:head>
 

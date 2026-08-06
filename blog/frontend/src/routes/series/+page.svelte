@@ -1,10 +1,12 @@
 <script>
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
+	import { SITE_OG_IMAGE } from '$lib/config/site.js';
 
 	let { data } = $props();
 
 	let series = $derived(data.series);
+	const imageUrl = SITE_OG_IMAGE;
 </script>
 
 {#snippet postItem({
@@ -76,6 +78,14 @@
 		content="Browse connected series of posts from Huu Thang's Blog."
 	/>
 	<meta property="og:type" content="website" />
+	<meta property="og:image" content={imageUrl} />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Series | Huu Thang's Blog" />
+	<meta
+		name="twitter:description"
+		content="Browse connected series of posts from Huu Thang's Blog."
+	/>
+	<meta name="twitter:image" content={imageUrl} />
 </svelte:head>
 
 <section class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8">

@@ -7,11 +7,13 @@
 	import FetchMore from '$lib/components/home/FetchMore.svelte';
 	import GridExpander from '$lib/components/shell/GridExpander.svelte';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
+	import { SITE_OG_IMAGE } from '$lib/config/site.js';
 
 	let { data } = $props();
 
 	const limit = $derived(untrack(() => data.firstOffset ?? 5));
 	const itemDelay = 45;
+	const imageUrl = SITE_OG_IMAGE;
 
 	let batchId = 0;
 
@@ -78,6 +80,11 @@
 	<meta name="description" content="Recent posts, essays, and updates." />
 	<meta property="og:description" content="Recent posts, essays, and updates." />
 	<meta property="og:type" content="website" />
+	<meta property="og:image" content={imageUrl} />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Posts | Huu Thang's Blog" />
+	<meta name="twitter:description" content="Recent posts, essays, and updates." />
+	<meta name="twitter:image" content={imageUrl} />
 </svelte:head>
 
 <div class="bg-white rounded-xl mb-2 lg:mb-4">

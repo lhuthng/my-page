@@ -1,6 +1,11 @@
+# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-
 Allow: /
+
 Disallow: /api/
+Disallow: /dashboard
+Disallow: /login
+Disallow: /reset-password
+Disallow: /verify-email
 
 Sitemap: https://blog.huuthangle.site/sitemap.xml

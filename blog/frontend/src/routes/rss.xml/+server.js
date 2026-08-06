@@ -19,18 +19,26 @@ export async function GET({ fetch }) {
 		// Keep the feed valid while the API is temporarily unavailable.
 	}
 
-	const items = (data.featured_posts ?? [])
+	const posts = data.featured_posts ?? [];
+	const items = posts
 		.map((post) => {
 			const link = canonicalUrl(`/posts/${encodeURIComponent(post.slug)}`);
+			const pubDate = post.published_at ? `<pubDate>${escapeXml(post.published_at)}</pubDate>` : '';
 			return `    <item>
       <title>${escapeXml(post.title)}</title>
       <link>${escapeXml(link)}</link>
       <guid isPermaLink="true">${escapeXml(link)}</guid>
       <description>${escapeXml(post.excerpt)}</description>
+      ${pubDate}
       <dc:creator>${escapeXml(post.author_name)}</dc:creator>
     </item>`;
 		})
 		.join('\n');
+
+	const lastBuildDate = posts.reduce((latest, post) => {
+		const candidate = post.updated_at ?? post.published_at ?? latest;
+		return latest && latest > candidate ? latest : candidate;
+	}, '');
 
 	const body = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -39,6 +47,7 @@ export async function GET({ fetch }) {
     <link>${escapeXml(`${SITE_ORIGIN}/`)}</link>
     <description>${escapeXml(SITE_DESCRIPTION)}</description>
     <language>en</language>
+    ${lastBuildDate ? `<lastBuildDate>${escapeXml(lastBuildDate)}</lastBuildDate>` : ''}
 ${items}
   </channel>
 </rss>

@@ -53,6 +53,7 @@
 <svelte:head>
 	<meta property="og:site_name" content={SITE_NAME} />
 	<meta property="og:url" content={canonical} />
+	<meta property="og:locale" content="en_US" />
 	<meta name="twitter:url" content={canonical} />
 	<meta name="theme-color" content="#ffffff" />
 
@@ -64,6 +65,12 @@
 	{/if}
 
 	<link rel="icon" href={`${SITE_ORIGIN}/favicon.ico`} />
+	<link rel="icon" type="image/svg+xml" href={`${SITE_ORIGIN}/logo.svg`} />
+	<link rel="apple-touch-icon" href={`${SITE_ORIGIN}/logo.png`} />
+	<link rel="manifest" href={`${SITE_ORIGIN}/manifest.webmanifest`} />
+	<meta name="mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-title" content={SITE_NAME} />
 	<link
 		rel="alternate"
 		type="application/rss+xml"

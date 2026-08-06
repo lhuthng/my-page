@@ -11,7 +11,11 @@
 		absoluteSiteUrl,
 		canonicalUrl,
 		safeJsonLd,
+		SITE_AUTHOR,
+		SITE_LOCALE,
 		SITE_NAME,
+		SITE_OG_IMAGE_HEIGHT,
+		SITE_OG_IMAGE_WIDTH,
 		SITE_ORIGIN
 	} from '$lib/config/site.js';
 
@@ -77,13 +81,31 @@
 				author: {
 					'@type': 'Person',
 					name: author_name,
-					url: canonicalUrl(`/profiles/${author_slug}`)
+					url: canonicalUrl(`/profiles/${author_slug}`),
+					sameAs: SITE_AUTHOR.sameAs
+				},
+				publisher: {
+					'@type': 'Organization',
+					'@id': `${SITE_ORIGIN}/#organization`,
+					name: SITE_NAME,
+					url: `${SITE_ORIGIN}/`,
+					logo: { '@type': 'ImageObject', url: SITE_AUTHOR.image },
+					publisher: { '@id': `${SITE_ORIGIN}/#person` }
 				},
 				isPartOf: {
 					'@type': 'WebSite',
 					'@id': `${SITE_ORIGIN}/#website`,
 					name: SITE_NAME
 				}
+			},
+			{
+				'@type': 'Person',
+				'@id': `${SITE_ORIGIN}/#person`,
+				name: SITE_AUTHOR.name,
+				alternateName: SITE_AUTHOR.alternateName,
+				url: SITE_AUTHOR.url,
+				image: SITE_AUTHOR.image,
+				sameAs: SITE_AUTHOR.sameAs
 			},
 			{
 				'@type': 'BreadcrumbList',
@@ -133,9 +155,18 @@
 	<meta name="description" content={excerpt} />
 
 	<meta property="og:title" content={title} />
-	<meta property="og:type" content="website" />
+	<meta property="og:type" content="article" />
 	<meta property="og:description" content={excerpt} />
 	<meta property="og:image" content={ogImageUrl} />
+	<meta property="og:image:width" content={SITE_OG_IMAGE_WIDTH} />
+	<meta property="og:image:height" content={SITE_OG_IMAGE_HEIGHT} />
+	<meta property="og:locale" content={SITE_LOCALE} />
+	<meta property="article:published_time" content={published_at} />
+	<meta property="article:modified_time" content={updated_at ?? published_at} />
+
+	{#each tags as tag}
+		<meta property="article:tag" content={tag} />
+	{/each}
 
 	{#if cover_video_url}
 		<meta property="og:video" content={absoluteSiteUrl(cover_video_url)} />
