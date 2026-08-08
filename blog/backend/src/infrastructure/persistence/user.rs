@@ -100,6 +100,18 @@ impl UserService for UserServiceImpl {
         })
     }
     async fn change_details(&self, cmd: ChangeDetailsCommand) -> Result<(), UserError> {
+        use crate::helper::string::*;
+        let cmd = ChangeDetailsCommand {
+            display_name: cmd
+                .display_name
+                .map(|v| validate_text(&v, "Display name", 60).map_err(UserError::InvalidData))
+                .transpose()?,
+            bio: validate_optional_long_text(cmd.bio.as_deref(), "Bio", 500)
+                .map_err(UserError::InvalidData)?,
+
+            ..cmd
+        };
+
         let mut tx = self.pool.begin().await?;
 
         if cmd.bio.is_none() && cmd.display_name.is_none() {

@@ -11,6 +11,7 @@ use crate::domain::errors::media::MediaError;
 pub enum SeriesError {
     Duplication,
     PermissionDenied,
+    Validation(String),
     InternalError(String),
     ExposedInternalError(String),
     Media(MediaError),
@@ -42,6 +43,7 @@ impl IntoResponse for SeriesError {
                         StatusCode::FORBIDDEN,
                         "You do not have permission to perform this action".to_string(),
                     ),
+                    SeriesError::Validation(msg) => (StatusCode::BAD_REQUEST, msg),
                     SeriesError::InternalError(msg) => {
                         if cfg!(debug_assertions) {
                             (StatusCode::INTERNAL_SERVER_ERROR, msg)
