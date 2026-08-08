@@ -377,7 +377,26 @@ impl SeriesService for SeriesServiceImpl {
         &self,
         cmd: NewSeriesCommand,
         config: &MediaConfig,
-    ) -> Result<bool, SeriesError> {
+) -> Result<bool, SeriesError> {
+        use crate::{
+            application::commands::series::NewSeriesCommand as C, helper::string::*,
+        };
+        let description = {
+            let trimmed = cmd.description.trim();
+            if trimmed.chars().count() > 1000 {
+                return Err(SeriesError::Validation(
+                    "Description must be at most 1000 characters.".into(),
+                ));
+            }
+            trimmed.to_string()
+        };
+        let cmd = C {
+            title: validate_text(&cmd.title, "Title", 300).map_err(SeriesError::Validation)?,
+            slug: validate_slug(&cmd.slug).map_err(SeriesError::Validation)?,
+            description,
+            ..cmd
+        };
+
         let mut tx = self.pool.begin().await?;
 
         let mut image_id: Option<i64> = None;

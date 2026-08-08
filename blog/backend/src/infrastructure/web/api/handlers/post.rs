@@ -849,8 +849,8 @@ pub async fn search(
     Query(query): Query<SearchPostQuery>,
 ) -> Result<impl IntoResponse, PostError> {
     let term = query.term;
-    let size = query.size.unwrap_or(1);
-    let offset = query.offset.unwrap_or(0);
+    let size = crate::helper::string::clamp_page_size(query.size, 1, 100);
+    let offset = crate::helper::string::clamp_offset(query.offset);
 
     let user_snapshots = state
         .post_service
@@ -884,8 +884,8 @@ pub async fn search_tags(
         .post_service
         .search_tags(SearchTagsCommand {
             term: query.term,
-            size: query.size.unwrap_or(24),
-            offset: query.offset.unwrap_or(0),
+            size: crate::helper::string::clamp_page_size(query.size, 24, 100),
+            offset: crate::helper::string::clamp_offset(query.offset),
         })
         .await?;
 
@@ -925,16 +925,16 @@ pub async fn get_posts_by_tag(
         .post_service
         .get_posts_by_tag(GetPostsByTagCommand {
             slug: tag_slug,
-            limit: query.limit.unwrap_or(24),
-            offset: query.offset.unwrap_or(0),
+            limit: crate::helper::string::clamp_page_size(query.limit, 24, 100),
+            offset: crate::helper::string::clamp_offset(query.offset),
         })
         .await?;
     let projects = state
         .project_service
         .get_project_snapshots_by_tag(GetProjectsByTagCommand {
             slug: tag.slug.clone(),
-            limit: query.limit.unwrap_or(24),
-            offset: query.offset.unwrap_or(0),
+            limit: crate::helper::string::clamp_page_size(query.limit, 24, 100),
+            offset: crate::helper::string::clamp_offset(query.offset),
         })
         .await
         .unwrap_or_default();
@@ -1026,7 +1026,9 @@ pub async fn get_featured_posts(
     State(state): State<Arc<AppState>>,
     Query(query): Query<GetFeaturedPostsBody>,
 ) -> Result<impl IntoResponse, PostError> {
-    let cmd = GetFeaturedPostsCommand { limit: query.limit };
+    let cmd = GetFeaturedPostsCommand {
+        limit: crate::helper::string::clamp_page_size(Some(query.limit), 1, 100),
+    };
     let featured_posts = state.post_service.get_featured_post_snapshots(cmd).await?;
 
     let wrapped_featured_posts = GetFeaturedPostsResponse {
@@ -1050,8 +1052,8 @@ pub async fn get_latest_posts(
     State(state): State<Arc<AppState>>,
     Query(query): Query<GetFeaturedPostsQuery>,
 ) -> Result<impl IntoResponse, PostError> {
-    let limit = query.limit.unwrap_or(1);
-    let offset = query.offset.unwrap_or(0);
+    let limit = crate::helper::string::clamp_page_size(query.limit, 1, 100);
+    let offset = crate::helper::string::clamp_offset(query.offset);
     let default = "created";
     let sorted_by = query
         .sorted_by_updated
@@ -1172,7 +1174,7 @@ pub async fn get_comments(
     Query(query): Query<CommentsQuery>,
 ) -> Result<impl IntoResponse, PostError> {
     let before = query.before;
-    let limit = query.limit.unwrap_or(1);
+    let limit = crate::helper::string::clamp_page_size(query.limit, 1, 100);
     let parent_id = query.parent_id;
     let post_id = post_id_str.parse::<i64>().unwrap();
 

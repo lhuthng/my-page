@@ -10,6 +10,7 @@ pub enum PostError {
     TagNotFound,
     Forbidden,
     // InvalidPostContent,
+    Validation(String),
     UploadFailed(String),
     InternalError(String),
     Media(MediaError),
@@ -35,6 +36,7 @@ impl IntoResponse for PostError {
                         StatusCode::FORBIDDEN,
                         "You do not have permission to perform this action".to_string(),
                     ),
+                    PostError::Validation(msg) => (StatusCode::BAD_REQUEST, msg),
                     // PostError::InvalidPostContent => {
                     //     (StatusCode::BAD_REQUEST, "Invalid post content.".to_string())
                     // }

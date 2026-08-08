@@ -77,13 +77,13 @@ pub struct RegisterCredentials {
     #[validate(email(message = "Invalid email address"))]
     pub email: String,
 
-    #[validate(length(min = 6, message = "Password must be at least 6 characters"),regex(path = *RE_PASSWORD,message = "Password must be 8-30 characters long and can only contain letters, numbers, and common symbols (no spaces)."))]
+    #[validate(length(min = 8, max = 30, message = "Password must be 8-30 characters long"),regex(path = *RE_PASSWORD,message = "Password can contain letters, numbers, and common symbols (spaces allowed)."))]
     pub password: String,
 }
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct ResetPasswordCredentials {
-    #[validate(length(min = 6, message = "Password must be at least 6 characters"),regex(path = *RE_PASSWORD,message = "Password must be 8-30 characters long and can only contain letters, numbers, and common symbols (no spaces)."))]
+    #[validate(length(min = 8, max = 30, message = "Password must be 8-30 characters long"),regex(path = *RE_PASSWORD,message = "Password can contain letters, numbers, and common symbols (spaces allowed)."))]
     pub password: String,
 }
 

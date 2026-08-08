@@ -312,6 +312,12 @@ impl PostService for PostServiceImpl {
         Ok(results)
     }
     async fn new_post(&self, cmd: NewPostCommand) -> Result<i64, PostError> {
+        let title = crate::helper::string::validate_text(&cmd.title, "Title", 200)
+            .map_err(PostError::Validation)?;
+        let slug = crate::helper::string::validate_slug(&cmd.slug).map_err(PostError::Validation)?;
+        let excerpt = crate::helper::string::validate_text(&cmd.excerpt, "Excerpt", 400)
+            .map_err(PostError::Validation)?;
+
         let mut tx = self.pool.begin().await?;
         let post_id: i64 = sqlx::query_scalar(
             r#"
@@ -321,9 +327,9 @@ impl PostService for PostServiceImpl {
             "#,
         )
         .bind(cmd.user_id)
-        .bind(&cmd.title)
-        .bind(&cmd.slug)
-        .bind(&cmd.excerpt)
+        .bind(&title)
+        .bind(&slug)
+        .bind(&excerpt)
         .bind(&cmd.content)
         .bind("draft".to_string())
         .bind(&cmd.content_kind)
@@ -587,6 +593,23 @@ impl PostService for PostServiceImpl {
         ))
     }
     async fn update_post(&self, cmd: UpdatePostCommand) -> Result<(), PostError> {
+        use crate::{application::commands::post::UpdatePostCommand as C, helper::string::*};
+        let cmd = C {
+            title: cmd
+                .title
+                .map(|v| validate_text(&v, "Title", 200).map_err(PostError::Validation))
+                .transpose()?,
+            slug: cmd
+                .slug
+                .map(|v| validate_slug(&v).map_err(PostError::Validation))
+                .transpose()?,
+            excerpt: cmd
+                .excerpt
+                .map(|v| validate_text(&v, "Excerpt", 400).map_err(PostError::Validation))
+                .transpose()?,
+            ..cmd
+        };
+
         let mut tx = self.pool.begin().await?;
 
         let mut set_fields: Vec<String> = vec![];
@@ -1178,6 +1201,10 @@ impl PostService for PostServiceImpl {
         })
     }
     async fn post_new_comment(&self, cmd: PostNewCommentCommand) -> Result<i64, PostError> {
+        let content = crate::helper::string::validate_text(&cmd.content, "Comment", 2000)
+            .map_err(PostError::Validation)?;
+        let cmd = PostNewCommentCommand { content, ..cmd };
+
         let mut tx = self.pool.begin().await?;
 
         if let Some(parent_id) = cmd.parent_id {
@@ -1287,6 +1314,12 @@ impl PostService for PostServiceImpl {
         &self,
         cmd: PostNewAnynymouseCommentCommand,
     ) -> Result<i64, PostError> {
+        let content = crate::helper::string::validate_text(&cmd.content, "Comment", 2000)
+            .map_err(PostError::Validation)?;
+        let cmd = PostNewAnynymouseCommentCommand {
+            content,
+            ..cmd
+        };
         let mut tx = self.pool.begin().await?;
 
         if let Some(parent_id) = cmd.parent_id {
