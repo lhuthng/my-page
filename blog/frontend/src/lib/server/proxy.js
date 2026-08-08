@@ -9,7 +9,7 @@ export function route(path) {
  * Convert a backend media path (e.g. "media/i/my-slug") into a URL the
  * browser can fetch directly.
  *
- * When BACKEND_ORIGIN is set (e.g. "https://my-blog-backend.fly.dev"),
+ * When BACKEND_ORIGIN is set (e.g. "https://blog-backend.example"),
  * the browser fetches the image straight from the backend, skipping the
  * SvelteKit proxy entirely - one fewer network hop, no memory pressure on
  * the frontend machine, and proper Cache-Control headers reach the browser
