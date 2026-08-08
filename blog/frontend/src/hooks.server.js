@@ -3,6 +3,7 @@ import { env } from '$env/dynamic/private';
 import { SITE_HOSTNAME, SITE_ORIGIN } from '$lib/config/site.js';
 import { fixClientRoute, route } from '$lib/server/proxy';
 
+const EXEMPT_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const NOINDEX_PATHS = [
 	'/api',
@@ -26,7 +27,6 @@ function allowedHosts() {
 		'localhost',
 		'127.0.0.1',
 		'::1',
-		...(env.FLY_APP_NAME ? [`${env.FLY_APP_NAME}.fly.dev`] : []),
 		...commaSeparated(env.ALLOWED_HOSTS)
 	]);
 }
@@ -65,8 +65,7 @@ function hardenHtml(html) {
 		`$1="${officialOrigin}/`
 	);
 
-	const redirectGuard = `<script>(()=>{const h=location.hostname;if(h!=='${SITE_HOSTNAME}'&&h!=='localhost'&&h!=='127.0.0.1'&&h!=='::1'){location.replace('${SITE_ORIGIN}'+location.pathname+location.search+location.hash)}})();</script>`;
-	return absoluteRootReferences.replace('</head>', `${redirectGuard}</head>`);
+	return absoluteRootReferences;
 }
 
 function applySecurityHeaders(response, event, noindex) {
@@ -147,8 +146,33 @@ async function populateUser(event) {
 }
 
 export async function handle({ event, resolve }) {
-	if (!dev && !allowedHosts().has(requestHostname(event))) {
+	const hostname = requestHostname(event);
+
+	if (!dev && !allowedHosts().has(hostname)) {
 		return applySecurityHeaders(new Response('Misdirected request', { status: 421 }), event, true);
+	}
+
+	// Serve one canonical host to crawlers. A server-side 301 (rather than a
+	// client-side `location.replace`) lets Google Search follow and merge the
+	// URL into the canonical version instead of reporting a "Redirect error".
+	if (
+		!dev &&
+		hostname !== SITE_HOSTNAME &&
+		!EXEMPT_HOSTS.has(hostname) &&
+		(event.request.method === 'GET' || event.request.method === 'HEAD')
+	) {
+		const target = new URL(event.url);
+		target.protocol = 'https:';
+		target.hostname = SITE_HOSTNAME;
+		target.port = '';
+		return applySecurityHeaders(
+			new Response(null, {
+				status: 301,
+				headers: { Location: target.toString() }
+			}),
+			event,
+			false
+		);
 	}
 
 	const requestOrigin = event.request.headers.get('origin');
