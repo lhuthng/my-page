@@ -16,15 +16,26 @@ import MarkdownIt from 'markdown-it';
 import mkKatex from 'markdown-it-katex';
 import anchor from 'markdown-it-anchor';
 
+const md = new MarkdownIt()
+	.use(mkKatex)
+	.use(mediaWithShortcutPlugin)
+	.use(iframeBlockPlugin)
+	.use(youtubeBlockPlugin)
+	.use(appBlockPlugin)
+	.use(revealPlugin)
+	.use(namedContainerPlugin)
+	.use(codeHighlightPlugin)
+	.use(kaomojiPlugin)
+	.use(anchor, { slugify });
+
 export async function load({ locals, fetch, params, setHeaders }) {
-	
 	const res = await fetch(route(`posts/s/${params.slug}`), {
 		method: 'GET'
 	});
 
 	if (res.ok) {
 		setHeaders({
-			'cache-control': 'public, max-age=10, s-maxage=10'
+			'cache-control': 'public, max-age=10, s-maxage=60, stale-while-revalidate=300'
 		});
 		const data = await res.json();
 
@@ -60,18 +71,7 @@ export async function load({ locals, fetch, params, setHeaders }) {
 			if (shortName) mediaDictionary[shortName] = fixClientRoute(medium_urls[index]);
 		});
 
-		const md = new MarkdownIt()
-			.use(mkKatex)
-			.use(mediaWithShortcutPlugin, { mediaDictionary })
-			.use(iframeBlockPlugin)
-			.use(youtubeBlockPlugin)
-			.use(appBlockPlugin, { mediaDictionary })
-			.use(revealPlugin)
-			.use(namedContainerPlugin)
-			.use(codeHighlightPlugin)
-			.use(kaomojiPlugin)
-			.use(anchor, { slugify });
-		content = md.render(content);
+		content = md.render(content, { mediaDictionary });
 
 		const series = rest.series;
 		if (series) {

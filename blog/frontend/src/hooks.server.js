@@ -13,6 +13,15 @@ const NOINDEX_PATHS = [
 	'/reset-password',
 	'/verify-email'
 ];
+const userCache = new Map();
+const USER_CACHE_TTL_MS = 30_000;
+
+function pruneUserCache() {
+	const now = Date.now();
+	for (const [key, entry] of userCache) {
+		if (entry.expiresAt <= now) userCache.delete(key);
+	}
+}
 
 function commaSeparated(value) {
 	return (value ?? '')
@@ -104,6 +113,16 @@ async function populateUser(event) {
 
 	if (!refreshToken) return;
 
+	const cached = userCache.get(refreshToken);
+	if (cached && cached.expiresAt > Date.now()) {
+		if (cached.result) {
+			event.locals.accessToken = cached.result.accessToken;
+			event.locals.user = cached.result.user;
+			event.locals.role = cached.result.role;
+		}
+		return;
+	}
+
 	let res = await event.fetch(route('auth/refresh'), {
 		method: 'POST',
 		headers: {
@@ -135,14 +154,23 @@ async function populateUser(event) {
 
 	const { username, display_name: displayName, role, avatar_url: avatarUrl } = await res.json();
 
-	event.locals.accessToken = { type, token };
-	event.locals.user = {
-		username,
-		displayName,
-		role,
-		avatarUrl: fixClientRoute(avatarUrl)
+	const result = {
+		accessToken: { type, token },
+		user: {
+			username,
+			displayName,
+			role,
+			avatarUrl: fixClientRoute(avatarUrl)
+		},
+		role
 	};
-	event.locals.role = role;
+
+	event.locals.accessToken = result.accessToken;
+	event.locals.user = result.user;
+	event.locals.role = result.role;
+
+	pruneUserCache();
+	userCache.set(refreshToken, { expiresAt: Date.now() + USER_CACHE_TTL_MS, result });
 }
 
 export async function handle({ event, resolve }) {

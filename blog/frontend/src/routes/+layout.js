@@ -3,11 +3,6 @@ export const ssr = true;
 
 import { clearLogin, saveLogin } from '$lib/auth/user.svelte.js';
 
-import { gsap } from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-
-gsap.registerPlugin(ScrollTrigger);
-
 export function load({ data }) {
 	const { user, accessToken } = data;
 	if (user && accessToken) {

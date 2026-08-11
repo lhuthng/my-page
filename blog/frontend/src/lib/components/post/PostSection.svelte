@@ -217,6 +217,8 @@
 									class="min-w-16 w-16 h-16 object-cover rounded-lg"
 									src={url}
 									alt="left-post-cover"
+									loading="lazy"
+									decoding="async"
 								/>
 							</a>
 							<div class="relative z-10 grow my-auto pointer-events-none">
@@ -255,6 +257,8 @@
 									class="min-w-16 w-16 h-16 object-cover rounded-lg"
 									src={url}
 									alt="left-post-cover"
+									loading="lazy"
+									decoding="async"
 								/>
 							</a>
 							<div class="relative z-10 grow my-auto pointer-events-none">
@@ -291,6 +295,8 @@
 									class="w-14 h-14 object-cover rounded-lg shrink-0"
 									src={post.cover_url}
 									alt={post.title}
+									loading="lazy"
+									decoding="async"
 								/>
 							{/if}
 							<span class="text-sm font-medium line-clamp-3">{post.title}</span>
@@ -313,6 +319,8 @@
 							class="min-w-16 w-16 h-16 object-contain"
 							src={author.avatarUrl ?? '/missing.png'}
 							alt="author-avatar"
+							loading="lazy"
+							decoding="async"
 						/>
 					</div>
 					<div class="flex flex-col">
@@ -333,6 +341,8 @@
 								class="w-36 min-w-36 h-36 min-h-36 object-cover rounded-lg"
 								src={url}
 								alt="series-cover"
+								loading="lazy"
+								decoding="async"
 							/>
 						</a>
 						<a

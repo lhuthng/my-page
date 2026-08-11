@@ -356,7 +356,9 @@ impl<'a> HTTPServer<'a> {
         let pool = sqlx::SqlitePool::connect_with(
             db_url
                 .parse::<sqlx::sqlite::SqliteConnectOptions>()?
-                .create_if_missing(true),
+                .create_if_missing(true)
+                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+                .synchronous(sqlx::sqlite::SqliteSynchronous::Normal),
         )
         .await?;
         sqlx::migrate!().run(&pool).await?;
