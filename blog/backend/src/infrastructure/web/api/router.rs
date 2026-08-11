@@ -7,6 +7,7 @@ use axum::{
     routing::{delete, get, get_service, patch, post, put},
 };
 use http::{HeaderValue, Method, header::CONTENT_TYPE};
+use tower_http::compression::CompressionLayer;
 use tower_http::trace::TraceLayer;
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
@@ -482,6 +483,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/dashboard", dashboard_routes)
         .merge(graphql_routes)
         .layer(TraceLayer::new_for_http())
+        .layer(CompressionLayer::new())
         .with_state(state)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
 }

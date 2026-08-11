@@ -354,15 +354,15 @@ impl AuthService for AuthServiceImpl {
         .await
         {
             Ok(row) => {
-                match verify(token, &row.token_hash) {
-                    Ok(value) => {
-                        if !value {
-                            return Err(AuthError::InvalidToken);
-                        }
-                    }
-                    Err(error) => {
-                        return Err(AuthError::InternalError(error.to_string()));
-                    }
+                let token_hash = row.token_hash.clone();
+                let token_owned = token.to_string();
+                let is_valid = tokio::task::spawn_blocking(move || verify(&token_owned, &token_hash))
+                    .await
+                    .map_err(|e| AuthError::InternalError(e.to_string()))?
+                    .map_err(|e| AuthError::InternalError(e.to_string()))?;
+
+                if !is_valid {
+                    return Err(AuthError::InvalidToken);
                 }
                 if Utc::now() > row.expires_at {
                     return Err(AuthError::ExpiredToken);

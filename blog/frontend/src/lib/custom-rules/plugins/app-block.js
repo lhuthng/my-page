@@ -1,6 +1,4 @@
-export function appBlockPlugin(md, options) {
-	const mediaDictionary = options?.mediaDictionary || {};
-
+export function appBlockPlugin(md) {
 	function normalizeCssSize(value, fallback) {
 		if (!value || value === '_') return fallback;
 		return /^\d+$/.test(value) ? `${value}px` : value;
@@ -22,6 +20,7 @@ export function appBlockPlugin(md, options) {
 		const width = normalizeCssSize(parts[3], '100%');
 		const height = normalizeCssSize(parts[4], '400px');
 		const rest = parts.slice(5).join('-') || '';
+		const mediaDictionary = state.env?.mediaDictionary || {};
 		const temp = mediaDictionary[name];
 
 		const token = state.push('app_block', '', 0);

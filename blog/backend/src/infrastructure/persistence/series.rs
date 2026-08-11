@@ -406,7 +406,8 @@ impl SeriesService for SeriesServiceImpl {
                 cover_image.bytes,
                 &cover_image.content_type,
                 &cover_image.filename,
-            )?;
+            )
+            .await?;
 
             if !self.is_cover_supported(&content_type, config).await? {
                 return Err(SeriesError::Media(MediaError::InvalidFileType));

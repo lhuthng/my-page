@@ -1,6 +1,7 @@
 <script>
 	import CommentButton from '../shell/buttons/CommentButton.svelte';
 	import GridExpander from '../shell/GridExpander.svelte';
+	import { lazyVideo } from '$lib/actions/lazyVideo.js';
 
 	let {
 		src,
@@ -39,19 +40,21 @@
 				{#if coverMediaType?.startsWith('video/')}
 					<video
 						class="absolute z-10 left-0 top-0 w-full h-full object-cover bg-white border-3 border-dark rounded-t-lg"
-						src={coverSrc}
+						data-src={coverSrc}
 						poster={`${coverSrc}.thumbnail`}
 						muted
 						loop
 						playsinline
-						autoplay
-						preload="auto"
+						preload="none"
+						use:lazyVideo
 					></video>
 				{:else}
 					<img
 						class="absolute z-10 left-0 top-0 w-full h-full object-cover bg-white border-3 border-dark rounded-t-lg"
 						src={coverSrc}
 						alt="post-cover"
+						loading="lazy"
+						decoding="async"
 					/>
 				{/if}
 				<div
@@ -82,19 +85,21 @@
 				{#if coverMediaType?.startsWith('video/')}
 					<video
 						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
-						src={coverSrc}
+						data-src={coverSrc}
 						poster={`${coverSrc}.thumbnail`}
 						muted
 						loop
 						playsinline
-						autoplay
-						preload="auto"
+						preload="none"
+						use:lazyVideo
 					></video>
 				{:else}
 					<img
 						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
 						src={coverSrc}
 						alt="post-cover"
+						loading="lazy"
+						decoding="async"
 					/>
 				{/if}
 				{#if children !== undefined}

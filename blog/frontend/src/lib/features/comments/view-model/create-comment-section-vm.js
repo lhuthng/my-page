@@ -1,9 +1,21 @@
-import { gsap } from 'gsap';
+import { getGsap } from '$lib/gsap.js';
 import { authState } from '$lib/auth/user.svelte.js';
 import { resizeTextarea } from '$lib/dom/auto-resize';
 import { createCommentApi } from '../data/comment-api.js';
-import { createCommentFeatureState, createEmptyState, createMentionState, createCommandState, createDrawerState, createUiState, resetObject } from '../model/state.js';
-import { createCommentNodeView, createSuggestionPanelState, normalizeAvatarUrl } from '../model/view.js';
+import {
+	createCommentFeatureState,
+	createEmptyState,
+	createMentionState,
+	createCommandState,
+	createDrawerState,
+	createUiState,
+	resetObject
+} from '../model/state.js';
+import {
+	createCommentNodeView,
+	createSuggestionPanelState,
+	normalizeAvatarUrl
+} from '../model/view.js';
 import { createCommentSyntaxEngine } from '../syntax/engine.js';
 import { createMentionPlugin } from '../syntax/plugins/mention.js';
 import { createKaomojiCommandPlugin } from '../syntax/plugins/command-kaomoji.js';
@@ -13,6 +25,8 @@ import { createThreadController } from '../controllers/thread-controller.js';
 import { createComposerController } from '../controllers/composer-controller.js';
 import CommentGifPopover from '$lib/components/post/popovers/CommentGifPopover.svelte';
 import CommentKaomojiPopover from '$lib/components/post/popovers/CommentKaomojiPopover.svelte';
+
+const { gsap } = getGsap();
 
 const mentionMinChars = 3;
 const mentionDebounceMs = 250;
@@ -134,9 +148,9 @@ export function createCommentSectionViewModel({
 			}
 
 			const anchorIndex = state.commandState.open
-				? activeCommandMatch?.context?.start ?? state.commandState.start
+				? (activeCommandMatch?.context?.start ?? state.commandState.start)
 				: state.mentionState.open
-					? activeMentionMatch?.context?.start ?? state.mentionState.start
+					? (activeMentionMatch?.context?.start ?? state.mentionState.start)
 					: -1;
 
 			if (anchorIndex < 0) {
@@ -226,7 +240,10 @@ export function createCommentSectionViewModel({
 	async function fetchComments() {
 		if (state.comments.fetching) return;
 		state.comments.fetching = true;
-		const page = await api.fetchRoots(state.postId, state.comments.lastId === 0 ? null : state.comments.lastId);
+		const page = await api.fetchRoots(
+			state.postId,
+			state.comments.lastId === 0 ? null : state.comments.lastId
+		);
 		page.items = await renderComments(page.items);
 		threadController.updateRoots(page);
 		state.comments.fetching = false;
@@ -237,7 +254,11 @@ export function createCommentSectionViewModel({
 		if (thread.fetching || thread.endReached) return;
 
 		thread.fetching = true;
-		const page = await api.fetchReplies(state.postId, parentId, thread.lastId === 0 ? null : thread.lastId);
+		const page = await api.fetchReplies(
+			state.postId,
+			parentId,
+			thread.lastId === 0 ? null : thread.lastId
+		);
 		page.items = await renderComments(page.items);
 		threadController.updateReplies(parentId, page);
 		thread.fetching = false;
@@ -485,7 +506,8 @@ export function createCommentSectionViewModel({
 		setTimeout(() => {
 			const activeEl = document.activeElement;
 			if (activeEl && activeEl.closest('.comment-autocomplete-popover')) return;
-			if (event.relatedTarget && event.relatedTarget.closest('.comment-autocomplete-popover')) return;
+			if (event.relatedTarget && event.relatedTarget.closest('.comment-autocomplete-popover'))
+				return;
 			clearTransientUi();
 		}, 100);
 	}
@@ -838,7 +860,12 @@ export function createCommentSectionViewModel({
 	};
 }
 
-export function createCommentSectionRuntime(state, getUserAvatarUrl, getGuestIdentity, onCommentPosted) {
+export function createCommentSectionRuntime(
+	state,
+	getUserAvatarUrl,
+	getGuestIdentity,
+	onCommentPosted
+) {
 	return createCommentSectionViewModel({
 		state,
 		getUserAvatarUrl,

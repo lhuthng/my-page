@@ -2,10 +2,9 @@
 	import { preventDefault, stopPropagation } from '$lib/utils';
 	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { gsap } from 'gsap';
-	import { Flip } from 'gsap/Flip';
+	import { getGsap } from '$lib/gsap.js';
 
-	gsap.registerPlugin(Flip);
+	const { gsap, Flip } = getGsap();
 
 	let { visible, origin, onClose } = $props();
 

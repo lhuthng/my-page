@@ -40,10 +40,10 @@
 	const md = $derived(
 		new MarkdownIt()
 			.use(mkKatex)
-			.use(mediaWithShortcutPlugin, { mediaDictionary })
+			.use(mediaWithShortcutPlugin)
 			.use(iframeBlockPlugin)
 			.use(youtubeBlockPlugin)
-			.use(appBlockPlugin, { mediaDictionary })
+			.use(appBlockPlugin)
 			.use(revealPlugin)
 			.use(namedContainerPlugin)
 			.use(codeHighlightPlugin)
@@ -57,11 +57,14 @@
 		...[...text.matchAll(lottieAppSyntax)].map((match) => match[1])
 	];
 
-	let debounce = useDebounce(async (_content) => {
-		const keys = collectMediaKeys(_content);
-		await searchMedia(keys);
-		content = _content;
-	}, untrack(() => delay));
+	let debounce = useDebounce(
+		async (_content) => {
+			const keys = collectMediaKeys(_content);
+			await searchMedia(keys);
+			content = _content;
+		},
+		untrack(() => delay)
+	);
 
 	$effect(() => {
 		debounce.update(_content);
@@ -69,7 +72,7 @@
 	});
 
 	$effect(() => {
-		onUpdateRendered(md.render(content));
+		onUpdateRendered(md.render(content, { mediaDictionary }));
 	});
 </script>
 

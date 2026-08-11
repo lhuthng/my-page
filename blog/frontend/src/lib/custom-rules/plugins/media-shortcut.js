@@ -1,6 +1,4 @@
-export function mediaWithShortcutPlugin(md, options) {
-	const mediaDictionary = options.mediaDictionary || {};
-
+export function mediaWithShortcutPlugin(md) {
 	md.inline.ruler.before('emphasis', 'extra', (state, silent) => {
 		const start = state.pos;
 		const src = state.src;
@@ -51,7 +49,8 @@ export function mediaWithShortcutPlugin(md, options) {
 		return true;
 	});
 
-	md.renderer.rules.extra = (tokens, idx) => {
+	md.renderer.rules.extra = (tokens, idx, options, env) => {
+		const mediaDictionary = env?.mediaDictionary || {};
 		const { width, height, tag, value } = tokens[idx].meta;
 		const style = [];
 		if (width && !isNaN(parseInt(width, 10))) style.push(`width:${width}px`);

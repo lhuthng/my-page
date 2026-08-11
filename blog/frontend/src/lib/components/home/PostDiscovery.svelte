@@ -1,10 +1,9 @@
 <script>
 	import PostCard from './PostCard.svelte';
-	import gsap from 'gsap';
-	import { Flip } from 'gsap/Flip';
+	import { getGsap } from '$lib/gsap.js';
 	import { onMount, tick, untrack } from 'svelte';
 
-	gsap.registerPlugin(Flip);
+	const { gsap, Flip } = getGsap();
 	import { fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
 	import Smug from '../svgs/emotes/Smug.svelte';

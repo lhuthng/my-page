@@ -140,7 +140,7 @@ impl MediaService for MediaServiceImpl {
         config: &MediaConfig,
     ) -> Result<(), MediaError> {
         let (bytes, content_type, file_name) =
-            convert_to_webp(cmd.bytes, &cmd.content_type, &cmd.file_name)?;
+            convert_to_webp(cmd.bytes, &cmd.content_type, &cmd.file_name).await?;
         if !self.is_supported(&content_type, &file_name, config).await? {
             return Err(MediaError::InvalidFileType);
         }
@@ -209,7 +209,7 @@ impl MediaService for MediaServiceImpl {
             bytes,
         } = cmd.medium_details;
 
-        let (bytes, content_type, filename) = convert_to_webp(bytes, &content_type, &filename)?;
+        let (bytes, content_type, filename) = convert_to_webp(bytes, &content_type, &filename).await?;
 
         if !self.is_avatar_supported(&content_type, config).await? {
             return Err(MediaError::InvalidFileType);
@@ -358,7 +358,7 @@ impl MediaService for MediaServiceImpl {
             bytes,
         } = cmd.medium_details;
 
-        let (bytes, content_type, filename) = convert_to_webp(bytes, &content_type, &filename)?;
+        let (bytes, content_type, filename) = convert_to_webp(bytes, &content_type, &filename).await?;
 
         let media_type = MediaType::from_str(&content_type)?;
         if !config.allowed_cover_types.contains(&media_type) {
@@ -659,7 +659,7 @@ impl MediaService for MediaServiceImpl {
         for i in 0..cmd.number_of_files {
             let bytes = cmd.bytes_list[i].clone();
             let (new_bytes, new_content_type, new_filename) =
-                convert_to_webp(bytes, &cmd.content_types[i], &cmd.file_names[i])?;
+                convert_to_webp(bytes, &cmd.content_types[i], &cmd.file_names[i]).await?;
             cmd.bytes_list[i] = new_bytes;
             let media_type = MediaType::from_upload(&new_content_type, &new_filename)?;
             cmd.content_types[i] = media_type.get_content_type().to_string();

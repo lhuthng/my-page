@@ -1,5 +1,6 @@
 <script>
 	import CommentButton from '../shell/buttons/CommentButton.svelte';
+	import { lazyVideo } from '$lib/actions/lazyVideo.js';
 
 	let {
 		src,
@@ -39,19 +40,21 @@
 				{#if coverMediaType?.startsWith('video/')}
 					<video
 						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover bg-white border-3 border-dark rounded-lg"
-						src={coverSrc}
+						data-src={coverSrc}
 						poster={`${coverSrc}.thumbnail`}
 						muted
 						loop
 						playsinline
-						autoplay
-						preload="auto"
+						preload="none"
+						use:lazyVideo
 					></video>
 				{:else}
 					<img
 						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover bg-white border-3 border-dark rounded-lg"
 						src={coverSrc}
 						alt="post-cover"
+						loading="lazy"
+						decoding="async"
 					/>
 				{/if}
 				<div
@@ -82,19 +85,21 @@
 				{#if coverMediaType?.startsWith('video/')}
 					<video
 						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105 bg-white border-3 border-dark"
-						src={coverSrc}
+						data-src={coverSrc}
 						poster={`${coverSrc}.thumbnail`}
 						muted
 						loop
 						playsinline
-						autoplay
-						preload="auto"
+						preload="none"
+						use:lazyVideo
 					></video>
 				{:else}
 					<img
 						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105 bg-white border-3 border-dark"
 						src={coverSrc}
 						alt="post-cover"
+						loading="lazy"
+						decoding="async"
 					/>
 				{/if}
 				{#if children !== undefined}
