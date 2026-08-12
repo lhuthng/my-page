@@ -153,6 +153,20 @@
 					</span>
 					<Slider min="0.05" max="1" step="0.05" bind:value={player.mouseSensitivity} />
 				</label>
+				<label class="flex flex-col gap-1 text-dark/75">
+					<span
+						class="cursor-help underline decoration-dashed underline-offset-2"
+						title="The emulator draws on the same thread that runs the virtual CPU. Drawing less often gives that time back to the game, which helps on slower machines."
+					>
+						Frame rate limit
+					</span>
+					<select class="rounded-sm bg-white px-1 py-0.5" bind:value={player.maxFps}>
+						<option value={60}>60 fps (default)</option>
+						<option value={30}>30 fps — slower devices</option>
+						<option value={20}>20 fps — very slow devices</option>
+						<option value={0}>Uncapped</option>
+					</select>
+				</label>
 			</div>
 		</Popover>
 

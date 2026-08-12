@@ -29,6 +29,12 @@ export class V86Player {
 	// millions; a struggling machine drops an order of magnitude, which
 	// distinguishes "this device is too slow" from "this is waiting on I/O".
 	emulatedMips = $state(0);
+	/** Cap on how often the screen is redrawn, 0 for uncapped. v86 draws from a
+	 *  requestAnimationFrame on the same thread that emulates the CPU, so it
+	 *  otherwise redraws at the display's refresh rate no matter how slowly the
+	 *  guest is producing frames. Skipping those redraws hands the time back to
+	 *  emulation. 60 is a free win on a 120Hz panel and a no-op on a 60Hz one. */
+	maxFps = $state(60);
 
 	#emulator;
 	#pressed = new Set();
@@ -254,6 +260,31 @@ export class V86Player {
 		this.diskFetching = false;
 	};
 
+	// Wraps update_screen so a skipped frame still reschedules itself but does
+	// no drawing. Reads maxFps per frame, so changing it takes effect live.
+	#applyFrameThrottle = () => {
+		const adapter = this.#emulator?.screen_adapter;
+		if (!adapter || adapter.v86FrameThrottled) return;
+		const original = adapter.update_screen;
+		if (typeof original !== 'function' || typeof adapter.timer !== 'function') return;
+		let lastDrawnAt = 0;
+		adapter.update_screen = () => {
+			const cap = this.maxFps;
+			if (cap > 0) {
+				const now = performance.now();
+				// The 2ms slack keeps a 60 cap from halving to 30 on a 60Hz
+				// display, where frames land a hair under the nominal interval.
+				if (now - lastDrawnAt < 1000 / cap - 2) {
+					adapter.timer();
+					return;
+				}
+				lastDrawnAt = now;
+			}
+			original.call(adapter);
+		};
+		adapter.v86FrameThrottled = true;
+	};
+
 	// The counter is a uint32 that wraps, so only deltas are meaningful and a
 	// wrap is discarded rather than reported as a spike.
 	#startMipsSampling = () => {
@@ -320,6 +351,7 @@ export class V86Player {
 				this.applyAudioState();
 				this.preloadLaunchers().catch(() => {});
 				this.#startMipsSampling();
+				this.#applyFrameThrottle();
 			});
 			// emulator-ready fires inside v86.init(), before restore_state runs.
 			// Inserting media there leaves a disc in a drive the state records as
