@@ -68,7 +68,8 @@ export async function load({ fetch, params, url, setHeaders }) {
 		}
 		rest.v86_runtime.variants = rest.v86_runtime.variants?.map((variant) => ({
 			...variant,
-			iso_url: fixClientRoute(variant.iso_url)
+			iso_url: fixClientRoute(variant.iso_url),
+			snapshot_url: variant.snapshot_url ? fixClientRoute(variant.snapshot_url) : undefined
 		}));
 	}
 
