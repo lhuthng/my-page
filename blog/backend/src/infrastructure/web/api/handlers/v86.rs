@@ -142,6 +142,14 @@ pub struct ChunkUploadResponse {
 #[derive(Deserialize)]
 pub struct StartSnapshotUploadRequest {
     pub project_id: i64,
+    /// 0 captures the project-wide machine with no disc in the drive; a
+    /// variant index captures that variant's launcher CD already mounted.
+    /// The player has to rebuild the same topology, so this decides whether
+    /// the disc is passed at construction or inserted after the restore.
+    #[serde(default)]
+    pub variant_index: i32,
+    /// Required when `variant_index` > 0: the disc that was in the drive.
+    pub iso_sha256: Option<String>,
     pub system_version_id: i64,
     /// sha256 of the game disk the snapshot was captured against. Together
     /// with `system_version_id` this pins the state to the exact images whose
@@ -160,9 +168,10 @@ pub struct StartSnapshotUploadRequest {
 
 #[derive(Serialize)]
 pub struct SnapshotStatusResponse {
+    pub variant_index: i32,
     pub exists: bool,
     /// True when a snapshot row exists but no longer matches the project's
-    /// current disks / state version / memory size, so it is not being served.
+    /// current disks / disc / state version / memory size, so it is not served.
     pub stale: bool,
     pub size_bytes: Option<u64>,
     pub raw_size_bytes: Option<u64>,
@@ -224,6 +233,13 @@ pub struct VariantDescriptor {
     pub iso_url: String,
     pub iso_size_bytes: u64,
     pub iso_sha256: String,
+    /// A snapshot captured with this variant's disc already mounted. When set
+    /// the player restores it with that same disc attached at construction;
+    /// when absent it falls back to the project-wide snapshot, then to a cold
+    /// boot.
+    pub snapshot_url: Option<String>,
+    pub snapshot_size_bytes: Option<u64>,
+    pub snapshot_sha256: Option<String>,
 }
 
 fn user_id(claims: &Claims) -> Result<i64, ProjectError> {
@@ -3106,30 +3122,69 @@ pub async fn runtime_descriptor_for(
         }
         None => format!("projects/s/{slug}/v86/{sha}/full.iso"),
     };
-    let variants: Vec<VariantDescriptor> = variant_rows
-        .iter()
-        .skip(1)
-        .map(|row| VariantDescriptor {
-            index: row.get("variant_index"),
+    let snapshot_url_for = |sha: &str| match r2_public_url {
+        Some(r2) => {
+            let base = r2.trim_end_matches('/');
+            format!("{base}/v86/snapshots/{sha}/state.zst")
+        }
+        None => format!("v86/snapshots/{sha}/state.zst"),
+    };
+
+    // Variant snapshots additionally pin the disc they were captured with:
+    // rebuilding a variant's CD changes its contents under a state that has
+    // already cached them.
+    let variant_snapshots: HashMap<i32, (String, i64)> = match include_snapshot {
+        false => HashMap::new(),
+        true => sqlx::query(
+            r#"SELECT s.variant_index, s.sha256, s.size_bytes
+               FROM project_v86_snapshots s
+               JOIN project_v86_variants v
+                 ON v.project_id = s.project_id AND v.variant_index = s.variant_index
+               WHERE s.project_id = ? AND s.variant_index > 0
+                 AND s.system_version_id = ? AND s.game_disk_sha256 = ?
+                 AND s.iso_sha256 = v.iso_sha256
+                 AND s.state_version = ? AND s.memory_size = ? AND s.vga_memory_size = ?"#,
+        )
+        .bind(project_id)
+        .bind(version_id)
+        .bind(&game_sha)
+        .bind(V86_STATE_VERSION)
+        .bind(V86_MEMORY_SIZE as i64)
+        .bind(V86_VGA_MEMORY_SIZE as i64)
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<i32, _>("variant_index"),
+                (row.get::<String, _>("sha256"), row.get::<i64, _>("size_bytes")),
+            )
+        })
+        .collect(),
+    };
+
+    let describe_variant = |row: &sqlx::sqlite::SqliteRow| {
+        let index: i32 = row.get("variant_index");
+        let snapshot = variant_snapshots.get(&index);
+        VariantDescriptor {
+            index,
             name: row.get("name"),
             exe: row.get("exe"),
             args: row.get("args"),
             iso_url: iso_url_for(row.get::<String, _>("iso_sha256").as_str()),
             iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
             iso_sha256: row.get("iso_sha256"),
-        })
-        .collect();
+            snapshot_url: snapshot.map(|(sha, _)| snapshot_url_for(sha)),
+            snapshot_size_bytes: snapshot.map(|(_, size)| *size as u64),
+            snapshot_sha256: snapshot.map(|(sha, _)| sha.clone()),
+        }
+    };
+
+    let variants: Vec<VariantDescriptor> =
+        variant_rows.iter().skip(1).map(&describe_variant).collect();
     // Variant 1 is the default and is represented both by project_v86_games'
     // legacy iso_* columns and by the top of the variants list.
-    let default_variant = variant_rows.first().map(|row| VariantDescriptor {
-        index: row.get("variant_index"),
-        name: row.get("name"),
-        exe: row.get("exe"),
-        args: row.get("args"),
-        iso_url: iso_url_for(&row.get::<String, _>("iso_sha256")),
-        iso_size_bytes: row.get::<i64, _>("iso_size_bytes") as u64,
-        iso_sha256: row.get("iso_sha256"),
-    });
+    let default_variant = variant_rows.first().map(&describe_variant);
 
     let (base_url, game_url, iso_url) = match r2_public_url {
         Some(r2) => {
@@ -3156,7 +3211,8 @@ pub async fn runtime_descriptor_for(
         true => {
             sqlx::query(
                 r#"SELECT sha256, size_bytes FROM project_v86_snapshots
-                   WHERE project_id = ? AND system_version_id = ? AND game_disk_sha256 = ?
+                   WHERE project_id = ? AND variant_index = 0
+                     AND system_version_id = ? AND game_disk_sha256 = ?
                      AND state_version = ? AND memory_size = ? AND vga_memory_size = ?"#,
             )
             .bind(project_id)
@@ -3172,15 +3228,8 @@ pub async fn runtime_descriptor_for(
     let (snapshot_url, snapshot_size_bytes, snapshot_sha256) = match snapshot {
         Some(row) => {
             let sha: String = row.get("sha256");
-            let url = match r2_public_url {
-                Some(r2) => {
-                    let base = r2.trim_end_matches('/');
-                    format!("{base}/v86/snapshots/{sha}/state.zst")
-                }
-                None => format!("v86/snapshots/{sha}/state.zst"),
-            };
             (
-                Some(url),
+                Some(snapshot_url_for(&sha)),
                 Some(row.get::<i64, _>("size_bytes") as u64),
                 Some(sha),
             )
@@ -3273,41 +3322,44 @@ pub async fn get_project_snapshot(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     AxumPath(project_id): AxumPath<i64>,
-) -> Result<Json<SnapshotStatusResponse>, ProjectError> {
+) -> Result<Json<Vec<SnapshotStatusResponse>>, ProjectError> {
     require_project_owner(&state, project_id, user_id(&claims)?).await?;
-    let row = sqlx::query(
-        r#"SELECT s.size_bytes, s.raw_size_bytes, s.created_at,
+    // A variant row is only fresh if its disc still matches too, so the join
+    // to project_v86_variants is deliberately left (a deleted variant leaves
+    // its snapshot present but stale rather than hiding it).
+    let rows = sqlx::query(
+        r#"SELECT s.variant_index, s.size_bytes, s.raw_size_bytes, s.created_at,
                   (s.system_version_id = g.system_version_id
                    AND s.game_disk_sha256 = g.disk_sha256
                    AND s.state_version = ?
                    AND s.memory_size = ?
-                   AND s.vga_memory_size = ?) AS fresh
+                   AND s.vga_memory_size = ?
+                   AND (s.variant_index = 0 OR s.iso_sha256 = v.iso_sha256)) AS fresh
            FROM project_v86_snapshots s
            JOIN project_v86_games g ON g.project_id = s.project_id
-           WHERE s.project_id = ?"#,
+           LEFT JOIN project_v86_variants v
+             ON v.project_id = s.project_id AND v.variant_index = s.variant_index
+           WHERE s.project_id = ?
+           ORDER BY s.variant_index"#,
     )
     .bind(V86_STATE_VERSION)
     .bind(V86_MEMORY_SIZE as i64)
     .bind(V86_VGA_MEMORY_SIZE as i64)
     .bind(project_id)
-    .fetch_optional(&state.project_service.pool)
+    .fetch_all(&state.project_service.pool)
     .await?;
-    Ok(Json(match row {
-        None => SnapshotStatusResponse {
-            exists: false,
-            stale: false,
-            size_bytes: None,
-            raw_size_bytes: None,
-            created_at: None,
-        },
-        Some(row) => SnapshotStatusResponse {
-            exists: true,
-            stale: row.get::<i64, _>("fresh") == 0,
-            size_bytes: Some(row.get::<i64, _>("size_bytes") as u64),
-            raw_size_bytes: Some(row.get::<i64, _>("raw_size_bytes") as u64),
-            created_at: Some(row.get("created_at")),
-        },
-    }))
+    Ok(Json(
+        rows.iter()
+            .map(|row| SnapshotStatusResponse {
+                variant_index: row.get("variant_index"),
+                exists: true,
+                stale: row.get::<Option<i64>, _>("fresh").unwrap_or(0) == 0,
+                size_bytes: Some(row.get::<i64, _>("size_bytes") as u64),
+                raw_size_bytes: Some(row.get::<i64, _>("raw_size_bytes") as u64),
+                created_at: Some(row.get("created_at")),
+            })
+            .collect(),
+    ))
 }
 
 pub async fn start_snapshot_upload(
@@ -3360,6 +3412,51 @@ pub async fn start_snapshot_upload(
         ));
     }
 
+    // A variant snapshot holds a machine with that variant's disc mounted, so
+    // it is only replayable against the identical disc. Index 0 is the
+    // project-wide capture and must have no disc at all.
+    if request.variant_index < 0 {
+        return Err(ProjectError::InvalidDemo(
+            "The variant index cannot be negative.".to_string(),
+        ));
+    }
+    if request.variant_index == 0 {
+        if request.iso_sha256.is_some() {
+            return Err(ProjectError::InvalidDemo(
+                "A project-wide snapshot is captured with no disc, so it cannot record one."
+                    .to_string(),
+            ));
+        }
+    } else {
+        let iso_sha = request.iso_sha256.as_deref().ok_or_else(|| {
+            ProjectError::InvalidDemo(
+                "A variant snapshot must record the disc it was captured with.".to_string(),
+            )
+        })?;
+        validate_sha256_hex(iso_sha)?;
+        let current_iso_sha: Option<String> = sqlx::query_scalar(
+            "SELECT iso_sha256 FROM project_v86_variants WHERE project_id = ? AND variant_index = ?",
+        )
+        .bind(request.project_id)
+        .bind(request.variant_index)
+        .fetch_optional(&state.project_service.pool)
+        .await?;
+        match current_iso_sha {
+            None => {
+                return Err(ProjectError::InvalidDemo(
+                    "That launch variant does not exist for this project.".to_string(),
+                ));
+            }
+            Some(current) if current != iso_sha => {
+                return Err(ProjectError::Conflict(
+                    "That variant's disc was rebuilt while this snapshot was being captured. Recapture it."
+                        .to_string(),
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+
     let upload_id = Uuid::new_v4().to_string();
     let r2 = require_r2(&state)?;
     let transient_key = transient_r2_key("snapshots", &upload_id, "zst");
@@ -3377,15 +3474,18 @@ pub async fn start_snapshot_upload(
         Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
     sqlx::query(
         r#"INSERT INTO v86_snapshot_upload_sessions
-           (id, uploader_id, project_id, system_version_id, game_disk_sha256,
+           (id, uploader_id, project_id, variant_index, iso_sha256,
+            system_version_id, game_disk_sha256,
             raw_size_bytes, sha256, state_version, memory_size, vga_memory_size,
             expected_size_bytes, upload_chunk_size_bytes, temp_storage_key,
             r2_upload_id, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
     .bind(request.project_id)
+    .bind(request.variant_index)
+    .bind(&request.iso_sha256)
     .bind(request.system_version_id)
     .bind(&request.game_disk_sha256)
     .bind(request.raw_size_bytes as i64)
@@ -3457,7 +3557,8 @@ pub async fn complete_snapshot_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        r#"SELECT project_id, system_version_id, game_disk_sha256, raw_size_bytes, sha256,
+        r#"SELECT project_id, variant_index, iso_sha256, system_version_id,
+                  game_disk_sha256, raw_size_bytes, sha256,
                   state_version, memory_size, vga_memory_size, expected_size_bytes,
                   received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags,
                   status, expires_at
@@ -3528,25 +3629,48 @@ pub async fn complete_snapshot_upload(
         return Err(ProjectError::Conflict(message.to_string()));
     }
 
+    // Same for the variant's disc, which a manifest edit can rebuild.
+    let variant_index: i32 = row.get("variant_index");
+    let iso_sha: Option<String> = row.get("iso_sha256");
+    if variant_index > 0 {
+        let current_iso_sha: Option<String> = sqlx::query_scalar(
+            "SELECT iso_sha256 FROM project_v86_variants WHERE project_id = ? AND variant_index = ?",
+        )
+        .bind(project_id)
+        .bind(variant_index)
+        .fetch_optional(&state.project_service.pool)
+        .await?;
+        if current_iso_sha.is_none() || current_iso_sha != iso_sha {
+            let _ = r2.delete_object(&temp_key).await;
+            let message = "That variant's disc changed while this snapshot was uploading.";
+            fail_snapshot_session(&state, &upload_id, message).await;
+            return Err(ProjectError::Conflict(message.to_string()));
+        }
+    }
+
     let storage_key = snapshot_storage_key(&declared_sha);
     r2.put_object_bytes(&storage_key, bytes)
         .await
         .map_err(r2_error)?;
     let _ = r2.delete_object(&temp_key).await;
 
-    let previous_key: Option<String> =
-        sqlx::query_scalar("SELECT storage_key FROM project_v86_snapshots WHERE project_id = ?")
-            .bind(project_id)
-            .fetch_optional(&state.project_service.pool)
-            .await?
-            .flatten();
+    let previous_key: Option<String> = sqlx::query_scalar(
+        "SELECT storage_key FROM project_v86_snapshots WHERE project_id = ? AND variant_index = ?",
+    )
+    .bind(project_id)
+    .bind(variant_index)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .flatten();
 
     sqlx::query(
         r#"INSERT INTO project_v86_snapshots
-           (project_id, system_version_id, game_disk_sha256, storage_key, size_bytes,
+           (project_id, variant_index, iso_sha256, system_version_id, game_disk_sha256,
+            storage_key, size_bytes,
             raw_size_bytes, sha256, state_version, memory_size, vga_memory_size, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(project_id) DO UPDATE SET
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(project_id, variant_index) DO UPDATE SET
+             iso_sha256 = excluded.iso_sha256,
              system_version_id = excluded.system_version_id,
              game_disk_sha256 = excluded.game_disk_sha256,
              storage_key = excluded.storage_key,
@@ -3560,6 +3684,8 @@ pub async fn complete_snapshot_upload(
              updated_at = CURRENT_TIMESTAMP"#,
     )
     .bind(project_id)
+    .bind(variant_index)
+    .bind(&iso_sha)
     .bind(row.get::<i64, _>("system_version_id"))
     .bind(&game_disk_sha)
     .bind(&storage_key)
@@ -3581,10 +3707,21 @@ pub async fn complete_snapshot_upload(
     .await?;
 
     // Content-addressed keys mean a recapture that produced identical bytes
-    // reuses the same object; only drop the old one when it really changed.
+    // reuses the same object, and two variants could in principle land on the
+    // same one. Only drop the old object when it changed and nothing else
+    // still points at it.
     if let Some(previous) = previous_key {
         if previous != storage_key {
-            let _ = r2.delete_object(&previous).await;
+            let still_referenced: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM project_v86_snapshots WHERE storage_key = ?",
+            )
+            .bind(&previous)
+            .fetch_one(&state.project_service.pool)
+            .await
+            .unwrap_or(1);
+            if still_referenced == 0 {
+                let _ = r2.delete_object(&previous).await;
+            }
         }
     }
     Ok(StatusCode::NO_CONTENT)
@@ -3626,21 +3763,33 @@ pub async fn abort_snapshot_upload(
 pub async fn delete_project_snapshot(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    AxumPath(project_id): AxumPath<i64>,
+    AxumPath((project_id, variant_index)): AxumPath<(i64, i32)>,
 ) -> Result<StatusCode, ProjectError> {
     require_project_owner(&state, project_id, user_id(&claims)?).await?;
-    let storage_key: Option<String> =
-        sqlx::query_scalar("SELECT storage_key FROM project_v86_snapshots WHERE project_id = ?")
-            .bind(project_id)
-            .fetch_optional(&state.project_service.pool)
-            .await?
-            .flatten();
-    sqlx::query("DELETE FROM project_v86_snapshots WHERE project_id = ?")
+    let storage_key: Option<String> = sqlx::query_scalar(
+        "SELECT storage_key FROM project_v86_snapshots WHERE project_id = ? AND variant_index = ?",
+    )
+    .bind(project_id)
+    .bind(variant_index)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .flatten();
+    sqlx::query("DELETE FROM project_v86_snapshots WHERE project_id = ? AND variant_index = ?")
         .bind(project_id)
+        .bind(variant_index)
         .execute(&state.project_service.pool)
         .await?;
+    // Blobs are content-addressed, so another variant may share this object.
     if let (Some(r2), Some(key)) = (state.r2.clone(), storage_key) {
-        let _ = r2.delete_object(&key).await;
+        let still_referenced: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM project_v86_snapshots WHERE storage_key = ?")
+                .bind(&key)
+                .fetch_one(&state.project_service.pool)
+                .await
+                .unwrap_or(1);
+        if still_referenced == 0 {
+            let _ = r2.delete_object(&key).await;
+        }
     }
     Ok(StatusCode::NO_CONTENT)
 }

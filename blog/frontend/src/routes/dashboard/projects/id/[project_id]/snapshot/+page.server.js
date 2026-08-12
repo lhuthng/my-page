@@ -33,6 +33,6 @@ export async function load(event) {
 	return {
 		projectId: Number(projectId),
 		runtime,
-		snapshot: await snapshotResponse.json()
+		snapshots: await snapshotResponse.json()
 	};
 }

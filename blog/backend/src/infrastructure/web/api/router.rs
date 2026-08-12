@@ -352,7 +352,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     get(handlers::v86::get_project_snapshot),
                 )
                 .route(
-                    "/projects/id/{project_id}/snapshot",
+                    "/projects/id/{project_id}/snapshot/{variant_index}",
                     delete(handlers::v86::delete_project_snapshot),
                 )
                 .route(
