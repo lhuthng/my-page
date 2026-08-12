@@ -27,10 +27,8 @@ export class V86Player {
 	#saveFloppy = null;
 	#lastSaveAt = 0;
 	#launcherBuffers = new Map();
-	/** An in-memory state blob used instead of runtime.snapshot_url. Set by the
-	 *  capture studio so a freshly captured state can be test-booted without
-	 *  ever touching the server. */
 	#snapshotBuffer = null;
+	#carriedFloppy = null;
 
 	saveAvailable = $derived(this.runtime?.save_supported === true);
 
@@ -53,24 +51,19 @@ export class V86Player {
 		this.variants.find((variant) => variant.index === this.selectedVariant) ?? this.variants[0]
 	);
 
-	/** `capture` boots the bare machine the snapshot studio needs: base + game
-	 *  disk only, with no CD and no save floppy, so the guest enumerates both
-	 *  drives as empty and a later insert raises a real media-change. */
+	// `capture` boots base + game disk only: no CD, no floppy.
 	constructor({ runtime, mode = 'play', snapshotBuffer = null }) {
 		this.runtime = runtime;
 		this.mode = mode;
 		this.#snapshotBuffer = snapshotBuffer;
 	}
 
-	/** True when this boot restores a state instead of running the BIOS. */
 	get usingSnapshot() {
 		return Boolean(this.#snapshotBuffer || (this.mode !== 'capture' && this.runtime?.snapshot_url));
 	}
 
-	/** Media is attached after the guest is up rather than at construction.
-	 *  v86 applies initial_state after device init and the IDE restore path
-	 *  force-clears medium_changed, so a CD passed to the constructor would sit
-	 *  in a drive Windows still believes is empty and autorun would never fire. */
+	// A CD passed at construction is masked by the state restore, so autorun
+	// never fires; insert it afterwards instead.
 	get #deferMedia() {
 		return this.usingSnapshot;
 	}
@@ -130,9 +123,8 @@ export class V86Player {
 			}
 		};
 
-		// The hard disks above must be present at construction either way:
-		// Windows enumerates IDE disks once at boot and never hot-detects a new
-		// one, so a snapshot is only ever valid against these exact images.
+		// Disks must be present at construction: Windows enumerates IDE disks
+		// at boot and never hot-detects one.
 		if (this.#snapshotBuffer) {
 			options.initial_state = { buffer: this.#snapshotBuffer };
 		} else if (this.usingSnapshot) {
@@ -142,9 +134,6 @@ export class V86Player {
 			};
 		}
 
-		// Capture mode deliberately leaves both removable drives empty so the
-		// captured state has a CD drive and an A: drive Windows already knows
-		// about but has never seen media in.
 		if (this.mode !== 'capture' && !this.#deferMedia) {
 			options.cdrom = {
 				url: this.selected?.iso_url ?? this.runtime.iso_url,
@@ -156,9 +145,7 @@ export class V86Player {
 		return options;
 	};
 
-	/** Inserts the launcher CD and save floppy into an already-running guest.
-	 *  insert_disk/set_cdrom raise media_changed, which is the signal Windows'
-	 *  drivers poll for — this is what makes autorun fire without a reboot. */
+	// set_cdrom/insert_disk raise media_changed, which is what triggers autorun.
 	attachDeferredMedia = async () => {
 		if (!this.#emulator || this.mode === 'capture') return;
 		const iso = this.selected?.iso_url ?? this.runtime.iso_url;
@@ -186,11 +173,16 @@ export class V86Player {
 			const V86Constructor = window.V86 ?? window.V86Starter;
 			if (!V86Constructor) throw new Error('The local v86 constructor is unavailable.');
 			if (this.mode !== 'capture' && this.runtime.save_supported) {
-				this.status = 'Loading your save…';
-				this.#saveFloppy =
-					(await loadSave(this.runtime.slug).catch(() => null)) ??
-					(await loadBlankFloppy().catch(() => null));
-				if (this.#disposed) return;
+				if (this.#carriedFloppy) {
+					this.#saveFloppy = this.#carriedFloppy;
+					this.#carriedFloppy = null;
+				} else {
+					this.status = 'Loading your save…';
+					this.#saveFloppy =
+						(await loadSave(this.runtime.slug).catch(() => null)) ??
+						(await loadBlankFloppy().catch(() => null));
+					if (this.#disposed) return;
+				}
 			}
 			this.#emulator = new V86Constructor(this.#buildOptions());
 			if (this.#disposed) {
@@ -206,16 +198,20 @@ export class V86Player {
 				this.applyNoiseFilter().catch(() => {});
 				this.applyAudioState();
 				this.preloadLaunchers().catch(() => {});
-				if (this.#deferMedia) {
-					this.status = 'Inserting disc…';
-					this.attachDeferredMedia()
-						.then(() => {
-							this.status = 'Running';
-						})
-						.catch((cause) => {
-							this.error = cause?.message ?? 'Could not insert the disc.';
-						});
-				}
+			});
+			// emulator-ready fires inside v86.init(), before restore_state runs.
+			// Inserting media there leaves a disc in a drive the state records as
+			// empty, and the restore then crashes. emulator-loaded is post-restore.
+			this.#emulator.add_listener?.('emulator-loaded', () => {
+				if (!this.#deferMedia) return;
+				this.status = 'Inserting disc…';
+				this.attachDeferredMedia()
+					.then(() => {
+						this.status = 'Running';
+					})
+					.catch((cause) => {
+						this.error = cause?.message ?? 'Could not insert the disc.';
+					});
 			});
 			this.#emulator.add_listener?.('download-progress', (info) => {
 				const fileUrl = new URL(info?.file_name ?? '', window.location.origin);
@@ -246,8 +242,8 @@ export class V86Player {
 		}
 	};
 
-	/** Freezes the guest. v86's stop() resolves once the CPU loop has actually
-	 *  halted, so a state captured after awaiting it is internally consistent. */
+	// stop() resolves once the CPU loop has halted, so a state captured after
+	// awaiting it is consistent.
 	pause = async () => {
 		if (!this.#emulator || this.paused) return;
 		await this.#emulator.stop?.();
@@ -262,9 +258,7 @@ export class V86Player {
 		this.status = 'Running';
 	};
 
-	/** Dumps the machine for use as an initial_state. Pauses first so the
-	 *  capture is a clean stop rather than a snapshot of a mid-instruction CPU.
-	 *  Returns the raw (uncompressed) ArrayBuffer. */
+	// Returns the raw, uncompressed state.
 	captureState = async () => {
 		if (!this.#emulator) throw new Error('The emulator is not running.');
 		await this.pause();
@@ -286,12 +280,8 @@ export class V86Player {
 		}
 	};
 
-	/** Tears the machine down. v86's own destroy() is async — it awaits stop()
-	 *  and only then unbinds the keyboard, mouse and screen adapters — so any
-	 *  caller that immediately builds a replacement MUST await this. Starting a
-	 *  new machine while the old one is still unbinding leaves the fresh
-	 *  instance wired to adapters the outgoing one then tears down, which
-	 *  presents as a dead, uncontrollable screen. */
+	// v86's destroy() is async and unbinds adapters after awaiting stop(), so
+	// anything rebuilding the machine must await this first.
 	destroy = async () => {
 		const emulator = this.#emulator;
 		// Cleared up front so a concurrent start() can never see the dying one.
@@ -302,8 +292,7 @@ export class V86Player {
 			if (emulator?.destroy) await emulator.destroy();
 			else await emulator?.stop?.();
 		} catch {
-			// A machine that failed mid-boot may not tear down cleanly; the
-			// references are already dropped, so keep going either way.
+			// A machine that died mid-boot may not tear down cleanly.
 		} finally {
 			for (const context of document.querySelectorAll('audio')) {
 				if (this.shell?.contains(context)) context.remove();
@@ -318,10 +307,8 @@ export class V86Player {
 		await this.start();
 	};
 
-	/** Rebuilds the machine around a state blob. Used by the snapshot studio to
-	 *  dry-run a freshly captured state — booting from it and then inserting the
-	 *  CD and floppy exactly the way the public player will — without uploading
-	 *  anything. Passing null returns to a normal cold boot. */
+	// Rebuilds around a state blob so the studio can dry-run a capture.
+	// Pass null to go back to a cold boot.
 	rebootWithSnapshot = async (buffer, { mode = 'play' } = {}) => {
 		if (!this.runtime || this.#disposed) return;
 		await this.destroy();
@@ -332,9 +319,7 @@ export class V86Player {
 		await this.start();
 	};
 
-	/** Fetches every variant's small launcher CD into memory up front so
-	 *  switching variants is an instant, offline-capable hot-swap that never
-	 *  touches the network or reboots the guest. */
+	// Preloads each variant's launcher CD so the post-restore insert is instant.
 	preloadLaunchers = async () => {
 		const jobs = this.variants.map(async (variant) => {
 			if (this.#launcherBuffers.has(variant.index)) return;
@@ -343,30 +328,21 @@ export class V86Player {
 				if (!res.ok) return;
 				this.#launcherBuffers.set(variant.index, await res.arrayBuffer());
 			} catch {
-				// fall back to a url-based swap in selectVariant
+				// attachDeferredMedia falls back to inserting by URL
 			}
 		});
 		await Promise.allSettled(jobs);
 	};
 
-	/** Switches to another launch variant by swapping the in-memory launcher CD
-	 *  while the drive stays "present". No eject is used: ejecting latches the
-	 *  guest into an empty-tray state that a later timed insert can't reliably
-	 *  recover from (v86 exposes no "guest acknowledged eject" signal, so a
-	 *  scripted eject→insert is a race). Swapping buffers keeps the medium
-	 *  continuously readable. The guest keeps running; the game disk stays
-	 *  cached in RAM. */
+	// Full rebuild, same path as first load. v86's own restart() only resets the
+	// CPU, leaving the disks' write cache half-written, which corrupts the guest.
 	selectVariant = async (index) => {
 		const variant = this.variants.find((v) => v.index === index);
 		if (!variant || variant.index === this.selectedVariant) return;
 		this.selectedVariant = index;
-		if (!this.#emulator || !this.running) {
-			await this.restart();
-			return;
-		}
 		try {
-			this.status = 'Saving game…';
-			if (this.runtime?.save_supported) {
+			if (this.#emulator && this.running && this.runtime?.save_supported) {
+				this.status = 'Saving game…';
 				const floppy = this.#emulator.get_disk_fda?.();
 				if (
 					floppy &&
@@ -374,35 +350,12 @@ export class V86Player {
 					floppy[510] === 0x55 &&
 					floppy[511] === 0xaa
 				) {
+					this.#carriedFloppy = floppy.slice();
 					await saveGame(this.runtime.slug, floppy).catch(() => {});
 				}
 			}
-			const buffer = this.#launcherBuffers.get(variant.index);
 			this.status = `Loading ${variant.name || 'variant'}…`;
-			if (buffer) {
-				await this.#emulator.set_cdrom?.({ buffer });
-			} else {
-				await this.#emulator.set_cdrom?.({
-					url: variant.iso_url,
-					async: false
-				});
-			}
-			if (this.usingSnapshot) {
-				// Under a snapshot the reboot below is exactly what we must not
-				// do: restart() resets the CPU and would throw away the restored
-				// state, cold-booting into the very Windows boot sequence the
-				// snapshot exists to skip. The swap above already raised
-				// medium_changed, which is the signal autorun actually waits on,
-				// so the running guest picks the new disc up on its own.
-				this.status = 'Running';
-				return;
-			}
-			// Soft guest reboot: swap the CD, then cold-boot Windows so it
-			// reliably mounts the new launcher. reboot_internal resets the CPU
-			// only — memory (and the in-RAM save floppy) is kept, and the game
-			// disk buffers are NOT re-downloaded.
-			this.#emulator.restart?.();
-			this.status = 'Running';
+			await this.restart();
 		} catch (cause) {
 			this.error = cause?.message ?? 'Could not switch variant.';
 		}
