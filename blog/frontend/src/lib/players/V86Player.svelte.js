@@ -14,6 +14,10 @@ export class V86Player {
 	saveBusy = $state(false);
 	saveMessage = $state('');
 	paused = $state(false);
+	// True once a disk read has been outstanding longer than a cache hit ever
+	// takes, i.e. the game is actually blocked on a chunk fetch over the
+	// network. Lets the UI explain lag instead of looking like it's frozen.
+	diskFetching = $state(false);
 
 	#emulator;
 	#pressed = new Set();
@@ -29,6 +33,8 @@ export class V86Player {
 	#launcherBuffers = new Map();
 	#snapshotBuffer = null;
 	#carriedFloppy = null;
+	#pendingReads = 0;
+	#diskFetchTimer = null;
 
 	saveAvailable = $derived(this.runtime?.save_supported === true);
 
@@ -158,6 +164,28 @@ export class V86Player {
 		}
 	};
 
+	// ide-read-start/end bracket every disk read, cached or not. A cache hit
+	// resolves within the same tick; only a real chunk fetch takes long enough
+	// to clear this threshold, so this stays quiet during normal play.
+	#onDiskReadStart = () => {
+		this.#pendingReads++;
+		if (this.#diskFetchTimer) return;
+		this.#diskFetchTimer = setTimeout(() => {
+			this.#diskFetchTimer = null;
+			if (this.#pendingReads > 0) this.diskFetching = true;
+		}, 150);
+	};
+
+	#onDiskReadEnd = () => {
+		this.#pendingReads = Math.max(0, this.#pendingReads - 1);
+		if (this.#pendingReads > 0) return;
+		if (this.#diskFetchTimer) {
+			clearTimeout(this.#diskFetchTimer);
+			this.#diskFetchTimer = null;
+		}
+		this.diskFetching = false;
+	};
+
 	start = async () => {
 		if (this.running || !this.runtime) return;
 		this.error = '';
@@ -213,6 +241,8 @@ export class V86Player {
 						this.error = cause?.message ?? 'Could not insert the disc.';
 					});
 			});
+			this.#emulator.add_listener?.('ide-read-start', this.#onDiskReadStart);
+			this.#emulator.add_listener?.('ide-read-end', this.#onDiskReadEnd);
 			this.#emulator.add_listener?.('download-progress', (info) => {
 				const fileUrl = new URL(info?.file_name ?? '', window.location.origin);
 				const gameAsset = fileUrl.pathname.includes(`/${this.runtime.game_sha256}/`);
@@ -288,6 +318,12 @@ export class V86Player {
 		this.#emulator = undefined;
 		this.running = false;
 		this.paused = false;
+		this.#pendingReads = 0;
+		this.diskFetching = false;
+		if (this.#diskFetchTimer) {
+			clearTimeout(this.#diskFetchTimer);
+			this.#diskFetchTimer = null;
+		}
 		try {
 			if (emulator?.destroy) await emulator.destroy();
 			else await emulator?.stop?.();

@@ -319,6 +319,9 @@
 	<div class="flex items-center gap-2" aria-live="polite">
 		<span class="status-dot {phase}" aria-hidden="true"></span>
 		<span class="font-semibold">{player.error || player.status || 'Idle'}</span>
+		{#if phase === 'running' && player.diskFetching}
+			<span class="disk-fetch-pill">Fetching game data…</span>
+		{/if}
 	</div>
 
 	{#if player.downloadProgress != null}
@@ -418,6 +421,10 @@
 
 	.status-dot.idle {
 		@apply bg-dark/30;
+	}
+
+	.disk-fetch-pill {
+		@apply animate-pulse rounded-full bg-accent-yellow-light-3 px-2 py-0.5 text-xs font-normal text-dark/70;
 	}
 
 	.v86-keys {
