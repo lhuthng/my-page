@@ -32,6 +32,7 @@ export class V86Player {
 	#lastSaveAt = 0;
 	#launcherBuffers = new Map();
 	#snapshotBuffer = null;
+	#snapshotHasCdrom = false;
 	#carriedFloppy = null;
 	#pendingReads = 0;
 	#diskFetchTimer = null;
@@ -57,21 +58,64 @@ export class V86Player {
 		this.variants.find((variant) => variant.index === this.selectedVariant) ?? this.variants[0]
 	);
 
-	// `capture` boots base + game disk only: no CD, no floppy.
-	constructor({ runtime, mode = 'play', snapshotBuffer = null }) {
+	// `capture` boots base + game disk only: no CD, no floppy. `snapshotHasCdrom`
+	// says the in-memory buffer was captured with the disc already mounted, so
+	// the studio can test-boot it with matching topology.
+	constructor({
+		runtime,
+		mode = 'play',
+		snapshotBuffer = null,
+		snapshotHasCdrom = false,
+		captureVariantIndex = 0
+	}) {
 		this.runtime = runtime;
 		this.mode = mode;
 		this.#snapshotBuffer = snapshotBuffer;
+		this.#snapshotHasCdrom = snapshotHasCdrom;
+		// 0 captures the project-wide machine with an empty drive; a variant
+		// index captures with that variant's disc in, so the launcher is already
+		// running and the state can be restored straight into it.
+		this.captureVariantIndex = captureVariantIndex;
+		if (captureVariantIndex > 0) this.selectedVariant = captureVariantIndex;
+	}
+
+	// variant snapshot -> project-wide snapshot -> cold boot. A variant's own
+	// snapshot was captured with its disc mounted; the project-wide one was
+	// captured with an empty drive. That difference decides the topology below,
+	// so the two can never be swapped.
+	get #snapshot() {
+		if (this.mode === 'capture') return null;
+		if (this.#snapshotBuffer) {
+			return { buffer: this.#snapshotBuffer, hasCdrom: this.#snapshotHasCdrom };
+		}
+		const variant = this.selected;
+		if (variant?.snapshot_url) {
+			return {
+				url: variant.snapshot_url,
+				size: variant.snapshot_size_bytes,
+				hasCdrom: true
+			};
+		}
+		if (this.runtime?.snapshot_url) {
+			return {
+				url: this.runtime.snapshot_url,
+				size: this.runtime.snapshot_size_bytes,
+				hasCdrom: false
+			};
+		}
+		return null;
 	}
 
 	get usingSnapshot() {
-		return Boolean(this.#snapshotBuffer || (this.mode !== 'capture' && this.runtime?.snapshot_url));
+		return this.#snapshot !== null;
 	}
 
-	// A CD passed at construction is masked by the state restore, so autorun
-	// never fires; insert it afterwards instead.
+	// Only the empty-drive snapshot defers the disc. A snapshot captured with
+	// the disc in must get it back at construction: v86 throws if the restored
+	// state and the attached drives disagree.
 	get #deferMedia() {
-		return this.usingSnapshot;
+		const snapshot = this.#snapshot;
+		return Boolean(snapshot) && !snapshot.hasCdrom;
 	}
 
 	loadRuntime = () =>
@@ -131,22 +175,31 @@ export class V86Player {
 
 		// Disks must be present at construction: Windows enumerates IDE disks
 		// at boot and never hot-detects one.
-		if (this.#snapshotBuffer) {
-			options.initial_state = { buffer: this.#snapshotBuffer };
-		} else if (this.usingSnapshot) {
-			options.initial_state = {
-				url: this.runtime.snapshot_url,
-				size: this.runtime.snapshot_size_bytes
-			};
+		const snapshot = this.#snapshot;
+		if (snapshot) {
+			options.initial_state = snapshot.buffer
+				? { buffer: snapshot.buffer }
+				: { url: snapshot.url, size: snapshot.size };
 		}
 
-		if (this.mode !== 'capture' && !this.#deferMedia) {
-			options.cdrom = {
-				url: this.selected?.iso_url ?? this.runtime.iso_url,
-				size: this.selected?.iso_size_bytes ?? this.runtime.iso_size_bytes,
-				async: false
-			};
-			if (this.#saveFloppy) options.fda = { buffer: this.#saveFloppy.buffer };
+		const cdrom = {
+			url: this.selected?.iso_url ?? this.runtime.iso_url,
+			size: this.selected?.iso_size_bytes ?? this.runtime.iso_size_bytes,
+			async: false
+		};
+
+		// Capture never mounts a floppy, whichever kind it is: the state has to
+		// restore into an empty A: so the launcher copies the visitor's own save.
+		if (this.mode === 'capture') {
+			if (this.captureVariantIndex > 0) options.cdrom = cdrom;
+			return options;
+		}
+
+		if (!this.#deferMedia) {
+			options.cdrom = cdrom;
+			// Same reason in reverse: under any snapshot the floppy is attached
+			// after the restore, never baked into the machine at construction.
+			if (!snapshot && this.#saveFloppy) options.fda = { buffer: this.#saveFloppy.buffer };
 		}
 		return options;
 	};
@@ -154,13 +207,18 @@ export class V86Player {
 	// set_cdrom/insert_disk raise media_changed, which is what triggers autorun.
 	attachDeferredMedia = async () => {
 		if (!this.#emulator || this.mode === 'capture') return;
+		// Floppy first: inserting the CD is what fires autorun, and the launcher
+		// copies saves off A: early, so A: has to already be there. Under a
+		// variant snapshot the launcher is already running and waiting out its
+		// delay, which is what gives the floppy time to land.
+		if (this.#saveFloppy) {
+			await this.#emulator.set_fda?.({ buffer: this.#saveFloppy.buffer });
+		}
+		if (!this.#deferMedia) return;
 		const iso = this.selected?.iso_url ?? this.runtime.iso_url;
 		if (iso) {
 			const buffer = this.#launcherBuffers.get(this.selectedVariant);
 			await this.#emulator.set_cdrom?.(buffer ? { buffer } : { url: iso, async: false });
-		}
-		if (this.#saveFloppy) {
-			await this.#emulator.set_fda?.({ buffer: this.#saveFloppy.buffer });
 		}
 	};
 
@@ -231,8 +289,8 @@ export class V86Player {
 			// Inserting media there leaves a disc in a drive the state records as
 			// empty, and the restore then crashes. emulator-loaded is post-restore.
 			this.#emulator.add_listener?.('emulator-loaded', () => {
-				if (!this.#deferMedia) return;
-				this.status = 'Inserting disc…';
+				if (!this.usingSnapshot) return;
+				this.status = this.#deferMedia ? 'Inserting disc…' : 'Loading your save…';
 				this.attachDeferredMedia()
 					.then(() => {
 						this.status = 'Running';
@@ -345,10 +403,11 @@ export class V86Player {
 
 	// Rebuilds around a state blob so the studio can dry-run a capture.
 	// Pass null to go back to a cold boot.
-	rebootWithSnapshot = async (buffer, { mode = 'play' } = {}) => {
+	rebootWithSnapshot = async (buffer, { mode = 'play', hasCdrom = false } = {}) => {
 		if (!this.runtime || this.#disposed) return;
 		await this.destroy();
 		this.#snapshotBuffer = buffer;
+		this.#snapshotHasCdrom = hasCdrom;
 		this.mode = mode;
 		this.downloadProgress = null;
 		this.error = '';
