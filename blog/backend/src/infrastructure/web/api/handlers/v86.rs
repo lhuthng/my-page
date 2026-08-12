@@ -50,6 +50,12 @@ const V86_VGA_MEMORY_SIZE: u64 = 8 * 1024 * 1024;
 /// invalidates every stored snapshot, which degrades to a normal cold boot.
 const V86_STATE_VERSION: i64 = 6;
 
+/// Which set of emulated devices the player builds. A restored state assumes
+/// the layout it was captured on, so changing the device list here retires
+/// every older snapshot rather than restoring one into a machine it does not
+/// match. Keep in sync with V86_TOPOLOGY_VERSION in V86Player.svelte.js.
+const V86_TOPOLOGY_VERSION: i64 = 2;
+
 /// Zstandard frame magic, little-endian. Snapshots are compressed in the
 /// browser and stored verbatim: v86's `restore_state` sniffs this magic and
 /// decompresses internally, so nothing on the server ever unpacks them.
@@ -162,6 +168,10 @@ pub struct StartSnapshotUploadRequest {
     /// sha256 of the compressed blob, verified server-side on completion.
     pub sha256: String,
     pub state_version: i64,
+    /// Which device layout the capturing player built. Rejected unless it
+    /// matches what this server currently serves.
+    #[serde(default)]
+    pub topology_version: i64,
     pub memory_size: u64,
     pub vga_memory_size: u64,
 }
@@ -3143,12 +3153,14 @@ pub async fn runtime_descriptor_for(
                WHERE s.project_id = ? AND s.variant_index > 0
                  AND s.system_version_id = ? AND s.game_disk_sha256 = ?
                  AND s.iso_sha256 = v.iso_sha256
-                 AND s.state_version = ? AND s.memory_size = ? AND s.vga_memory_size = ?"#,
+                 AND s.state_version = ? AND s.topology_version = ?
+                 AND s.memory_size = ? AND s.vga_memory_size = ?"#,
         )
         .bind(project_id)
         .bind(version_id)
         .bind(&game_sha)
         .bind(V86_STATE_VERSION)
+        .bind(V86_TOPOLOGY_VERSION)
         .bind(V86_MEMORY_SIZE as i64)
         .bind(V86_VGA_MEMORY_SIZE as i64)
         .fetch_all(pool)
@@ -3213,12 +3225,14 @@ pub async fn runtime_descriptor_for(
                 r#"SELECT sha256, size_bytes FROM project_v86_snapshots
                    WHERE project_id = ? AND variant_index = 0
                      AND system_version_id = ? AND game_disk_sha256 = ?
-                     AND state_version = ? AND memory_size = ? AND vga_memory_size = ?"#,
+                     AND state_version = ? AND topology_version = ?
+                     AND memory_size = ? AND vga_memory_size = ?"#,
             )
             .bind(project_id)
             .bind(version_id)
             .bind(&game_sha)
             .bind(V86_STATE_VERSION)
+            .bind(V86_TOPOLOGY_VERSION)
             .bind(V86_MEMORY_SIZE as i64)
             .bind(V86_VGA_MEMORY_SIZE as i64)
             .fetch_optional(pool)
@@ -3332,6 +3346,7 @@ pub async fn get_project_snapshot(
                   (s.system_version_id = g.system_version_id
                    AND s.game_disk_sha256 = g.disk_sha256
                    AND s.state_version = ?
+                   AND s.topology_version = ?
                    AND s.memory_size = ?
                    AND s.vga_memory_size = ?
                    AND (s.variant_index = 0 OR s.iso_sha256 = v.iso_sha256)) AS fresh
@@ -3343,6 +3358,7 @@ pub async fn get_project_snapshot(
            ORDER BY s.variant_index"#,
     )
     .bind(V86_STATE_VERSION)
+    .bind(V86_TOPOLOGY_VERSION)
     .bind(V86_MEMORY_SIZE as i64)
     .bind(V86_VGA_MEMORY_SIZE as i64)
     .bind(project_id)
@@ -3389,6 +3405,12 @@ pub async fn start_snapshot_upload(
     if request.memory_size != V86_MEMORY_SIZE || request.vga_memory_size != V86_VGA_MEMORY_SIZE {
         return Err(ProjectError::InvalidDemo(
             "The snapshot was captured with a different memory size than the player uses."
+                .to_string(),
+        ));
+    }
+    if request.topology_version != V86_TOPOLOGY_VERSION {
+        return Err(ProjectError::InvalidDemo(
+            "This snapshot was captured on a different machine layout. Reload the studio and recapture."
                 .to_string(),
         ));
     }
@@ -3667,10 +3689,12 @@ pub async fn complete_snapshot_upload(
         r#"INSERT INTO project_v86_snapshots
            (project_id, variant_index, iso_sha256, system_version_id, game_disk_sha256,
             storage_key, size_bytes,
-            raw_size_bytes, sha256, state_version, memory_size, vga_memory_size, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            raw_size_bytes, sha256, state_version, topology_version,
+            memory_size, vga_memory_size, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(project_id, variant_index) DO UPDATE SET
              iso_sha256 = excluded.iso_sha256,
+             topology_version = excluded.topology_version,
              system_version_id = excluded.system_version_id,
              game_disk_sha256 = excluded.game_disk_sha256,
              storage_key = excluded.storage_key,
@@ -3693,6 +3717,7 @@ pub async fn complete_snapshot_upload(
     .bind(row.get::<i64, _>("raw_size_bytes"))
     .bind(&declared_sha)
     .bind(row.get::<i64, _>("state_version"))
+    .bind(V86_TOPOLOGY_VERSION)
     .bind(row.get::<i64, _>("memory_size"))
     .bind(row.get::<i64, _>("vga_memory_size"))
     .bind(uploader_id)

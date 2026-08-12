@@ -1,7 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { auth } from '$lib/auth/user.svelte.js';
-	import { V86Player } from '$lib/players/V86Player.svelte.js';
+	import { V86Player, V86_TOPOLOGY_VERSION } from '$lib/players/V86Player.svelte.js';
 
 	let { data } = $props();
 
@@ -184,6 +184,7 @@
 						raw_size_bytes: captured.byteLength,
 						sha256: compressed.sha256,
 						state_version: 6,
+						topology_version: V86_TOPOLOGY_VERSION,
 						memory_size: data.runtime.memory_size,
 						vga_memory_size: data.runtime.vga_memory_size
 					})

@@ -322,6 +322,11 @@
 		{#if phase === 'running' && player.diskFetching}
 			<span class="disk-fetch-pill">Fetching game data…</span>
 		{/if}
+		{#if phase === 'running' && player.emulatedMips > 0}
+			<span class="mips-pill" title="Emulated CPU speed. Low values mean this device is the limit.">
+				{player.emulatedMips.toFixed(0)} MIPS
+			</span>
+		{/if}
 	</div>
 
 	{#if player.downloadProgress != null}
@@ -425,6 +430,10 @@
 
 	.disk-fetch-pill {
 		@apply animate-pulse rounded-full bg-accent-yellow-light-3 px-2 py-0.5 text-xs font-normal text-dark/70;
+	}
+
+	.mips-pill {
+		@apply rounded-full bg-dark/5 px-2 py-0.5 font-mono text-xs font-normal text-dark/50;
 	}
 
 	.v86-keys {
