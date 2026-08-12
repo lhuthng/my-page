@@ -1,5 +1,12 @@
 import { loadSave, saveGame, clearSave, SAVE_BYTES, loadBlankFloppy } from './v86-saves.js';
 
+/** Which set of emulated devices this player builds. A restored state assumes
+ *  the layout it was captured on, so any change to the device list must bump
+ *  this and V86_TOPOLOGY_VERSION in v86.rs, retiring older snapshots.
+ *  1 = base + game disk, cdrom, floppy, ne2k NIC
+ *  2 = the same without the NIC */
+export const V86_TOPOLOGY_VERSION = 2;
+
 export class V86Player {
 	status = $state('Loading emulator…');
 	error = $state('');
@@ -18,6 +25,10 @@ export class V86Player {
 	// takes, i.e. the game is actually blocked on a chunk fetch over the
 	// network. Lets the UI explain lag instead of looking like it's frozen.
 	diskFetching = $state(false);
+	// Emulated instructions per second. A healthy desktop sustains tens of
+	// millions; a struggling machine drops an order of magnitude, which
+	// distinguishes "this device is too slow" from "this is waiting on I/O".
+	emulatedMips = $state(0);
 
 	#emulator;
 	#pressed = new Set();
@@ -36,6 +47,9 @@ export class V86Player {
 	#carriedFloppy = null;
 	#pendingReads = 0;
 	#diskFetchTimer = null;
+	#mipsTimer = null;
+	#lastInstructionCount = 0;
+	#lastMipsAt = 0;
 
 	saveAvailable = $derived(this.runtime?.save_supported === true);
 
@@ -164,13 +178,9 @@ export class V86Player {
 				use_parts: true
 			},
 			acpi: false,
-			disable_speaker: false,
-			net_device: {
-				type: 'ne2k',
-				relay_url: undefined,
-				cors_proxy: undefined,
-				mtu: 1500
-			}
+			disable_speaker: false
+			// No net_device: it was an ne2k with no relay, so the guest spent time
+			// initialising and polling hardware that could never carry traffic.
 		};
 
 		// Disks must be present at construction: Windows enumerates IDE disks
@@ -244,6 +254,31 @@ export class V86Player {
 		this.diskFetching = false;
 	};
 
+	// The counter is a uint32 that wraps, so only deltas are meaningful and a
+	// wrap is discarded rather than reported as a spike.
+	#startMipsSampling = () => {
+		this.#stopMipsSampling();
+		this.#lastInstructionCount = this.#emulator?.get_instruction_counter?.() ?? 0;
+		this.#lastMipsAt = performance.now();
+		this.#mipsTimer = setInterval(() => {
+			const count = this.#emulator?.get_instruction_counter?.();
+			if (count == null) return;
+			const now = performance.now();
+			const elapsed = (now - this.#lastMipsAt) / 1000;
+			const delta = count - this.#lastInstructionCount;
+			if (elapsed > 0 && delta >= 0) {
+				this.emulatedMips = delta / elapsed / 1e6;
+			}
+			this.#lastInstructionCount = count;
+			this.#lastMipsAt = now;
+		}, 1000);
+	};
+
+	#stopMipsSampling = () => {
+		if (this.#mipsTimer) clearInterval(this.#mipsTimer);
+		this.#mipsTimer = null;
+	};
+
 	start = async () => {
 		if (this.running || !this.runtime) return;
 		this.error = '';
@@ -284,6 +319,7 @@ export class V86Player {
 				this.applyNoiseFilter().catch(() => {});
 				this.applyAudioState();
 				this.preloadLaunchers().catch(() => {});
+				this.#startMipsSampling();
 			});
 			// emulator-ready fires inside v86.init(), before restore_state runs.
 			// Inserting media there leaves a disc in a drive the state records as
@@ -378,6 +414,8 @@ export class V86Player {
 		this.paused = false;
 		this.#pendingReads = 0;
 		this.diskFetching = false;
+		this.emulatedMips = 0;
+		this.#stopMipsSampling();
 		if (this.#diskFetchTimer) {
 			clearTimeout(this.#diskFetchTimer);
 			this.#diskFetchTimer = null;
@@ -548,6 +586,13 @@ export class V86Player {
 		} catch {
 			return null;
 		}
+		// The gate only ever runs as an AudioWorklet, i.e. on the audio thread.
+		// There is deliberately no ScriptProcessor fallback: that variant runs
+		// its per-sample callback on the main thread, competing with the
+		// emulator loop, and it was reached by losing a race against a timeout —
+		// so the slowest machines, which can least afford it, were the ones that
+		// got it. Without a worklet the chain degrades to the native lowpass,
+		// which is C++ and effectively free.
 		let gate = null;
 		try {
 			if (ctx.audioWorklet?.addModule) {
@@ -555,7 +600,7 @@ export class V86Player {
 				await Promise.race([
 					ctx.audioWorklet.addModule(url),
 					new Promise((_, reject) =>
-						setTimeout(() => reject(new Error('worklet load timed out')), 1500)
+						setTimeout(() => reject(new Error('worklet load timed out')), 5000)
 					)
 				]);
 				URL.revokeObjectURL(url);
@@ -566,28 +611,7 @@ export class V86Player {
 				});
 			}
 		} catch (cause) {
-			console.warn('v86 noise-gate worklet unavailable, falling back.', cause);
-		}
-		if (!gate && ctx.createScriptProcessor) {
-			gate = ctx.createScriptProcessor(4096, 2, 2);
-			gate.threshold = 0.008;
-			let envelope = 0;
-			const atk = 1 - Math.exp(-1 / (0.004 * ctx.sampleRate));
-			const rel = 1 - Math.exp(-1 / (0.18 * ctx.sampleRate));
-			gate.onaudioprocess = function (event) {
-				const inL = event.inputBuffer.getChannelData(0);
-				const inR = event.inputBuffer.getChannelData(1);
-				const outL = event.outputBuffer.getChannelData(0);
-				const outR = event.outputBuffer.getChannelData(1);
-				const threshold = this.threshold;
-				for (let i = 0; i < inL.length; i++) {
-					const peak = Math.abs(inL[i]) > Math.abs(inR[i]) ? Math.abs(inL[i]) : Math.abs(inR[i]);
-					const target = peak > threshold ? 1 : 0;
-					envelope = target > envelope ? envelope + (1 - envelope) * atk : envelope * (1 - rel);
-					outL[i] = inL[i] * envelope;
-					outR[i] = inR[i] * envelope;
-				}
-			};
+			console.warn('v86 noise-gate worklet unavailable, using lowpass only.', cause);
 		}
 		if (gate) {
 			lowpass.connect(gate);
@@ -620,8 +644,7 @@ export class V86Player {
 		const t = Math.min(1, Math.max(0, strength / 200));
 		chain.lowpass.frequency.value = 11000 - t * 7000;
 		const threshold = 0.02 * Math.pow(0.1, t);
-		if (chain.gate?.port) chain.gate.port.postMessage({ type: 'threshold', value: threshold });
-		else if (chain.gate) chain.gate.threshold = threshold;
+		chain.gate?.port?.postMessage({ type: 'threshold', value: threshold });
 	};
 
 	applyNoiseFilter = async () => {
