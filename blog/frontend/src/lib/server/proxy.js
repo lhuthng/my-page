@@ -65,7 +65,23 @@ export async function proxyFallback({ request, params, search, extraHeaders }) {
 	try {
 		const response = await fetch(proxyRequest);
 
-		return response;
+		// The backend runs a CompressionLayer, and we forward the browser's
+		// Accept-Encoding, so it may answer with a gzip/br body. fetch already
+		// decodes that transparently — but the original Content-Encoding and
+		// Content-Length headers survive and would describe the compressed
+		// original, leaving the browser to inflate a body that is already
+		// plain (ERR_CONTENT_DECODING_FAILED). Drop both so the headers match
+		// the bytes we actually forward; compression on the hop to the backend
+		// still happens, it just terminates here.
+		const responseHeaders = new Headers(response.headers);
+		responseHeaders.delete('content-encoding');
+		responseHeaders.delete('content-length');
+
+		return new Response(response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers: responseHeaders
+		});
 	} catch (e) {
 		console.error('API Proxy Error:', e);
 		throw error(503, 'Backend service unavailable.');
