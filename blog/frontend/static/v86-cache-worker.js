@@ -1,7 +1,12 @@
-const CACHE_NAME = 'v86-runtime-v3';
+const CACHE_NAME = 'v86-runtime-v4';
 
 const isV86ImmutableAsset = (pathname) => {
 	if (pathname.includes('/v86/assets/systems/')) return true;
+	// Snapshots are content-addressed by the sha256 of the compressed state, so
+	// a changed state always arrives under a new path and can be cached
+	// indefinitely. Caching matters most here: unlike the disks, a state cannot
+	// be range-loaded, so an uncached visit re-downloads the whole blob.
+	if (pathname.includes('/v86/snapshots/')) return pathname.endsWith('/state.zst');
 	if (!pathname.includes('/projects/s/') || !pathname.includes('/v86/')) return false;
 	return pathname.endsWith('/full.iso');
 };

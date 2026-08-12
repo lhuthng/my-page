@@ -63,6 +63,9 @@ export async function load({ fetch, params, url, setHeaders }) {
 		rest.v86_runtime.base_url = fixClientRoute(rest.v86_runtime.base_url);
 		rest.v86_runtime.iso_url = fixClientRoute(rest.v86_runtime.iso_url);
 		rest.v86_runtime.game_url = fixClientRoute(rest.v86_runtime.game_url);
+		if (rest.v86_runtime.snapshot_url) {
+			rest.v86_runtime.snapshot_url = fixClientRoute(rest.v86_runtime.snapshot_url);
+		}
 		rest.v86_runtime.variants = rest.v86_runtime.variants?.map((variant) => ({
 			...variant,
 			iso_url: fixClientRoute(variant.iso_url)
