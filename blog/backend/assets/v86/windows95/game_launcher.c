@@ -503,13 +503,18 @@ void WINAPI WinMainCRTStartup(void)
     }
 
     parse_save_files();
+
+    /* The delay runs before the saves are touched so a v86 snapshot can be
+       captured here: the launcher is up and idle but has not read A: yet, so
+       restoring that snapshot still copies the visitor's own save rather than
+       replaying whatever the snapshot was captured with. */
+    Sleep(parse_delay(delay_text));
+
     if(g_save_file_count > 0)
     {
         restore_all_saves();
         mirror_all_saves();
     }
-
-    Sleep(parse_delay(delay_text));
 
     if(audio_primer[0] != '\0')
     {
