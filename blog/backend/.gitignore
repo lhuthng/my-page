@@ -7,3 +7,4 @@ data/*
 media/*
 api_test/*
 project-demos/*
+.minio-data/
