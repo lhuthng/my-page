@@ -205,7 +205,7 @@
 					<hr class="grow border" />
 				</div>
 			</div>
-			<ul class="flex flex-wrap">
+			<ul class="flex flex-wrap gap-2">
 				{#each links as link}
 					<li class="duo-btn" data-duo-color="blue">
 						<a class="no-underline!" href={link.url} target="_blank" rel="noopener noreferrer">

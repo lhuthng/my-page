@@ -37,7 +37,8 @@ impl R2Client {
         let secret_key = env::var("R2_SECRET_ACCESS_KEY").ok()?;
         let bucket = env::var("R2_BUCKET").ok()?;
 
-        let endpoint = format!("https://{account_id}.r2.cloudflarestorage.com");
+        let endpoint = env::var("R2_ENDPOINT")
+            .unwrap_or_else(|_| format!("https://{account_id}.r2.cloudflarestorage.com"));
         let credentials = Credentials::new(
             access_key,
             secret_key,
