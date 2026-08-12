@@ -8,6 +8,10 @@ It runs on pushes to `master` and only reacts to changes inside `blog/**` or the
 
 You can force a blog deploy by adding `[deploy blog]` to the commit message.
 
+You can skip CI entirely by adding `[manual deploy]` to the commit message —
+the whole pipeline is skipped for that push, for when you're building and
+deploying locally instead (see `scripts/emergency/README.md`).
+
 ## Blog deployment
 
 The workflow has four jobs:

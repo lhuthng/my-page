@@ -1,9 +1,10 @@
-# Temporary Emergency Deploy (manual)
+# Manual Deploy (local build)
 
-A stop-gap deploy path used while the GitHub Actions pipeline
-(`.github/workflows/deploy.yml`) is unavailable or broken. The VPS is too
-weak to build, so images are built on this machine and pushed to GHCR, then
-the VPS pulls and reloads them.
+A deploy path that builds and pushes images from this machine instead of
+GitHub Actions — used when CI is unavailable/broken, or for any push tagged
+`[manual deploy]` (see `.github/README.md`), which skips the CI pipeline for
+that commit. The VPS is too weak to build, so images are built here and
+pushed to GHCR, then the VPS pulls and reloads them.
 
 This is intentional and manual on purpose:
 
@@ -39,8 +40,7 @@ The script curls `/robots.txt` and `/BingSiteAuth.xml`. If `/BingSiteAuth.xml`
 shows 404 while `/robots.txt` shows 200, purge that URL in Cloudflare (stale
 edge 404) — otherwise the new static file should be reachable.
 
-## When to delete this
+## Note
 
-Once the normal pipeline is healthy again (GitHub Actions runner available /
-billing resolved, or a self-hosted runner), remove this whole
-`scripts/emergency/` directory.
+This is a real, ongoing part of the deploy workflow now — not only a
+fallback for CI outages — so it's not going away once CI is healthy.
