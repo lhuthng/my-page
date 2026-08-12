@@ -331,6 +331,34 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     "/games/upload/{upload_id}",
                     delete(handlers::v86::abort_game_upload),
                 )
+                .route(
+                    "/snapshots/upload",
+                    post(handlers::v86::start_snapshot_upload),
+                )
+                .route(
+                    "/snapshots/upload/{upload_id}/chunk/{chunk_index}",
+                    put(handlers::v86::append_snapshot_chunk),
+                )
+                .route(
+                    "/snapshots/upload/{upload_id}/complete",
+                    post(handlers::v86::complete_snapshot_upload),
+                )
+                .route(
+                    "/snapshots/upload/{upload_id}",
+                    delete(handlers::v86::abort_snapshot_upload),
+                )
+                .route(
+                    "/projects/id/{project_id}/snapshot",
+                    get(handlers::v86::get_project_snapshot),
+                )
+                .route(
+                    "/projects/id/{project_id}/snapshot",
+                    delete(handlers::v86::delete_project_snapshot),
+                )
+                .route(
+                    "/projects/id/{project_id}/capture-runtime",
+                    get(handlers::v86::get_project_capture_runtime),
+                )
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
@@ -374,6 +402,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route(
             "/assets/systems/{version_id}/{sha256}/{part}",
             get(handlers::v86::get_system_chunk),
+        )
+        .route(
+            "/snapshots/{sha256}/{part}",
+            get(handlers::v86::get_snapshot_blob),
         );
 
     let tag_routes = Router::new()

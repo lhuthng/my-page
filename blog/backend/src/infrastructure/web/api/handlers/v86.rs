@@ -39,6 +39,26 @@ const V86_SAVE_MAX_UPLOAD_BYTES: usize = 2 * 1024 * 1024;
 /// Per-user cooldown between cloud saves (matches the client).
 const V86_SAVE_RATE_LIMIT_MS: u64 = 30_000;
 
+/// RAM / VGA the player hands to v86. A restored `initial_state` only makes
+/// sense against the same sizes it was captured with, so snapshots record
+/// these and `runtime_descriptor` refuses to serve a snapshot that disagrees.
+const V86_MEMORY_SIZE: u64 = 64 * 1024 * 1024;
+const V86_VGA_MEMORY_SIZE: u64 = 8 * 1024 * 1024;
+
+/// v86's `save_state()` container format version (`libv86.js` throws
+/// "Version mismatch" on anything else). Bumping the vendored v86 build
+/// invalidates every stored snapshot, which degrades to a normal cold boot.
+const V86_STATE_VERSION: i64 = 6;
+
+/// Zstandard frame magic, little-endian. Snapshots are compressed in the
+/// browser and stored verbatim: v86's `restore_state` sniffs this magic and
+/// decompresses internally, so nothing on the server ever unpacks them.
+const ZSTD_MAGIC: [u8; 4] = [0x28, 0xb5, 0x2f, 0xfd];
+
+/// Hard cap for a snapshot upload. A 64 MB machine dumps ~72 MB raw, which
+/// compresses to roughly 10-25 MB; 192 MB leaves generous headroom.
+const V86_SNAPSHOT_MAX_BYTES: u64 = 192 * 1024 * 1024;
+
 /// A single launch variant resolved from the manifest. `name` is the display
 /// label and the "source of truth" for how many variants exist; `exe`/`args`
 /// are that variant's coalesced values (falling back to the root keys).
@@ -120,6 +140,36 @@ pub struct ChunkUploadResponse {
 }
 
 #[derive(Deserialize)]
+pub struct StartSnapshotUploadRequest {
+    pub project_id: i64,
+    pub system_version_id: i64,
+    /// sha256 of the game disk the snapshot was captured against. Together
+    /// with `system_version_id` this pins the state to the exact images whose
+    /// dirty blocks are baked into it.
+    pub game_disk_sha256: String,
+    /// Size of the compressed blob about to be uploaded.
+    pub size_bytes: u64,
+    /// Size of the raw `save_state()` output, for display only.
+    pub raw_size_bytes: u64,
+    /// sha256 of the compressed blob, verified server-side on completion.
+    pub sha256: String,
+    pub state_version: i64,
+    pub memory_size: u64,
+    pub vga_memory_size: u64,
+}
+
+#[derive(Serialize)]
+pub struct SnapshotStatusResponse {
+    pub exists: bool,
+    /// True when a snapshot row exists but no longer matches the project's
+    /// current disks / state version / memory size, so it is not being served.
+    pub stale: bool,
+    pub size_bytes: Option<u64>,
+    pub raw_size_bytes: Option<u64>,
+    pub created_at: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub struct UpdateSystemRequest {
     pub name: Option<String>,
     pub is_active: Option<bool>,
@@ -157,6 +207,12 @@ pub struct V86RuntimeDescriptor {
     pub variants: Vec<VariantDescriptor>,
     pub save_supported: bool,
     pub save_max_bytes: u64,
+    /// A pre-booted `initial_state` blob, present only when one was captured
+    /// against exactly this base disk, game disk, state version and memory
+    /// size. `None` means the player cold-boots, which is always safe.
+    pub snapshot_url: Option<String>,
+    pub snapshot_size_bytes: Option<u64>,
+    pub snapshot_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2978,29 +3034,56 @@ pub async fn get_game_upload_status(
     }))
 }
 
+/// How to locate the project behind a runtime descriptor. The public player
+/// resolves a published slug; the admin snapshot studio resolves a project by
+/// id so it can also work on drafts.
+pub enum RuntimeLookup<'a> {
+    PublishedSlug(&'a str),
+    ProjectId(i64),
+}
+
 pub async fn runtime_descriptor(
     pool: &sqlx::SqlitePool,
     slug: &str,
     r2_public_url: Option<&str>,
 ) -> Result<Option<V86RuntimeDescriptor>, ProjectError> {
-    let row = sqlx::query(
+    runtime_descriptor_for(pool, RuntimeLookup::PublishedSlug(slug), r2_public_url, true).await
+}
+
+pub async fn runtime_descriptor_for(
+    pool: &sqlx::SqlitePool,
+    lookup: RuntimeLookup<'_>,
+    r2_public_url: Option<&str>,
+    include_snapshot: bool,
+) -> Result<Option<V86RuntimeDescriptor>, ProjectError> {
+    let filter = match lookup {
+        RuntimeLookup::PublishedSlug(_) => "posts.slug = ? AND posts.status = 'published'",
+        RuntimeLookup::ProjectId(_) => "g.project_id = ?",
+    };
+    let sql = format!(
         r#"SELECT s.name AS system_name, s.platform_key, v.id AS system_version_id,
                   v.size_bytes AS base_size, v.sha256 AS base_sha,
                   g.project_id, g.disk_size_bytes, g.disk_sha256,
                   g.iso_size_bytes, g.iso_sha256, g.manifest_text, g.manifest_sha256,
                   g.chunk_size_bytes, g.artifact_revision,
+                  posts.slug AS slug,
                   p.demo_width, p.demo_height
            FROM project_v86_games g
            JOIN projects p ON p.id = g.project_id
            JOIN posts ON posts.id = p.post_id
            JOIN v86_system_versions v ON v.id = g.system_version_id
            JOIN v86_systems s ON s.id = v.system_id
-           WHERE posts.slug = ? AND posts.status = 'published' AND p.demo_type = 'v86'"#,
-    )
-    .bind(slug)
-    .fetch_optional(pool)
-    .await?;
+           WHERE {filter} AND p.demo_type = 'v86'"#
+    );
+    let query = sqlx::query(&sql);
+    let query = match lookup {
+        RuntimeLookup::PublishedSlug(slug) => query.bind(slug),
+        RuntimeLookup::ProjectId(id) => query.bind(id),
+    };
+    let row = query.fetch_optional(pool).await?;
     let Some(row) = row else { return Ok(None) };
+    let slug: String = row.get("slug");
+    let slug = slug.as_str();
     let version_id: i64 = row.get("system_version_id");
     let base_sha: String = row.get("base_sha");
     let game_sha: String = row.get("disk_sha256");
@@ -3063,6 +3146,47 @@ pub async fn runtime_descriptor(
             format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
         ),
     };
+
+    // A snapshot is only offered when every dimension it depends on still
+    // matches. Anything else (replaced base disk, rebuilt game disk, upgraded
+    // v86, resized memory) simply yields None and the player cold-boots, so a
+    // stale snapshot can never produce a broken restore.
+    let snapshot = match include_snapshot {
+        false => None,
+        true => {
+            sqlx::query(
+                r#"SELECT sha256, size_bytes FROM project_v86_snapshots
+                   WHERE project_id = ? AND system_version_id = ? AND game_disk_sha256 = ?
+                     AND state_version = ? AND memory_size = ? AND vga_memory_size = ?"#,
+            )
+            .bind(project_id)
+            .bind(version_id)
+            .bind(&game_sha)
+            .bind(V86_STATE_VERSION)
+            .bind(V86_MEMORY_SIZE as i64)
+            .bind(V86_VGA_MEMORY_SIZE as i64)
+            .fetch_optional(pool)
+            .await?
+        }
+    };
+    let (snapshot_url, snapshot_size_bytes, snapshot_sha256) = match snapshot {
+        Some(row) => {
+            let sha: String = row.get("sha256");
+            let url = match r2_public_url {
+                Some(r2) => {
+                    let base = r2.trim_end_matches('/');
+                    format!("{base}/v86/snapshots/{sha}/state.zst")
+                }
+                None => format!("v86/snapshots/{sha}/state.zst"),
+            };
+            (
+                Some(url),
+                Some(row.get::<i64, _>("size_bytes") as u64),
+                Some(sha),
+            )
+        }
+        None => (None, None, None),
+    };
     Ok(Some(V86RuntimeDescriptor {
         platform_key: row.get("platform_key"),
         system_name: row.get("system_name"),
@@ -3070,8 +3194,8 @@ pub async fn runtime_descriptor(
         artifact_revision: row.get("artifact_revision"),
         manifest_sha256: row.get("manifest_sha256"),
         slug: slug.to_string(),
-        memory_size: 64 * 1024 * 1024,
-        vga_memory_size: 8 * 1024 * 1024,
+        memory_size: V86_MEMORY_SIZE,
+        vga_memory_size: V86_VGA_MEMORY_SIZE,
         display_width: row
             .get::<Option<String>, _>("demo_width")
             .unwrap_or_else(|| "100%".to_string()),
@@ -3098,6 +3222,9 @@ pub async fn runtime_descriptor(
         },
         save_supported,
         save_max_bytes: V86_SAVE_FLOPPY_BYTES as u64,
+        snapshot_url,
+        snapshot_size_bytes,
+        snapshot_sha256,
     }))
 }
 
@@ -3105,6 +3232,454 @@ fn has_save_paths(manifest: &str) -> bool {
     !save_files_from_manifest(manifest)
         .map(|files| files.is_empty())
         .unwrap_or(true)
+}
+
+/// Storage key for a snapshot blob. Content-addressed, so identical states
+/// dedupe and the object can be cached immutably forever.
+fn snapshot_storage_key(sha256: &str) -> String {
+    format!("v86/snapshots/{sha256}/state.zst")
+}
+
+fn validate_sha256_hex(value: &str) -> Result<(), ProjectError> {
+    if value.len() != 64 || !value.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(ProjectError::InvalidDemo(
+            "Expected a hex-encoded sha256 digest.".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Runtime descriptor for the admin snapshot studio. Resolves by project id so
+/// drafts work, and always omits the snapshot: capture must start from a cold
+/// boot, never from a previously captured state.
+pub async fn get_project_capture_runtime(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(project_id): AxumPath<i64>,
+) -> Result<Json<V86RuntimeDescriptor>, ProjectError> {
+    require_project_owner(&state, project_id, user_id(&claims)?).await?;
+    runtime_descriptor_for(
+        &state.project_service.pool,
+        RuntimeLookup::ProjectId(project_id),
+        state.config.r2_public_url.as_deref(),
+        false,
+    )
+    .await?
+    .map(Json)
+    .ok_or(ProjectError::ProjectNotFound)
+}
+
+pub async fn get_project_snapshot(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(project_id): AxumPath<i64>,
+) -> Result<Json<SnapshotStatusResponse>, ProjectError> {
+    require_project_owner(&state, project_id, user_id(&claims)?).await?;
+    let row = sqlx::query(
+        r#"SELECT s.size_bytes, s.raw_size_bytes, s.created_at,
+                  (s.system_version_id = g.system_version_id
+                   AND s.game_disk_sha256 = g.disk_sha256
+                   AND s.state_version = ?
+                   AND s.memory_size = ?
+                   AND s.vga_memory_size = ?) AS fresh
+           FROM project_v86_snapshots s
+           JOIN project_v86_games g ON g.project_id = s.project_id
+           WHERE s.project_id = ?"#,
+    )
+    .bind(V86_STATE_VERSION)
+    .bind(V86_MEMORY_SIZE as i64)
+    .bind(V86_VGA_MEMORY_SIZE as i64)
+    .bind(project_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    Ok(Json(match row {
+        None => SnapshotStatusResponse {
+            exists: false,
+            stale: false,
+            size_bytes: None,
+            raw_size_bytes: None,
+            created_at: None,
+        },
+        Some(row) => SnapshotStatusResponse {
+            exists: true,
+            stale: row.get::<i64, _>("fresh") == 0,
+            size_bytes: Some(row.get::<i64, _>("size_bytes") as u64),
+            raw_size_bytes: Some(row.get::<i64, _>("raw_size_bytes") as u64),
+            created_at: Some(row.get("created_at")),
+        },
+    }))
+}
+
+pub async fn start_snapshot_upload(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Json(request): Json<StartSnapshotUploadRequest>,
+) -> Result<Json<StartUploadResponse>, ProjectError> {
+    let uploader_id = user_id(&claims)?;
+    require_project_owner(&state, request.project_id, uploader_id).await?;
+    validate_sha256_hex(&request.sha256)?;
+    validate_sha256_hex(&request.game_disk_sha256)?;
+
+    if request.size_bytes == 0 || request.size_bytes > V86_SNAPSHOT_MAX_BYTES {
+        return Err(ProjectError::InvalidDemo(
+            "The snapshot exceeds the configured limit.".to_string(),
+        ));
+    }
+    // Restoring a state into a machine shaped differently from the one it was
+    // captured on corrupts the guest, so reject the mismatch at the door
+    // rather than storing something runtime_descriptor would silently drop.
+    if request.state_version != V86_STATE_VERSION {
+        return Err(ProjectError::InvalidDemo(format!(
+            "This snapshot targets v86 state version {}, but the server serves version {V86_STATE_VERSION}.",
+            request.state_version
+        )));
+    }
+    if request.memory_size != V86_MEMORY_SIZE || request.vga_memory_size != V86_VGA_MEMORY_SIZE {
+        return Err(ProjectError::InvalidDemo(
+            "The snapshot was captured with a different memory size than the player uses."
+                .to_string(),
+        ));
+    }
+
+    // The snapshot embeds dirty blocks from these exact disks; if the project
+    // has been re-uploaded since capture started, the state is already void.
+    let game = sqlx::query(
+        "SELECT system_version_id, disk_sha256 FROM project_v86_games WHERE project_id = ?",
+    )
+    .bind(request.project_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    let current_disk_sha: Option<String> = game.get("disk_sha256");
+    if game.get::<i64, _>("system_version_id") != request.system_version_id
+        || current_disk_sha.as_deref() != Some(request.game_disk_sha256.as_str())
+    {
+        return Err(ProjectError::Conflict(
+            "The project's disks changed while this snapshot was being captured. Recapture it."
+                .to_string(),
+        ));
+    }
+
+    let upload_id = Uuid::new_v4().to_string();
+    let r2 = require_r2(&state)?;
+    let transient_key = transient_r2_key("snapshots", &upload_id, "zst");
+    let multipart = r2
+        .create_multipart(&transient_key)
+        .await
+        .map_err(r2_error)?;
+    let r2_upload_id = multipart
+        .upload_id()
+        .ok_or_else(|| {
+            ProjectError::InternalError("R2 did not return a multipart upload id.".to_string())
+        })?
+        .to_string();
+    let expires_at =
+        Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
+    sqlx::query(
+        r#"INSERT INTO v86_snapshot_upload_sessions
+           (id, uploader_id, project_id, system_version_id, game_disk_sha256,
+            raw_size_bytes, sha256, state_version, memory_size, vga_memory_size,
+            expected_size_bytes, upload_chunk_size_bytes, temp_storage_key,
+            r2_upload_id, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(&upload_id)
+    .bind(uploader_id)
+    .bind(request.project_id)
+    .bind(request.system_version_id)
+    .bind(&request.game_disk_sha256)
+    .bind(request.raw_size_bytes as i64)
+    .bind(&request.sha256)
+    .bind(request.state_version)
+    .bind(request.memory_size as i64)
+    .bind(request.vga_memory_size as i64)
+    .bind(request.size_bytes as i64)
+    .bind(state.project_demo_config.v86_upload_chunk_size as i64)
+    .bind(&transient_key)
+    .bind(&r2_upload_id)
+    .bind(expires_at.to_rfc3339())
+    .execute(&state.project_service.pool)
+    .await
+    .map_err(|error| {
+        let r2 = r2.clone();
+        tokio::spawn(async move {
+            let _ = r2.abort_multipart(&transient_key, &r2_upload_id).await;
+        });
+        error
+    })?;
+    Ok(Json(StartUploadResponse {
+        upload_id,
+        chunk_size_bytes: state.project_demo_config.v86_upload_chunk_size,
+        next_chunk_index: 0,
+        expected_size_bytes: request.size_bytes,
+        upload_required: true,
+    }))
+}
+
+pub async fn append_snapshot_chunk(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath((upload_id, chunk_index)): AxumPath<(String, u64)>,
+    bytes: Bytes,
+) -> Result<Json<ChunkUploadResponse>, ProjectError> {
+    Ok(Json(
+        append_upload_chunk(
+            &state,
+            "v86_snapshot_upload_sessions",
+            &upload_id,
+            user_id(&claims)?,
+            chunk_index,
+            bytes,
+        )
+        .await?,
+    ))
+}
+
+async fn fail_snapshot_session(state: &AppState, upload_id: &str, message: &str) {
+    sqlx::query(
+        "UPDATE v86_snapshot_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    )
+    .bind(message)
+    .bind(upload_id)
+    .execute(&state.project_service.pool)
+    .await
+    .ok();
+}
+
+/// Finalises a snapshot upload. Unlike the disk pipeline there is no chunking,
+/// no zstd pass and no background build: v86 forces `initial_state` to load
+/// synchronously as a single blob, and `restore_state` unpacks the zstd frame
+/// itself, so the bytes are promoted to their content-addressed key verbatim.
+pub async fn complete_snapshot_upload(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(upload_id): AxumPath<String>,
+) -> Result<StatusCode, ProjectError> {
+    let uploader_id = user_id(&claims)?;
+    let row = sqlx::query(
+        r#"SELECT project_id, system_version_id, game_disk_sha256, raw_size_bytes, sha256,
+                  state_version, memory_size, vga_memory_size, expected_size_bytes,
+                  received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags,
+                  status, expires_at
+           FROM v86_snapshot_upload_sessions WHERE id = ? AND uploader_id = ?"#,
+    )
+    .bind(&upload_id)
+    .bind(uploader_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    ensure_upload_not_expired(row.get::<String, _>("expires_at").as_str())?;
+    if row.get::<String, _>("status") != "active"
+        || row.get::<i64, _>("expected_size_bytes") != row.get::<i64, _>("received_size_bytes")
+    {
+        return Err(ProjectError::InvalidDemo(
+            "The snapshot upload is incomplete.".to_string(),
+        ));
+    }
+    let project_id: i64 = row.get("project_id");
+    require_project_owner(&state, project_id, uploader_id).await?;
+
+    let r2 = require_r2(&state)?;
+    let temp_key: String = row.get("temp_storage_key");
+    let r2_upload_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
+        ProjectError::InternalError("Upload session is missing its R2 multipart id.".to_string())
+    })?;
+    let etags = parse_r2_part_etags(row.get::<Option<String>, _>("r2_part_etags").as_deref());
+    r2.complete_multipart(&temp_key, &r2_upload_id, etags)
+        .await
+        .map_err(r2_error)?;
+
+    // Verify what actually landed rather than trusting the client: the blob
+    // must be a zstd frame (v86 sniffs this magic to decide whether to
+    // decompress) and must hash to the digest the key is derived from.
+    let bytes = r2.get_object(&temp_key).await.map_err(r2_error)?;
+    let declared_sha: String = row.get("sha256");
+    let actual_sha = hex::encode(Sha256::digest(&bytes));
+    let invalid = if bytes.len() < 4 || bytes[..4] != ZSTD_MAGIC {
+        Some("The snapshot is not a zstd-compressed v86 state.")
+    } else if actual_sha != declared_sha {
+        Some("The uploaded snapshot does not match its declared checksum.")
+    } else {
+        None
+    };
+    if let Some(message) = invalid {
+        let _ = r2.delete_object(&temp_key).await;
+        fail_snapshot_session(&state, &upload_id, message).await;
+        return Err(ProjectError::InvalidDemo(message.to_string()));
+    }
+
+    // Re-check the disk pinning: the game disk may have been replaced while
+    // the (slow) compress + upload was in flight.
+    let game = sqlx::query(
+        "SELECT system_version_id, disk_sha256 FROM project_v86_games WHERE project_id = ?",
+    )
+    .bind(project_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    let game_disk_sha: String = row.get("game_disk_sha256");
+    let current_disk_sha: Option<String> = game.get("disk_sha256");
+    if game.get::<i64, _>("system_version_id") != row.get::<i64, _>("system_version_id")
+        || current_disk_sha.as_deref() != Some(game_disk_sha.as_str())
+    {
+        let _ = r2.delete_object(&temp_key).await;
+        let message = "The project's disks changed while this snapshot was uploading.";
+        fail_snapshot_session(&state, &upload_id, message).await;
+        return Err(ProjectError::Conflict(message.to_string()));
+    }
+
+    let storage_key = snapshot_storage_key(&declared_sha);
+    r2.put_object_bytes(&storage_key, bytes)
+        .await
+        .map_err(r2_error)?;
+    let _ = r2.delete_object(&temp_key).await;
+
+    let previous_key: Option<String> =
+        sqlx::query_scalar("SELECT storage_key FROM project_v86_snapshots WHERE project_id = ?")
+            .bind(project_id)
+            .fetch_optional(&state.project_service.pool)
+            .await?
+            .flatten();
+
+    sqlx::query(
+        r#"INSERT INTO project_v86_snapshots
+           (project_id, system_version_id, game_disk_sha256, storage_key, size_bytes,
+            raw_size_bytes, sha256, state_version, memory_size, vga_memory_size, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(project_id) DO UPDATE SET
+             system_version_id = excluded.system_version_id,
+             game_disk_sha256 = excluded.game_disk_sha256,
+             storage_key = excluded.storage_key,
+             size_bytes = excluded.size_bytes,
+             raw_size_bytes = excluded.raw_size_bytes,
+             sha256 = excluded.sha256,
+             state_version = excluded.state_version,
+             memory_size = excluded.memory_size,
+             vga_memory_size = excluded.vga_memory_size,
+             created_by = excluded.created_by,
+             updated_at = CURRENT_TIMESTAMP"#,
+    )
+    .bind(project_id)
+    .bind(row.get::<i64, _>("system_version_id"))
+    .bind(&game_disk_sha)
+    .bind(&storage_key)
+    .bind(row.get::<i64, _>("expected_size_bytes"))
+    .bind(row.get::<i64, _>("raw_size_bytes"))
+    .bind(&declared_sha)
+    .bind(row.get::<i64, _>("state_version"))
+    .bind(row.get::<i64, _>("memory_size"))
+    .bind(row.get::<i64, _>("vga_memory_size"))
+    .bind(uploader_id)
+    .execute(&state.project_service.pool)
+    .await?;
+
+    sqlx::query(
+        "UPDATE v86_snapshot_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    )
+    .bind(&upload_id)
+    .execute(&state.project_service.pool)
+    .await?;
+
+    // Content-addressed keys mean a recapture that produced identical bytes
+    // reuses the same object; only drop the old one when it really changed.
+    if let Some(previous) = previous_key {
+        if previous != storage_key {
+            let _ = r2.delete_object(&previous).await;
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn abort_snapshot_upload(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(upload_id): AxumPath<String>,
+) -> Result<StatusCode, ProjectError> {
+    let uploader_id = user_id(&claims)?;
+    let row = sqlx::query(
+        "SELECT temp_storage_key, r2_upload_id, status FROM v86_snapshot_upload_sessions WHERE id = ? AND uploader_id = ?",
+    )
+    .bind(&upload_id)
+    .bind(uploader_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    if row.get::<String, _>("status") == "active" {
+        if let (Some(r2), Some(r2_upload_id)) = (
+            state.r2.clone(),
+            row.get::<Option<String>, _>("r2_upload_id"),
+        ) {
+            let _ = r2
+                .abort_multipart(&row.get::<String, _>("temp_storage_key"), &r2_upload_id)
+                .await;
+        }
+    }
+    sqlx::query(
+        "UPDATE v86_snapshot_upload_sessions SET status = 'aborted', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    )
+    .bind(&upload_id)
+    .execute(&state.project_service.pool)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn delete_project_snapshot(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(project_id): AxumPath<i64>,
+) -> Result<StatusCode, ProjectError> {
+    require_project_owner(&state, project_id, user_id(&claims)?).await?;
+    let storage_key: Option<String> =
+        sqlx::query_scalar("SELECT storage_key FROM project_v86_snapshots WHERE project_id = ?")
+            .bind(project_id)
+            .fetch_optional(&state.project_service.pool)
+            .await?
+            .flatten();
+    sqlx::query("DELETE FROM project_v86_snapshots WHERE project_id = ?")
+        .bind(project_id)
+        .execute(&state.project_service.pool)
+        .await?;
+    if let (Some(r2), Some(key)) = (state.r2.clone(), storage_key) {
+        let _ = r2.delete_object(&key).await;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Public serve for the local-storage fallback (no R2 public domain). With R2
+/// configured the descriptor points straight at the bucket instead.
+pub async fn get_snapshot_blob(
+    State(state): State<Arc<AppState>>,
+    AxumPath((sha256, part)): AxumPath<(String, String)>,
+) -> Result<Response, ProjectError> {
+    if part != "state.zst" {
+        return Err(ProjectError::ProjectNotFound);
+    }
+    validate_sha256_hex(&sha256).map_err(|_| ProjectError::ProjectNotFound)?;
+    // Only serve digests referenced by a published project, matching the disk
+    // and ISO routes. A snapshot is a fully booted machine with the game on
+    // it, so a draft's state must not be reachable before the post goes live.
+    let storage_key: Option<String> = sqlx::query_scalar(
+        r#"SELECT s.storage_key FROM project_v86_snapshots s
+           JOIN projects p ON p.id = s.project_id
+           JOIN posts ON posts.id = p.post_id
+           WHERE s.sha256 = ? AND posts.status = 'published' AND p.demo_type = 'v86'
+           LIMIT 1"#,
+    )
+    .bind(&sha256)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
+    if let Some(r2) = &state.r2 {
+        let bytes = r2
+            .get_object(&storage_key)
+            .await
+            .map_err(|_| ProjectError::ProjectNotFound)?;
+        return Ok(immutable_chunk_response(bytes, "application/octet-stream"));
+    }
+    let bytes = tokio::fs::read(state.project_demo_config.dir.join(&storage_key))
+        .await
+        .map_err(|_| ProjectError::ProjectNotFound)?;
+    Ok(immutable_chunk_response(bytes, "application/octet-stream"))
 }
 
 fn immutable_chunk_response(bytes: Vec<u8>, content_type: &'static str) -> Response {

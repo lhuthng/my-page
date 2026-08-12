@@ -790,6 +790,22 @@
 					Each variant's exe2/args2 falls back to the root exe/args when omitted.
 				</p>
 			</div>
+			{#if mode === 'edit' && data.id}
+				<div class="flex flex-col gap-1 border-t border-dark/10 pt-2">
+					<span class="text-sm">Boot snapshot:</span>
+					<p class="text-xs text-dark/60">
+						Capture an already-booted machine so visitors skip the Windows boot sequence. Only
+						available once the game disk is attached, and it must be recaptured whenever the base or
+						game disk changes.
+					</p>
+					<a
+						class="text-xs text-blue-700 hover:underline"
+						href="/dashboard/projects/id/{data.id}/snapshot"
+					>
+						Open the snapshot studio →
+					</a>
+				</div>
+			{/if}
 		</div>
 	{/if}
 	{#if editingData.demoType === 'html5' || editingData.demoType === 'webgl' || editingData.demoType === 'jsdos' || editingData.demoType === 'v86'}
