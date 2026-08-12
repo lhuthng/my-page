@@ -13,7 +13,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Commits tagged [manual deploy] skip the whole pipeline below — use this
+  # when you're building and deploying locally via scripts/emergency/deploy.sh
+  # instead (see scripts/emergency/README.md). Doesn't apply to a manual
+  # workflow_dispatch run, which is already an explicit choice to use CI.
   filter:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[manual deploy]')
     runs-on: ubuntu-latest
     outputs:
       blog: ${{ steps.filter.outputs.blog }}
@@ -29,7 +34,9 @@ jobs:
   # ── Build backend image on GitHub's servers and push to GHCR ─────────────
   build-push-backend:
     needs: filter
-    if: needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')
+    if: |
+      (needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')) &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[manual deploy]'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -63,7 +70,9 @@ jobs:
   # ── Build frontend image on GitHub's servers and push to GHCR ────────────
   build-push-frontend:
     needs: filter
-    if: needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')
+    if: |
+      (needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')) &&
+      (github.event_name != 'push' || !contains(github.event.head_commit.message, '[manual deploy]'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
