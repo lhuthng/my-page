@@ -1,4 +1,13 @@
 import { loadSave, saveGame, clearSave, SAVE_BYTES, loadBlankFloppy } from './v86-saves.js';
+import { installWheelGuard, wheelBelongsToEmulator } from './wheel-guard.js';
+
+// Weak devices (few cores) can't spare the AudioWorklet's per-sample noise gate
+// on top of emulation, so default it off there: sound still plays, just without
+// the DSP load. The auto frame-rate cap handles the CPU-bound case regardless.
+const isWeakDevice = () => {
+	const cores = globalThis.navigator?.hardwareConcurrency;
+	return typeof cores === 'number' && cores > 0 && cores <= 4;
+};
 
 /** Which set of emulated devices this player builds. A restored state assumes
  *  the layout it was captured on, so any change to the device list must bump
@@ -12,7 +21,7 @@ export class V86Player {
 	error = $state('');
 	running = $state(false);
 	mouseSensitivity = $state(0.4);
-	noiseReductionStrength = $state(200);
+	noiseReductionStrength = $state(isWeakDevice() ? 0 : 200);
 	disableMouseWheel = $state(true);
 	audioEnabled = $state(true);
 	downloadProgress = $state(null);
@@ -29,11 +38,14 @@ export class V86Player {
 	// millions; a struggling machine drops an order of magnitude, which
 	// distinguishes "this device is too slow" from "this is waiting on I/O".
 	emulatedMips = $state(0);
-	/** Cap on how often the screen is redrawn, 0 for uncapped. v86 draws from a
+	/** User's frame-rate choice, -1 for auto. v86 draws from a
 	 *  requestAnimationFrame on the same thread that emulates the CPU, so it
 	 *  otherwise redraws at the display's refresh rate no matter how slowly the
 	 *  guest is producing frames. Skipping those redraws hands the time back to
 	 *  emulation. 60 is a free win on a 120Hz panel and a no-op on a 60Hz one. */
+	maxFpsPreference = $state(-1);
+	// The cap the throttle actually reads: the manual choice when set, otherwise
+	// whatever #tuneFrameCap last settled on.
 	maxFps = $state(60);
 
 	#emulator;
@@ -44,6 +56,7 @@ export class V86Player {
 	#mouseRemainderY = 0;
 	#noiseChain = null;
 	#noiseChainPromise = null;
+	#outputGain = null;
 	#wheelCooldown = 0;
 	#saveFloppy = null;
 	#lastSaveAt = 0;
@@ -56,6 +69,11 @@ export class V86Player {
 	#mipsTimer = null;
 	#lastInstructionCount = 0;
 	#lastMipsAt = 0;
+	#autoCap = 60;
+	#autoCapChangedAt = 0;
+	#mipsHistory = [];
+	#progressFrame = null;
+	#pendingProgress = null;
 
 	saveAvailable = $derived(this.runtime?.save_supported === true);
 
@@ -291,6 +309,9 @@ export class V86Player {
 		this.#stopMipsSampling();
 		this.#lastInstructionCount = this.#emulator?.get_instruction_counter?.() ?? 0;
 		this.#lastMipsAt = performance.now();
+		this.#autoCap = 60;
+		this.#autoCapChangedAt = 0;
+		this.#mipsHistory.length = 0;
 		this.#mipsTimer = setInterval(() => {
 			const count = this.#emulator?.get_instruction_counter?.();
 			if (count == null) return;
@@ -299,6 +320,9 @@ export class V86Player {
 			const delta = count - this.#lastInstructionCount;
 			if (elapsed > 0 && delta >= 0) {
 				this.emulatedMips = delta / elapsed / 1e6;
+				this.#mipsHistory.push(this.emulatedMips);
+				if (this.#mipsHistory.length > 16) this.#mipsHistory.shift();
+				this.#tuneFrameCap(now);
 			}
 			this.#lastInstructionCount = count;
 			this.#lastMipsAt = now;
@@ -308,6 +332,33 @@ export class V86Player {
 	#stopMipsSampling = () => {
 		if (this.#mipsTimer) clearInterval(this.#mipsTimer);
 		this.#mipsTimer = null;
+	};
+
+	// Auto frame-rate loop. A guest that's genuinely idle (HLT loops) reports
+	// sub-8 MIPS; that's not starvation, so it never triggers a drop. A machine
+	// that's actively computing below the current cap gets the cap lowered, and
+	// each skipped redraw becomes emulation time. The cap is raised again only
+	// after a sustained healthy window, so the two never oscillate.
+	#tuneFrameCap = (now) => {
+		if (this.maxFpsPreference >= 0 || this.#mipsHistory.length < 8) return;
+		if (now - this.#autoCapChangedAt < 30000) return;
+		const sorted = this.#mipsHistory.slice().sort((a, b) => a - b);
+		const median = sorted[sorted.length >> 1];
+		if (median < 8) return;
+		if (this.#autoCap === 60 && median < 40) this.#setAutoCap(30);
+		else if (this.#autoCap === 30 && median < 28) this.#setAutoCap(20);
+		else if (median >= 55 && this.#autoCap < 60) this.#setAutoCap(this.#autoCap === 20 ? 30 : 60);
+		this.#autoCapChangedAt = now;
+	};
+
+	#setAutoCap = (cap) => {
+		if (this.#autoCap === cap) return;
+		this.#autoCap = cap;
+		this.maxFps = cap;
+	};
+
+	applyMaxFpsPreference = () => {
+		this.maxFps = this.maxFpsPreference >= 0 ? this.maxFpsPreference : this.#autoCap;
 	};
 
 	start = async () => {
@@ -337,6 +388,7 @@ export class V86Player {
 				}
 			}
 			this.#emulator = new V86Constructor(this.#buildOptions());
+			installWheelGuard(this.#emulator, () => this.disableMouseWheel);
 			if (this.#disposed) {
 				await this.destroy();
 				return;
@@ -380,15 +432,25 @@ export class V86Player {
 					fileUrl.pathname === new URL(this.runtime.iso_url, window.location.origin).pathname;
 				if (!gameAsset && !isIso) return;
 				if (info.loaded == null || info.total == null) return;
-				this.downloadProgress = Math.min(100, (info.loaded / info.total) * 100);
-				if (info.loaded >= info.total) {
-					this.downloadProgress = null;
-					this.status = `Booting ${this.runtime.system_name}…`;
-				} else {
-					const loaded = Math.floor(info.loaded / 1048576);
-					const total = Math.floor(info.total / 1048576);
-					this.status = `Downloading game (${loaded} / ${total} MB)`;
-				}
+				// Chunks arrive in bursts; coalesce to one render per frame so
+				// the burst doesn't churn the DOM during boot.
+				this.#pendingProgress = { loaded: info.loaded, total: info.total };
+				if (this.#progressFrame) return;
+				this.#progressFrame = requestAnimationFrame(() => {
+					this.#progressFrame = null;
+					const { loaded, total } = this.#pendingProgress ?? {};
+					this.#pendingProgress = null;
+					if (loaded == null || total == null) return;
+					this.downloadProgress = Math.min(100, (loaded / total) * 100);
+					if (loaded >= total) {
+						this.downloadProgress = null;
+						this.status = `Booting ${this.runtime.system_name}…`;
+					} else {
+						const mLoaded = Math.floor(loaded / 1048576);
+						const mTotal = Math.floor(total / 1048576);
+						this.status = `Downloading game (${mLoaded} / ${mTotal} MB)`;
+					}
+				});
 			});
 			this.applyNoiseFilter().catch(() => {});
 		} catch (cause) {
@@ -448,6 +510,12 @@ export class V86Player {
 		this.diskFetching = false;
 		this.emulatedMips = 0;
 		this.#stopMipsSampling();
+		this.#mipsHistory.length = 0;
+		if (this.#progressFrame) {
+			cancelAnimationFrame(this.#progressFrame);
+			this.#progressFrame = null;
+		}
+		this.#pendingProgress = null;
 		if (this.#diskFetchTimer) {
 			clearTimeout(this.#diskFetchTimer);
 			this.#diskFetchTimer = null;
@@ -647,9 +715,9 @@ export class V86Player {
 		}
 		if (gate) {
 			lowpass.connect(gate);
-			gate.connect(ctx.destination);
+			gate.connect(this.ensureMasterGain(ctx));
 		} else {
-			lowpass.connect(ctx.destination);
+			lowpass.connect(this.ensureMasterGain(ctx));
 		}
 		return { lowpass, gate };
 	};
@@ -687,7 +755,7 @@ export class V86Player {
 		if (this.noiseReductionStrength <= 0) {
 			if (this.#noiseChain) {
 				mixer.node_merger.disconnect();
-				mixer.node_merger.connect(ctx.destination);
+				mixer.node_merger.connect(this.ensureMasterGain(ctx));
 			}
 			return;
 		}
@@ -698,14 +766,29 @@ export class V86Player {
 		mixer.node_merger.connect(chain.lowpass);
 	};
 
+	// One master GainNode sits in front of ctx.destination, and every path that
+	// used to connect straight to destination (the noise chain's output and the
+	// bypass in applyNoiseFilter) now routes through it. Muting pauses by gain,
+	// never by suspend: suspending freezes the AudioContext clock, which starves
+	// the emulated sound card's DMA and makes games that wait on it go erratic.
+	ensureMasterGain = (ctx) => {
+		if (this.#outputGain && this.#outputGain.context === ctx) return this.#outputGain;
+		this.#outputGain = ctx.createGain();
+		this.#outputGain.gain.value = 1;
+		this.#outputGain.connect(ctx.destination);
+		return this.#outputGain;
+	};
+
 	applyAudioState = () => {
-		const ctx = this.#emulator?.speaker_adapter?.audio_context;
+		const speaker = this.#emulator?.speaker_adapter;
+		const ctx = speaker?.audio_context;
 		if (!ctx || ctx.state === 'closed') return;
-		if (this.audioEnabled) {
-			if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-		} else if (ctx.state === 'running') {
-			ctx.suspend().catch(() => {});
-		}
+		const gain = this.ensureMasterGain(ctx);
+		gain.gain.value = this.audioEnabled ? 1 : 0;
+		// A user gesture is required before the UA will start an AudioContext.
+		// The mute toggle only flips gain, so the clock keeps running and the
+		// pipeline keeps draining; resume stays solely for that initial unlock.
+		if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 	};
 
 	handleMiddleClick = (event) => {
@@ -756,7 +839,7 @@ export class V86Player {
 	};
 
 	handleWheel = (event) => {
-		if (!this.shell?.contains(event.target)) return;
+		if (!wheelBelongsToEmulator(event, this.shell)) return;
 		event.preventDefault();
 		event.stopImmediatePropagation();
 		if (this.disableMouseWheel) return;

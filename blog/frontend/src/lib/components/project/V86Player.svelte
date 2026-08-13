@@ -141,7 +141,7 @@
 					/>
 					<span
 						class="underline decoration-dashed underline-offset-2 cursor-help"
-						title="Wheel could break some games. So I disabled it, but it's not guaranteed, especially you do a Giga Scroll."
+						title="Windows 95's stock PS/2 driver has no wheel support, so scroll events reach the game as bogus mouse interrupts and can crash it. Leave this on unless a game actually needs the wheel."
 					>
 						Disable mousewheel
 					</span>
@@ -160,8 +160,13 @@
 					>
 						Frame rate limit
 					</span>
-					<select class="rounded-sm bg-white px-1 py-0.5" bind:value={player.maxFps}>
-						<option value={60}>60 fps (default)</option>
+					<select
+						class="rounded-sm bg-white px-1 py-0.5"
+						bind:value={player.maxFpsPreference}
+						onchange={() => player.applyMaxFpsPreference()}
+					>
+						<option value={-1}>Auto — adjust to device (default)</option>
+						<option value={60}>60 fps</option>
 						<option value={30}>30 fps — slower devices</option>
 						<option value={20}>20 fps — very slow devices</option>
 						<option value={0}>Uncapped</option>
