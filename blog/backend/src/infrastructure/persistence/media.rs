@@ -703,15 +703,12 @@ impl MediaService for MediaServiceImpl {
                 }
             };
 
-            if fs::try_exists(&file_path).await? {
-                got_error = Some(MediaError::Duplication);
-                break;
+            if !fs::try_exists(&file_path).await? {
+                fs::create_dir_all(&dir_path).await?;
+                fs::write(&file_path, &cmd.bytes_list[i]).await?;
+
+                file_paths.push(file_path.clone());
             }
-
-            fs::create_dir_all(&dir_path).await?;
-            fs::write(&file_path, &cmd.bytes_list[i]).await?;
-
-            file_paths.push(file_path.clone());
 
             let file_path_str = match file_path.to_str() {
                 Some(file_path_str) => file_path_str.to_string(),
@@ -728,6 +725,13 @@ impl MediaService for MediaServiceImpl {
                 INSERT INTO media
                 (hash, short_name, file_name, file_type, url, size, uploader_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(short_name) DO UPDATE SET
+                    hash = excluded.hash,
+                    file_name = excluded.file_name,
+                    file_type = excluded.file_type,
+                    url = excluded.url,
+                    size = excluded.size,
+                    uploader_id = excluded.uploader_id
                 "#,
             )
             .bind(&hash)

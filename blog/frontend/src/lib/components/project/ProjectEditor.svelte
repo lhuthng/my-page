@@ -174,7 +174,7 @@
 			...[...text.matchAll(mediaSyntax)].map((match) => match[1]),
 			...[...text.matchAll(lottieAppSyntax)].map((match) => match[1])
 		]);
-		return [...new Set(keys.filter((key) => !isOnline(key)))];
+		return [...new Set(keys)];
 	};
 
 	const appendInlineFiles = (formData, keys) => {
@@ -186,7 +186,7 @@
 	};
 
 	const validateOfflineKeys = (keys) => {
-		const missing = keys.filter((key) => !isOffline(key));
+		const missing = keys.filter((key) => !isOffline(key) && !isOnline(key));
 		if (missing.length > 0) {
 			editor.isCritical = true;
 			editor.status = `[${missing}] is/are missing`;
@@ -338,8 +338,9 @@
 			.trim()
 			.split(' ')
 			.filter((tag) => tag !== '');
-		const offlineKeys = collectOfflineKeys([editingData.draft]);
-		if (!validateOfflineKeys(offlineKeys)) return;
+		const allKeys = collectOfflineKeys([editingData.draft]);
+		const offlineKeys = allKeys.filter((key) => isOffline(key));
+		if (!validateOfflineKeys(allKeys)) return;
 
 		let v86UploadId;
 		if (editingData.demoType === 'v86') {
@@ -445,8 +446,9 @@
 		let offlineKeys = [];
 		const contentChanged = editingData.draft !== data.draft;
 
-		offlineKeys = collectOfflineKeys([editingData.content, editingData.draft]);
-		if (!validateOfflineKeys(offlineKeys)) return;
+		const allKeys = collectOfflineKeys([editingData.content, editingData.draft]);
+		offlineKeys = allKeys.filter((key) => isOffline(key));
+		if (!validateOfflineKeys(allKeys)) return;
 		projectData.number_of_files = offlineKeys.length;
 		appendInlineFiles(formData, offlineKeys);
 

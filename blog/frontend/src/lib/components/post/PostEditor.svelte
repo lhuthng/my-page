@@ -206,9 +206,21 @@
 			.split(' ')
 			.filter((tag) => tag !== '');
 
-		const keys = collectMediaKeys([draft]).filter((key) => !isOnline(key));
+		const keys = collectMediaKeys([draft]);
 
-		const missing = keys.filter((key) => !isOffline(key));
+		const offlineKeys = keys.filter((key) => {
+			if (ignored.some((ext) => key.endsWith(ext))) {
+				return false;
+			}
+			return isOffline(key);
+		});
+
+		const missing = keys.filter((key) => {
+			if (ignored.some((ext) => key.endsWith(ext))) {
+				return false;
+			}
+			return !isOffline(key) && !isOnline(key);
+		});
 
 		if (missing.length > 0) {
 			editor.isCritical = true;
@@ -229,17 +241,17 @@
 						tags,
 						content: draft,
 						categories: [],
-						number_of_files: keys.length
+						number_of_files: offlineKeys.length
 					})
 				],
 				{ type: 'application/json' }
 			)
 		);
 
-		for (let index = 0; index < keys.length; index++) {
-			const mediaItem = getNewMedia(keys[index]);
+		for (let index = 0; index < offlineKeys.length; index++) {
+			const mediaItem = getNewMedia(offlineKeys[index]);
 			formData.append(`file_${index + 1}`, mediaItem.file, mediaItem.file.name);
-			formData.append(`short_name_${index + 1}`, keys[index]);
+			formData.append(`short_name_${index + 1}`, offlineKeys[index]);
 		}
 		appendCreateCover(formData, editor.createCoverFile, editingData.ogImageSeconds);
 
@@ -282,12 +294,15 @@
 			if (ignored.some((ext) => key.endsWith(ext))) {
 				return false;
 			}
-			return !isOnline(key);
+			return isOffline(key);
 		});
 
-		console.log(keys, offlineKeys);
-
-		const missing = offlineKeys.filter((key) => !isOffline(key));
+		const missing = keys.filter((key) => {
+			if (ignored.some((ext) => key.endsWith(ext))) {
+				return false;
+			}
+			return !isOffline(key) && !isOnline(key);
+		});
 
 		if (missing.length > 0) {
 			editor.isCritical = true;

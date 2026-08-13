@@ -382,11 +382,6 @@
 		</div>
 	</dl>
 
-	<p
-		class="rounded-lg border border-accent-yellow/60 bg-accent-yellow-light-3 px-3 py-2 text-dark/80"
-	>
-		Avoid scrolling hard while booting or playing - it's fragile and could break the game.
-	</p>
 	<p class="text-dark/60">
 		Saves travel on a virtual floppy: play the game, quit it, then press the save button.
 	</p>
