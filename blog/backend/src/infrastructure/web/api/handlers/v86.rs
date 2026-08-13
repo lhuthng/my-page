@@ -1291,6 +1291,54 @@ pub async fn list_systems(
     Ok(Json(systems))
 }
 
+#[derive(Serialize)]
+pub struct PublicSystemVersion {
+    pub id: i64,
+    pub version_number: i64,
+    pub system_name: String,
+    pub platform_key: String,
+    pub sha256: String,
+    pub size_bytes: i64,
+    pub chunk_size_bytes: i64,
+}
+
+/// Unguarded, and deliberately narrow: only versions whose chunks
+/// `get_system_chunk` already serves to anyone, i.e. those a published project
+/// uses. It exposes no image that was not already publicly fetchable.
+pub async fn list_public_systems(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<PublicSystemVersion>>, ProjectError> {
+    let rows = sqlx::query(
+        r#"SELECT v.id, v.version_number, v.sha256, v.size_bytes, v.chunk_size_bytes,
+                  s.name AS system_name, s.platform_key
+           FROM v86_system_versions v
+           JOIN v86_systems s ON s.id = v.system_id
+           WHERE v.chunk_count > 0 AND EXISTS (
+             SELECT 1 FROM project_v86_games g
+             JOIN projects p ON p.id = g.project_id
+             JOIN posts ON posts.id = p.post_id
+             WHERE g.system_version_id = v.id
+               AND p.demo_type = 'v86' AND posts.status = 'published'
+           )
+           ORDER BY s.name, v.version_number DESC"#,
+    )
+    .fetch_all(&state.project_service.pool)
+    .await?;
+    Ok(Json(
+        rows.into_iter()
+            .map(|row| PublicSystemVersion {
+                id: row.get("id"),
+                version_number: row.get("version_number"),
+                system_name: row.get("system_name"),
+                platform_key: row.get("platform_key"),
+                sha256: row.get("sha256"),
+                size_bytes: row.get("size_bytes"),
+                chunk_size_bytes: row.get("chunk_size_bytes"),
+            })
+            .collect(),
+    ))
+}
+
 pub async fn list_active_systems(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ActiveSystemsQuery>,

@@ -399,6 +399,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 ))
                 .layer(DefaultBodyLimit::max(9 * 1024 * 1024)),
         )
+        .route("/systems/public", get(handlers::v86::list_public_systems))
         .route(
             "/assets/systems/{version_id}/{sha256}/{part}",
             get(handlers::v86::get_system_chunk),

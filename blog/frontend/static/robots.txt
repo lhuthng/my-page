@@ -4,6 +4,7 @@ Allow: /
 
 Disallow: /api/
 Disallow: /dashboard
+Disallow: /sandbox
 Disallow: /login
 Disallow: /reset-password
 Disallow: /verify-email
