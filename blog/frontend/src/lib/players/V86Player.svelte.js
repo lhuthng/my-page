@@ -1,4 +1,5 @@
 import { loadSave, saveGame, clearSave, SAVE_BYTES, loadBlankFloppy } from './v86-saves.js';
+import { auth } from '$lib/auth/user.svelte.js';
 import { installWheelGuard, wheelBelongsToEmulator } from './wheel-guard.js';
 
 // Weak devices (few cores) can't spare the AudioWorklet's per-sample noise gate
@@ -611,7 +612,7 @@ export class V86Player {
 		try {
 			await saveGame(this.runtime.slug, floppy);
 			this.#lastSaveAt = now;
-			this.saveMessage = 'Game saved to your account.';
+			this.saveMessage = auth() ? 'Game saved to your account.' : 'Game saved to this browser.';
 		} catch (cause) {
 			this.saveMessage = cause?.message ?? 'Could not save the game.';
 		} finally {

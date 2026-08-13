@@ -194,6 +194,11 @@ static void ensure_directory(const char *path)
 static char g_save_files[MAX_SAVE_FILES][MAX_SAVE_PATH];
 static DWORD g_save_file_count = 0;
 static volatile LONG g_stop_mirror = 0;
+/* Set while the floppy restore (A: -> D:) is still owed. The mirror thread
+   keeps retrying it every MIRROR_POLL_MS until A: is reachable, so a snapshot
+   restore that resumes the launcher before the host attaches the floppy does
+   not permanently lose the save. */
+static volatile LONG g_restore_pending = 0;
 
 /* Does `entry` contain a path separator? */
 static BOOL entry_has_separator(const char *entry)
@@ -350,13 +355,49 @@ static void mirror_all_saves(void)
     (void)copied;
 }
 
+/* A: is only reachable once the host has attached the save floppy (set_fda);
+   before that the drive reports media-not-ready. GetFileAttributesA on the
+   root returns INVALID_FILE_ATTRIBUTES when there is no media in the drive. */
+static BOOL floppy_reachable(void)
+{
+    return GetFileAttributesA("A:\\") != INVALID_FILE_ATTRIBUTES;
+}
+
+/* The snapshot-restore race: a restored launcher resumes after its delay has
+   already elapsed, so it can reach the restore step before the host finishes
+   re-inserting the floppy. One-shot restore_all_saves() would then copy nothing
+   and the save would be silently lost for the boot. restore_targeting() is the
+   retried form: it does nothing while A: is absent and, once the floppy lands,
+   restores A: -> D:\ exactly once and then mirrors D:\ -> A: to resync. */
+static void restore_targeting(void)
+{
+    if(!floppy_reachable())
+    {
+        return;
+    }
+
+    restore_all_saves();
+    InterlockedExchange(&g_restore_pending, 0);
+    mirror_all_saves();
+}
+
 static DWORD WINAPI mirror_thread(void *ignored)
 {
     (void)ignored;
 
     while(InterlockedCompareExchange(&g_stop_mirror, 0, 0) == 0)
     {
-        mirror_all_saves();
+        /* While a restore is still owed, only try the restore on each poll and
+           defer mirroring until it has happened, so the floppy's saved content
+           is never clobbered by an empty game disk. */
+        if(InterlockedCompareExchange(&g_restore_pending, 0, 0))
+        {
+            restore_targeting();
+        }
+        else
+        {
+            mirror_all_saves();
+        }
         Sleep(MIRROR_POLL_MS);
     }
 
@@ -510,10 +551,15 @@ void WINAPI WinMainCRTStartup(void)
        replaying whatever the snapshot was captured with. */
     Sleep(parse_delay(delay_text));
 
+    /* No blocking restore before launch: a snapshot-restored launcher can
+       resume past its delay before the host has re-attached the floppy, so a
+       one-shot copy here would miss it. Mark the restore as owed and let the
+       mirror thread retry it every MIRROR_POLL_MS until A: becomes reachable.
+       The thread is created right before the game starts, so the first retry
+       runs immediately and then every 2 s for the whole session. */
     if(g_save_file_count > 0)
     {
-        restore_all_saves();
-        mirror_all_saves();
+        InterlockedExchange(&g_restore_pending, 1);
     }
 
     if(audio_primer[0] != '\0')
