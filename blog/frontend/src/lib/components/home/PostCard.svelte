@@ -122,7 +122,7 @@
 									? link
 									: undefined}
 						>
-							<h1 class="text-md md:text-lg line-clamp-2">
+							<h1 class="text-md md:text-lg line-clamp-2 leading-6">
 								{title}
 								{#if status === 'draft'}
 									<i class="text-accent-red">(draft)</i>
