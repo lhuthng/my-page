@@ -4,6 +4,7 @@ import ImagePreviewer from '$lib/components/embeds/ImagePreviewer.svelte';
 import { el } from '$lib/dom/elements.svelte.js';
 
 export function pluginExtend(root) {
+	const appInstances = new Map();
 	const appContainers = root.querySelectorAll('.app-container');
 	appContainers.forEach((container) => {
 		if (container.__mounted) return;
@@ -11,10 +12,13 @@ export function pluginExtend(root) {
 
 		const { name, type, width, height, config, temp } = container.dataset;
 
-		mount(App, {
-			target: container,
-			props: { name, type, width, height, config, temp }
-		});
+		appInstances.set(
+			container,
+			mount(App, {
+				target: container,
+				props: { name, type, width, height, config, temp }
+			})
+		);
 	});
 
 	const revealContainers = root.querySelectorAll('.reveal');
@@ -101,4 +105,12 @@ export function pluginExtend(root) {
 			});
 		});
 	});
+
+	return () => {
+		for (const [container, app] of appInstances) {
+			unmount(app);
+			container.__mounted = false;
+		}
+		appInstances.clear();
+	};
 }

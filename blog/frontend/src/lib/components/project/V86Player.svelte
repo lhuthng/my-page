@@ -389,11 +389,10 @@
 				<dd>Toggle fullscreen</dd>
 			</div>
 		</dl>
+		<p class="text-dark/60">
+			Saves travel on a virtual floppy: play the game, quit it, then press the save button.
+		</p>
 	{/if}
-
-	<p class="text-dark/60">
-		Saves travel on a virtual floppy: play the game, quit it, then press the save button.
-	</p>
 </Portal>
 
 <div class="v86-shell absolute inset-0 grid bg-black" bind:this={player.shell}>
@@ -413,7 +412,7 @@
 		<canvas class="hidden"></canvas>
 	</div>
 	{#if player.error}
-		<div class="absolute inset-0 grid place-items-center bg-background p-6 text-center">
+		<div class="absolute inset-0 grid place-items-center p-6 text-center">
 			<div class="space-y-3">
 				<p class="text-accent-red font-semibold">{player.error}</p>
 				<button class="duo-btn px-3 py-1" onclick={() => player.start()}>Try again</button>

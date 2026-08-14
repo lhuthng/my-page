@@ -6,8 +6,9 @@
 
 	function applyPlugins(e) {
 		content; // To be reactive
-		pluginExtend(e);
+		const cleanup = pluginExtend(e);
 		headers = findHeaders(e);
+		return cleanup;
 	}
 </script>
 
