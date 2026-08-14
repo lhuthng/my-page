@@ -31,7 +31,12 @@
 	});
 </script>
 
-<div class="relative mx-auto bg-background rounded-lg" style:width style:max-width={width}>
+<div
+	class="relative mx-auto rounded-lg transition-colors duration-100"
+	class:bg-background={!loaded}
+	style:width
+	style:max-width={width}
+>
 	<div class="mx-auto max-w-full" bind:this={beforeDemoPortal} style:width></div>
 
 	<div
