@@ -9,7 +9,7 @@ pub const DASHBOARD_POST_COLUMNS: &str = r#"
     p.id AS post_id, p.title, p.slug, p.excerpt,
     u.username AS author_slug, um.display_name AS author_name,
     'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, p.status,
-    ps.views, ps.likes, ps.comments_count
+    ps.views, ps.likes, ps.comments_count, p.reading_time_minutes
 "#;
 
 pub const DASHBOARD_POST_JOINS: &str = r#"
@@ -69,6 +69,7 @@ pub async fn attach_tags_to_posts(
                 views: r.views,
                 likes: r.likes,
                 comments_count: r.comments_count,
+                reading_time_minutes: r.reading_time_minutes,
             }
         })
         .collect();

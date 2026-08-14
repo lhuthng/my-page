@@ -1,0 +1,1 @@
+ALTER TABLE posts ADD COLUMN reading_time_minutes INTEGER NOT NULL DEFAULT 0;

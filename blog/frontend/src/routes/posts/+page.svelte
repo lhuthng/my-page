@@ -124,6 +124,7 @@
 							src={post.url}
 							stats={post.stats}
 							coverMediaType={post.cover_media_type}
+							readingTime={post.reading_time_minutes}
 						/>
 					</li>
 				{/each}

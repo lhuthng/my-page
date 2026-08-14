@@ -27,6 +27,7 @@ pub struct PostSnapshot {
     pub url: Option<String>,
     pub cover_media_type: Option<String>,
     pub stats: PostStats,
+    pub reading_time_minutes: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -99,6 +100,7 @@ pub struct Post {
     pub cover_video_url: Option<String>,
     pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
+    pub reading_time_minutes: i64,
     pub post_series: Option<PostSeries>,
 }
 

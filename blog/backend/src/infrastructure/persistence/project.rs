@@ -47,6 +47,7 @@ struct ProjectSnapshotRow {
     views: i64,
     likes: i64,
     comments_count: i64,
+    reading_time_minutes: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -111,6 +112,7 @@ impl ProjectSnapshotRow {
                 likes: self.likes,
                 comments: self.comments_count,
             },
+            reading_time_minutes: self.reading_time_minutes,
         }
     }
 }
@@ -624,7 +626,8 @@ impl ProjectService for ProjectServiceImpl {
                 projects.demo_type,
                 post_stats.views,
                 post_stats.likes,
-                post_stats.comments_count
+                post_stats.comments_count,
+                posts.reading_time_minutes
             FROM projects
             JOIN posts ON posts.id = projects.post_id
             JOIN users ON users.id = posts.user_id
@@ -698,7 +701,8 @@ impl ProjectService for ProjectServiceImpl {
                 projects.demo_type,
                 post_stats.views,
                 post_stats.likes,
-                post_stats.comments_count
+                post_stats.comments_count,
+                posts.reading_time_minutes
             FROM projects
             JOIN posts ON posts.id = projects.post_id
             JOIN users ON users.id = posts.user_id
@@ -737,7 +741,8 @@ impl ProjectService for ProjectServiceImpl {
                 projects.demo_type,
                 post_stats.views,
                 post_stats.likes,
-                post_stats.comments_count
+                post_stats.comments_count,
+                posts.reading_time_minutes
             FROM projects
             JOIN posts ON posts.id = projects.post_id
             JOIN users ON users.id = posts.user_id

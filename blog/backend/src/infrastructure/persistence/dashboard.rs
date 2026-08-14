@@ -69,6 +69,7 @@ struct DashProjectRow {
     views: i64,
     likes: i64,
     comments_count: i64,
+    reading_time_minutes: i64,
 }
 
 #[derive(FromRow)]
@@ -101,6 +102,7 @@ impl DashProjectRow {
                 likes: self.likes,
                 comments: self.comments_count,
             },
+            reading_time_minutes: self.reading_time_minutes,
         }
     }
 }
@@ -198,7 +200,7 @@ const TOP_POSTS_SQL: &str = r#"
     SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
            u.username AS author_slug, um.display_name AS author_name,
            'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, p.status,
-           ps.views, ps.likes, ps.comments_count
+           ps.views, ps.likes, ps.comments_count, p.reading_time_minutes
     FROM posts p
     JOIN users u ON u.id = p.user_id
     JOIN user_meta um ON um.user_id = p.user_id
@@ -256,7 +258,7 @@ impl DashboardService for DashboardServiceImpl {
             SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
                    u.username AS author_slug, um.display_name AS author_name,
                    'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, p.status,
-                   ps.views, ps.likes, ps.comments_count
+                   ps.views, ps.likes, ps.comments_count, p.reading_time_minutes
             FROM posts p
             JOIN users u ON u.id = p.user_id
             JOIN user_meta um ON um.user_id = p.user_id
@@ -414,7 +416,7 @@ impl DashboardService for DashboardServiceImpl {
             SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
                    u.username AS author_slug, um.display_name AS author_name,
                    'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, p.status,
-                   ps.views, ps.likes, ps.comments_count
+                   ps.views, ps.likes, ps.comments_count, p.reading_time_minutes
             FROM posts p
             JOIN users u ON u.id = p.user_id
             JOIN user_meta um ON um.user_id = p.user_id
@@ -600,7 +602,8 @@ impl DashboardService for DashboardServiceImpl {
                 projects.demo_type,
                 post_stats.views,
                 post_stats.likes,
-                post_stats.comments_count
+                post_stats.comments_count,
+                posts.reading_time_minutes
             FROM projects
             JOIN posts ON posts.id = projects.post_id
             JOIN users ON users.id = posts.user_id

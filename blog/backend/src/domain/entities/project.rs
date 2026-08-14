@@ -43,6 +43,7 @@ pub struct ProjectSnapshot {
     pub cover_media_type: Option<String>,
     pub demo_type: String,
     pub stats: PostStats,
+    pub reading_time_minutes: i64,
 }
 
 #[derive(Debug, Clone)]

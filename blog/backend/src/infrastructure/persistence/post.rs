@@ -71,6 +71,7 @@ pub struct PostRow {
     pub views: i64,
     pub likes: i64,
     pub comments_count: i64,
+    pub reading_time_minutes: i64,
 }
 
 impl PostRow {
@@ -92,6 +93,7 @@ impl PostRow {
                 views: self.views,
                 comments: self.comments_count,
             },
+            reading_time_minutes: self.reading_time_minutes,
         }
     }
 }
@@ -113,6 +115,7 @@ pub struct PostContentRow {
     pub cover_video_url: Option<String>,
     pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
+    pub reading_time_minutes: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -253,7 +256,7 @@ impl PostServiceImpl {
 
         let sequel = format!(
             r#"
-            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, 'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, status, views, likes, comments_count
+            SELECT p.id AS post_id, title, slug, excerpt, username AS author_slug, display_name AS author_name, 'media/i/' || m.short_name AS url, m.file_type AS cover_media_type, status, views, likes, comments_count, reading_time_minutes
             FROM posts p
                 JOIN users u ON u.id = p.user_id
                 JOIN user_meta um ON um.user_id = p.user_id
@@ -319,10 +322,12 @@ impl PostService for PostServiceImpl {
             .map_err(PostError::Validation)?;
 
         let mut tx = self.pool.begin().await?;
+        let reading_time_minutes =
+            crate::helper::reading_time::estimate_reading_time_minutes(&cmd.content);
         let post_id: i64 = sqlx::query_scalar(
             r#"
-            INSERT INTO posts (user_id, title, slug, excerpt, draft, status, content_kind)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO posts (user_id, title, slug, excerpt, draft, status, content_kind, reading_time_minutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
@@ -333,6 +338,7 @@ impl PostService for PostServiceImpl {
         .bind(&cmd.content)
         .bind("draft".to_string())
         .bind(&cmd.content_kind)
+        .bind(reading_time_minutes)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -556,7 +562,8 @@ impl PostService for PostServiceImpl {
                 status,
                 views,
                 likes,
-                comments_count
+                comments_count,
+                reading_time_minutes
             FROM posts p
                 JOIN users u ON u.id = p.user_id
                 JOIN user_meta um ON um.user_id = p.user_id
@@ -613,13 +620,19 @@ impl PostService for PostServiceImpl {
         let mut tx = self.pool.begin().await?;
 
         let mut set_fields: Vec<String> = vec![];
+
+        let reading_time_source = cmd.content.clone().or_else(|| cmd.draft.clone());
+        let reading_time_opt: Option<i64> = reading_time_source
+            .map(|text| crate::helper::reading_time::estimate_reading_time_minutes(&text));
+
         set_opt!(
             set_fields,
             ("title", cmd.title),
             ("slug", cmd.slug),
             ("excerpt", cmd.excerpt),
             ("content", cmd.content),
-            ("draft", cmd.draft)
+            ("draft", cmd.draft),
+            ("reading_time_minutes", reading_time_opt)
         );
 
         if !set_fields.is_empty() {
@@ -641,7 +654,8 @@ impl PostService for PostServiceImpl {
                 cmd.slug,
                 cmd.excerpt,
                 cmd.content,
-                cmd.draft
+                cmd.draft,
+                reading_time_opt
             );
 
             query = query.bind(cmd.post_id);
@@ -828,9 +842,10 @@ impl PostService for PostServiceImpl {
             cover_video_url,
             cover_video_type,
             og_image_seconds,
+            reading_time_minutes,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, m1.file_type AS cover_media_type, 'media/i/' || video.short_name AS cover_video_url, video.file_type AS cover_video_type, posts.og_image_seconds, 'media/i/' || m2.short_name AS author_avatar_url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, m1.file_type AS cover_media_type, 'media/i/' || video.short_name AS cover_video_url, video.file_type AS cover_video_type, posts.og_image_seconds, posts.reading_time_minutes, 'media/i/' || m2.short_name AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
@@ -990,6 +1005,7 @@ impl PostService for PostServiceImpl {
             cover_video_url,
             cover_video_type,
             og_image_seconds,
+            reading_time_minutes,
         })
     }
     async fn publish(&self, cmd: PublishCommand) -> Result<(), PostError> {
@@ -1009,11 +1025,14 @@ impl PostService for PostServiceImpl {
         .await?
         .ok_or(PostError::PostNotFound)?;
 
+        let reading_time_minutes = crate::helper::reading_time::estimate_reading_time_minutes(&draft);
+
         sqlx::query(
             r#"
             UPDATE posts
             SET
                 content = ?,
+                reading_time_minutes = ?,
                 published_at = CASE
                     WHEN status = 'draft' THEN CURRENT_TIMESTAMP
                     ELSE published_at
@@ -1024,6 +1043,7 @@ impl PostService for PostServiceImpl {
             "#,
         )
         .bind(draft)
+        .bind(reading_time_minutes)
         .bind(id)
         .execute(&mut *tx)
         .await?;

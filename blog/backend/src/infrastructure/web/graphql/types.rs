@@ -155,6 +155,7 @@ pub struct GqlDashboardPost {
     pub views: i64,
     pub likes: i64,
     pub comments_count: i64,
+    pub reading_time_minutes: i64,
 }
 
 #[derive(SimpleObject)]

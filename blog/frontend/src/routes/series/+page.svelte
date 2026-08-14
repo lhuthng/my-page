@@ -18,7 +18,8 @@
 	tag_slugs,
 	url,
 	stats,
-	cover_media_type
+	cover_media_type,
+	reading_time_minutes
 })}
 	<li class="h-fit">
 		<PostCard
@@ -30,6 +31,7 @@
 			src={url}
 			{stats}
 			coverMediaType={cover_media_type}
+			readingTime={reading_time_minutes}
 		/>
 	</li>
 {/snippet}
