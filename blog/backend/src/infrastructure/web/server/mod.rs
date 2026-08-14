@@ -361,7 +361,21 @@ impl<'a> HTTPServer<'a> {
                 .synchronous(sqlx::sqlite::SqliteSynchronous::Normal),
         )
         .await?;
-        sqlx::migrate!().run(&pool).await?;
+        // Run migrations on a dedicated pool with foreign key enforcement
+        // disabled. sqlx wraps each migration in a transaction, where SQLite
+        // ignores PRAGMA foreign_keys, so table-rebuild migrations (e.g.
+        // relaxing a UNIQUE constraint) need FK checks off at connect time.
+        let migration_pool = sqlx::SqlitePool::connect_with(
+            db_url
+                .parse::<sqlx::sqlite::SqliteConnectOptions>()?
+                .create_if_missing(true)
+                .foreign_keys(false)
+                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+                .synchronous(sqlx::sqlite::SqliteSynchronous::Normal),
+        )
+        .await?;
+        sqlx::migrate!().run(&migration_pool).await?;
+        drop(migration_pool);
         let project_demo_config = ProjectDemoConfig::from_env();
         let r2 = crate::infrastructure::storage::r2::R2Client::from_env();
         cleanup_orphaned_uploads(&pool, &r2, &project_demo_config.dir).await?;
