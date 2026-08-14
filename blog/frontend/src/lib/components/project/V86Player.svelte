@@ -10,7 +10,14 @@
 	import { V86Player } from '$lib/players/V86Player.svelte.js';
 	import { win } from '$lib/dom/windows.svelte.js';
 
-	let { title, runtime, initialVariant = null, beforeDemoPortal, afterDemoPortal } = $props();
+	let {
+		title,
+		runtime,
+		initialVariant = null,
+		beforeDemoPortal,
+		afterDemoPortal,
+		showKeys = true
+	} = $props();
 	const player = new V86Player({ runtime });
 
 	let soundOpen = $state(false);
@@ -363,24 +370,26 @@
 		</p>
 	{/if}
 
-	<dl class="v86-keys">
-		<div>
-			<dt><kbd>Click</kbd></dt>
-			<dd>Capture the mouse</dd>
-		</div>
-		<div>
-			<dt><kbd>Esc</kbd></dt>
-			<dd>Release the mouse</dd>
-		</div>
-		<div>
-			<dt>
-				<kbd>F8</kbd>
-				<span>+</span>
-				<kbd>F9</kbd>
-			</dt>
-			<dd>Toggle fullscreen</dd>
-		</div>
-	</dl>
+	{#if showKeys}
+		<dl class="v86-keys">
+			<div>
+				<dt><kbd>Click</kbd></dt>
+				<dd>Capture the mouse</dd>
+			</div>
+			<div>
+				<dt><kbd>Esc</kbd></dt>
+				<dd>Release the mouse</dd>
+			</div>
+			<div>
+				<dt>
+					<kbd>F8</kbd>
+					<span>+</span>
+					<kbd>F9</kbd>
+				</dt>
+				<dd>Toggle fullscreen</dd>
+			</div>
+		</dl>
+	{/if}
 
 	<p class="text-dark/60">
 		Saves travel on a virtual floppy: play the game, quit it, then press the save button.
