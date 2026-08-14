@@ -17,7 +17,7 @@
 	<h2 class="text-xl sm:text-2xl font-bold text-dark">Featured Projects</h2>
 
 	<ul class="[&>li]:opacity-0 grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4">
-		{#each featuredProjects as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, cover_media_type }, index (slug)}
+		{#each featuredProjects as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, cover_media_type, reading_time_minutes }, index (slug)}
 			<li class:animate-fly-in={hydrated} style:--delay={`${index * itemDelay}ms`}>
 				<BigPostCard
 					{title}
@@ -30,6 +30,7 @@
 					tags={tag_slugs}
 					src={url}
 					{stats}
+					readingTime={reading_time_minutes}
 					routePrefix="/projects"
 					coverMediaType={cover_media_type}
 				/>

@@ -1736,6 +1736,7 @@ pub struct ProjectCard {
     pub url: Option<String>,
     pub cover_media_type: Option<String>,
     pub stats: ProjectStats,
+    pub reading_time_minutes: i64,
 }
 
 impl From<ProjectSnapshot> for ProjectCard {
@@ -1758,6 +1759,7 @@ impl From<ProjectSnapshot> for ProjectCard {
                 likes: value.stats.likes,
                 comments: value.stats.comments,
             },
+            reading_time_minutes: value.reading_time_minutes,
         }
     }
 }

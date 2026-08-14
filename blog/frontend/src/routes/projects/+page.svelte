@@ -118,6 +118,7 @@
 							tags={project.tag_slugs}
 							src={project.url}
 							stats={project.stats}
+							readingTime={project.reading_time_minutes}
 							routePrefix="/projects"
 							dashboardPrefix="/dashboard/projects/id"
 							coverMediaType={project.cover_media_type}

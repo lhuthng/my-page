@@ -466,6 +466,7 @@ pub struct PostResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
+    pub reading_time_minutes: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub author_avatar_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -526,6 +527,7 @@ pub async fn get_post_by_slug(
         cover_video_url: post.cover_video_url,
         cover_video_type: post.cover_video_type,
         og_image_seconds: post.og_image_seconds,
+        reading_time_minutes: post.reading_time_minutes,
         series: post.post_series.map(|series| PostSeriesResponse {
             title: series.series_title,
             slug: series.series_slug,
@@ -978,6 +980,7 @@ pub struct Post {
     pub url: Option<String>,
     pub cover_media_type: Option<String>,
     pub stats: PostStats,
+    pub reading_time_minutes: i64,
 }
 
 impl From<PostSnapshot> for Post {
@@ -994,6 +997,7 @@ impl From<PostSnapshot> for Post {
             url,
             cover_media_type,
             stats,
+            reading_time_minutes,
             ..
         } = value;
         Post {
@@ -1012,6 +1016,7 @@ impl From<PostSnapshot> for Post {
                 likes: stats.likes,
                 comments: stats.comments,
             },
+            reading_time_minutes,
         }
     }
 }

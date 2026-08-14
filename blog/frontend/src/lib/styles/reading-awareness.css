@@ -1,0 +1,41 @@
+.reading-cover {
+	--awareness-border: var(--color-dark);
+	--awareness-bg: rgb(73 92 131 / 0.9);
+	--awareness-text: rgb(255 255 255 / 0.9);
+
+	&[data-awareness='green'] {
+		--awareness-border: var(--color-accent-green-dark);
+		--awareness-bg: color-mix(in srgb, var(--color-accent-green-light-2) 90%, transparent);
+		--awareness-text: var(--color-accent-green-dark);
+	}
+	&[data-awareness='blue'] {
+		--awareness-border: var(--color-accent-blue-dark);
+		--awareness-bg: color-mix(in srgb, var(--color-accent-blue-light-2) 90%, transparent);
+		--awareness-text: var(--color-accent-blue-dark);
+	}
+	&[data-awareness='yellow'] {
+		--awareness-border: var(--color-accent-yellow-dark);
+		--awareness-bg: color-mix(in srgb, var(--color-accent-yellow-light-2) 90%, transparent);
+		--awareness-text: var(--color-accent-yellow-dark);
+	}
+	&[data-awareness='orange'] {
+		--awareness-border: var(--color-accent-orange-dark);
+		--awareness-bg: color-mix(in srgb, var(--color-accent-orange-light-2) 90%, transparent);
+		--awareness-text: var(--color-accent-orange-dark);
+	}
+	&[data-awareness='red'] {
+		--awareness-border: var(--color-accent-red-dark);
+		--awareness-bg: color-mix(in srgb, var(--color-accent-red-light-2) 90%, transparent);
+		--awareness-text: var(--color-accent-red-dark);
+	}
+}
+
+.reading-media {
+	border-color: var(--awareness-border);
+}
+
+.reading-bar {
+	border-color: var(--awareness-border);
+	background-color: var(--awareness-bg);
+	color: var(--awareness-text);
+}

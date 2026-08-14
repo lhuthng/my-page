@@ -211,6 +211,7 @@ pub struct Post {
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_media_type: Option<String>,
+    pub reading_time_minutes: i64,
 }
 
 #[derive(Serialize)]
@@ -284,6 +285,7 @@ pub async fn get_posts(
                 status: post.status,
                 url: post.url,
                 cover_media_type: post.cover_media_type,
+                reading_time_minutes: post.reading_time_minutes,
             })
             .collect(),
     };

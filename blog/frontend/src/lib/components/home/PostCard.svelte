@@ -15,17 +15,31 @@
 		author,
 		tags,
 		previewMode,
-		stats,
 		routePrefix = '/posts',
 		dashboardPrefix = '/dashboard/posts/id',
 		children,
-		coverMediaType = ''
+		coverMediaType = '',
+		readingTime = 0
 	} = $props();
 
 	let toggled = $state(false);
 
 	let link = $derived(dashboardMode ? `${dashboardPrefix}/${id}` : `${routePrefix}/${slug}`);
 	let coverSrc = $derived(src ?? '/missing.png');
+
+	let readingTier = $derived(
+		readingTime <= 0
+			? null
+			: readingTime < 4
+				? 'green'
+				: readingTime < 8
+					? 'blue'
+					: readingTime < 16
+						? 'yellow'
+						: readingTime < 32
+							? 'orange'
+							: 'red'
+	);
 </script>
 
 <div class="bg-white rounded-lg drop-shadow-sm">
@@ -34,12 +48,13 @@
 	>
 		{#if !dashboardMode}
 			<a
-				class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34 cursor-pointer rounded-lg origin-center hover:scale-105 transition-transform duration-100 overflow-hidden"
+				class="reading-cover relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34 cursor-pointer rounded-lg origin-center hover:scale-105 transition-transform duration-100 overflow-hidden"
 				href={status === 'draft' ? `${dashboardPrefix}/${id}` : link}
+				data-awareness={readingTier ?? 'none'}
 			>
 				{#if coverMediaType?.startsWith('video/')}
 					<video
-						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover bg-white border-3 border-dark rounded-lg"
+						class="reading-media absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover bg-white border-3 rounded-lg"
 						data-src={coverSrc}
 						poster={`${coverSrc}.thumbnail`}
 						muted
@@ -50,7 +65,7 @@
 					></video>
 				{:else}
 					<img
-						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover bg-white border-3 border-dark rounded-lg"
+						class="reading-media absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover bg-white border-3 rounded-lg"
 						src={coverSrc}
 						alt="post-cover"
 						loading="lazy"
@@ -58,26 +73,23 @@
 					/>
 				{/if}
 				<div
-					class="absolute flex items-center justify-center z-11 left-0 right-0 bottom-0 h-8 bg-dark/80 text-sm font-semibold"
+					class="reading-bar absolute flex items-center justify-center z-11 left-0 right-0 bottom-0 h-8 text-sm font-semibold rounded-b-lg border-3"
 				>
-					<div>
-						<span class="text-white/80!">{stats?.views ?? '#'}</span>
-						<svg class="inline-block fill-white/80 h-6" viewBox="0 0 24 24">
-							<path
-								d="M11.5 6C10.9477 6 10.5 6.44772 10.5 7C10.5 7.55228 10.9477 8 11.5 8H20C20.5523 8 21 7.55228 21 7C21 6.44772 20.5523 6 20 6H11.5ZM15 11C14.4477 11 14 11.4477 14 12C14 12.5523 14.4477 13 15 13H20C20.5523 13 21 12.5523 21 12C21 11.4477 20.5523 11 20 11H15ZM12 16C11.4477 16 11 16.4477 11 17C11 17.5523 11.4477 18 12 18H20C20.5523 18 21 17.5523 21 17C21 16.4477 20.5523 16 20 16H12ZM7.70711 8.29289C7.31658 7.90237 6.68342 7.90237 6.29289 8.29289C5.90237 8.68342 5.90237 9.31658 6.29289 9.70711L7.58579 11H4C3.44772 11 3 11.4477 3 12C3 12.5523 3.44772 13 4 13H7.58579L6.29289 14.2929C5.90237 14.6834 5.90237 15.3166 6.29289 15.7071C6.68342 16.0976 7.31658 16.0976 7.70711 15.7071L10.7071 12.7071C11.0976 12.3166 11.0976 11.6834 10.7071 11.2929L7.70711 8.29289Z"
-							></path>
-						</svg>
-					</div>
-					<div>
-						<svg class="inline-block fill-white/80 h-6" viewBox="0 0 26 26">
-							<path
-								fill-rule="evenodd"
-								clip-rule="evenodd"
-								d="M12.7071 4.29289C12.5196 4.10536 12.2652 4 12 4C11.7348 4 11.4804 4.10536 11.2929 4.29289L4.29289 11.2929C3.90237 11.6834 3.90237 12.3166 4.29289 12.7071C4.68342 13.0976 5.31658 13.0976 5.70711 12.7071L12 6.41421L18.2929 12.7071C18.6834 13.0976 19.3166 13.0976 19.7071 12.7071C20.0976 12.3166 20.0976 11.6834 19.7071 11.2929L12.7071 4.29289ZM12.7071 11.2929C12.5196 11.1054 12.2652 11 12 11C11.7348 11 11.4804 11.1054 11.2929 11.2929L4.29289 18.2929C3.90237 18.6834 3.90237 19.3166 4.29289 19.7071C4.68342 20.0976 5.31658 20.0976 5.70711 19.7071L12 13.4142L18.2929 19.7071C18.6834 20.0976 19.3166 20.0976 19.7071 19.7071C20.0976 19.3166 20.0976 18.6834 19.7071 18.2929L12.7071 11.2929Z"
-							></path>
-						</svg>
-						<span class="text-white/80!">{stats?.likes ?? '#'}</span>
-					</div>
+					{#if readingTime > 0}
+						<span class="flex items-center gap-1" title={`${readingTime} min read`}>
+							<svg class="inline-block h-6 w-6" viewBox="0 0 24 24">
+								<path
+									d="M5.06152 12C5.55362 8.05369 8.92001 5 12.9996 5C17.4179 5 20.9996 8.58172 20.9996 13C20.9996 17.4183 17.4179 21 12.9996 21H8M13 13V9M11 3H15M3 15H8M5 18H10"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								></path>
+							</svg>
+							{readingTime}m
+						</span>
+					{/if}
 				</div>
 			</a>
 		{:else}
@@ -215,10 +227,6 @@
 
 <style lang="postcss">
 	@reference "../../../app.css";
-
-	span {
-		@apply text-dark/50;
-	}
 
 	.tag-container {
 		@apply pointer-events-none;

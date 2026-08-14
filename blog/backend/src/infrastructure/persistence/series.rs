@@ -201,7 +201,7 @@ impl SeriesService for SeriesServiceImpl {
 
         let sql = format!(
             r#"
-            SELECT p.id, p.title, p.slug, p.excerpt, um.display_name, u.username, p.status, 'media/i/' || m.short_name, m.file_type AS cover_media_type, ps.views, ps.likes, ps.comments_count
+            SELECT p.id, p.title, p.slug, p.excerpt, um.display_name, u.username, p.status, 'media/i/' || m.short_name, m.file_type AS cover_media_type, ps.views, ps.likes, ps.comments_count, p.reading_time_minutes
             FROM posts p
             JOIN post_stats ps ON ps.post_id = p.id
             LEFT JOIN users u ON u.id = p.user_id
@@ -226,6 +226,7 @@ impl SeriesService for SeriesServiceImpl {
                 i64,
                 i64,
                 i64,
+                i64,
             ),
         >(&sql)
         .fetch_all(&mut *tx)
@@ -245,6 +246,7 @@ impl SeriesService for SeriesServiceImpl {
                 i64,
                 i64,
                 i64,
+                i64,
             ),
         >::new();
         for (
@@ -260,6 +262,7 @@ impl SeriesService for SeriesServiceImpl {
             views,
             likes,
             comments_count,
+            reading_time_minutes,
         ) in all_posts
         {
             post_hash_map.insert(
@@ -276,6 +279,7 @@ impl SeriesService for SeriesServiceImpl {
                     views,
                     likes,
                     comments_count,
+                    reading_time_minutes,
                 ),
             );
         }
@@ -331,6 +335,7 @@ impl SeriesService for SeriesServiceImpl {
                             views,
                             likes,
                             comments_count,
+                            reading_time_minutes,
                         )) = post_hash_map.get(&post_id)
                             && let Some((tag_names, tag_slugs)) = tag_name_hash_map
                                 .get(&post_id)
@@ -353,6 +358,7 @@ impl SeriesService for SeriesServiceImpl {
                                     likes: *likes,
                                     comments: *comments_count,
                                 },
+                                reading_time_minutes: *reading_time_minutes,
                             });
                         }
                     }

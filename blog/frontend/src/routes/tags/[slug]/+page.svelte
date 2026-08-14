@@ -75,7 +75,7 @@
 		</div>
 	{:else}
 		<ul class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4">
-			{#each posts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, cover_media_type }, index (slug)}
+			{#each posts as { title, slug, excerpt, author_name, author_slug, tag_slugs, url, stats, cover_media_type, reading_time_minutes }, index (slug)}
 				<li in:fly={{ y: -20, duration: 500 }} out:fade={{ duration: 150 }}>
 					<PostCard
 						{title}
@@ -89,6 +89,7 @@
 						src={url}
 						{stats}
 						coverMediaType={cover_media_type}
+						readingTime={reading_time_minutes}
 					/>
 				</li>
 			{/each}
