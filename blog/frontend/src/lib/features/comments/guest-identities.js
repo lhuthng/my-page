@@ -6,7 +6,6 @@ export const GUEST_IDENTITIES = [
 
 const identityMap = new Map(GUEST_IDENTITIES.map((i) => [i.code, i]));
 
-
 export function getGuestIdentity(code) {
 	return identityMap.get(code) ?? null;
 }

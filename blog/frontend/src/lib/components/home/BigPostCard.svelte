@@ -87,7 +87,7 @@
 									stroke-linejoin="round"
 								></path>
 							</svg>
-{readingTime}m
+							{readingTime}m
 						</span>
 					{:else}
 						<span>...</span>

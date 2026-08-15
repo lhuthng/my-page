@@ -68,7 +68,9 @@
 
 <section class="flex flex-col gap-4 pb-8">
 	{#if loading}
-		<div class="flex justify-center items-center py-16 text-dark/40 text-lg">Loading dashboard data…</div>
+		<div class="flex justify-center items-center py-16 text-dark/40 text-lg">
+			Loading dashboard data…
+		</div>
 	{:else if overview}
 		<!-- ── Stat cards ─────────────────────────────── -->
 		<div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -215,8 +217,14 @@
 						<p class="text-sm text-dark/50">Last 30 days, aggregated by Cloudflare country</p>
 					</div>
 					<div class="flex gap-4 text-sm text-dark/60">
-						<span><strong class="text-dark">{visitorTotal}</strong> visits</span>
-						<span><strong class="text-dark">{visitorUnknown}</strong> unknown</span>
+						<span>
+							<strong class="text-dark">{visitorTotal}</strong>
+							visits
+						</span>
+						<span>
+							<strong class="text-dark">{visitorUnknown}</strong>
+							unknown
+						</span>
 					</div>
 				</div>
 				{#if topVisitorCountries.length}
@@ -260,7 +268,11 @@
 						{#each overview.recentPosts as post}
 							<li class="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
 								{#if post.coverUrl}
-									<img src={post.coverUrl} alt="" class="w-10 h-10 rounded-lg object-cover shrink-0" />
+									<img
+										src={post.coverUrl}
+										alt=""
+										class="w-10 h-10 rounded-lg object-cover shrink-0"
+									/>
 								{:else}
 									<div class="w-10 h-10 rounded-lg bg-background/60 shrink-0"></div>
 								{/if}

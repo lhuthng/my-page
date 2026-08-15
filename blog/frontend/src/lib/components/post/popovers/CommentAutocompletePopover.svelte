@@ -15,7 +15,10 @@
 </script>
 
 {#if suggestionPanel?.mode === 'command'}
-	<CommentAutocompletePopoverContainer open={suggestionPanel.open} top={suggestionPanel.top ?? popoverTop}>
+	<CommentAutocompletePopoverContainer
+		open={suggestionPanel.open}
+		top={suggestionPanel.top ?? popoverTop}
+	>
 		<CommentCommandPopoverContent {commandState} {pickCommandItem} {applyKaomojiSuggestion} />
 	</CommentAutocompletePopoverContainer>
 {:else if suggestionPanel?.mode === 'mention'}

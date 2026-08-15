@@ -23,8 +23,7 @@ export function buildTree(entries) {
 	for (const entry of entries) {
 		const path = entry.name.replace(/\\/g, '/');
 		if (path.endsWith('/') || isMacJunk(path)) continue;
-		if (entry.encrypted)
-			throw new Error(`"${path}" is password protected.`);
+		if (entry.encrypted) throw new Error(`"${path}" is password protected.`);
 
 		const parts = path.split('/').filter((part) => part && part !== '.');
 		if (parts.length === 0 || parts.some((part) => part === '..')) {

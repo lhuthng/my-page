@@ -115,9 +115,7 @@ export async function readZipEntry(file, entry) {
 
 	if (entry.method === 0) return new Uint8Array(await blob.arrayBuffer());
 	if (entry.method !== 8) {
-		throw new Error(
-			`"${entry.name}" uses a zip format this cannot read. Re-zip it normally.`
-		);
+		throw new Error(`"${entry.name}" uses a zip format this cannot read. Re-zip it normally.`);
 	}
 	const stream = blob.stream().pipeThrough(new DecompressionStream('deflate-raw'));
 	return new Uint8Array(await new Response(stream).arrayBuffer());
