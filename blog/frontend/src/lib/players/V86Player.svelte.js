@@ -75,6 +75,10 @@ export class V86Player {
 	#mipsHistory = [];
 	#progressFrame = null;
 	#pendingProgress = null;
+	// True once v86's emulator-ready has fired. A download-progress callback
+	// coalesced into a later animation frame can otherwise run after the machine
+	// is already running and rewrite the status back to "Booting…".
+	#emulatorReady = false;
 
 	saveAvailable = $derived(this.runtime?.save_supported === true);
 
@@ -395,10 +399,12 @@ export class V86Player {
 				return;
 			}
 			this.running = true;
+			this.#emulatorReady = false;
 			this.status = this.usingSnapshot
 				? `Restoring ${this.runtime.system_name}…`
 				: `Booting ${this.runtime.system_name}…`;
 			this.#emulator.add_listener?.('emulator-ready', () => {
+				this.#emulatorReady = true;
 				this.status = 'Running';
 				this.applyNoiseFilter().catch(() => {});
 				this.applyAudioState();
@@ -445,8 +451,12 @@ export class V86Player {
 					this.downloadProgress = Math.min(100, (loaded / total) * 100);
 					if (loaded >= total) {
 						this.downloadProgress = null;
-						this.status = `Booting ${this.runtime.system_name}…`;
-					} else {
+						// The machine may already be running by the time this frame
+						// lands; don't drag the status back to "Booting…".
+						if (!this.#emulatorReady) {
+							this.status = `Booting ${this.runtime.system_name}…`;
+						}
+					} else if (!this.#emulatorReady) {
 						const mLoaded = Math.floor(loaded / 1048576);
 						const mTotal = Math.floor(total / 1048576);
 						this.status = `Downloading game (${mLoaded} / ${mTotal} MB)`;
@@ -507,6 +517,7 @@ export class V86Player {
 		this.#emulator = undefined;
 		this.running = false;
 		this.paused = false;
+		this.#emulatorReady = false;
 		this.#pendingReads = 0;
 		this.diskFetching = false;
 		this.emulatedMips = 0;
