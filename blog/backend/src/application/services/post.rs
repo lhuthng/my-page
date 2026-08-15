@@ -17,10 +17,12 @@ pub trait PostService {
         &self,
         cmd: commands::post::NewPostCommand,
     ) -> Result<i64, errors::post::PostError>;
+    /// Returns the row's new `updated_at`, so the caller can refresh the
+    /// baseline it diffs against and use it for the next optimistic-lock check.
     async fn update_post(
         &self,
         cmd: commands::post::UpdatePostCommand,
-    ) -> Result<(), errors::post::PostError>;
+    ) -> Result<String, errors::post::PostError>;
     async fn get_post(
         &self,
         cmd: commands::post::GetPostCommand,

@@ -43,8 +43,7 @@
 
 	const t = untrack(() => type);
 	const s = untrack(() => shortName);
-	const isLottie =
-		t === 'application/vnd.lottie+zip' || s?.toLowerCase().endsWith('.lottie');
+	const isLottie = t === 'application/vnd.lottie+zip' || s?.toLowerCase().endsWith('.lottie');
 </script>
 
 <li

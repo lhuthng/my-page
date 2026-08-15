@@ -116,7 +116,11 @@ pub async fn publish(
             {
                 Ok(row) => row,
                 Err(e) => {
-                    tracing::error!("Failed to load post {} for newsletter campaign: {}", post_id, e);
+                    tracing::error!(
+                        "Failed to load post {} for newsletter campaign: {}",
+                        post_id,
+                        e
+                    );
                     return;
                 }
             };
@@ -195,6 +199,9 @@ pub struct GetPostDetailsResponse {
     pub og_image_url: Option<String>,
     pub og_image_seconds: i64,
     pub is_owner: bool,
+    /// Optimistic-lock token the editor echoes back as `expected_updated_at`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
 }
 
 pub async fn get_post_details(
@@ -232,6 +239,7 @@ pub async fn get_post_details(
         medium_urls,
         medium_short_names,
         is_owner,
+        updated_at,
     } = state
         .post_service
         .get_post_details(GetDetailedPostsCommand {
@@ -259,6 +267,7 @@ pub async fn get_post_details(
         medium_urls,
         medium_short_names,
         is_owner,
+        updated_at,
     }))
 }
 
@@ -345,9 +354,14 @@ pub async fn update_post(
             .ok_or(PostError::UploadFailed("Empty field found.".to_string()))?;
 
         if field_name == "post_data" {
-            if let Ok(bytes) = field.bytes().await {
-                post_data = Some(serde_json::from_slice::<PostPatchData>(&bytes).unwrap());
-            }
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|_| PostError::UploadFailed("Cannot read post data.".to_string()))?;
+            post_data = Some(
+                serde_json::from_slice::<PostPatchData>(&bytes)
+                    .map_err(|e| PostError::UploadFailed(format!("Malformed post data: {}", e)))?,
+            );
         } else if let Some(index_str) = field_name.strip_prefix("file_") {
             let index: usize = index_str
                 .parse()
@@ -462,6 +476,13 @@ pub async fn update_post(
 
     let mut cmd = UpdatePostCommand {
         user_id: uploader_id,
+        // Admins may edit anyone's post; everyone else is limited to their own.
+        required_author_id: if claims.role == "admin" {
+            None
+        } else {
+            Some(uploader_id)
+        },
+        expected_updated_at: post_data.expected_updated_at,
         post_id,
         title: post_data.title,
         slug: post_data.slug,
@@ -487,7 +508,7 @@ pub async fn update_post(
         cmd.media_usage = Some(media_usage);
     }
 
-    state.post_service.update_post(cmd).await?;
+    let updated_at = state.post_service.update_post(cmd).await?;
 
     if post_data.og_image_seconds.is_some() {
         state
@@ -500,7 +521,7 @@ pub async fn update_post(
             .await?;
     }
 
-    Ok(())
+    Ok(Json(UpdatePostResponse { updated_at }))
 }
 
 #[derive(Deserialize)]
@@ -711,6 +732,13 @@ pub struct PostPatchData {
     tags: Option<Vec<String>>,
     number_of_files: usize,
     og_image_seconds: Option<i64>,
+    /// Optional optimistic-lock token; see `UpdatePostCommand`.
+    expected_updated_at: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct UpdatePostResponse {
+    pub updated_at: String,
 }
 
 pub struct FileData {
@@ -746,9 +774,14 @@ pub async fn new_post(
             .to_string();
 
         if field_name == "post_data" {
-            if let Ok(bytes) = field.bytes().await {
-                post_data = Some(serde_json::from_slice::<PostData>(&bytes).unwrap());
-            }
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|_| PostError::UploadFailed("Cannot read post data.".to_string()))?;
+            post_data = Some(
+                serde_json::from_slice::<PostData>(&bytes)
+                    .map_err(|e| PostError::UploadFailed(format!("Malformed post data: {}", e)))?,
+            );
         } else if let Some(index_str) = field_name.strip_prefix("file_") {
             let index: usize = index_str
                 .parse()

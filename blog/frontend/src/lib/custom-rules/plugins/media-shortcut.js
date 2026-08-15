@@ -49,40 +49,50 @@ export function mediaWithShortcutPlugin(md) {
 		return true;
 	});
 
+	const esc = (input) => md.utils.escapeHtml(String(input ?? ''));
+
+	// Only accept a plain integer as a dimension. parseInt() alone would happily
+	// accept `1"onload=...`, which then breaks out of the style attribute.
+	const dimension = (input) => (/^\d+$/.test(String(input ?? '')) ? String(input) : null);
+
 	md.renderer.rules.extra = (tokens, idx, options, env) => {
 		const mediaDictionary = env?.mediaDictionary || {};
 		const { width, height, tag, value } = tokens[idx].meta;
 		const style = [];
-		if (width && !isNaN(parseInt(width, 10))) style.push(`width:${width}px`);
-		if (height && !isNaN(parseInt(height, 10))) style.push(`height:${height}px`);
+		const w = dimension(width);
+		const h = dimension(height);
+		if (w) style.push(`width:${w}px`);
+		if (h) style.push(`height:${h}px`);
 		const styleAttr = style.length ? ` style="${style.join(';')}"` : '';
+		const alt = esc(value);
 		if (tag === undefined) {
-			return `<img src="https://${value}" ${styleAttr}/>`;
+			return `<img src="https://${esc(value)}" ${styleAttr}/>`;
 		} else {
 			const src = mediaDictionary[value];
 			switch (src) {
 				case undefined:
-					return `<span class="missing-image">${value}</span>`;
+					return `<span class="missing-image">${alt}</span>`;
 				case null:
-					return `<span class="loading-image">${value}</span>`;
+					return `<span class="loading-image">${alt}</span>`;
 				default: {
+					const escapedSrc = esc(src);
 					switch (tag) {
 						case 'img':
-							return `<img class="expandable" src="${src}" alt="${value}" ${styleAttr}/>`;
+							return `<img class="expandable" src="${escapedSrc}" alt="${alt}" ${styleAttr}/>`;
 						case 'img-inl':
-							return `<img class="expandable inline-block align-bottom" src="${src}" alt="${value}" ${styleAttr}/>`;
+							return `<img class="expandable inline-block align-bottom" src="${escapedSrc}" alt="${alt}" ${styleAttr}/>`;
 						case 'img-left-float':
 							const floatStyle = style.length
 								? `style="${style.join(';')}; float: left; margin-right: 5px; margin-bottom: 5px;"`
 								: 'style="float: left; margin-right: 5px; margin-bottom: 5px;"';
 
-							return `<img class="expandable" src="${src}" alt="${value}" ${floatStyle}/>`;
+							return `<img class="expandable" src="${escapedSrc}" alt="${alt}" ${floatStyle}/>`;
 						case 'audio':
-							return `<div class="audio-container"><audio src="${src}" alt="${value}" controls></audio></div>`;
+							return `<div class="audio-container"><audio src="${escapedSrc}" alt="${alt}" controls></audio></div>`;
 						case 'vid':
-							return `<div class="video-container"><video ${styleAttr} alt="${value}" src="${src}" controls></video></div>`;
+							return `<div class="video-container"><video ${styleAttr} alt="${alt}" src="${escapedSrc}" controls></video></div>`;
 						default:
-							return `<span class="invalid-tag">${tag}-${value}</span>`;
+							return `<span class="invalid-tag">${esc(tag)}-${alt}</span>`;
 					}
 				}
 			}

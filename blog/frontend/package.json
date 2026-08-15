@@ -7,7 +7,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"lint": "prettier --check .",
-		"test": "node --test src/lib/features/comments/tests/*.test.js",
+		"test": "node --test src/lib/features/*/tests/*.test.js src/lib/custom-rules/tests/*.test.js",
 		"format": "prettier --write .",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''"

@@ -1,29 +1,6 @@
-import { mediaSyntax } from '$lib/utils';
+import { decodeShortNames } from '$lib/features/editor/media/references.js';
 import { fixClientRoute, route } from '$lib/server/proxy.js';
 import { error } from '@sveltejs/kit';
-
-const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)/g;
-
-function restoreShortNames(text, mediumShortNames) {
-	let next = text ?? '';
-	let edits = [
-		...[...next.matchAll(mediaSyntax)].map((match) => ({
-			index: match.index + match[0].lastIndexOf(match[1]),
-			length: match[1].length,
-			replacement: mediumShortNames[parseInt(match[1])]
-		})),
-		...[...next.matchAll(lottieAppSyntax)].map((match) => ({
-			index: match.index + match[0].lastIndexOf(match[1]),
-			length: match[1].length,
-			replacement: mediumShortNames[parseInt(match[1])]
-		}))
-	].filter(({ replacement }) => replacement !== undefined);
-	edits.sort((a, b) => b.index - a.index);
-	edits.forEach(({ index, length, replacement }) => {
-		next = next.slice(0, index) + replacement + next.slice(index + length);
-	});
-	return next;
-}
 
 export async function load(event) {
 	const locals = await event.parent();
@@ -42,8 +19,8 @@ export async function load(event) {
 
 	const data = await res.json();
 	data.medium_urls = data.medium_urls.map((url) => fixClientRoute(url));
-	data.content = restoreShortNames(data.content, data.medium_short_names);
-	data.draft = restoreShortNames(data.draft, data.medium_short_names);
+	data.content = decodeShortNames(data.content, data.medium_short_names);
+	data.draft = decodeShortNames(data.draft, data.medium_short_names);
 	data.cover_url = fixClientRoute(data.cover_url);
 	const includeVersion = data.v86_system_version_id
 		? `?include_version_id=${data.v86_system_version_id}`

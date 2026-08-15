@@ -1,31 +1,10 @@
-import {
-	appBlockPlugin,
-	codeHighlightPlugin,
-	iframeBlockPlugin,
-	mediaWithShortcutPlugin,
-	namedContainerPlugin,
-	revealPlugin,
-	slugify,
-	youtubeBlockPlugin,
-	kaomojiPlugin
-} from '$lib/custom-rules/index.js';
+import { buildMediaDictionary } from '$lib/features/editor/media/references.js';
+import { createMarkdownRenderer } from '$lib/features/editor/markdown/renderer.js';
 import { fixClientRoute, route } from '$lib/server/proxy.js';
 import { error } from '@sveltejs/kit';
-import MarkdownIt from 'markdown-it';
-import mkKatex from 'markdown-it-katex';
-import anchor from 'markdown-it-anchor';
 
-const md = new MarkdownIt()
-	.use(mkKatex)
-	.use(mediaWithShortcutPlugin)
-	.use(iframeBlockPlugin)
-	.use(youtubeBlockPlugin)
-	.use(appBlockPlugin)
-	.use(revealPlugin)
-	.use(namedContainerPlugin)
-	.use(codeHighlightPlugin)
-	.use(kaomojiPlugin)
-	.use(anchor, { slugify });
+// One module-scoped renderer, reused across requests.
+const md = createMarkdownRenderer();
 
 export async function load({ fetch, params, url, setHeaders }) {
 	const res = await fetch(route(`projects/s/${params.slug}`), {
@@ -73,11 +52,7 @@ export async function load({ fetch, params, url, setHeaders }) {
 		}));
 	}
 
-	const mediaDictionary = {};
-	medium_urls.forEach((url, index) => (mediaDictionary[index.toString()] = fixClientRoute(url)));
-	medium_short_names?.forEach((shortName, index) => {
-		if (shortName) mediaDictionary[shortName] = fixClientRoute(medium_urls[index]);
-	});
+	const mediaDictionary = buildMediaDictionary(medium_urls, medium_short_names, fixClientRoute);
 
 	content = md.render(content, { mediaDictionary });
 

@@ -55,6 +55,8 @@ pub struct PostDetails {
     pub medium_short_names: Vec<String>,
     pub is_owner: bool,
     pub og_image_url: Option<String>,
+    /// Optimistic-lock token the editor echoes back on save.
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]

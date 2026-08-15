@@ -19,7 +19,10 @@ pub fn validate_slug(raw: &str) -> Result<String, String> {
     if slug.len() > MAX {
         return Err(format!("Slug must be at most {MAX} characters."));
     }
-    if !slug.chars().all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_') {
+    if !slug
+        .chars()
+        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_')
+    {
         return Err(
             "Slug may only contain lowercase letters, numbers, hyphens, and underscores.".into(),
         );
@@ -42,7 +45,11 @@ pub fn validate_text(raw: &str, name: &str, max: usize) -> Result<String, String
 
 /// Validate an optional long text field (e.g. a bio): all-whitespace is treated
 /// as empty. Returns `None` for blank input, `Some` for a trimmed valid value.
-pub fn validate_optional_long_text(raw: Option<&str>, name: &str, max: usize) -> Result<Option<String>, String> {
+pub fn validate_optional_long_text(
+    raw: Option<&str>,
+    name: &str,
+    max: usize,
+) -> Result<Option<String>, String> {
     let Some(raw) = raw else { return Ok(None) };
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -52,6 +59,52 @@ pub fn validate_optional_long_text(raw: Option<&str>, name: &str, max: usize) ->
         return Err(format!("{name} must be at most {max} characters."));
     }
     Ok(Some(trimmed.to_string()))
+}
+
+/// Upper bound on a post or project body, in characters.
+///
+/// Bodies were previously unbounded: the only ceiling was the 100 MB request
+/// body limit, so a single row could hold tens of megabytes of text that then
+/// had to be rendered on every request.
+pub const MAX_BODY_CHARS: usize = 400_000;
+
+/// Validate a post/project body (`content` or `draft`). Unlike `validate_text`
+/// an empty body is allowed — a new draft legitimately starts blank — but the
+/// length is capped.
+pub fn validate_body(raw: &str, name: &str) -> Result<String, String> {
+    if raw.chars().count() > MAX_BODY_CHARS {
+        return Err(format!(
+            "{name} must be at most {MAX_BODY_CHARS} characters."
+        ));
+    }
+    Ok(raw.to_string())
+}
+
+/// Validate a user-supplied link, restricting it to http(s).
+///
+/// Without this a `javascript:` or `data:` URL could be stored and later
+/// rendered into an `href`/`src`.
+pub fn validate_http_url(raw: &str, name: &str) -> Result<String, String> {
+    const MAX: usize = 2048;
+
+    let url = raw.trim();
+    if url.is_empty() {
+        return Err(format!("{name} must not be empty."));
+    }
+    if url.len() > MAX {
+        return Err(format!("{name} must be at most {MAX} characters."));
+    }
+
+    let lowered = url.to_ascii_lowercase();
+    if !lowered.starts_with("http://") && !lowered.starts_with("https://") {
+        return Err(format!("{name} must be an http:// or https:// URL."));
+    }
+    // Control characters would let a value break out of the attribute it is
+    // rendered into, independently of escaping at the render site.
+    if url.chars().any(|ch| ch.is_control()) {
+        return Err(format!("{name} must not contain control characters."));
+    }
+    Ok(url.to_string())
 }
 
 /// Clamp an optional page size into `1..=max`, defaulting to `default` when
@@ -110,7 +163,10 @@ mod tests {
     #[test]
     fn optional_text_blank_becomes_none() {
         assert_eq!(validate_optional_long_text(None, "bio", 500).unwrap(), None);
-        assert_eq!(validate_optional_long_text(Some("   "), "bio", 500).unwrap(), None);
+        assert_eq!(
+            validate_optional_long_text(Some("   "), "bio", 500).unwrap(),
+            None
+        );
         assert_eq!(
             validate_optional_long_text(Some("  hey  "), "bio", 500).unwrap(),
             Some("hey".to_string())

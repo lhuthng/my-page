@@ -29,5 +29,10 @@ export async function finishCreatedDraftPrompt({
 		}
 	}
 	editor.createPromptOpen = false;
-	goto(gotoPath(editor.createdEntryId));
+	// Callers that guard against in-progress navigation (the editor's
+	// unsaved-changes prompt) need this to actually finish — including running
+	// any `beforeNavigate` hooks — before they lift the guard. `goto` without
+	// `await` returns before that happens, which let the guard's own
+	// `beforeNavigate` callback fire on this exact navigation and cancel it.
+	await goto(gotoPath(editor.createdEntryId));
 }

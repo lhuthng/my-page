@@ -28,7 +28,7 @@ export function iframeBlockPlugin(md) {
 			return `<p class="text-red-500">Invalid iframe source:</p>`;
 		}
 
-		const escapedSrc = String(src).replace(/"/g, '&quot;');
+		const escapedSrc = md.utils.escapeHtml(String(src));
 
 		const widthAttr = /^\d+$/.test(String(width)) ? `${width}px` : width;
 
@@ -36,8 +36,8 @@ export function iframeBlockPlugin(md) {
       <div class="w-full rounded-lg custom-scrollbar overflow-hidden ">
         <iframe
           src="${escapedSrc}"
-          width="${widthAttr}"
-          height="${height}"
+          width="${md.utils.escapeHtml(String(widthAttr))}"
+          height="${md.utils.escapeHtml(String(height))}"
           frameborder="0"
           class="w-full"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

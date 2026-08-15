@@ -44,7 +44,7 @@ export function appBlockPlugin(md) {
         <div
           class="app-container mx-auto"
           ${dataBlock}
-          style="width: ${width}; min-height: ${height};">
+          style="width: ${md.utils.escapeHtml(width)}; min-height: ${md.utils.escapeHtml(height)};">
         </div>\n
       </div>
     `;

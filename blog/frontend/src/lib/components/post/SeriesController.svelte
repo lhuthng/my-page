@@ -29,11 +29,25 @@
 
 	let selectedForCreate = $state(null);
 
+	// `editor.coverImage` is a local preview blob, never handed outside this
+	// component — unlike the post/project cover uploader, there's no "was it
+	// already reported as the live URL" case to worry about here.
+	function revokeCoverImage() {
+		if (editor.coverImage) URL.revokeObjectURL(editor.coverImage);
+	}
+
+	$effect(() => {
+		return () => revokeCoverImage();
+	});
+
 	const closeModal = () => {
 		toggled = false;
 		editor.seriesMode = '';
 		editor.selected = null;
 		editor.coverError = '';
+		revokeCoverImage();
+		editor.coverImage = undefined;
+		editor.coverFile = undefined;
 	};
 
 	const handleAddToSeries = async () => {
@@ -91,6 +105,7 @@
 			editor.title = '';
 			editor.slug = '';
 			editor.description = '';
+			revokeCoverImage();
 			editor.coverImage = undefined;
 			editor.coverFile = undefined;
 		} else {
@@ -100,13 +115,13 @@
 	};
 </script>
 
-<div class="flex flex-col gap-2 bg-white rounded-sm p-2">
+<div class="flex flex-col gap-2">
 	{#if series && series.length > 0}
-		<ul class="flex flex-col gap-2">
+		<ul class="flex flex-col gap-1.5">
 			{#each series as item}
-				<li class="bg-primary/20 hover:bg-primary/30 rounded-sm">
+				<li class="rounded-lg bg-primary/15 hover:bg-primary/25 transition-colors">
 					<button
-						class="px-2 py-1 w-full text-left"
+						class="px-3 py-1.5 w-full text-left text-sm"
 						onclick={() => {
 							editor.seriesMode = 'add';
 							editor.selected = item;
@@ -122,7 +137,9 @@
 	{/if}
 
 	{#if !postId && selectedForCreate}
-		<div class="flex items-center gap-2 text-sm bg-accent-green/10 px-2 py-1 rounded-sm">
+		<div
+			class="flex items-center gap-2 text-sm bg-accent-green-light-4 border border-accent-green/30 px-2 py-1.5 rounded-lg"
+		>
 			<span>
 				→ <strong>{selectedForCreate.title}</strong>
 			</span>
@@ -139,7 +156,7 @@
 	{/if}
 
 	{#if postId && seriesSlug}
-		<div class="text-sm text-primary/60 px-2">
+		<div class="text-sm text-dark/50 px-1">
 			Attached to: <i>{seriesSlug}</i>
 		</div>
 	{/if}
@@ -175,31 +192,31 @@
 
 				{#if editor.seriesMode === 'new'}
 					<div class="flex not-lg:flex-col gap-2">
-						<div class="flex flex-col gap-1">
-							<div class="grid grid-cols-[5rem_auto] gap-1 items-center">
-								<span>Title:</span>
+						<div class="flex flex-col gap-2">
+							<div class="grid grid-cols-[5rem_auto] gap-1.5 items-center">
+								<span class="text-sm text-dark/60">Title:</span>
 								<input
-									class="bg-primary/40 px-2 py-0.5 rounded-sm"
+									class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 border-dark transition-colors focus:bg-primary focus:text-white"
 									type="text"
 									bind:value={editor.title}
 								/>
-								<span>Slug:</span>
+								<span class="text-sm text-dark/60">Slug:</span>
 								<input
-									class="bg-primary/40 px-2 py-0.5 rounded-sm"
+									class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 border-dark transition-colors focus:bg-primary focus:text-white"
 									type="text"
 									bind:value={editor.slug}
 								/>
 							</div>
-							<span>Description:</span>
+							<span class="text-sm text-dark/60">Description:</span>
 							<textarea
-								class="bg-primary/40 p-2 rounded-sm resize-none outline-none custom-scrollbar"
+								class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 border-dark transition-colors resize-none custom-scrollbar focus:bg-primary focus:text-white"
 								autocorrect="off"
 								autocomplete="off"
 								rows="4"
 								bind:value={editor.description}></textarea>
 						</div>
 						<div
-							class="flex shrink-0 m-auto justify-center items-center w-40 h-40 bg-primary/40 outline-4 outline-dark outline-dashed rounded-xl overflow-hidden"
+							class="flex shrink-0 m-auto justify-center items-center w-40 h-40 bg-background/30 border-2 border-dashed border-dark/30 rounded-xl overflow-hidden"
 							role="none"
 							ondrop={(e) => {
 								e.preventDefault();
@@ -216,6 +233,7 @@
 									editor.coverError = `File size exceeds 5MB`;
 									return;
 								}
+								revokeCoverImage();
 								editor.coverFile = file;
 								editor.coverImage = URL.createObjectURL(file);
 								editor.isUploading = false;

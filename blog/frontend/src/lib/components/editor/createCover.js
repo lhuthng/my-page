@@ -49,6 +49,15 @@ export function selectCreateCover(file) {
 	};
 }
 
+/**
+ * Release a preview URL created by `selectCreateCover`. Safe to call with a
+ * URL that isn't a blob (e.g. an already-uploaded cover's real URL) — those
+ * are left alone.
+ */
+export function revokeCreateCoverPreview(url) {
+	if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+}
+
 export function appendCreateCover(formData, file, ogImageSeconds) {
 	if (!file) return;
 	formData.append('cover_file', file, file.name);
