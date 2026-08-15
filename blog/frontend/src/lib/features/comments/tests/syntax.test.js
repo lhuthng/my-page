@@ -65,9 +65,6 @@ test('kaomoji suggestion and gif insertion replace command range', () => {
 	};
 	assert.equal(buildGifMarkdown(gif), '![happy cat](https://gif.test/original.gif)');
 
-	const gifResult = gifPlugin.apply(
-		{ value: '/gif cat', start: 0, replaceEnd: 8 },
-		gif
-	);
+	const gifResult = gifPlugin.apply({ value: '/gif cat', start: 0, replaceEnd: 8 }, gif);
 	assert.equal(gifResult.value, '![happy cat](https://gif.test/original.gif) ');
 });

@@ -7,7 +7,7 @@
 	let replacingSystemId = $state('');
 	let image = $state();
 	let busy = $state(false);
-	let 	status = $state('');
+	let status = $state('');
 	let critical = $state(false);
 
 	const request = async (url, options = {}) => {
@@ -68,7 +68,9 @@
 						const data = await res.json();
 						console.log('[upload] poll', { status: data.status, progress: data.chunk_progress });
 						if (data.chunk_progress) {
-							status = data.chunk_progress.message || `Compressing chunk ${data.chunk_progress.completed_chunks}/${data.chunk_progress.total_chunks}`;
+							status =
+								data.chunk_progress.message ||
+								`Compressing chunk ${data.chunk_progress.completed_chunks}/${data.chunk_progress.total_chunks}`;
 						} else if (data.status === 'consumed') {
 							console.log('[upload] done — system ready');
 							clearInterval(interval);
@@ -121,7 +123,9 @@
 			if (patch.name !== undefined) system.name = patch.name;
 			if (patch.is_active !== undefined) system.is_active = patch.is_active;
 			if (patch.is_default === true) {
-				systems.forEach(s => { s.is_default = s.id === system.id; });
+				systems.forEach((s) => {
+					s.is_default = s.id === system.id;
+				});
 			} else if (patch.is_default === false) {
 				system.is_default = false;
 			}
@@ -142,7 +146,7 @@
 			await request(`/api/v86/systems/${system.id}/versions/${version.id}`, {
 				method: 'DELETE'
 			});
-			system.versions = system.versions.filter(v => v.id !== version.id);
+			system.versions = system.versions.filter((v) => v.id !== version.id);
 		} catch (error) {
 			critical = true;
 			status = error?.message ?? 'Version deletion failed.';
@@ -153,7 +157,7 @@
 		if (!confirm(`Delete ${system.name} and every unreferenced image version?`)) return;
 		try {
 			await request(`/api/v86/systems/${system.id}`, { method: 'DELETE' });
-			systems = systems.filter(s => s.id !== system.id);
+			systems = systems.filter((s) => s.id !== system.id);
 		} catch (error) {
 			critical = true;
 			status = error?.message ?? 'System deletion failed.';
@@ -181,11 +185,18 @@
 	>
 		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
 			System name
-			<input class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark" bind:value={name} required />
+			<input
+				class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark"
+				bind:value={name}
+				required
+			/>
 		</label>
 		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
 			Action
-			<select class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark" bind:value={replacingSystemId}>
+			<select
+				class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark"
+				bind:value={replacingSystemId}
+			>
 				<option value="">Create new system</option>
 				{#each systems as system}
 					<option value={system.id}>Replace {system.name}</option>
@@ -194,20 +205,30 @@
 		</label>
 		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
 			Platform strategy
-			<input class="w-full rounded-lg border-2 border-dark/25 bg-slate-100 px-3 py-2 font-normal" value="Windows 95" readonly />
+			<input
+				class="w-full rounded-lg border-2 border-dark/25 bg-slate-100 px-3 py-2 font-normal"
+				value="Windows 95"
+				readonly
+			/>
 		</label>
 		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
 			Raw IMG (maximum 2 GiB)
-			<input class="w-full rounded-lg border-2 border-dashed border-dark/30 bg-white px-3 py-2 font-normal" 
+			<input
+				class="w-full rounded-lg border-2 border-dashed border-dark/30 bg-white px-3 py-2 font-normal"
 				type="file"
 				accept=".img,application/octet-stream"
 				required
 				onchange={(event) => (image = event.currentTarget.files?.[0])}
 			/>
 		</label>
-		<div class="flex flex-col items-start justify-between gap-3 border-t border-dark/15 pt-3 lg:col-span-2 sm:flex-row sm:items-center">
+		<div
+			class="flex flex-col items-start justify-between gap-3 border-t border-dark/15 pt-3 lg:col-span-2 sm:flex-row sm:items-center"
+		>
 			<p class:text-accent-red={critical} class="min-h-5 text-sm">{status}</p>
-			<button class="rounded-lg bg-dark px-4 py-2 font-semibold text-white shadow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50" disabled={busy}>
+			<button
+				class="rounded-lg bg-dark px-4 py-2 font-semibold text-white shadow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+				disabled={busy}
+			>
 				{busy ? 'Working…' : 'Upload image'}
 			</button>
 		</div>
@@ -238,7 +259,10 @@
 					>
 						Rename
 					</button>
-					<button class="rounded-lg border-2 border-dark/30 px-3 py-1.5 text-sm font-semibold transition hover:bg-dark hover:text-white" onclick={() => updateSystem(system, { is_active: !system.is_active })}>
+					<button
+						class="rounded-lg border-2 border-dark/30 px-3 py-1.5 text-sm font-semibold transition hover:bg-dark hover:text-white"
+						onclick={() => updateSystem(system, { is_active: !system.is_active })}
+					>
 						{system.is_active ? 'Deactivate' : 'Activate'}
 					</button>
 					<button
@@ -248,7 +272,10 @@
 					>
 						{system.is_default ? 'Default' : 'Make default'}
 					</button>
-					<button class="rounded-lg border-2 border-accent-red/40 px-3 py-1.5 text-sm font-semibold text-accent-red transition hover:bg-accent-red hover:text-white" onclick={() => deleteSystem(system)}>
+					<button
+						class="rounded-lg border-2 border-accent-red/40 px-3 py-1.5 text-sm font-semibold text-accent-red transition hover:bg-accent-red hover:text-white"
+						onclick={() => deleteSystem(system)}
+					>
 						Delete system
 					</button>
 				</div>

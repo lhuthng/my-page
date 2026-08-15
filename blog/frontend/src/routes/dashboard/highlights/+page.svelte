@@ -13,14 +13,23 @@
 	onMount(async () => {
 		if (!data.featuredPosts?.length) {
 			try {
-				const result = await gql.request(`query { featuredPosts(limit:100) { id title slug excerpt coverUrl coverMediaType authorName authorSlug views likes commentsCount } }`);
+				const result = await gql.request(
+					`query { featuredPosts(limit:100) { id title slug excerpt coverUrl coverMediaType authorName authorSlug views likes commentsCount } }`
+				);
 				featuredPosts = (result.featuredPosts ?? []).map((p) => ({
-					id: p.id, title: p.title, slug: p.slug, excerpt: p.excerpt,
-					author_name: p.authorName, author_slug: p.authorSlug,
-					url: fixUrl(p.coverUrl), cover_media_type: p.coverMediaType,
+					id: p.id,
+					title: p.title,
+					slug: p.slug,
+					excerpt: p.excerpt,
+					author_name: p.authorName,
+					author_slug: p.authorSlug,
+					url: fixUrl(p.coverUrl),
+					cover_media_type: p.coverMediaType,
 					stats: { views: p.views, likes: p.likes, comments: p.commentsCount }
 				}));
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 			loading = false;
 		}
 	});
@@ -138,7 +147,16 @@
 						>
 							{#if post.url}
 								{#if post.cover_media_type?.startsWith('video/')}
-									<video src={post.url} poster={post.url} class="w-16 h-16 rounded-lg object-cover shrink-0" muted loop playsinline autoplay preload="auto"></video>
+									<video
+										src={post.url}
+										poster={post.url}
+										class="w-16 h-16 rounded-lg object-cover shrink-0"
+										muted
+										loop
+										playsinline
+										autoplay
+										preload="auto"
+									></video>
 								{:else}
 									<img src={post.url} alt="" class="w-16 h-16 rounded-lg object-cover shrink-0" />
 								{/if}
@@ -240,7 +258,16 @@
 							>
 								{#if post.url}
 									{#if post.cover_media_type?.startsWith('video/')}
-										<video src={post.url} poster={post.url} class="w-12 h-12 rounded-lg object-cover shrink-0" muted loop playsinline autoplay preload="auto"></video>
+										<video
+											src={post.url}
+											poster={post.url}
+											class="w-12 h-12 rounded-lg object-cover shrink-0"
+											muted
+											loop
+											playsinline
+											autoplay
+											preload="auto"
+										></video>
 									{:else}
 										<img src={post.url} alt="" class="w-12 h-12 rounded-lg object-cover shrink-0" />
 									{/if}

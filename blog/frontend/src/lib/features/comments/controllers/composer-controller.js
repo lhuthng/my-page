@@ -39,13 +39,22 @@ export function createComposerController({ state, getTextarea, engine, onAfterIn
 		insertAtCursor(text) {
 			const selection = currentSelection();
 			applySelectionChange(
-				engine.toolbar.insertText(selection.value, selection.selectionStart, selection.selectionEnd, text)
+				engine.toolbar.insertText(
+					selection.value,
+					selection.selectionStart,
+					selection.selectionEnd,
+					text
+				)
 			);
 		},
 		insertHeader() {
 			const selection = currentSelection();
 			applySelectionChange(
-				engine.toolbar.insertHeader(selection.value, selection.selectionStart, selection.selectionEnd)
+				engine.toolbar.insertHeader(
+					selection.value,
+					selection.selectionStart,
+					selection.selectionEnd
+				)
 			);
 		},
 		wrapBold() {

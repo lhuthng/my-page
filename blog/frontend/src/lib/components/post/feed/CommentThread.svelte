@@ -20,8 +20,9 @@
 	} = $props();
 
 	const isGuest = (comment) => Boolean(comment.guest_identity);
-	const isAuthor = (comment) => Boolean(!isGuest(comment) && comment.username && comment.display_name);
-	const getGuest = (comment) => GUEST_IDENTITIES.find(i => i.code === comment.guest_identity);
+	const isAuthor = (comment) =>
+		Boolean(!isGuest(comment) && comment.username && comment.display_name);
+	const getGuest = (comment) => GUEST_IDENTITIES.find((i) => i.code === comment.guest_identity);
 	const isPostAuthor = (comment) =>
 		Boolean(postAuthorUsername && comment.username === postAuthorUsername);
 

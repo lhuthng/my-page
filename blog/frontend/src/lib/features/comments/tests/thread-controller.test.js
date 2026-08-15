@@ -41,5 +41,8 @@ test('thread controller inserts optimistic replies and bumps counts', () => {
 	});
 
 	assert.equal(commentsState.roots[0].direct_reply_count, 1);
-	assert.deepEqual(replyThreads[10].items.map((item) => item.id), [20]);
+	assert.deepEqual(
+		replyThreads[10].items.map((item) => item.id),
+		[20]
+	);
 });

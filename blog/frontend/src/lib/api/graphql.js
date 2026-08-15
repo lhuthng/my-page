@@ -5,9 +5,7 @@ let client;
 
 function getClient() {
 	if (client) return client;
-	const url = globalThis.location
-		? `${globalThis.location.origin}/api/graphql`
-		: '/api/graphql';
+	const url = globalThis.location ? `${globalThis.location.origin}/api/graphql` : '/api/graphql';
 	client = new GraphQLClient(url, {
 		requestMiddleware: (req) => ({
 			...req,
@@ -103,11 +101,25 @@ export const gql = {
 	request(query, variables) {
 		return getClient().request(query, variables);
 	},
-	dashboardPosts(vars) { return this.request(Q.dashboardPosts, vars).then(fixUrls); },
-	dashboardProjects(vars) { return this.request(Q.dashboardProjects, vars).then(fixUrls); },
-	users(vars) { return this.request(Q.users, vars).then(fixUrls); },
-	roleCounts() { return this.request(Q.roleCounts); },
-	series(vars) { return this.request(Q.series, vars).then(fixUrls); },
-	seriesPosts(vars) { return this.request(Q.seriesPosts, vars).then(fixUrls); },
-	overview() { return this.request(Q.overview).then(fixUrls); }
+	dashboardPosts(vars) {
+		return this.request(Q.dashboardPosts, vars).then(fixUrls);
+	},
+	dashboardProjects(vars) {
+		return this.request(Q.dashboardProjects, vars).then(fixUrls);
+	},
+	users(vars) {
+		return this.request(Q.users, vars).then(fixUrls);
+	},
+	roleCounts() {
+		return this.request(Q.roleCounts);
+	},
+	series(vars) {
+		return this.request(Q.series, vars).then(fixUrls);
+	},
+	seriesPosts(vars) {
+		return this.request(Q.seriesPosts, vars).then(fixUrls);
+	},
+	overview() {
+		return this.request(Q.overview).then(fixUrls);
+	}
 };

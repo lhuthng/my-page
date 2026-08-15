@@ -18,8 +18,9 @@
 
 	<h3>Visitor Statistics</h3>
 	<p>
-		I collect rough daily visitor statistics by country to better understand where traffic comes from. This
-		uses Cloudflare's country header and stores only aggregated country counts, not raw IP addresses.
+		I collect rough daily visitor statistics by country to better understand where traffic comes
+		from. This uses Cloudflare's country header and stores only aggregated country counts, not raw
+		IP addresses.
 	</p>
 
 	<h3>Data Security</h3>

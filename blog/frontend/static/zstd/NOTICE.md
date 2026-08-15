@@ -10,10 +10,10 @@ verbatim end to end.
 
 ## Contents
 
-| File | Origin |
-| --- | --- |
-| `zstd.wasm` | `@bokuweb/zstd-wasm@0.0.27`, `dist/web/zstd.wasm`, copied unmodified |
-| `zstd-compress-worker.js` | bundled from the same package plus the worker shim below |
+| File                      | Origin                                                               |
+| ------------------------- | -------------------------------------------------------------------- |
+| `zstd.wasm`               | `@bokuweb/zstd-wasm@0.0.27`, `dist/web/zstd.wasm`, copied unmodified |
+| `zstd-compress-worker.js` | bundled from the same package plus the worker shim below             |
 
 Licences: `@bokuweb/zstd-wasm` is MIT; the underlying
 [facebook/zstd](https://github.com/facebook/zstd) is dual BSD-3-Clause /

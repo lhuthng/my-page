@@ -52,10 +52,16 @@
 
 	function buildVariables() {
 		const v = { limit: LIMIT, offset: (currentPage - 1) * LIMIT };
-		if (table === 'users') { if (searchInput) v.search = searchInput; if (roleFilter) v.role = roleFilter; }
-		else if (table === 'posts') { if (searchInput) v.search = searchInput; if (statusFilter) v.status = statusFilter; }
-		else if (table === 'comments') v.includeDeleted = includeDeleted;
-		else if (table === 'media') { if (searchInput) v.search = searchInput; }
+		if (table === 'users') {
+			if (searchInput) v.search = searchInput;
+			if (roleFilter) v.role = roleFilter;
+		} else if (table === 'posts') {
+			if (searchInput) v.search = searchInput;
+			if (statusFilter) v.status = statusFilter;
+		} else if (table === 'comments') v.includeDeleted = includeDeleted;
+		else if (table === 'media') {
+			if (searchInput) v.search = searchInput;
+		}
 		return v;
 	}
 
@@ -97,8 +103,12 @@
 	}
 
 	function switchTable(id) {
-		searchInput = ''; statusFilter = ''; roleFilter = ''; includeDeleted = false;
-		table = id; currentPage = 1;
+		searchInput = '';
+		statusFilter = '';
+		roleFilter = '';
+		includeDeleted = false;
+		table = id;
+		currentPage = 1;
 		fetchData();
 	}
 
@@ -195,16 +205,23 @@
 </svelte:head>
 
 <div class="flex gap-4 items-start">
-	<aside class="w-48 shrink-0 bg-white rounded-xl p-2 flex flex-col gap-0.5 self-start sticky top-4">
+	<aside
+		class="w-48 shrink-0 bg-white rounded-xl p-2 flex flex-col gap-0.5 self-start sticky top-4"
+	>
 		<p class="text-xs font-semibold text-dark/40 uppercase tracking-wider px-3 py-1.5">Tables</p>
 		{#each TABLES as t}
 			{@const count = dbStats?.[t.statKey] ?? 0}
 			<button
 				onclick={() => switchTable(t.id)}
-				class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full {table === t.id ? 'bg-dark text-white' : 'text-dark hover:bg-background/60'}"
+				class="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full {table ===
+				t.id
+					? 'bg-dark text-white'
+					: 'text-dark hover:bg-background/60'}"
 			>
 				<span>{t.label}</span>
-				<span class="text-xs tabular-nums {table === t.id ? 'text-white/60' : 'text-dark/40'}">{count}</span>
+				<span class="text-xs tabular-nums {table === t.id ? 'text-white/60' : 'text-dark/40'}">
+					{count}
+				</span>
 			</button>
 		{/each}
 	</aside>
@@ -213,13 +230,32 @@
 		<div class="bg-white rounded-xl p-4 flex flex-wrap items-center gap-3">
 			<h2 class="text-xl font-semibold capitalize mr-auto">{table}</h2>
 			{#if ['users', 'posts', 'media'].includes(table)}
-				<form onsubmit={(e) => { e.preventDefault(); navigate({ page: 1 }); }} class="flex gap-2">
-					<input bind:value={searchInput} placeholder="Search…" class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none focus:border-dark/30 w-44 transition-colors" />
-					<button type="submit" class="px-3 py-1.5 bg-dark text-white rounded-lg text-sm hover:bg-dark/80 transition-colors">Search</button>
+				<form
+					onsubmit={(e) => {
+						e.preventDefault();
+						navigate({ page: 1 });
+					}}
+					class="flex gap-2"
+				>
+					<input
+						bind:value={searchInput}
+						placeholder="Search…"
+						class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none focus:border-dark/30 w-44 transition-colors"
+					/>
+					<button
+						type="submit"
+						class="px-3 py-1.5 bg-dark text-white rounded-lg text-sm hover:bg-dark/80 transition-colors"
+					>
+						Search
+					</button>
 				</form>
 			{/if}
 			{#if table === 'posts'}
-				<select bind:value={statusFilter} onchange={() => navigate({ page: 1 })} class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none bg-white cursor-pointer">
+				<select
+					bind:value={statusFilter}
+					onchange={() => navigate({ page: 1 })}
+					class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none bg-white cursor-pointer"
+				>
 					<option value="">All Status</option>
 					<option value="published">Published</option>
 					<option value="draft">Draft</option>
@@ -227,7 +263,11 @@
 				</select>
 			{/if}
 			{#if table === 'users'}
-				<select bind:value={roleFilter} onchange={() => navigate({ page: 1 })} class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none bg-white cursor-pointer">
+				<select
+					bind:value={roleFilter}
+					onchange={() => navigate({ page: 1 })}
+					class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none bg-white cursor-pointer"
+				>
 					<option value="">All Roles</option>
 					<option value="admin">Admin</option>
 					<option value="moderator">Moderator</option>
@@ -236,13 +276,21 @@
 			{/if}
 			{#if table === 'comments'}
 				<label class="flex items-center gap-2 text-sm cursor-pointer select-none">
-					<input type="checkbox" bind:checked={includeDeleted} onchange={() => navigate({ page: 1 })} class="accent-primary w-4 h-4" /> Show deleted
+					<input
+						type="checkbox"
+						bind:checked={includeDeleted}
+						onchange={() => navigate({ page: 1 })}
+						class="accent-primary w-4 h-4"
+					/>
+					Show deleted
 				</label>
 			{/if}
 		</div>
 
 		<div class="bg-white rounded-xl overflow-hidden">
-			<div class="px-4 py-2.5 border-b border-background/60 flex items-center gap-3 text-sm text-dark/50">
+			<div
+				class="px-4 py-2.5 border-b border-background/60 flex items-center gap-3 text-sm text-dark/50"
+			>
 				<span>{tableData?.total ?? 0} records</span>
 				{#if loading}
 					<span class="animate-pulse text-primary font-medium">Loading…</span>
@@ -255,36 +303,54 @@
 						<tr>
 							{#if table === 'users'}
 								{#each ['#', 'Username', 'Display Name', 'Email', 'Role', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
+									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+										{h}
+									</th>
 								{/each}
 							{:else if table === 'posts'}
 								{#each ['#', 'Title', 'Author', 'Status', 'Series', 'Views', 'Featured', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
+									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+										{h}
+									</th>
 								{/each}
 							{:else if table === 'comments'}
 								{#each ['#', 'Content', 'Post', 'Author', 'Status', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
+									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+										{h}
+									</th>
 								{/each}
 							{:else if table === 'media'}
 								{#each ['#', 'Short Name', 'File Name', 'Type', 'Size', 'Uses', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
+									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+										{h}
+									</th>
 								{/each}
 							{:else if table === 'series'}
 								{#each ['#', 'Title', 'Slug', 'Posts', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
+									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+										{h}
+									</th>
 								{/each}
 							{:else if table === 'tags'}
 								{#each ['#', 'Name', 'Slug', 'Description', 'Posts', 'Actions'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
+									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+										{h}
+									</th>
 								{/each}
 							{:else if table === 'categories'}
 								{#each ['#', 'Name', 'Slug', 'Description', 'Posts'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">{h}</th>
+									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+										{h}
+									</th>
 								{/each}
 							{/if}
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-background/60 transition-opacity duration-150 {loading ? 'opacity-40' : 'opacity-100'}">
+					<tbody
+						class="divide-y divide-background/60 transition-opacity duration-150 {loading
+							? 'opacity-40'
+							: 'opacity-100'}"
+					>
 						{#if tableData?.items?.length}
 							{#each tableData.items as row, i}
 								{@const rowNum = (currentPage - 1) * LIMIT + i + 1}
@@ -295,43 +361,106 @@
 										<td class="px-4 py-2.5">{row.displayName}</td>
 										<td class="px-4 py-2.5 text-dark/60">{row.email}</td>
 										<td class="px-4 py-2.5">
-											<span class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {row.role === 'admin' ? 'bg-accent-red/15 text-accent-red' : row.role === 'moderator' ? 'bg-accent-blue/15 text-accent-blue' : 'bg-background/80 text-dark/60'}">{row.role}</span>
+											<span
+												class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {row.role ===
+												'admin'
+													? 'bg-accent-red/15 text-accent-red'
+													: row.role === 'moderator'
+														? 'bg-accent-blue/15 text-accent-blue'
+														: 'bg-background/80 text-dark/60'}"
+											>
+												{row.role}
+											</span>
 										</td>
 										<td class="px-4 py-2.5 text-dark/45 text-xs">{fmtDate(row.createdAt)}</td>
 									{:else if table === 'posts'}
-										<td class="px-4 py-2.5 font-medium max-w-[16rem] truncate" title={row.title}>{row.title}</td>
-										<td class="px-4 py-2.5 text-dark/60 whitespace-nowrap">{row.authorName ?? '-'}</td>
-										<td class="px-4 py-2.5">
-											<span class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {row.status === 'published' ? 'bg-accent-green/15 text-accent-green' : row.status === 'draft' ? 'bg-accent-yellow/25 text-dark/70' : 'bg-background/80 text-dark/50'}">{row.status}</span>
+										<td class="px-4 py-2.5 font-medium max-w-[16rem] truncate" title={row.title}>
+											{row.title}
 										</td>
-										<td class="px-4 py-2.5 text-dark/45 text-xs max-w-40 truncate" title={row.seriesTitle ?? ''}>{row.seriesTitle ?? '-'}</td>
+										<td class="px-4 py-2.5 text-dark/60 whitespace-nowrap">
+											{row.authorName ?? '-'}
+										</td>
+										<td class="px-4 py-2.5">
+											<span
+												class="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap {row.status ===
+												'published'
+													? 'bg-accent-green/15 text-accent-green'
+													: row.status === 'draft'
+														? 'bg-accent-yellow/25 text-dark/70'
+														: 'bg-background/80 text-dark/50'}"
+											>
+												{row.status}
+											</span>
+										</td>
+										<td
+											class="px-4 py-2.5 text-dark/45 text-xs max-w-40 truncate"
+											title={row.seriesTitle ?? ''}
+										>
+											{row.seriesTitle ?? '-'}
+										</td>
 										<td class="px-4 py-2.5 text-dark/60 tabular-nums">{row.viewCount}</td>
 										<td class="px-4 py-2.5 text-center">{row.isFeatured ? '⭐' : '-'}</td>
-										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">{fmtDate(row.createdAt)}</td>
+										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">
+											{fmtDate(row.createdAt)}
+										</td>
 									{:else if table === 'comments'}
-										<td class="px-4 py-2.5 text-dark/80 max-w-[18rem] truncate" title={row.content}>{row.content}</td>
-										<td class="px-4 py-2.5 text-dark/55 text-xs max-w-48 truncate" title={row.postTitle}>{row.postTitle}</td>
-										<td class="px-4 py-2.5 text-dark/60 whitespace-nowrap">{row.authorName ?? 'Anonymous'}</td>
+										<td class="px-4 py-2.5 text-dark/80 max-w-[18rem] truncate" title={row.content}>
+											{row.content}
+										</td>
+										<td
+											class="px-4 py-2.5 text-dark/55 text-xs max-w-48 truncate"
+											title={row.postTitle}
+										>
+											{row.postTitle}
+										</td>
+										<td class="px-4 py-2.5 text-dark/60 whitespace-nowrap">
+											{row.authorName ?? 'Anonymous'}
+										</td>
 										<td class="px-4 py-2.5">
 											{#if row.isDeleted}
-												<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-accent-red/15 text-accent-red">Deleted</span>
+												<span
+													class="px-2 py-0.5 rounded-full text-xs font-medium bg-accent-red/15 text-accent-red"
+												>
+													Deleted
+												</span>
 											{:else}
-												<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-accent-green/15 text-accent-green">Active</span>
+												<span
+													class="px-2 py-0.5 rounded-full text-xs font-medium bg-accent-green/15 text-accent-green"
+												>
+													Active
+												</span>
 											{/if}
 										</td>
-										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">{fmtDate(row.createdAt)}</td>
+										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">
+											{fmtDate(row.createdAt)}
+										</td>
 									{:else if table === 'media'}
-										<td class="px-4 py-2.5 font-mono text-xs text-dark/70 whitespace-nowrap">{row.shortName}</td>
-										<td class="px-4 py-2.5 text-dark/70 max-w-[16rem] truncate text-xs" title={row.fileName}>{row.fileName}</td>
-										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">{row.fileType}</td>
-										<td class="px-4 py-2.5 text-dark/60 tabular-nums text-xs whitespace-nowrap">{formatBytes(row.size)}</td>
+										<td class="px-4 py-2.5 font-mono text-xs text-dark/70 whitespace-nowrap">
+											{row.shortName}
+										</td>
+										<td
+											class="px-4 py-2.5 text-dark/70 max-w-[16rem] truncate text-xs"
+											title={row.fileName}
+										>
+											{row.fileName}
+										</td>
+										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">
+											{row.fileType}
+										</td>
+										<td class="px-4 py-2.5 text-dark/60 tabular-nums text-xs whitespace-nowrap">
+											{formatBytes(row.size)}
+										</td>
 										<td class="px-4 py-2.5 text-dark/60 tabular-nums">{row.useCount}</td>
-										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">{fmtDate(row.createdAt)}</td>
+										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">
+											{fmtDate(row.createdAt)}
+										</td>
 									{:else if table === 'series'}
 										<td class="px-4 py-2.5 font-medium">{row.title}</td>
 										<td class="px-4 py-2.5 font-mono text-xs text-dark/55">{row.slug}</td>
 										<td class="px-4 py-2.5 text-dark/60 tabular-nums">{row.postCount}</td>
-										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">{fmtDate(row.createdAt)}</td>
+										<td class="px-4 py-2.5 text-dark/45 text-xs whitespace-nowrap">
+											{fmtDate(row.createdAt)}
+										</td>
 									{:else if table === 'tags'}
 										<td class="px-4 py-2.5">
 											{#if isAdmin && editingTagId === row.id}
@@ -360,14 +489,16 @@
 														bind:value={editingTagDescription}
 														rows="3"
 														class="w-full min-w-56 rounded-lg border border-background px-3 py-2 text-xs text-dark/75 outline-none focus:border-dark/30"
-														placeholder="Optional description"
-													></textarea>
+														placeholder="Optional description"></textarea>
 													{#if tagError}
 														<p class="text-xs text-accent-red">{tagError}</p>
 													{/if}
 												</div>
 											{:else}
-												<div class="max-w-[18rem] truncate text-xs text-dark/45" title={row.description ?? ''}>
+												<div
+													class="max-w-[18rem] truncate text-xs text-dark/45"
+													title={row.description ?? ''}
+												>
 													{row.description ?? '-'}
 												</div>
 											{/if}
@@ -393,7 +524,9 @@
 														</button>
 														<button
 															onclick={() => promptDeleteTag(row)}
-															disabled={row.postCount > 0 || savingTagId === row.id || deletingTagId === row.id}
+															disabled={row.postCount > 0 ||
+																savingTagId === row.id ||
+																deletingTagId === row.id}
 															class="rounded-lg border border-accent-red/20 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
 														>
 															{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
@@ -411,7 +544,9 @@
 															onclick={() => promptDeleteTag(row)}
 															disabled={row.postCount > 0 || deletingTagId === row.id}
 															class="rounded-lg border border-accent-red/20 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
-															title={row.postCount > 0 ? 'Only unused tags can be deleted.' : 'Delete this unused tag'}
+															title={row.postCount > 0
+																? 'Only unused tags can be deleted.'
+																: 'Delete this unused tag'}
 														>
 															{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
 														</button>
@@ -424,23 +559,46 @@
 									{:else if table === 'categories'}
 										<td class="px-4 py-2.5 font-medium">{row.name}</td>
 										<td class="px-4 py-2.5 font-mono text-xs text-dark/55">{row.slug}</td>
-										<td class="px-4 py-2.5 text-dark/45 text-xs max-w-[16rem] truncate" title={row.description ?? ''}>{row.description ?? '-'}</td>
+										<td
+											class="px-4 py-2.5 text-dark/45 text-xs max-w-[16rem] truncate"
+											title={row.description ?? ''}
+										>
+											{row.description ?? '-'}
+										</td>
 										<td class="px-4 py-2.5 text-dark/60 tabular-nums">{row.postCount}</td>
 									{/if}
 								</tr>
 							{/each}
 						{:else}
-							<tr><td colspan="10" class="px-4 py-12 text-center text-dark/35">{loading ? 'Loading…' : 'No records found'}</td></tr>
+							<tr>
+								<td colspan="10" class="px-4 py-12 text-center text-dark/35">
+									{loading ? 'Loading…' : 'No records found'}
+								</td>
+							</tr>
 						{/if}
 					</tbody>
 				</table>
 			</div>
 
 			{#if totalPages > 1}
-				<div class="px-4 py-3 border-t border-background/60 flex items-center justify-between gap-4">
-					<button onclick={() => navigate({ page: currentPage - 1 })} disabled={currentPage <= 1 || loading} class="px-3 py-1.5 rounded-lg text-sm border border-background disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors">← Prev</button>
+				<div
+					class="px-4 py-3 border-t border-background/60 flex items-center justify-between gap-4"
+				>
+					<button
+						onclick={() => navigate({ page: currentPage - 1 })}
+						disabled={currentPage <= 1 || loading}
+						class="px-3 py-1.5 rounded-lg text-sm border border-background disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors"
+					>
+						← Prev
+					</button>
 					<span class="text-sm text-dark/55 tabular-nums">Page {currentPage} of {totalPages}</span>
-					<button onclick={() => navigate({ page: currentPage + 1 })} disabled={currentPage >= totalPages || loading} class="px-3 py-1.5 rounded-lg text-sm border border-background disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors">Next →</button>
+					<button
+						onclick={() => navigate({ page: currentPage + 1 })}
+						disabled={currentPage >= totalPages || loading}
+						class="px-3 py-1.5 rounded-lg text-sm border border-background disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors"
+					>
+						Next →
+					</button>
 				</div>
 			{/if}
 		</div>
@@ -459,7 +617,8 @@
 				<div>
 					<h3 id="delete-tag-title" class="text-lg font-semibold text-dark">Delete unused tag?</h3>
 					<p class="mt-1 text-sm text-dark/65">
-						<span class="font-medium text-dark">{tagToDelete.name}</span> will be removed permanently. This is only available because the tag has no current usage.
+						<span class="font-medium text-dark">{tagToDelete.name}</span>
+						will be removed permanently. This is only available because the tag has no current usage.
 					</p>
 				</div>
 				{#if tagError}
