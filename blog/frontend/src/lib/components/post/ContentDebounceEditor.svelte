@@ -1,88 +1,53 @@
 <script>
-	import {
-		appBlockPlugin,
-		codeHighlightPlugin,
-		iframeBlockPlugin,
-		mediaWithShortcutPlugin,
-		namedContainerPlugin,
-		revealPlugin,
-		slugify,
-		youtubeBlockPlugin,
-		kaomojiPlugin
-	} from '$lib/custom-rules';
+	import { onDestroy } from 'svelte';
 	import { useDebounce } from '$lib/utils/debounce';
-	import { untrack } from 'svelte';
-	import MarkdownIt from 'markdown-it';
-	import mkKatex from 'markdown-it-katex';
-	import anchor from 'markdown-it-anchor';
-	import { tick } from 'svelte';
+	import { createMarkdownRenderer, renderBody } from '$lib/features/editor/markdown/renderer.js';
+	import { collectMediaKeys } from '$lib/features/editor/media/references.js';
 
 	let {
-		delay,
-		onUpdateRendered,
-		onUpdateDraft,
+		value = $bindable(''),
+		delay = 500,
 		mediaDictionary,
-		searchMedia,
-		mediaSyntax,
-		registerForceContent,
-		forDraft,
-		disabled,
+		disabled = false,
+		onRenderedUpdate = () => {},
+		onKeysChanged = () => {},
 		...rest
 	} = $props();
 
-	let content = $state('');
-	let _content = $state('');
+	// Built once — this used to be a `$derived`, which rebuilt the entire
+	// parser and all ten plugins on every dependency change.
+	const md = createMarkdownRenderer();
 
-	untrack(() => registerForceContent)((content) => {
-		_content = content;
-	});
+	let debouncedValue = $state(value);
 
-	const md = $derived(
-		new MarkdownIt()
-			.use(mkKatex)
-			.use(mediaWithShortcutPlugin)
-			.use(iframeBlockPlugin)
-			.use(youtubeBlockPlugin)
-			.use(appBlockPlugin)
-			.use(revealPlugin)
-			.use(namedContainerPlugin)
-			.use(codeHighlightPlugin)
-			.use(kaomojiPlugin)
-			.use(anchor, { slugify })
-	);
+	const debounce = useDebounce((next) => {
+		debouncedValue = next;
+		onKeysChanged(collectMediaKeys(next));
+	}, delay);
 
-	const lottieAppSyntax = /:::app\s+lottie\s+([^\s]+)/g;
-	const collectMediaKeys = (text) => [
-		...[...text.matchAll(mediaSyntax)].map((match) => match[1]),
-		...[...text.matchAll(lottieAppSyntax)].map((match) => match[1])
-	];
-
-	let debounce = useDebounce(
-		async (_content) => {
-			const keys = collectMediaKeys(_content);
-			await searchMedia(keys);
-			content = _content;
-		},
-		untrack(() => delay)
-	);
-
+	// One-directional: reads `value` (which only the textarea's own `bind:value`
+	// or the parent ever write) and schedules a local update. Nothing here
+	// writes back to `value`, so there is no cycle through the parent.
 	$effect(() => {
-		debounce.update(_content);
-		if (forDraft) onUpdateDraft(_content);
+		debounce.update(value);
 	});
 
 	$effect(() => {
-		onUpdateRendered(md.render(content, { mediaDictionary }));
+		onRenderedUpdate(renderBody(md, debouncedValue, mediaDictionary));
 	});
+
+	onDestroy(() => debounce.destroy());
 </script>
 
 <div {...rest}>
 	<textarea
 		id="content-editor"
-		class="w-full h-full p-2 rounded-sm bg-white/60 focus:outline-0 resize-none custom-scrollbar"
-		class:bg-transparent!={disabled}
+		class="w-full h-full rounded-sm p-1 focus:outline-0 resize-none custom-scrollbar"
+		style="background-color: {disabled
+			? 'color-mix(in oklab,var(--color-primary) 30%,transparent)'
+			: 'transparent'};"
 		placeholder={disabled ? '' : 'Type here...'}
 		autocorrect="off"
 		{disabled}
-		bind:value={_content}></textarea>
+		bind:value></textarea>
 </div>

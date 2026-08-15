@@ -65,13 +65,15 @@
 </script>
 
 <div class="flex flex-col gap-2">
-	<label class="inline-block font-medium" for="related-post-search">Related Posts:</label>
+	<label class="inline-block text-sm font-medium text-dark/60" for="related-post-search">
+		Related Posts
+	</label>
 
 	{#if relatedPosts.length > 0}
 		<div class="flex flex-wrap gap-2">
 			{#each relatedPosts as post (post.slug)}
 				<span
-					class="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/20 border border-primary/40 text-sm"
+					class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/20 border border-primary/40 text-sm"
 				>
 					{post.title}
 					<button
@@ -91,12 +93,12 @@
 		<input
 			id="related-post-search"
 			type="text"
-			class="w-full p-1 outline-none bg-white rounded-sm border border-dark/20"
+			class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 border-dark transition-colors focus:bg-primary focus:text-white placeholder:text-dark/30 focus:placeholder:text-white/70"
 			placeholder="Search posts to link..."
 			bind:value={searchTerm}
 		/>
 		{#if searching}
-			<span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-dark/50">searching…</span>
+			<span class="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-dark/50">searching…</span>
 		{/if}
 		{#if searchResults.length > 0}
 			<ul
@@ -125,9 +127,9 @@
 	</div>
 
 	{#if saving}
-		<span class="text-xs text-dark/50">Saving…</span>
+		<span class="text-sm text-dark/50">Saving…</span>
 	{/if}
 	{#if saveError}
-		<span class="text-xs text-red-500">{saveError}</span>
+		<span class="text-sm text-accent-red">{saveError}</span>
 	{/if}
 </div>

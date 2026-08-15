@@ -22,7 +22,13 @@ export function youtubeBlockPlugin(md) {
 	});
 
 	md.renderer.rules.youtube_block = (tokens, idx) => {
-		const { videoId, width, height } = tokens[idx].meta;
+		const { videoId } = tokens[idx].meta;
+
+		// YouTube ids are [A-Za-z0-9_-]; anything else would break out of the
+		// src attribute, so reject rather than escape.
+		if (!/^[\w-]+$/.test(String(videoId))) {
+			return `<p class="text-red-500">Invalid YouTube video id.</p>`;
+		}
 
 		return `
       <div class="w-full rounded-lg overflow-hidden">

@@ -9,6 +9,10 @@ pub enum PostError {
     PostNotFound,
     TagNotFound,
     Forbidden,
+    /// The client's `expected_updated_at` did not match the stored row: someone
+    /// else saved in the meantime. Carries the current `updated_at` so the
+    /// client can show the conflict and offer to reload or overwrite.
+    Conflict(String),
     // InvalidPostContent,
     Validation(String),
     UploadFailed(String),
@@ -36,6 +40,9 @@ impl IntoResponse for PostError {
                         StatusCode::FORBIDDEN,
                         "You do not have permission to perform this action".to_string(),
                     ),
+                    PostError::Conflict(current_updated_at) => {
+                        (StatusCode::CONFLICT, current_updated_at)
+                    }
                     PostError::Validation(msg) => (StatusCode::BAD_REQUEST, msg),
                     // PostError::InvalidPostContent => {
                     //     (StatusCode::BAD_REQUEST, "Invalid post content.".to_string())

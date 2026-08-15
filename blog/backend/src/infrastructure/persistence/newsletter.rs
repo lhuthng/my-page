@@ -385,6 +385,7 @@ impl NewsletterService for NewsletterServiceImpl {
     ) -> Result<(), NewsletterError> {
         self.run_campaign(
             Some(post_id),
+            "publish",
             subject,
             body_html,
             body_text,
@@ -403,6 +404,7 @@ impl NewsletterService for NewsletterServiceImpl {
     ) -> Result<(), NewsletterError> {
         self.run_campaign(
             cmd.post_id,
+            "manual",
             cmd.subject,
             cmd.body_html,
             cmd.body_text,
@@ -419,6 +421,7 @@ impl NewsletterServiceImpl {
     async fn run_campaign(
         &self,
         post_id: Option<i64>,
+        source: &str,
         subject: String,
         body_html: String,
         body_text: String,
@@ -427,16 +430,19 @@ impl NewsletterServiceImpl {
         app_base_url: String,
     ) -> Result<(), NewsletterError> {
         // Insert the campaign row first: the unique index on `post_id` (where
-        // not null) acts as the double-send guard. A conflict here means this
-        // post already had a campaign fired, which is expected and not an error.
+        // not null and `source = 'publish'`) acts as the double-send guard. A
+        // conflict here means this post already had a publish campaign fired,
+        // which is expected and not an error. Manual sends never touch that
+        // slot, so a one-off dashboard send can't block the publish campaign.
         let campaign_id: Option<i64> = match sqlx::query_scalar(
             r#"
-            INSERT INTO newsletter_campaigns (post_id, subject, body_text, body_html, sent_by_user_id)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO newsletter_campaigns (post_id, source, subject, body_text, body_html, sent_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
         .bind(post_id)
+        .bind(source)
         .bind(&subject)
         .bind(&body_text)
         .bind(&body_html)

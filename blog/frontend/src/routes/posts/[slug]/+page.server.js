@@ -1,32 +1,10 @@
-import { mediaSyntax } from '$lib/utils';
-import {
-	appBlockPlugin,
-	codeHighlightPlugin,
-	iframeBlockPlugin,
-	mediaWithShortcutPlugin,
-	namedContainerPlugin,
-	revealPlugin,
-	slugify,
-	youtubeBlockPlugin,
-	kaomojiPlugin
-} from '$lib/custom-rules/index.js';
+import { buildMediaDictionary } from '$lib/features/editor/media/references.js';
+import { createMarkdownRenderer } from '$lib/features/editor/markdown/renderer.js';
 import { fixClientRoute, route } from '$lib/server/proxy.js';
 import { error } from '@sveltejs/kit';
-import MarkdownIt from 'markdown-it';
-import mkKatex from 'markdown-it-katex';
-import anchor from 'markdown-it-anchor';
 
-const md = new MarkdownIt()
-	.use(mkKatex)
-	.use(mediaWithShortcutPlugin)
-	.use(iframeBlockPlugin)
-	.use(youtubeBlockPlugin)
-	.use(appBlockPlugin)
-	.use(revealPlugin)
-	.use(namedContainerPlugin)
-	.use(codeHighlightPlugin)
-	.use(kaomojiPlugin)
-	.use(anchor, { slugify });
+// One module-scoped renderer, reused across requests.
+const md = createMarkdownRenderer();
 
 export async function load({ locals, fetch, params, setHeaders }) {
 	const res = await fetch(route(`posts/s/${params.slug}`), {
@@ -51,25 +29,12 @@ export async function load({ locals, fetch, params, setHeaders }) {
 			...rest
 		} = data;
 
-		let edits = [...content.matchAll(mediaSyntax)].map((match) => ({
-			index: match.index + match[0].lastIndexOf(match[1]),
-			length: match[1].length,
-			replacement: medium_urls[parseInt(match[1])]
-		}));
-
-		edits.sort((a, b) => b.index - a.index);
-
 		author_avatar_url = fixClientRoute(author_avatar_url);
 		cover_url = fixClientRoute(cover_url);
 		cover_video_url = fixClientRoute(cover_video_url);
 		og_image_url = fixClientRoute(og_image_url);
 
-		const mediaDictionary = {};
-
-		medium_urls.forEach((url, index) => (mediaDictionary[index.toString()] = fixClientRoute(url)));
-		medium_short_names?.forEach((shortName, index) => {
-			if (shortName) mediaDictionary[shortName] = fixClientRoute(medium_urls[index]);
-		});
+		const mediaDictionary = buildMediaDictionary(medium_urls, medium_short_names, fixClientRoute);
 
 		content = md.render(content, { mediaDictionary });
 

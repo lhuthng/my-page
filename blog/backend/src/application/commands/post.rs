@@ -20,6 +20,13 @@ pub struct NewPostCommand {
 #[allow(dead_code)]
 pub struct UpdatePostCommand {
     pub user_id: i64,
+    /// `Some(user_id)` restricts the write to that author's own rows; `None`
+    /// lets an admin edit anyone's post. Mirrors `GetDetailedPostsCommand`.
+    pub required_author_id: Option<i64>,
+    /// When set, the write only proceeds if the stored `updated_at` still
+    /// matches — otherwise the caller is working from a stale copy and gets a
+    /// `Conflict`. `None` keeps the previous last-write-wins behaviour.
+    pub expected_updated_at: Option<String>,
     pub post_id: i64,
     pub title: Option<String>,
     pub slug: Option<String>,

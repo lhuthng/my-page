@@ -1,49 +1,31 @@
 <script>
-	import { untrack } from 'svelte';
 	import PostEditor from '$lib/components/post/PostEditor.svelte';
 
 	const { data } = $props();
 
-	const {
-		id,
-		title,
-		slug,
-		series,
-		cover_url: coverUrl,
-		cover_media_type,
-		video_short_name: videoShortName,
-		og_image_seconds: ogImageSeconds,
-		series_slug: seriesSlug,
-		content,
-		draft,
-		tags,
-		excerpt,
-		related_posts: relatedPosts,
-		medium_short_names: mediumShortNames,
-		medium_urls: mediumUrls,
-		is_owner: isOwner = true
-	} = untrack(() => data);
+	// Reactive, not a one-time `untrack` snapshot — see the equivalent comment
+	// in the project dashboard edit page for why.
+	const mapped = $derived({
+		id: data.id,
+		title: data.title,
+		slug: data.slug,
+		coverUrl: data.cover_url,
+		cover_media_type: data.cover_media_type,
+		videoShortName: data.video_short_name,
+		ogImageSeconds: data.og_image_seconds,
+		seriesSlug: data.series_slug,
+		content: data.content,
+		draft: data.draft,
+		tags: data.tags,
+		excerpt: data.excerpt,
+		relatedPosts: data.related_posts,
+		mediumShortNames: data.medium_short_names,
+		mediumUrls: data.medium_urls,
+		series: data.series,
+		updatedAt: data.updated_at
+	});
 </script>
 
-<PostEditor
-	mode="edit"
-	{isOwner}
-	data={{
-		id,
-		title,
-		slug,
-		coverUrl,
-		cover_media_type,
-		videoShortName,
-		ogImageSeconds,
-		series,
-		seriesSlug,
-		content,
-		draft,
-		tags,
-		excerpt,
-		relatedPosts,
-		mediumShortNames,
-		mediumUrls
-	}}
-/>
+{#key data.id}
+	<PostEditor mode="edit" isOwner={data.is_owner ?? true} data={mapped} />
+{/key}

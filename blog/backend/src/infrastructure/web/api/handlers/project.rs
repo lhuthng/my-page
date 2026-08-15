@@ -116,6 +116,8 @@ struct ProjectPatchData {
     demo_url: Option<String>,
     og_image_seconds: Option<i64>,
     v86_upload_id: Option<String>,
+    /// Optional optimistic-lock token; see `UpdatePostCommand`.
+    expected_updated_at: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -817,15 +819,48 @@ pub async fn abort_jsdos_upload(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn normalize_links(links: Vec<ProjectLink>) -> Vec<ProjectLink> {
-    links
+/// Upper bound on how many external links a project may list.
+const MAX_PROJECT_LINKS: usize = 20;
+
+/// Trim, drop blanks, and validate that every remaining link is an http(s) URL.
+///
+/// Link URLs are rendered into an `href`, so a `javascript:` or `data:` value
+/// must not be storable in the first place.
+fn normalize_links(links: Vec<ProjectLink>) -> Result<Vec<ProjectLink>, ProjectError> {
+    let kept: Vec<ProjectLink> = links
         .into_iter()
         .filter(|link| !link.label.trim().is_empty() && !link.url.trim().is_empty())
-        .map(|link| ProjectLink {
-            label: link.label.trim().to_string(),
-            url: link.url.trim().to_string(),
+        .collect();
+
+    if kept.len() > MAX_PROJECT_LINKS {
+        return Err(ProjectError::InvalidDemo(format!(
+            "A project may have at most {MAX_PROJECT_LINKS} links."
+        )));
+    }
+
+    kept.into_iter()
+        .map(|link| {
+            Ok(ProjectLink {
+                label: crate::helper::string::validate_text(&link.label, "Link label", 100)
+                    .map_err(ProjectError::InvalidDemo)?,
+                url: crate::helper::string::validate_http_url(&link.url, "Link URL")
+                    .map_err(ProjectError::InvalidDemo)?,
+            })
         })
         .collect()
+}
+
+/// Validate a demo URL when one is present. An empty value is how the editor
+/// clears the field, so it is passed through untouched.
+fn validate_demo_url(url: Option<String>) -> Result<Option<String>, ProjectError> {
+    match url {
+        Some(u) if u.trim().is_empty() => Ok(Some(String::new())),
+        Some(u) => Ok(Some(
+            crate::helper::string::validate_http_url(&u, "Demo URL")
+                .map_err(ProjectError::InvalidDemo)?,
+        )),
+        None => Ok(None),
+    }
 }
 
 /// Collects the per-variant autorun CD storage keys for a project. Called
@@ -1100,14 +1135,14 @@ pub async fn new_project(
             demo_width: data.demo_width,
             demo_height: data.demo_height,
             demo_config: data.demo_config,
-            demo_url: data.demo_url,
+            demo_url: validate_demo_url(data.demo_url)?,
             demo_url_dir: state
                 .project_demo_config
                 .dir
                 .to_str()
                 .unwrap_or("")
                 .to_string(),
-            links: normalize_links(data.links),
+            links: normalize_links(data.links)?,
         })
         .await;
     let project_id = match project_result {
@@ -1211,6 +1246,16 @@ pub async fn update_project(
         .user_id
         .parse::<i64>()
         .map_err(|_| ProjectError::InternalError("Cannot parse id".to_string()))?;
+
+    // Authorise before reading any project internals or buffering the upload.
+    let post_id = state
+        .project_service
+        .get_project_post_id(GetProjectPostIdCommand {
+            project_id,
+            required_author_id: Some(user_id),
+        })
+        .await?;
+
     let parsed = parse_project_multipart::<ProjectPatchData>(multipart, "project_data").await?;
     let mut data = parsed.data;
     let current_demo_type: String =
@@ -1224,12 +1269,15 @@ pub async fn update_project(
         .as_deref()
         .unwrap_or(current_demo_type.as_str())
         .to_string();
+    // A project only has a project_v86_games row when its demo type is v86;
+    // fetch_one would surface RowNotFound as a 500 for every other type.
     let old_v86_storage = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
         "SELECT zip_storage_key, iso_storage_key, disk_storage_key FROM project_v86_games WHERE project_id = ?",
     )
     .bind(project_id)
-    .fetch_one(&state.project_service.pool)
-    .await?;
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .unwrap_or((None, None, None));
     let old_v86_variant_keys = v86_variant_iso_keys(&state, project_id).await;
 
     let has_demo_url = data.demo_url.as_ref().is_some_and(|u| !u.trim().is_empty());
@@ -1295,14 +1343,6 @@ pub async fn update_project(
         ));
     }
 
-    let post_id = state
-        .project_service
-        .get_project_post_id(GetProjectPostIdCommand {
-            project_id,
-            required_author_id: Some(user_id),
-        })
-        .await?;
-
     upload_inline_media(
         &state,
         user_id,
@@ -1328,10 +1368,13 @@ pub async fn update_project(
         media_usage = Some(usage);
     }
 
-    state
+    let updated_at = state
         .post_service
         .update_post(UpdatePostCommand {
             user_id,
+            // Ownership was already established by get_project_post_id above.
+            required_author_id: Some(user_id),
+            expected_updated_at: data.expected_updated_at.take(),
             post_id,
             title: data.title,
             slug: data.slug,
@@ -1343,7 +1386,9 @@ pub async fn update_project(
         })
         .await?;
 
-    let mut demo_url = data.demo_url.filter(|u| !u.trim().is_empty());
+    // Validate the client-supplied URL before it can be replaced by the
+    // locally-extracted demo path below.
+    let mut demo_url = validate_demo_url(data.demo_url)?.filter(|u| !u.trim().is_empty());
     if parsed.demo_zip.is_some() {
         let local_demo_url = state
             .project_demo_config
@@ -1367,7 +1412,7 @@ pub async fn update_project(
             demo_height: data.demo_height,
             demo_config: data.demo_config,
             demo_url,
-            links: data.links.map(normalize_links),
+            links: data.links.map(normalize_links).transpose()?,
         })
         .await?;
 
@@ -1387,8 +1432,10 @@ pub async fn update_project(
         )
         .await?;
         tx.commit().await?;
-        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some() {
-            delete_v86_game_objects(&state, project_id, &old_v86_storage, &old_v86_variant_keys).await;
+        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some()
+        {
+            delete_v86_game_objects(&state, project_id, &old_v86_storage, &old_v86_variant_keys)
+                .await;
         }
     }
 
@@ -1415,8 +1462,10 @@ pub async fn update_project(
             .bind(project_id)
             .execute(&state.project_service.pool)
             .await?;
-        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some() {
-            delete_v86_game_objects(&state, project_id, &old_v86_storage, &old_v86_variant_keys).await;
+        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some()
+        {
+            delete_v86_game_objects(&state, project_id, &old_v86_storage, &old_v86_variant_keys)
+                .await;
         }
     }
 
@@ -1435,7 +1484,12 @@ pub async fn update_project(
             .await?;
     }
 
-    Ok(())
+    Ok(Json(UpdateProjectResponse { updated_at }))
+}
+
+#[derive(Serialize)]
+pub struct UpdateProjectResponse {
+    pub updated_at: String,
 }
 
 #[axum::debug_handler]

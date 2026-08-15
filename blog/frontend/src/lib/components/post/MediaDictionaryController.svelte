@@ -1,103 +1,25 @@
 <script>
 	import OfflineMediaCreator from './OfflineMediaCreator.svelte';
 	import OnlineMediaSearcher from './OnlineMediaSearcher.svelte';
-	import { untrack } from 'svelte';
 
-	let {
-		updateMediaDictionary,
-		registerSearch,
-		registerMediaCheck,
-		registerGetMedia,
-		registerClearNewMedia,
-		...rest
-	} = $props();
-
-	let newMedia = $state({});
-
-	let onlineMedia = $state({});
-	let offlineMedia = $derived(
-		Object.fromEntries(
-			Object.entries(newMedia).map(([key, value]) => [key, { url: value.url, type: value.type }])
-		)
-	);
-
-	$effect(() => {
-		updateMediaDictionary({
-			...Object.fromEntries(Object.entries(offlineMedia).map(([key, value]) => [key, value.url])),
-			...Object.fromEntries(Object.entries(onlineMedia).filter(([_, v]) => v !== undefined))
-		});
-	});
-
-	const searchOnlineMedia = async (keys) => {
-		const dict = { ...onlineMedia };
-		const missingKeys = keys.filter((key) => !(key in onlineMedia));
-
-		missingKeys.forEach((key) => (dict[key] = null));
-		onlineMedia = { ...dict };
-
-		missingKeys.forEach(async (key) => {
-			const res = await fetch('/api/media/s/' + key, { method: 'GET' });
-			if (res.ok) {
-				onlineMedia[key] = (await res.json()).url;
-			} else {
-				onlineMedia[key] = undefined;
-				setTimeout(() => delete onlineMedia[key], 5000);
-			}
-		});
-	};
-
-	untrack(() => registerSearch)(searchOnlineMedia);
-	untrack(() => registerMediaCheck)({
-		isOnline: (keyword) => keyword in onlineMedia && onlineMedia[keyword] != null,
-		isOffline: (keyword) => keyword in offlineMedia && offlineMedia[keyword] != null
-	});
-	untrack(() => registerGetMedia)((keyword) => newMedia[keyword]);
-	untrack(() => registerClearNewMedia)((names) => {
-		const temp = { ...newMedia };
-		names.forEach((name) => {
-			delete temp[name];
-		});
-		searchOnlineMedia(names);
-		newMedia = { ...temp };
-	});
-
-	const uploadNewMedia = (media) => {
-		const temp = { ...newMedia };
-		const names = [];
-		media.forEach((medium) => {
-			temp[medium.name] = medium;
-			names.push(medium.name);
-		});
-		searchOnlineMedia(names);
-		newMedia = { ...temp };
-	};
-
-	const changeName = (oldName, newName) => {
-		if (newName in newMedia) return false;
-
-		let temp = { ...newMedia };
-		temp[newName] = temp[oldName];
-
-		delete temp[oldName];
-
-		newMedia = { ...temp };
-		if (!(newName in onlineMedia)) {
-			searchOnlineMedia([newName]);
-		}
-		return true;
-	};
+	// `media` is created once by the view-model (`createMediaDictionary()`) and
+	// handed down as a plain prop — this component only renders it. It used to
+	// own this state itself and hand functions back *up* into `$state` slots
+	// its parent declared for that purpose; now nothing needs to cross the
+	// boundary in either direction beyond this one object.
+	let { media, ...rest } = $props();
 </script>
 
 <div {...rest}>
 	<OnlineMediaSearcher
-		class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-primary/40 rounded-xl"
+		class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-background/30 border border-dark/10 rounded-xl"
 	/>
 
 	<OfflineMediaCreator
-		{onlineMedia}
-		{offlineMedia}
-		{uploadNewMedia}
-		{changeName}
-		class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-primary/40 rounded-xl"
+		onlineMedia={media.online}
+		offlineMedia={media.offline}
+		uploadNewMedia={media.uploadNew}
+		changeName={media.changeName}
+		class="flex flex-col w-1/2 lg:w-60 h-full text-dark bg-background/30 border border-dark/10 rounded-xl"
 	/>
 </div>
