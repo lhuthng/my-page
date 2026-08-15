@@ -1,44 +1,53 @@
 <script>
 	import { dev } from '$app/environment';
 	import { env as publicEnv } from '$env/dynamic/public';
-	import { onMount } from 'svelte';
 
 	let email = $state('');
 	let pending = $state(false);
 	let status = $state(true);
 	let message = $state('');
+	// The captcha stays hidden until Subscribe is hit with no token in hand,
+	// and is torn down as soon as the submission finishes.
+	let showTurnstile = $state(false);
+	// Set when Subscribe is clicked without a token; consumed by the token
+	// callback so the form submits itself once the challenge is solved.
+	let awaitingSubmit = $state(false);
 	let turnstileHost = $state();
 	let turnstileToken = $state('');
 	let turnstileWidgetId;
 	const turnstileSiteKey = publicEnv.PUBLIC_TURNSTILE_SITE_KEY ?? '';
 	const captchaRequired = !dev;
 
-	function resetTurnstile() {
-		if (window.turnstile && turnstileWidgetId !== undefined) {
-			window.turnstile.reset(turnstileWidgetId);
-		}
-		turnstileToken = '';
+	async function loadTurnstileScript() {
+		if (window.turnstile) return;
+		await new Promise((resolve, reject) => {
+			const script = document.createElement('script');
+			script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+			script.async = true;
+			script.defer = true;
+			script.onload = resolve;
+			script.onerror = reject;
+			document.head.appendChild(script);
+		});
 	}
 
-	async function loadTurnstile() {
-		if (!captchaRequired || !turnstileSiteKey || !turnstileHost) return;
-		if (!window.turnstile) {
-			await new Promise((resolve, reject) => {
-				const script = document.createElement('script');
-				script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-				script.async = true;
-				script.defer = true;
-				script.onload = resolve;
-				script.onerror = reject;
-				document.head.appendChild(script);
-			});
-		}
-		if (window.turnstile && turnstileWidgetId === undefined) {
+	// Renders the widget once both the flag and the mounted host are ready;
+	// `turnstileWidgetId` guards against double-rendering.
+	$effect(() => {
+		if (!captchaRequired || !showTurnstile || !turnstileHost) return;
+		loadTurnstileScript().then(() => {
+			if (!window.turnstile || turnstileWidgetId !== undefined) return;
 			turnstileWidgetId = window.turnstile.render(turnstileHost, {
 				sitekey: turnstileSiteKey,
 				theme: 'dark',
 				callback(token) {
 					turnstileToken = token;
+					// The user clicked Subscribe and the challenge is done — fire
+					// the request instead of making them click a second time.
+					if (awaitingSubmit) {
+						awaitingSubmit = false;
+						submit();
+					}
 				},
 				'expired-callback'() {
 					turnstileToken = '';
@@ -47,29 +56,20 @@
 					turnstileToken = '';
 				}
 			});
-		}
-	}
-
-	onMount(() => {
-		loadTurnstile();
+		});
 	});
 
-	async function handleSubmit(e) {
-		e.preventDefault();
+	function removeTurnstile() {
+		if (turnstileWidgetId !== undefined) {
+			window.turnstile?.remove(turnstileWidgetId);
+			turnstileWidgetId = undefined;
+		}
+		turnstileToken = '';
+		showTurnstile = false;
+	}
+
+	async function submit() {
 		message = '';
-
-		if (!email.trim()) {
-			status = false;
-			message = 'Please enter an email address.';
-			return;
-		}
-
-		if (captchaRequired && !turnstileToken) {
-			status = false;
-			message = 'Please complete the captcha first.';
-			return;
-		}
-
 		pending = true;
 		try {
 			const res = await fetch('/api/newsletter/subscribe', {
@@ -95,8 +95,30 @@
 			message = 'Something went wrong. Please try again.';
 		} finally {
 			pending = false;
-			resetTurnstile();
+			removeTurnstile();
 		}
+	}
+
+	async function handleSubmit(e) {
+		e.preventDefault();
+		message = '';
+		awaitingSubmit = false;
+
+		if (!email.trim()) {
+			status = false;
+			message = 'Please enter an email address.';
+			return;
+		}
+
+		if (captchaRequired && !turnstileToken) {
+			awaitingSubmit = true;
+			showTurnstile = true;
+			status = false;
+			message = 'Complete the captcha below to subscribe.';
+			return;
+		}
+
+		await submit();
 	}
 </script>
 
@@ -118,7 +140,7 @@
 			</button>
 		</div>
 	</form>
-	{#if captchaRequired}
+	{#if showTurnstile}
 		<div bind:this={turnstileHost}></div>
 	{/if}
 	{#if message}
