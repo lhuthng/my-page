@@ -1,4 +1,5 @@
 <script>
+	import NewsletterSubscribe from './NewsletterSubscribe.svelte';
 </script>
 
 <footer class="w-full bg-dark py-2 text-white divide-white">
@@ -9,8 +10,11 @@
 				Huu Thang's Blog
 			</h2>
 			<p>Exploring the intersection of programming and creativity (probably)</p>
+			<div class="max-w-sm mx-auto sm:mx-0">
+				<NewsletterSubscribe />
+			</div>
 		</div>
-		<div class="flex grow justify-evenly h-full gap-12 px-0 lg:px-4 py-2 lg:py-4">
+		<div class="flex grow mt-auto justify-evenly h-full gap-12 px-0 lg:px-4 py-2 lg:py-4">
 			<div class="space-y-2 text-left sm:text-right">
 				<h3 class="text-xl">EXPLORE</h3>
 				<ul class="space-y-1 h-full list-inside list-['-'] pt-1">

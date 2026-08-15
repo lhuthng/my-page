@@ -22,6 +22,46 @@ pub struct ContactFormResponse {
     message: String,
 }
 
+#[cfg(debug_assertions)]
+#[axum::debug_handler]
+pub async fn preview_email_templates(
+    State(state): State<Arc<AppState>>,
+) -> axum::response::Html<String> {
+    let app_base_url = state.config.app_base_url.trim_end_matches('/').to_string();
+
+    // Pick a random published post so the campaign sample shows real content.
+    let sample = {
+        let row: Option<(String, String, Option<String>, String)> = sqlx::query_as(
+            r#"
+            SELECT p.title, p.excerpt, m.short_name, p.slug
+            FROM posts p
+            LEFT JOIN media m ON m.id = p.cover_media_id
+            WHERE p.status = 'published' AND p.content_kind = 'post'
+            ORDER BY RANDOM() LIMIT 1
+            "#,
+        )
+        .fetch_optional(&state.newsletter_service.pool)
+        .await
+        .ok()
+        .flatten();
+
+        row.map(|(title, excerpt, short_name, slug)| {
+            crate::infrastructure::mail::CampaignPostData {
+                title,
+                excerpt,
+                cover_url: short_name
+                    .map(|short| format!("{app_base_url}/api/media/i/{short}")),
+                post_url: format!("{app_base_url}/posts/{slug}"),
+            }
+        })
+    };
+
+    axum::response::Html(crate::infrastructure::mail::preview_page(
+        &app_base_url,
+        sample.as_ref(),
+    ))
+}
+
 #[axum::debug_handler]
 pub async fn receive_contact_form(
     State(state): State<Arc<AppState>>,
@@ -48,7 +88,7 @@ pub async fn receive_contact_form(
 
     let send_result = timeout(
         Duration::from_secs(15),
-        send_contact_emails(mail_config, &cred),
+        send_contact_emails(mail_config, &state.config.app_base_url, &cred),
     )
     .await
     .map_err(|_| {

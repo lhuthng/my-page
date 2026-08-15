@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod backup;
 pub mod mail;
+pub mod newsletter;
 pub mod media;
 pub mod post;
 pub mod project;

@@ -98,6 +98,7 @@ pub struct AppState {
     pub project_service: persistence::project::ProjectServiceImpl,
     pub series_service: persistence::series::SeriesServiceImpl,
     pub dashboard_service: persistence::dashboard::DashboardServiceImpl,
+    pub newsletter_service: persistence::newsletter::NewsletterServiceImpl,
     pub graphql_schema: crate::infrastructure::web::graphql::BlogSchema,
 }
 
@@ -394,6 +395,7 @@ impl<'a> HTTPServer<'a> {
             project_service: persistence::project::ProjectServiceImpl::new(pool.clone()),
             series_service: persistence::series::SeriesServiceImpl::new(pool.clone()),
             dashboard_service: persistence::dashboard::DashboardServiceImpl::new(pool.clone()),
+            newsletter_service: persistence::newsletter::NewsletterServiceImpl::new(pool.clone()),
             graphql_schema,
         });
         let router = api::router::build_router(state);

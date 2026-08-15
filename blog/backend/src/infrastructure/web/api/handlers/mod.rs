@@ -4,6 +4,7 @@ pub mod common;
 pub mod dashboard;
 pub mod mail;
 pub mod media;
+pub mod newsletter;
 pub mod post;
 pub mod project;
 pub mod series;

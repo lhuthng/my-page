@@ -3,6 +3,7 @@ pub mod analytics;
 pub mod dashboard;
 pub mod image_convert;
 pub mod media;
+pub mod newsletter;
 pub mod post;
 pub mod project;
 pub mod series;

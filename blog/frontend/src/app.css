@@ -190,10 +190,11 @@ button {
 	--duo-before: var(--color-primary);
 	--duo-text: var(--color-white);
 
-	@apply relative;
+	@apply relative h-fit;
+
 	a,
 	button {
-		@apply relative z-11 block w-full cursor-pointer rounded-2xl border-2 px-2 py-1 font-semibold text-nowrap transition-all duration-50 not-disabled:hover:brightness-105 focus:outline-dark not-disabled:active:translate-y-[0.2rem] not-disabled:active:brightness-105;
+		@apply relative z-11 block w-full cursor-pointer rounded-2xl border-2 px-2 py-1 font-semibold text-nowrap transition-all duration-50 not-disabled:hover:brightness-105 focus:outline-dark not-disabled:active:translate-y-[0.2rem] not-disabled:active:brightness-105 no-underline;
 		border-color: var(--duo-border);
 		background-color: var(--duo-bg);
 		color: var(--duo-text);

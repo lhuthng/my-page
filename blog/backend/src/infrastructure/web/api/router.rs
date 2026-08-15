@@ -445,6 +445,15 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/posts", get(handlers::dashboard::get_posts))
         .route("/projects", get(handlers::dashboard::get_projects))
         .route("/users", get(handlers::dashboard::get_users))
+        .route(
+            "/newsletter/subscribers",
+            get(handlers::newsletter::list_subscribers),
+        )
+        .route(
+            "/newsletter/campaigns",
+            get(handlers::newsletter::list_campaigns),
+        )
+        .route("/newsletter/send", post(handlers::newsletter::send_campaign))
         .layer(middleware::from_fn(middlewares::auth::mod_check))
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -468,9 +477,25 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
 
     let analytics_routes = Router::new().route("/visit", post(handlers::dashboard::track_visit));
 
-    let mail_routes = Router::new().merge(
+    #[allow(unused_mut)]
+    let mut mail_routes = Router::new()
+        .route("/contact-form", post(handlers::mail::receive_contact_form));
+
+    #[cfg(debug_assertions)]
+    {
+        mail_routes = mail_routes.route("/preview", get(handlers::mail::preview_email_templates));
+    }
+
+    let mail_routes = Router::new().merge(mail_routes.layer(cors.clone()));
+
+    let newsletter_routes = Router::new().merge(
         Router::new()
-            .route("/contact-form", post(handlers::mail::receive_contact_form))
+            .route("/subscribe", post(handlers::newsletter::subscribe))
+            .route("/confirm", get(handlers::newsletter::confirm))
+            .route(
+                "/unsubscribe",
+                get(handlers::newsletter::unsubscribe).post(handlers::newsletter::unsubscribe_by_email),
+            )
             .layer(cors),
     );
 
@@ -512,6 +537,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/tags", tag_routes)
         .nest("/series", series_routes)
         .nest("/mail", mail_routes)
+        .nest("/newsletter", newsletter_routes)
         .nest("/analytics", analytics_routes)
         .nest("/dashboard", dashboard_routes)
         .merge(graphql_routes)
