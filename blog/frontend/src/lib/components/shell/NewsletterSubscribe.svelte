@@ -123,8 +123,7 @@
 </script>
 
 <div class="w-full space-y-2">
-	<h3 class="text-xl">Newsletter</h3>
-	<p class="text-white/70">Get new posts in your inbox, no spam.</p>
+	<h3 class="text-lg">Newsletter:</h3>
 	<form class="flex not-sm:flex-col gap-2" onsubmit={handleSubmit} novalidate>
 		<input
 			type="email"
@@ -132,9 +131,9 @@
 			autocomplete="email"
 			bind:value={email}
 			disabled={pending}
-			class="flex-1 min-w-0 rounded-xl border-2 border-white/40 bg-transparent px-3 py-1.5 text-white placeholder:text-white/40 focus:border-white focus:outline-none disabled:opacity-40"
+			class="flex-1 min-w-0 rounded-xl border-2 border-white bg-transparent px-3 py-1.5 text-white placeholder:text-white/60 focus:border-white focus:outline-none disabled:opacity-40"
 		/>
-		<div class="duo-btn w-fit mx-auto" data-duo-color="primary">
+		<div class="duo-btn w-fit mx-auto" data-duo-color="green">
 			<button type="submit" disabled={pending}>
 				{pending ? 'Subscribing...' : 'Subscribe'}
 			</button>
