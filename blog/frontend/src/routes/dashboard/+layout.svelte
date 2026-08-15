@@ -10,7 +10,8 @@
 		{ label: 'Posts', path: '/dashboard/posts' },
 		{ label: 'Projects', path: '/dashboard/projects', exact: true },
 		{ label: 'Series', path: '/dashboard/series' },
-		{ label: 'Users', path: '/dashboard/users' }
+		{ label: 'Users', path: '/dashboard/users' },
+		{ label: 'Newsletter', path: '/dashboard/newsletter' }
 	];
 
 	let tabs = $derived(
