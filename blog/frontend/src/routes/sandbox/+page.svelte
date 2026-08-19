@@ -1,5 +1,7 @@
 <script>
 	import SandboxMachine from './SandboxMachine.svelte';
+	import { readFloppyFiles, floppyFilesToZip } from '$lib/features/v86/floppy.js';
+	import { loadBlankFloppy } from '$lib/players/v86-saves.js';
 
 	let { data } = $props();
 
@@ -12,6 +14,10 @@
 	let machine = $state(null);
 	let booted = $state(null);
 	let mounted = $state(null);
+	let floppyBusy = $state(false);
+	let floppyStatus = $state('');
+	let floppyCritical = $state(false);
+	let floppyIn = $state(false);
 
 	const selected = $derived(data.systems.find((system) => system.id === versionId));
 
@@ -24,6 +30,9 @@
 		mounted = null;
 		status = '';
 		critical = false;
+		floppyIn = false;
+		floppyStatus = '';
+		floppyCritical = false;
 		booted = { ...selected };
 	};
 
@@ -81,6 +90,55 @@
 		mounted = null;
 		status = 'Disc removed.';
 	};
+
+	const insertFloppy = async () => {
+		if (!machine || floppyBusy) return;
+		floppyBusy = true;
+		floppyCritical = false;
+		floppyStatus = 'Putting an empty floppy in drive A:…';
+		try {
+			const floppy = await loadBlankFloppy();
+			await machine.insertFloppy(floppy.buffer);
+			floppyIn = true;
+			floppyStatus = 'Empty floppy inserted in drive A:. Copy files to it, then download them.';
+		} catch (error) {
+			floppyCritical = true;
+			floppyStatus = error?.message ?? 'Could not insert that floppy.';
+		}
+		floppyBusy = false;
+	};
+
+	const ejectFloppy = async () => {
+		if (!machine || floppyBusy) return;
+		await machine.ejectFloppy();
+		floppyIn = false;
+		floppyStatus = 'Floppy removed.';
+	};
+
+	const downloadFloppy = async () => {
+		if (!machine || floppyBusy) return;
+		floppyBusy = true;
+		floppyCritical = false;
+		floppyStatus = 'Reading the floppy…';
+		try {
+			const image = await machine.getFloppy();
+			const files = readFloppyFiles(image);
+			if (files.length === 0) throw new Error('The floppy is empty or unreadable.');
+			const zipBytes = floppyFilesToZip(files);
+			const blob = new Blob([zipBytes], { type: 'application/zip' });
+			const url = URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = `floppy-${new Date().toISOString().slice(0, 10)}.zip`;
+			link.click();
+			URL.revokeObjectURL(url);
+			floppyStatus = `Downloaded ${files.length} file${files.length === 1 ? '' : 's'} from the floppy.`;
+		} catch (error) {
+			floppyCritical = true;
+			floppyStatus = error?.message ?? 'Could not read the floppy.';
+		}
+		floppyBusy = false;
+	};
 </script>
 
 <svelte:head>
@@ -124,6 +182,40 @@
 	</div>
 
 	{#if booted}
+		<div class="rounded-xl bg-white p-4 drop-shadow-xl">
+			<h2 class="mb-2 font-semibold">Floppy drive</h2>
+			<div class="flex flex-wrap items-end gap-3">
+				<button
+					class="rounded-lg bg-dark px-4 py-2 text-sm text-white disabled:opacity-50"
+					disabled={!machine || floppyBusy}
+					onclick={insertFloppy}
+				>
+					{floppyIn ? 'New empty floppy' : 'Insert empty floppy'}
+				</button>
+				{#if floppyIn}
+					<button
+						class="rounded-lg border border-dark/15 px-4 py-2 text-sm disabled:opacity-50"
+						disabled={floppyBusy}
+						onclick={ejectFloppy}
+					>
+						Eject
+					</button>
+					<button
+						class="rounded-lg bg-dark px-4 py-2 text-sm text-white disabled:opacity-50"
+						disabled={floppyBusy}
+						onclick={downloadFloppy}
+					>
+						Download contents as .zip
+					</button>
+				{/if}
+			</div>
+			{#if floppyStatus}
+				<p class="mt-3 truncate text-sm {floppyCritical ? 'text-red-700' : 'text-dark/70'}">
+					{floppyStatus}
+				</p>
+			{/if}
+		</div>
+
 		<div class="rounded-xl bg-white p-4 drop-shadow-xl">
 			<h2 class="mb-2 font-semibold">CD drive</h2>
 			<div class="flex flex-wrap items-end gap-3">

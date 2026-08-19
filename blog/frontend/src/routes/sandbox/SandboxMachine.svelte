@@ -25,6 +25,12 @@
 	let busy = false;
 	// Held so a reboot can put the same disc back in the drive.
 	let disc = null;
+	// Same for the floppy drive, so a reboot keeps whatever was in A:.
+	let floppy = null;
+	// Fractional movement carried between pointer-move events, so a slow drag
+	// still ticks the guest instead of being lost to integer truncation.
+	let mouseRemainderX = 0;
+	let mouseRemainderY = 0;
 
 	const handleWheel = (event) => {
 		if (!blockWheel) return;
@@ -79,6 +85,7 @@
 			// letters it at boot and a disc can go in whenever. On a reboot the
 			// disc that was in the drive goes back in at construction.
 			if (disc) options.cdrom = { buffer: disc };
+			if (floppy) options.fda = { buffer: floppy };
 
 			emulator = new V86(options);
 			installWheelGuard(emulator, () => blockWheel);
@@ -97,7 +104,7 @@
 					lastAt = now;
 				}, 1000);
 			});
-			onready?.({ insertDisc, ejectDisc });
+			onready?.({ insertDisc, ejectDisc, insertFloppy, ejectFloppy, getFloppy });
 		} catch (cause) {
 			error = cause?.message ?? 'The machine could not start.';
 		}
@@ -135,6 +142,33 @@
 		disc = null;
 	};
 
+	// The floppy drive follows the same swap-then-wait pattern: dropping a disk
+	// onto an occupied drive only flips a flag, so eject first so the guest sees
+	// a real change.
+	const insertFloppy = async (buffer) => {
+		if (!emulator) throw new Error('Start the machine first.');
+		if (floppy) {
+			emulator.eject_fda?.();
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+		}
+		floppy = buffer;
+		await emulator.set_fda?.({ buffer });
+	};
+
+	const ejectFloppy = async () => {
+		if (!emulator) return;
+		emulator.eject_fda?.();
+		floppy = null;
+	};
+
+	// Hand back the live floppy bytes so the sandbox can export them as a zip.
+	// v86 reflects writes made in the guest, so this is the real on-disk state.
+	const getFloppy = () => {
+		if (!emulator) return null;
+		const buffer = emulator.get_disk_fda?.();
+		return buffer instanceof Uint8Array || buffer instanceof ArrayBuffer ? buffer : null;
+	};
+
 	const reboot = async () => {
 		if (busy) return;
 		busy = true;
@@ -164,14 +198,33 @@
 		else screen?.querySelector('canvas')?.requestPointerLock?.();
 	};
 
+	// v86's bundled adapter negates movementY, which shows up as a flipped
+	// (top-down) axis on some platforms. Send the browser's natural direction
+	// instead, carrying fractional movement between events — the same approach
+	// the project player uses.
+	const handleCapturedMouseMove = (event) => {
+		if (!emulator || document.pointerLockElement === null) return;
+		if (typeof event.movementX !== 'number' || typeof event.movementY !== 'number') return;
+		mouseRemainderX += event.movementX;
+		mouseRemainderY += event.movementY;
+		const deltaX = mouseRemainderX < 0 ? Math.ceil(mouseRemainderX) : Math.floor(mouseRemainderX);
+		const deltaY = mouseRemainderY < 0 ? Math.ceil(mouseRemainderY) : Math.floor(mouseRemainderY);
+		mouseRemainderX -= deltaX;
+		mouseRemainderY -= deltaY;
+		if (deltaX || deltaY) emulator.bus?.send?.('mouse-delta', [deltaX, deltaY]);
+		event.stopImmediatePropagation();
+	};
+
 	const fullscreen = () =>
 		document.fullscreenElement ? document.exitFullscreen?.() : shell?.requestFullscreen?.();
 
 	onMount(() => {
 		window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+		window.addEventListener('mousemove', handleCapturedMouseMove, true);
 		start();
 		return () => {
 			window.removeEventListener('wheel', handleWheel, { capture: true });
+			window.removeEventListener('mousemove', handleCapturedMouseMove, true);
 			teardown();
 		};
 	});
@@ -198,7 +251,17 @@
 		</span>
 	</div>
 	<div class="v86-shell" bind:this={shell}>
-		<div class="w-full h-130 screen" bind:this={screen}></div>
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div
+			class="w-full h-130 screen"
+			bind:this={screen}
+			role="application"
+			tabindex="0"
+			onclick={() => emulator && captureMouse()}
+			onkeydown={(event) => event.key === 'Enter' && emulator && captureMouse()}
+		></div>
 	</div>
 	{#if error}
 		<p class="px-3 py-2 text-xs text-red-400">{error}</p>
