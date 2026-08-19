@@ -1,5 +1,7 @@
 <script>
 	import { auth } from '$lib/auth/user.svelte.js';
+	import { Sha256 } from '$lib/features/v86/sha256.js';
+	import { createZstdCompress, teardownZstd } from '$lib/features/v86/zstd.js';
 
 	let { data } = $props();
 	let systems = $state(data.systems);
@@ -10,6 +12,8 @@
 	let status = $state('');
 	let critical = $state(false);
 
+	const CHUNK_SIZE = 256 * 1024;
+
 	const request = async (url, options = {}) => {
 		const response = await fetch(url, {
 			...options,
@@ -19,6 +23,18 @@
 		return response;
 	};
 
+	const hashFile = async (file) => {
+		const hasher = new Sha256();
+		const chunkSize = 1024 * 1024;
+		for (let offset = 0; offset < file.size; offset += chunkSize) {
+			const slice = file.slice(offset, Math.min(offset + chunkSize, file.size));
+			const buf = await slice.arrayBuffer();
+			hasher.update(new Uint8Array(buf));
+			status = `Hashing… ${Math.round((offset / file.size) * 100)}%`;
+		}
+		return hasher.digestHex();
+	};
+
 	const upload = async () => {
 		if (!image || !name.trim() || busy) return;
 		busy = true;
@@ -26,8 +42,9 @@
 		let uploadId;
 		let interval;
 		try {
+			const sha256 = await hashFile(image);
 			const existing = systems.find((system) => system.id === Number(replacingSystemId));
-			console.log('[upload] creating session', { name: name.trim(), replacingSystemId });
+			console.log('[upload] creating session', { name: name.trim(), sha256 });
 			const response = await request('/api/v86/systems/upload', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -35,33 +52,62 @@
 					system_id: existing?.id ?? null,
 					expected_current_version: existing?.current_version ?? 0,
 					name: name.trim(),
-					platform_key: 'windows95',
+					platform_key: 'windows9x',
 					file_name: image.name,
-					size_bytes: image.size
+					size_bytes: image.size,
+					sha256
 				})
 			});
 			const session = await response.json();
 			uploadId = session.upload_id;
-			console.log('[upload] session created', uploadId);
-			for (
-				let index = session.next_chunk_index;
-				index * session.chunk_size_bytes < image.size;
-				index++
-			) {
-				const start = index * session.chunk_size_bytes;
-				const chunk = image.slice(start, Math.min(start + session.chunk_size_bytes, image.size));
-				await request(`/api/v86/systems/upload/${session.upload_id}/chunk/${index}`, {
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/octet-stream' },
-					body: chunk
-				});
-				status = `Uploading image… ${Math.round(((start + chunk.size) / image.size) * 100)}%`;
+			console.log('[upload] session created', { uploadId, reuse: session.reuse });
+
+			if (!session.reuse) {
+				const zstdCompress = createZstdCompress({ workers: 3 });
+				const chunkCount = session.chunk_count;
+				let nextPart = 0;
+				let uploadError = null;
+
+				const uploadPart = async (partIndex) => {
+					const start = partIndex * CHUNK_SIZE;
+					const end = Math.min(start + CHUNK_SIZE, image.size);
+					const slice = image.slice(start, end);
+					const buf = await slice.arrayBuffer();
+					const raw = new Uint8Array(buf);
+					const padded = new Uint8Array(CHUNK_SIZE);
+					padded.set(raw);
+					const compressed = await zstdCompress(padded.buffer);
+					const res = await fetch(`/api/v86/systems/upload/${uploadId}/part/${partIndex}`, {
+						method: 'PUT',
+						headers: { Authorization: auth(), 'Content-Type': 'application/octet-stream' },
+						body: compressed
+					});
+					if (!res.ok) throw new Error(await res.text());
+					status = `Uploading image… ${Math.round(((partIndex + 1) / chunkCount) * 100)}%`;
+				};
+
+				await Promise.all(
+					Array.from({ length: 8 }, async () => {
+						while (nextPart < chunkCount && !uploadError) {
+							const partIndex = nextPart++;
+							try {
+								await uploadPart(partIndex);
+							} catch (e) {
+								uploadError = e;
+								throw e;
+							}
+						}
+					})
+				);
+				if (uploadError) throw uploadError;
+				teardownZstd();
 			}
-			console.log('[upload] all chunks uploaded, calling /complete');
-			status = 'Preparing immutable image chunks…';
+
+			console.log('[upload] parts uploaded, calling /complete');
+			status = 'Verifying immutable image chunks…';
 			interval = setInterval(async () => {
 				try {
-					const res = await fetch(`/api/v86/systems/upload/${session.upload_id}`, {
+					const res = await fetch(`/api/v86/systems/upload/${uploadId}`, {
 						headers: { Authorization: auth() }
 					});
 					if (res.ok) {
@@ -70,7 +116,7 @@
 						if (data.chunk_progress) {
 							status =
 								data.chunk_progress.message ||
-								`Compressing chunk ${data.chunk_progress.completed_chunks}/${data.chunk_progress.total_chunks}`;
+								`Verifying chunk ${data.chunk_progress.completed_chunks}/${data.chunk_progress.total_chunks}`;
 						} else if (data.status === 'consumed') {
 							console.log('[upload] done — system ready');
 							clearInterval(interval);
@@ -91,10 +137,10 @@
 					console.log('[upload] poll error', e);
 				}
 			}, 800);
-			await request(`/api/v86/systems/upload/${session.upload_id}/complete`, {
+			await request(`/api/v86/systems/upload/${uploadId}/complete`, {
 				method: 'POST'
 			});
-			console.log('[upload] /complete returned 202, background task running');
+			console.log('[upload] /complete returned, background task running');
 		} catch (error) {
 			console.log('[upload] error in main flow', error);
 			if (interval) clearInterval(interval);
@@ -207,7 +253,7 @@
 			Platform strategy
 			<input
 				class="w-full rounded-lg border-2 border-dark/25 bg-slate-100 px-3 py-2 font-normal"
-				value="Windows 95"
+				value="Windows 9x"
 				readonly
 			/>
 		</label>

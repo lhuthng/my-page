@@ -4,7 +4,7 @@
 //
 // Two directory hierarchies are emitted over one set of file extents: the
 // primary one with DOS-ish uppercase names, and a Joliet one with the original
-// names in UCS-2, which is what Windows 95 actually reads.
+// names in UCS-2, which is what Windows 9x actually reads.
 
 const SECTOR = 2048;
 const ROOT_RECORD_SIZE = 34;
@@ -335,11 +335,13 @@ function writeDescriptor(image, view, lba, type, plan, root, joliet, date, label
  * @param root  tree of { name, isDir, size, children: Map, source }
  * @param readFile  async (node) => Uint8Array
  */
-export async function buildIsoImage(root, { readFile, onProgress, label = 'V86SANDBOX' } = {}) {
+export async function buildIsoImage(
+	root,
+	{ readFile, onProgress, label = 'V86SANDBOX', date = new Date() } = {}
+) {
 	const plan = planIso(root);
 	const image = new Uint8Array(plan.byteLength);
 	const view = new DataView(image.buffer);
-	const date = new Date();
 
 	writeDescriptor(image, view, 16, 1, plan, root, false, date, label);
 	writeDescriptor(image, view, 17, 2, plan, root, true, date, label);

@@ -2,8 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::{Read, Write},
-    path::{Component, Path, PathBuf},
-    process::Command,
+    path::{Component, Path},
     sync::{Arc, Mutex, OnceLock},
 };
 
@@ -20,7 +19,6 @@ use sha2::{Digest, Sha256};
 use sqlx::{Row, Sqlite, Transaction};
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
-use zip::ZipArchive;
 
 use crate::{
     domain::{entities::secret::Claims, errors::project::ProjectError},
@@ -76,15 +74,6 @@ struct VariantSpec {
     args: String,
 }
 
-/// A variant that has been built into autorun CD and stored content-addressed.
-#[derive(Debug, Clone)]
-struct BuiltVariant {
-    spec: VariantSpec,
-    iso_storage_key: String,
-    iso_size_bytes: i64,
-    iso_sha256: String,
-}
-
 #[derive(Serialize)]
 pub struct V86SystemVersionResponse {
     pub id: i64,
@@ -118,6 +107,40 @@ pub struct StartSystemUploadRequest {
     pub platform_key: String,
     pub file_name: String,
     pub size_bytes: u64,
+    pub sha256: String,
+}
+
+#[derive(Serialize)]
+pub struct StartSystemUploadResponse {
+    pub upload_id: String,
+    pub reuse: bool,
+    pub chunk_size_bytes: u64,
+    pub chunk_count: u64,
+    pub storage_key: Option<String>,
+}
+
+/// The client's plan for the game disk (D:) it built locally. `None` means the
+/// upload carries no ZIP (a manifest-only edit) and the source project's
+/// stored disk is reused unchanged.
+#[derive(Debug, Deserialize)]
+pub struct GameDiskPlan {
+    pub sha256: String,
+    pub size_bytes: u64,
+}
+
+/// A client-built launcher CD (E:) plan for one variant. The SHA-256 is over
+/// the finished ISO bytes; the server verifies it when the bytes arrive.
+#[derive(Debug, Deserialize)]
+pub struct GameVariantPlan {
+    pub index: i32,
+    pub sha256: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GameBuildPlans {
+    pub disk: Option<GameDiskPlan>,
+    pub variants: Vec<GameVariantPlan>,
 }
 
 #[derive(Deserialize)]
@@ -126,8 +149,33 @@ pub struct StartGameUploadRequest {
     pub system_version_id: i64,
     pub expected_artifact_revision: i64,
     pub manifest: String,
-    pub file_name: Option<String>,
-    pub size_bytes: Option<u64>,
+    pub plans: GameBuildPlans,
+}
+
+/// Whether the client must upload each artifact. Reused artifacts already
+/// exist content-addressed in R2 and are skipped.
+#[derive(Serialize)]
+pub struct DiskUploadSpec {
+    pub sha256: String,
+    pub size_bytes: u64,
+    pub chunk_size_bytes: u64,
+    pub chunk_count: u64,
+    pub reuse: bool,
+}
+
+#[derive(Serialize)]
+pub struct VariantUploadSpec {
+    pub index: i32,
+    pub sha256: String,
+    pub size_bytes: u64,
+    pub reuse: bool,
+}
+
+#[derive(Serialize)]
+pub struct StartGameUploadResponse {
+    pub upload_id: String,
+    pub disk: Option<DiskUploadSpec>,
+    pub variants: Vec<VariantUploadSpec>,
 }
 
 #[derive(Serialize)]
@@ -310,6 +358,14 @@ fn transient_r2_key(kind: &str, upload_id: &str, extension: &str) -> String {
     format!("v86/tmp/{kind}/{upload_id}.{extension}")
 }
 
+/// The content-addressed object key of one disk part: the browser requests
+/// parts by `{offset}-{offset+chunk_size}.img.zst`, and every part is zero-
+/// padded to the full chunk size (including the last one), matching `split_asset`.
+fn disk_part_name(storage_key: &str, part_index: u64, chunk_size: u64) -> String {
+    let offset = part_index * chunk_size;
+    format!("{storage_key}/{offset}-{}.img.zst", offset + chunk_size)
+}
+
 fn parse_r2_part_etags(etags: Option<&str>) -> Vec<(i32, String)> {
     match etags {
         Some(text) if !text.is_empty() => serde_json::from_str::<Vec<String>>(text)
@@ -331,32 +387,7 @@ fn append_r2_part_etag(existing: Option<&str>, etag: &str) -> String {
     serde_json::to_string(&etags).unwrap_or_else(|_| "[]".to_string())
 }
 
-fn temp_upload_path(state: &AppState, kind: &str, upload_id: &str) -> PathBuf {
-    state
-        .project_demo_config
-        .dir
-        .join("v86")
-        .join("tmp")
-        .join(kind)
-        .join(format!("{upload_id}.upload"))
-}
-
-fn sha256_file(path: &Path) -> Result<(u64, String), ProjectError> {
-    let mut file = File::open(path)?;
-    let mut hash = Sha256::new();
-    let mut size = 0_u64;
-    let mut buffer = [0_u8; 1024 * 1024];
-    loop {
-        let read = file.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        hash.update(&buffer[..read]);
-        size += read as u64;
-    }
-    Ok((size, hex::encode(hash.finalize())))
-}
-
+#[allow(dead_code)]
 fn split_asset(
     source: &Path,
     destination: &Path,
@@ -409,19 +440,6 @@ fn split_asset(
     Ok(count)
 }
 
-fn is_reserved_windows_name(component: &str) -> bool {
-    let stem = component
-        .split('.')
-        .next()
-        .unwrap_or("")
-        .trim_end_matches(' ')
-        .to_ascii_uppercase();
-    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || (stem.len() == 4
-            && (stem.starts_with("COM") || stem.starts_with("LPT"))
-            && stem.as_bytes()[3].is_ascii_digit()
-            && stem.as_bytes()[3] != b'0')
-}
 
 async fn rollback_system_version(
     pool: &sqlx::SqlitePool,
@@ -454,193 +472,6 @@ async fn rollback_system_version(
     Ok(())
 }
 
-/// Skips macOS-created junk that carries no game data: the `__MACOSX/`
-/// resource-fork tree and `.DS_Store` metadata files.
-fn is_macos_junk(normalized: &str) -> bool {
-    let first = normalized.split('/').next().unwrap_or("");
-    if first.eq_ignore_ascii_case("__MACOSX") {
-        return true;
-    }
-    let name = normalized.rsplit('/').next().unwrap_or("");
-    name.eq_ignore_ascii_case(".DS_Store")
-}
-
-fn validate_and_extract_game_zip(
-    zip_path: &Path,
-    destination: &Path,
-    max_files: usize,
-    max_extracted_size: u64,
-) -> Result<(), ProjectError> {
-    let file = File::open(zip_path)?;
-    let mut archive = ZipArchive::new(file)
-        .map_err(|e| ProjectError::UploadFailed(format!("Invalid game ZIP: {e}")))?;
-    if archive.len() > max_files {
-        return Err(ProjectError::InvalidDemo(format!(
-            "The game ZIP exceeds the {max_files} file limit."
-        )));
-    }
-    fs::create_dir_all(destination)?;
-    let mut seen = HashSet::new();
-    let mut expanded = 0_u64;
-    let mut extracted_files = 0_u64;
-
-    for index in 0..archive.len() {
-        let mut entry = archive
-            .by_index(index)
-            .map_err(|e| ProjectError::UploadFailed(e.to_string()))?;
-        let normalized = entry.name().replace('\\', "/");
-        if normalized.contains('\0') || normalized.starts_with('/') {
-            return Err(ProjectError::InvalidDemo(
-                "The game ZIP contains an unsafe path.".to_string(),
-            ));
-        }
-        if is_macos_junk(&normalized) {
-            continue;
-        }
-        let relative = Path::new(&normalized);
-        if relative.components().any(|part| {
-            matches!(
-                part,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        }) {
-            return Err(ProjectError::InvalidDemo(
-                "The game ZIP contains path traversal.".to_string(),
-            ));
-        }
-        if let Some(mode) = entry.unix_mode()
-            && mode & 0o170000 == 0o120000
-        {
-            return Err(ProjectError::InvalidDemo(
-                "Symbolic links are not accepted in game ZIPs.".to_string(),
-            ));
-        }
-        for component in relative.components() {
-            if let Component::Normal(value) = component {
-                let value = value.to_string_lossy();
-                if is_reserved_windows_name(&value)
-                    || value.ends_with(' ')
-                    || value.ends_with('.')
-                    || value.chars().any(|c| c.is_control())
-                    || value.chars().any(|c| "<>:\"|?*".contains(c))
-                {
-                    return Err(ProjectError::InvalidDemo(
-                        "The game ZIP contains a Windows-incompatible path.".to_string(),
-                    ));
-                }
-            }
-        }
-        if format!(r"D:\{}", normalized).len() >= 260 {
-            return Err(ProjectError::InvalidDemo(
-                "The game ZIP contains a path longer than Windows 95 supports.".to_string(),
-            ));
-        }
-        let key = normalized.to_lowercase();
-        if !seen.insert(key) {
-            return Err(ProjectError::InvalidDemo(
-                "The game ZIP contains case-insensitive duplicate paths.".to_string(),
-            ));
-        }
-        let lower = normalized.to_ascii_lowercase();
-        if [".img", ".iso", ".jsdos", ".7z", ".rar"]
-            .iter()
-            .any(|suffix| lower.ends_with(suffix))
-        {
-            return Err(ProjectError::InvalidDemo(
-                "Nested disk images and archives are not accepted.".to_string(),
-            ));
-        }
-        expanded = expanded.saturating_add(entry.size());
-        if expanded > max_extracted_size {
-            return Err(ProjectError::InvalidDemo(
-                "The expanded game ZIP exceeds the configured limit.".to_string(),
-            ));
-        }
-        if entry.compressed_size() > 0
-            && entry.size() > 10 * 1024 * 1024
-            && entry.size() / entry.compressed_size() > 200
-        {
-            return Err(ProjectError::InvalidDemo(
-                "The game ZIP has an unsafe compression ratio.".to_string(),
-            ));
-        }
-
-        let output_path = destination.join(relative);
-        if entry.is_dir() {
-            fs::create_dir_all(&output_path)?;
-        } else {
-            extracted_files += 1;
-            if let Some(parent) = output_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let mut output = File::create(output_path)?;
-            std::io::copy(&mut entry, &mut output)?;
-        }
-    }
-    if extracted_files == 0 {
-        return Err(ProjectError::InvalidDemo(
-            "The game ZIP contains no game files.".to_string(),
-        ));
-    }
-    Ok(())
-}
-
-fn unwrap_single_top_level_dir(game_dir: &Path) -> Result<(), ProjectError> {
-    loop {
-        let entries: Vec<PathBuf> = fs::read_dir(game_dir)?.flatten().map(|e| e.path()).collect();
-        if entries.len() != 1 {
-            return Ok(());
-        }
-        let only = &entries[0];
-        if !only.is_dir() {
-            return Ok(());
-        }
-        let only_name = only
-            .file_name()
-            .ok_or_else(|| {
-                ProjectError::InternalError(
-                    "Could not unwrap an extracted game folder.".to_string(),
-                )
-            })?
-            .to_owned();
-        let inner = fs::read_dir(only)?
-            .flatten()
-            .map(|e| e.path())
-            .collect::<Vec<_>>();
-        let mut same_named_child = None;
-        for item in inner {
-            let name = item
-                .file_name()
-                .ok_or_else(|| {
-                    ProjectError::InternalError(
-                        "Could not unwrap an extracted game folder.".to_string(),
-                    )
-                })?;
-            if name == only_name {
-                // A child directory sharing the wrapper's name (Game/Game): it
-                // cannot be renamed onto the wrapper it lives in, so bubble it
-                // up once the wrapper is gone.
-                same_named_child = Some(item);
-                continue;
-            }
-            let target = game_dir.join(name);
-            if target.exists() {
-                return Err(ProjectError::InvalidDemo(
-                    "The game ZIP contains conflicting top-level paths.".to_string(),
-                ));
-            }
-            fs::rename(&item, &target)?;
-        }
-        if let Some(child) = same_named_child {
-            let temp = game_dir.join(format!(".__unwrap_{}", Uuid::new_v4()));
-            fs::rename(&child, &temp)?;
-            fs::remove_dir(only)?;
-            fs::rename(&temp, game_dir.join(only_name))?;
-        } else {
-            fs::remove_dir(only)?;
-        }
-    }
-}
 
 fn normalize_manifest_path(value: &str) -> Result<String, ProjectError> {
     let mut normalized = value.trim().trim_matches('"').replace('\\', "/");
@@ -664,7 +495,7 @@ fn normalize_manifest_path(value: &str) -> Result<String, ProjectError> {
         })
     {
         return Err(ProjectError::InvalidDemo(
-            "The Windows 95 manifest contains an unsafe executable path.".to_string(),
+            "The Windows 9x manifest contains an unsafe executable path.".to_string(),
         ));
     }
     Ok(normalized)
@@ -781,7 +612,7 @@ fn parse_variants(manifest: &str) -> Result<Vec<VariantSpec>, ProjectError> {
         let exe = normalize_manifest_path(&exe)?;
         if !exe.to_ascii_lowercase().ends_with(".exe") {
             return Err(ProjectError::InvalidDemo(format!(
-                "The Windows 95 manifest executable for variant {i} must be an .exe file."
+                "The Windows 9x manifest executable for variant {i} must be an .exe file."
             )));
         }
         let args = resolve_for(&fields, "args", i, true).unwrap_or_default();
@@ -868,7 +699,7 @@ fn save_files_from_manifest(manifest: &str) -> Result<Vec<String>, ProjectError>
         }
         validate_save_file(entry).map_err(|reason| {
             ProjectError::InvalidDemo(format!(
-                "Invalid Windows 95 save entry '{entry}': {reason}."
+                "Invalid Windows 9x save entry '{entry}': {reason}."
             ))
         })?;
         let normalized = entry.replace('/', "\\");
@@ -882,319 +713,6 @@ fn save_files_from_manifest(manifest: &str) -> Result<Vec<String>, ProjectError>
     Ok(files)
 }
 
-/// Builds the in-guest launcher `[game]` config for a single variant. The
-/// executable path is taken verbatim from the resolved variant: the game tree
-/// is baked into the disk at full-build time, so manifest-only edits do not
-/// need to re-extract the ZIP to resolve or verify the path.
-fn launcher_config_for(manifest: &str, variant: &VariantSpec) -> Result<String, ProjectError> {
-    let fields = parse_manifest_fields(manifest);
-    let relative_windows = variant.exe.replace('/', "\\");
-    let executable = format!(r"D:\{relative_windows}");
-    if executable.len() >= 260 {
-        return Err(ProjectError::InvalidDemo(
-            "The resolved Windows 95 executable path is too long.".to_string(),
-        ));
-    }
-    let working_directory = match variant.exe.rfind('/') {
-        Some(index) if index > 0 => format!(r"D:\{}", variant.exe[..index].replace('/', "\\")),
-        _ => r"D:\".to_string(),
-    };
-    let arguments = &variant.args;
-    let delay_ms = fields.get("delay_ms").map(String::as_str).unwrap_or("1000");
-    if !delay_ms.chars().all(|character| character.is_ascii_digit()) {
-        return Err(ProjectError::InvalidDemo(
-            "The Windows 95 manifest delay_ms must be a number.".to_string(),
-        ));
-    }
-
-    let save_files = save_files_from_manifest(manifest)?;
-    let mut config = String::new();
-    config.push_str(&format!(
-        "[game]\r\nexecutable={executable}\r\nworking_directory={working_directory}\r\narguments={arguments}\r\ndelay_ms={delay_ms}\r\n"
-    ));
-    if !save_files.is_empty() {
-        config.push_str("[saves]\r\n");
-        for file in &save_files {
-            config.push_str(&format!("file={file}\r\n"));
-        }
-    }
-    Ok(config)
-}
-
-/// Resolves an mtools binary name through the optional tool prefix dir.
-fn mtool(prefix: &str, name: &str) -> String {
-    if prefix.is_empty() {
-        name.to_string()
-    } else {
-        let base = prefix.trim_end_matches('/');
-        let name = name.trim_start_matches('/');
-        format!("{base}/{name}")
-    }
-}
-
-/// Returns the mtools command, pushing `prefix/name` args so callers just pass
-/// their `-i ...` flags. The command is resolved through `mtools_bin`.
-fn run_mtool(mtools_bin: &str, name: &str, args: &[&str]) -> Result<(), ProjectError> {
-    let binary = mtool(mtools_bin, name);
-    let output = Command::new(&binary)
-        .args(args)
-        .output()
-        .map_err(|e| {
-            ProjectError::InternalError(format!("Could not start mtools {name} ({binary}): {e}"))
-        })?;
-    if !output.status.success() {
-        return Err(ProjectError::UploadFailed(format!(
-            "mtools {name} failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
-    }
-    Ok(())
-}
-
-/// Computes a total byte size (rounded up to a whole sector) for a FAT image
-/// that comfortably holds `payload_bytes`, leaving `slack_fraction` of free
-/// space so the game has room for save files without repartitioning.
-fn fat_image_size(payload_bytes: u64) -> u64 {
-    const BLOCK: u64 = 512;
-    // The game disk is capped well below 2GiB so it stays FAT16-compatible.
-    let slack = payload_bytes / 2;
-    let raw = payload_bytes + slack + 8 * 1024 * 1024;
-    let raw = raw.min(1536 * 1024 * 1024);
-    raw.div_ceil(BLOCK) * BLOCK
-}
-
-/// Extracts (skipping macOS junk) and unwraps the game ZIP into `build_dir`,
-/// returning the game tree path and its total byte size.
-fn prepare_game_tree(
-    build_dir: &Path,
-    zip_path: &Path,
-    max_files: usize,
-    max_extracted_size: u64,
-) -> Result<(PathBuf, u64), ProjectError> {
-    let game_dir = build_dir.join("game");
-    validate_and_extract_game_zip(zip_path, &game_dir, max_files, max_extracted_size)?;
-    // A ZIP that wraps its payload in a single top-level folder is common; drop
-    // the wrapper so the game lands at the drive root instead of a doubled path.
-    unwrap_single_top_level_dir(&game_dir)?;
-    let extracted_bytes = dir_size(&game_dir);
-    Ok((game_dir, extracted_bytes))
-}
-
-/// Writes a classic MBR with one bootable FAT16 (0x06) partition starting at
-/// sector 63, mirroring the base Win95 disk layout that v86 mounts reliably.
-fn write_mbr_partition(image_path: &Path, total_sectors: u64) -> Result<(), ProjectError> {
-    use std::io::{Seek, SeekFrom, Write};
-    let part_sectors = total_sectors
-        .checked_sub(63)
-        .ok_or_else(|| ProjectError::UploadFailed("Game disk is too small.".to_string()))?;
-    let part_sectors: u32 = part_sectors
-        .try_into()
-        .map_err(|_| ProjectError::UploadFailed("Game disk partition is too large.".to_string()))?;
-    // End CHS from the whole-disk LBA with 255 heads / 63 sectors per track.
-    let end_lba = 63 + part_sectors - 1;
-    let heads: u32 = 255;
-    let sectors_per_track: u32 = 63;
-    let end_cyl = end_lba / (heads * sectors_per_track);
-    let remainder = end_lba % (heads * sectors_per_track);
-    let end_head = (remainder / sectors_per_track) as u8;
-    let end_sector = (remainder % sectors_per_track + 1) as u8;
-    let end_cyl = end_cyl as u8;
-    let mut entry = [0u8; 16];
-    entry[0] = 0x80; // bootable
-    entry[1] = 0; // start CHS head
-    entry[2] = 1; // start CHS sector
-    entry[3] = 0; // start CHS cylinder
-    entry[4] = 0x06; // FAT16
-    entry[5] = end_head;
-    entry[6] = end_sector;
-    entry[7] = end_cyl;
-    entry[8..12].copy_from_slice(&63u32.to_le_bytes());
-    entry[12..16].copy_from_slice(&part_sectors.to_le_bytes());
-    let mut file = fs::OpenOptions::new().write(true).open(image_path)?;
-    file.seek(SeekFrom::Start(446))?;
-    file.write_all(&entry)?;
-    file.seek(SeekFrom::Start(510))?;
-    file.write_all(&[0x55, 0xAA])?;
-    file.flush()?;
-    Ok(())
-}
-
-/// Builds the partitioned FAT16 game disk (D:) from an extracted game tree.
-fn build_game_disk(
-    mtools_bin: &str,
-    image_path: &Path,
-    game_dir: &Path,
-    extracted_bytes: u64,
-) -> Result<(), ProjectError> {
-    let total_bytes = fat_image_size(extracted_bytes);
-    let total_sectors = total_bytes / 512;
-    // Create a partitioned FAT16 disk image so classic Windows 95 mounts the
-    // whole game drive reliably (a raw superfloppy with mformat's phantom MBR
-    // entry can show up as inaccessible). This mirrors the base disk's proven
-    // MBR + FAT16 partition layout: C: (base) → D: (game) → E: (cdrom).
-    {
-        let image = fs::File::create(image_path)?;
-        image.set_len(total_bytes)?;
-    }
-    write_mbr_partition(image_path, total_sectors)?;
-    // mtools `@@N` offsets are in bytes, so partition sector 63 is byte 32256.
-    let partition_arg = format!("{}@@{}", image_path.to_str().unwrap(), 63 * 512);
-    run_mtool(mtools_bin, "mformat", &["-i", &partition_arg, "::"])?;
-    // Copy each top-level entry by name so the unwrapped game lands at the
-    // drive root (no GAME folder) instead of mcopy nesting a source dir.
-    let mut sources: Vec<PathBuf> = fs::read_dir(game_dir)?.flatten().map(|e| e.path()).collect();
-    sources.sort();
-    if !sources.is_empty() {
-        let mut args = vec!["-i", &partition_arg, "-s", "-o"];
-        args.extend(sources.iter().map(|path| path.to_str().unwrap()));
-        args.push("::/");
-        run_mtool(mtools_bin, "mcopy", &args)?;
-    }
-    Ok(())
-}
-
-/// Builds the tiny autorun CD (E:) for a single variant. The launcher + config
-/// live here (read-only), so the shared Win95 base never needs an auto-run-on-
-/// fixed-drive hack. Each variant gets its own CD whose V86GAME.INI points the
-/// game disk at that variant's executable; the full manifest is also copied for
-/// reference and a small marker records the variant index/name.
-fn build_game_cdrom(
-    xorriso_bin: &str,
-    assets_dir: &Path,
-    manifest: &str,
-    variant: &VariantSpec,
-    disc_dir: &Path,
-    cdrom_path: &Path,
-) -> Result<(), ProjectError> {
-    fs::create_dir_all(disc_dir)?;
-    let launcher = assets_dir
-        .join("v86")
-        .join("windows95")
-        .join("LAUNCHER.EXE");
-    if !launcher.is_file() {
-        return Err(ProjectError::InternalError(format!(
-            "The Windows 95 v86 launcher is missing at {}.",
-            launcher.display()
-        )));
-    }
-    fs::copy(launcher, disc_dir.join("LAUNCHER.EXE"))?;
-    fs::write(
-        disc_dir.join("AUTORUN.INF"),
-        b"[autorun]\r\nopen=LAUNCHER.EXE\r\n",
-    )?;
-    fs::write(
-        disc_dir.join("V86GAME.INI"),
-        launcher_config_for(manifest, variant)?.as_bytes(),
-    )?;
-    fs::write(disc_dir.join("V86GAME.MANIFEST"), manifest.as_bytes())?;
-    fs::write(
-        disc_dir.join("V86VARIANT.INI"),
-        format!("[variant]\r\nindex={}\r\nname={}\r\n", variant.index, variant.name).as_bytes(),
-    )?;
-
-    let volume_id = if variant.index <= 1 {
-        "V86GAME".to_string()
-    } else {
-        format!("V86GAME{}", variant.index)
-    };
-    let output = Command::new(xorriso_bin)
-        .args(["-as", "mkisofs", "-J", "-V"])
-        .arg(&volume_id)
-        .arg("-o")
-        .arg(cdrom_path)
-        .arg(disc_dir)
-        .output()
-        .map_err(|e| {
-            ProjectError::InternalError(format!("Could not start xorriso ({xorriso_bin}): {e}"))
-        })?;
-    if !output.status.success() {
-        return Err(ProjectError::UploadFailed(format!(
-            "ISO generation failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
-    }
-    Ok(())
-}
-
-/// Builds a writable FAT16 game disk (partitioned, mounted as D: by the guest)
-/// plus one tiny read-only autorun CD (mounted as E:) per variant that launches
-/// the game launcher. Game files sit at the D: drive root with no wrapper folder.
-/// Returns (disk_image_path, cdrom_iso_paths, extracted_game_bytes).
-#[allow(clippy::too_many_arguments)]
-fn build_windows95_disk(
-    state_dir: &Path,
-    assets_dir: &Path,
-    xorriso_bin: &str,
-    mtools_bin: &str,
-    upload_id: &str,
-    zip_path: &Path,
-    manifest: &str,
-    variants: &[VariantSpec],
-    max_files: usize,
-    max_extracted_size: u64,
-) -> Result<(PathBuf, Vec<PathBuf>, u64), ProjectError> {
-    let build_dir = state_dir
-        .join("v86")
-        .join("tmp")
-        .join("build")
-        .join(upload_id);
-    if build_dir.exists() {
-        fs::remove_dir_all(&build_dir)?;
-    }
-    let (game_dir, extracted_bytes) =
-        prepare_game_tree(&build_dir, zip_path, max_files, max_extracted_size)?;
-    let image_path = build_dir.join("game.img");
-    build_game_disk(mtools_bin, &image_path, &game_dir, extracted_bytes)?;
-    let mut cdrom_paths = Vec::new();
-    for variant in variants {
-        let cdrom_path = build_dir.join(format!("boot_{}.iso", variant.index));
-        build_game_cdrom(
-            xorriso_bin,
-            assets_dir,
-            manifest,
-            variant,
-            &build_dir.join("disc"),
-            &cdrom_path,
-        )?;
-        cdrom_paths.push(cdrom_path);
-    }
-    Ok((image_path, cdrom_paths, extracted_bytes))
-}
-
-/// Rebuilds only the autorun CDs when the manifest changed. The game ZIP is not
-/// needed: the launcher, config and manifest are static/small and the disk is
-/// reused as-is. Returns one CD path per variant.
-fn build_windows95_cdrom_only(
-    state_dir: &Path,
-    assets_dir: &Path,
-    xorriso_bin: &str,
-    upload_id: &str,
-    manifest: &str,
-    variants: &[VariantSpec],
-) -> Result<Vec<PathBuf>, ProjectError> {
-    let build_dir = state_dir
-        .join("v86")
-        .join("tmp")
-        .join("build")
-        .join(upload_id);
-    if build_dir.exists() {
-        fs::remove_dir_all(&build_dir)?;
-    }
-    let mut cdrom_paths = Vec::new();
-    for variant in variants {
-        let cdrom_path = build_dir.join(format!("boot_{}.iso", variant.index));
-        build_game_cdrom(
-            xorriso_bin,
-            assets_dir,
-            manifest,
-            variant,
-            &build_dir.join("disc"),
-            &cdrom_path,
-        )?;
-        cdrom_paths.push(cdrom_path);
-    }
-    Ok(cdrom_paths)
-}
 
 #[allow(dead_code)]
 fn dir_size(root: &Path) -> u64 {
@@ -1298,28 +816,25 @@ pub struct PublicSystemVersion {
     pub system_name: String,
     pub platform_key: String,
     pub sha256: String,
+    pub storage_key: String,
     pub size_bytes: i64,
     pub chunk_size_bytes: i64,
 }
 
-/// Unguarded, and deliberately narrow: only versions whose chunks
-/// `get_system_chunk` already serves to anyone, i.e. those a published project
-/// uses. It exposes no image that was not already publicly fetchable.
+/// Unguarded, and deliberately narrow: only the *current* version of each
+/// active system. `get_system_chunk` serves these to anyone, so it exposes no
+/// image that was not already publicly fetchable.
 pub async fn list_public_systems(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<PublicSystemVersion>>, ProjectError> {
     let rows = sqlx::query(
-        r#"SELECT v.id, v.version_number, v.sha256, v.size_bytes, v.chunk_size_bytes,
+        r#"SELECT v.id, v.version_number, v.sha256, v.storage_key, v.size_bytes, v.chunk_size_bytes,
                   s.name AS system_name, s.platform_key
            FROM v86_system_versions v
            JOIN v86_systems s ON s.id = v.system_id
-           WHERE v.chunk_count > 0 AND EXISTS (
-             SELECT 1 FROM project_v86_games g
-             JOIN projects p ON p.id = g.project_id
-             JOIN posts ON posts.id = p.post_id
-             WHERE g.system_version_id = v.id
-               AND p.demo_type = 'v86' AND posts.status = 'published'
-           )
+           WHERE s.is_active = 1
+             AND v.version_number = s.current_version
+             AND v.chunk_count > 0
            ORDER BY s.name, v.version_number DESC"#,
     )
     .fetch_all(&state.project_service.pool)
@@ -1332,6 +847,7 @@ pub async fn list_public_systems(
                 system_name: row.get("system_name"),
                 platform_key: row.get("platform_key"),
                 sha256: row.get("sha256"),
+                storage_key: row.get("storage_key"),
                 size_bytes: row.get("size_bytes"),
                 chunk_size_bytes: row.get("chunk_size_bytes"),
             })
@@ -1360,11 +876,11 @@ pub async fn start_system_upload(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     Json(request): Json<StartSystemUploadRequest>,
-) -> Result<Json<StartUploadResponse>, ProjectError> {
+) -> Result<Json<StartSystemUploadResponse>, ProjectError> {
     let uploader_id = user_id(&claims)?;
-    if request.platform_key != "windows95" {
+    if request.platform_key != "windows9x" {
         return Err(ProjectError::InvalidDemo(
-            "Only the windows95 v86 platform is currently supported.".to_string(),
+            "Only the windows9x v86 platform is currently supported.".to_string(),
         ));
     }
     validate_file_name(&request.file_name, ".img")?;
@@ -1391,27 +907,63 @@ pub async fn start_system_upload(
             "A system with this name already exists.".to_string(),
         ));
     }
+
+    let chunk_size = state.project_demo_config.v86_download_chunk_size;
+    let chunk_count = request.size_bytes.div_ceil(chunk_size);
+    let storage_key = format!("v86/assets/systems/{}", request.sha256);
+
+    // Content-addressed dedup: if a version with this exact sha already exists,
+    // skip the upload entirely.
+    let existing_version: Option<String> = sqlx::query_scalar(
+        "SELECT storage_key FROM v86_system_versions WHERE sha256 = ? LIMIT 1",
+    )
+    .bind(&request.sha256)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+
+    if let Some(existing_key) = existing_version {
+        let upload_id = Uuid::new_v4().to_string();
+        let expires_at =
+            Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
+        sqlx::query(
+            r#"INSERT INTO v86_system_upload_sessions
+               (id, uploader_id, system_id, name, platform_key, expected_current_version,
+                original_file_name, expected_size_bytes, staged_storage_key, staged_sha256,
+                staged_chunk_count, reuse, status, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?)"#,
+        )
+        .bind(&upload_id)
+        .bind(uploader_id)
+        .bind(request.system_id)
+        .bind(name)
+        .bind(&request.platform_key)
+        .bind(request.expected_current_version.unwrap_or(0))
+        .bind(&request.file_name)
+        .bind(request.size_bytes as i64)
+        .bind(&existing_key)
+        .bind(&request.sha256)
+        .bind(chunk_count as i64)
+        .bind(expires_at.to_rfc3339())
+        .execute(&state.project_service.pool)
+        .await?;
+        return Ok(Json(StartSystemUploadResponse {
+            upload_id,
+            reuse: true,
+            chunk_size_bytes: chunk_size,
+            chunk_count,
+            storage_key: Some(existing_key),
+        }));
+    }
+
     let upload_id = Uuid::new_v4().to_string();
-    let r2 = require_r2(&state)?;
-    let transient_key = transient_r2_key("systems", &upload_id, "img");
-    let multipart = r2
-        .create_multipart(&transient_key)
-        .await
-        .map_err(r2_error)?;
-    let r2_upload_id = multipart
-        .upload_id()
-        .ok_or_else(|| {
-            ProjectError::InternalError("R2 did not return a multipart upload id.".to_string())
-        })?
-        .to_string();
     let expires_at =
         Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
     sqlx::query(
         r#"INSERT INTO v86_system_upload_sessions
            (id, uploader_id, system_id, name, platform_key, expected_current_version,
-            original_file_name, expected_size_bytes, upload_chunk_size_bytes,
-            temp_storage_key, r2_upload_id, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            original_file_name, expected_size_bytes, staged_storage_key, staged_sha256,
+            staged_chunk_count, reuse, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -1421,25 +973,18 @@ pub async fn start_system_upload(
     .bind(request.expected_current_version.unwrap_or(0))
     .bind(&request.file_name)
     .bind(request.size_bytes as i64)
-    .bind(state.project_demo_config.v86_upload_chunk_size as i64)
-    .bind(&transient_key)
-    .bind(&r2_upload_id)
+    .bind(&storage_key)
+    .bind(&request.sha256)
+    .bind(chunk_count as i64)
     .bind(expires_at.to_rfc3339())
     .execute(&state.project_service.pool)
-    .await
-    .map_err(|error| {
-        let r2 = r2.clone();
-        tokio::spawn(async move {
-            let _ = r2.abort_multipart(&transient_key, &r2_upload_id).await;
-        });
-        error
-    })?;
-    Ok(Json(StartUploadResponse {
+    .await?;
+    Ok(Json(StartSystemUploadResponse {
         upload_id,
-        chunk_size_bytes: state.project_demo_config.v86_upload_chunk_size,
-        next_chunk_index: 0,
-        expected_size_bytes: request.size_bytes,
-        upload_required: true,
+        reuse: false,
+        chunk_size_bytes: chunk_size,
+        chunk_count,
+        storage_key: None,
     }))
 }
 
@@ -1525,23 +1070,72 @@ async fn append_upload_chunk(
     })
 }
 
-pub async fn append_system_chunk(
+pub async fn upload_system_part(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    AxumPath((upload_id, chunk_index)): AxumPath<(String, u64)>,
+    AxumPath((upload_id, part_index)): AxumPath<(String, u64)>,
     bytes: Bytes,
-) -> Result<Json<ChunkUploadResponse>, ProjectError> {
-    Ok(Json(
-        append_upload_chunk(
-            &state,
-            "v86_system_upload_sessions",
-            &upload_id,
-            user_id(&claims)?,
-            chunk_index,
-            bytes,
-        )
-        .await?,
-    ))
+) -> Result<StatusCode, ProjectError> {
+    let uploader_id = user_id(&claims)?;
+    let row = sqlx::query(
+        r#"SELECT status, expected_size_bytes, staged_storage_key,
+                  staged_chunk_count, reuse, expires_at
+           FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?"#,
+    )
+    .bind(&upload_id)
+    .bind(uploader_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    ensure_upload_not_expired(row.get::<String, _>("expires_at").as_str())?;
+    if row.get::<String, _>("status") != "active" {
+        return Err(ProjectError::InvalidDemo(
+            "The system upload is no longer active.".to_string(),
+        ));
+    }
+    if row.get::<i64, _>("reuse") != 0 {
+        return Err(ProjectError::Conflict(
+            "The base image already exists; no upload is expected.".to_string(),
+        ));
+    }
+    let chunk_count: i64 = row.get("staged_chunk_count");
+    if part_index >= chunk_count as u64 {
+        return Err(ProjectError::InvalidDemo(
+            "Part index exceeds the expected chunk count.".to_string(),
+        ));
+    }
+
+    let storage_key: String = row.get("staged_storage_key");
+    let chunk_size: u64 = state.project_demo_config.v86_download_chunk_size;
+    let offset = part_index * chunk_size;
+    let end = (offset + chunk_size).min(row.get::<i64, _>("expected_size_bytes") as u64);
+    let part_name = format!("{storage_key}/{offset}-{end}.img.zst");
+
+    let r2 = require_r2(&state)?;
+    r2.put_object_bytes(&part_name, bytes.to_vec())
+        .await
+        .map_err(r2_error)?;
+
+    // Record the part atomically. INSERT is concurrency-safe, unlike the old
+    // read-modify-write of a received_parts JSON column.
+    let changed = sqlx::query(
+        "INSERT INTO v86_system_upload_parts (upload_id, part_index) VALUES (?, ?)",
+    )
+    .bind(&upload_id)
+    .bind(part_index as i64)
+    .execute(&state.project_service.pool)
+    .await;
+    match changed {
+        Ok(_) => Ok(StatusCode::NO_CONTENT),
+        Err(sqlx::Error::Database(db_err))
+            if db_err.is_unique_violation() =>
+        {
+            Err(ProjectError::Conflict(
+                "This part was already uploaded.".to_string(),
+            ))
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 pub async fn abort_system_upload(
@@ -1551,7 +1145,7 @@ pub async fn abort_system_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT temp_storage_key, r2_upload_id, status FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT staged_storage_key, reuse, status FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -1569,16 +1163,14 @@ pub async fn abort_system_upload(
     .bind(&upload_id)
     .execute(&state.project_service.pool)
     .await?;
-    if let Some(r2) = &state.r2 {
-        let temp_key: String = row.get("temp_storage_key");
-        if let Some(r2_upload_id) = row.get::<Option<String>, _>("r2_upload_id") {
-            let _ = r2.abort_multipart(&temp_key, &r2_upload_id).await;
+    let reuse: i64 = row.get("reuse");
+    if reuse == 0 {
+        if let Some(r2) = &state.r2 {
+            if let Some(key) = row.get::<Option<String>, _>("staged_storage_key") {
+                let _ = r2.delete_prefix(&key).await;
+            }
         }
-        let _ = r2.delete_object(&temp_key).await;
     }
-    tokio::fs::remove_file(temp_upload_path(&state, "systems", &upload_id))
-        .await
-        .ok();
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1589,7 +1181,10 @@ pub async fn complete_system_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT system_id, name, platform_key, expected_current_version, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags, status, expires_at FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?",
+        r#"SELECT system_id, name, platform_key, expected_current_version, original_file_name,
+                  expected_size_bytes, staged_storage_key, staged_sha256, staged_chunk_count,
+                  reuse, status, expires_at
+           FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -1597,40 +1192,35 @@ pub async fn complete_system_upload(
     .await?
     .ok_or(ProjectError::ProjectNotFound)?;
     ensure_upload_not_expired(row.get::<String, _>("expires_at").as_str())?;
-    if row.get::<String, _>("status") != "active"
-        || row.get::<i64, _>("expected_size_bytes") != row.get::<i64, _>("received_size_bytes")
-    {
+    if row.get::<String, _>("status") != "active" {
         return Err(ProjectError::InvalidDemo(
-            "The base IMG upload is incomplete.".to_string(),
+            "The system upload is no longer active.".to_string(),
         ));
     }
-    let r2 = require_r2(&state)?;
-    let temp_key: String = row.get("temp_storage_key");
-    let r2_upload_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
-        ProjectError::InternalError("Upload session is missing its R2 multipart id.".to_string())
-    })?;
-    let etags = parse_r2_part_etags(row.get::<Option<String>, _>("r2_part_etags").as_deref());
-    r2.complete_multipart(&temp_key, &r2_upload_id, etags)
-        .await
-        .map_err(r2_error)?;
-    let signature = r2
-        .get_object_range(&temp_key, 0, 511)
-        .await
-        .map_err(r2_error)?;
-    if signature.len() < 512 || signature[510..512] != [0x55, 0xaa] {
-        let _ = r2.delete_object(&temp_key).await;
-        sqlx::query(
-            "UPDATE v86_system_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+
+    let reuse: i64 = row.get("reuse");
+    if reuse == 0 {
+        let chunk_count: i64 = row.get("staged_chunk_count");
+        let received: Vec<i64> = sqlx::query_scalar(
+            "SELECT part_index FROM v86_system_upload_parts WHERE upload_id = ?",
         )
-        .bind("The base IMG does not contain a valid boot-sector signature.")
         .bind(&upload_id)
-        .execute(&state.project_service.pool)
-        .await
-        .ok();
-        return Err(ProjectError::InvalidDemo(
-            "The base IMG does not contain a valid boot-sector signature.".to_string(),
-        ));
+        .fetch_all(&state.project_service.pool)
+        .await?;
+        if received.len() as i64 != chunk_count {
+            return Err(ProjectError::InvalidDemo(
+                "The base IMG upload is incomplete.".to_string(),
+            ));
+        }
+        for index in 0..chunk_count {
+            if !received.contains(&index) {
+                return Err(ProjectError::InvalidDemo(
+                    "The base IMG upload is incomplete.".to_string(),
+                ));
+            }
+        }
     }
+
     let system_id_opt: Option<i64> = row.get("system_id");
     let expected_version: i64 = row.get("expected_current_version");
     let name: String = row.get("name");
@@ -1638,7 +1228,6 @@ pub async fn complete_system_upload(
     let original_file_name: String = row.get("original_file_name");
     let is_new_system = system_id_opt.is_none();
 
-    // Guard: name must still be unique in case another upload was created after this session
     let existing: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM v86_systems WHERE name = ? AND id != COALESCE(?, 0)",
     )
@@ -1652,7 +1241,6 @@ pub async fn complete_system_upload(
         ));
     }
 
-    // Phase 1: Brief tx to reserve version slot and set current_version
     let (system_id, version_number) = {
         let mut tx = state.project_service.pool.begin().await?;
         let (sid, vn) = if let Some(sid) = system_id_opt {
@@ -1686,6 +1274,41 @@ pub async fn complete_system_upload(
         (sid, vn)
     };
 
+    if reuse != 0 {
+        // Dedup: image already exists; create version row and mark consumed immediately.
+        let storage_key: String = row.get("staged_storage_key");
+        let expected_size: i64 = row.get("expected_size_bytes");
+        let sha256: String = row.get("staged_sha256");
+        let chunk_count: i64 = row.get("staged_chunk_count");
+        let chunk_size: i64 = state.project_demo_config.v86_download_chunk_size as i64;
+        sqlx::query(
+            r#"INSERT INTO v86_system_versions
+               (system_id, version_number, original_file_name, storage_key, size_bytes,
+                sha256, chunk_size_bytes, chunk_count)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(system_id)
+        .bind(version_number)
+        .bind(&original_file_name)
+        .bind(&storage_key)
+        .bind(expected_size)
+        .bind(&sha256)
+        .bind(chunk_size)
+        .bind(chunk_count)
+        .execute(&state.project_service.pool)
+        .await
+        .map_err(|e| ProjectError::InternalError(format!("Failed to create version: {e}")))?;
+        sqlx::query(
+            "UPDATE v86_system_upload_sessions SET status = 'consumed', system_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(system_id)
+        .bind(&upload_id)
+        .execute(&state.project_service.pool)
+        .await?;
+        return Ok(StatusCode::OK);
+    }
+
+    // Non-reuse: spawn background verify task.
     sqlx::query(
         "UPDATE v86_system_upload_sessions SET status = 'building', system_id = COALESCE(system_id, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
@@ -1706,27 +1329,27 @@ pub async fn complete_system_upload(
         .unwrap()
         .insert(upload_id.clone(), progress.lock().unwrap().clone());
 
-    // Spawn background task for Phases 2-3 (sha256, compression, R2 push, DB commit)
     let pool = state.project_service.pool.clone();
-    let r2_c = r2.clone();
-    let config_dir = state.project_demo_config.dir.clone();
+    let r2 = require_r2(&state)?.clone();
     let chunk_size = state.project_demo_config.v86_download_chunk_size;
     let upload_id_c = upload_id.clone();
-    let temp_key_c = temp_key.clone();
-    let local_download = temp_upload_path(&state, "systems", &upload_id);
-    let progress_c = progress.clone();
+    let storage_key: String = row.get("staged_storage_key");
+    let sha256: String = row.get("staged_sha256");
+    let expected_size: i64 = row.get("expected_size_bytes");
+    let chunk_count: i64 = row.get("staged_chunk_count");
     let original_file_name_c = original_file_name.clone();
 
     tokio::spawn(async move {
-        let result = process_system_upload(
+        let result = verify_system_upload(
             &pool,
-            &r2_c,
-            &config_dir,
+            &r2,
             &upload_id_c,
-            &temp_key_c,
-            &local_download,
+            &storage_key,
+            &sha256,
+            expected_size as u64,
+            chunk_count as u64,
             chunk_size,
-            progress_c,
+            progress,
             system_id,
             version_number,
             is_new_system,
@@ -1734,7 +1357,7 @@ pub async fn complete_system_upload(
         )
         .await;
         if let Err(e) = result {
-            tracing::error!("Background system upload failed for {upload_id_c}: {e}");
+            tracing::error!("Background system verify failed for {upload_id_c}: {e}");
             let _ = rollback_system_version(
                 &pool, &upload_id_c, system_id, version_number, is_new_system,
             )
@@ -1746,29 +1369,14 @@ pub async fn complete_system_upload(
     Ok(StatusCode::ACCEPTED)
 }
 
-async fn push_dir_to_r2(r2: &R2Client, storage_key: &str, dir: &Path) -> Result<(), String> {
-    let mut names = Vec::new();
-    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        names.push(entry.file_name().to_string_lossy().to_string());
-    }
-    names.sort();
-    for name in names {
-        let key = format!("{storage_key}/{name}");
-        r2.put_object_from_file(&key, &dir.join(&name))
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-async fn process_system_upload(
+async fn verify_system_upload(
     pool: &sqlx::SqlitePool,
     r2: &R2Client,
-    config_dir: &Path,
     upload_id: &str,
-    transient_key: &str,
-    local_download: &Path,
+    storage_key: &str,
+    expected_sha: &str,
+    expected_size: u64,
+    chunk_count: u64,
     chunk_size: u64,
     progress: Arc<Mutex<ChunkProgress>>,
     system_id: i64,
@@ -1776,122 +1384,89 @@ async fn process_system_upload(
     _is_new_system: bool,
     original_file_name: &str,
 ) -> Result<(), String> {
-    if let Some(parent) = local_download.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-    r2.download_to_file(transient_key, local_download)
-        .await
-        .map_err(|e| e.to_string())?;
-    let source = local_download.to_path_buf();
+    let mut hasher = Sha256::new();
+    let mut total_size: u64 = 0;
+    let mut boot_signature_valid = false;
 
-    // Phase 2a: Compute sha256 and file size (heavy I/O, offloaded)
-    let (size, sha256) = tokio::task::spawn_blocking({
-        let source = source.clone();
-        move || sha256_file(&source)
-    })
-    .await
-    .map_err(|e| format!("sha256 task panicked: {e}"))?
-    .map_err(|e| e.to_string())?;
-
-    let total_chunks = size.div_ceil(chunk_size as u64);
-    {
-        let mut p = progress.lock().unwrap();
-        p.total_chunks = total_chunks;
-        p.message = format!("Compressing chunk 0/{total_chunks}");
-    }
-
-    // Phase 2b: Compression into a transient local parts dir (offloaded)
-    let parts_dir = config_dir
-        .join("v86")
-        .join("tmp")
-        .join("systems")
-        .join(format!("{upload_id}.parts"));
-    let chunk_count = tokio::task::spawn_blocking({
-        let source = source.clone();
-        let parts = parts_dir.clone();
-        let progress_for_compress = progress.clone();
-        move || {
-            split_asset(
-                &source,
-                &parts,
-                chunk_size,
-                "img.zst",
-                Some(&*progress_for_compress),
-                19,
-            )
+    for index in 0..chunk_count {
+        let offset = index * chunk_size;
+        let end = (offset + chunk_size).min(expected_size);
+        let part_name = format!("{storage_key}/{offset}-{end}.img.zst");
+        let bytes = r2.get_object(&part_name).await.map_err(|e| e.to_string())?;
+        let mut decoder = zstd::stream::read::Decoder::new(&bytes[..])
+            .map_err(|e| format!("system part {index} is not valid zstd: {e}"))?;
+        let mut decompressed = Vec::new();
+        decoder
+            .read_to_end(&mut decompressed)
+            .map_err(|e| format!("system part {index} failed to decode: {e}"))?;
+        let expected_part_size = chunk_size.min(expected_size.saturating_sub(offset));
+        if decompressed.len() as u64 != expected_part_size {
+            return Err(format!(
+                "system part {index} decompressed to {} bytes, expected {expected_part_size}",
+                decompressed.len()
+            ));
         }
-    })
-    .await
-    .map_err(|e| format!("compression task panicked: {e}"))?
-    .map_err(|e| e.to_string())?;
+        if index == 0 && decompressed.len() >= 512 && decompressed[510..512] == [0x55, 0xaa] {
+            boot_signature_valid = true;
+        }
+        hasher.update(&decompressed);
+        total_size += decompressed.len() as u64;
+        {
+            let mut p = progress.lock().unwrap();
+            p.total_chunks = chunk_count;
+            p.completed_chunks = index + 1;
+            p.message = format!("Verifying system image… {}/{}", index + 1, chunk_count);
+        }
+    }
+
+    if !boot_signature_valid {
+        return Err("The base IMG does not contain a valid boot-sector signature.".to_string());
+    }
+    let actual_sha = hex::encode(hasher.finalize());
+    if actual_sha != expected_sha {
+        return Err(format!(
+            "system image checksum mismatch: {actual_sha} != {expected_sha}"
+        ));
+    }
+    if total_size != expected_size {
+        return Err(format!(
+            "system image size mismatch: {total_size} != {expected_size}"
+        ));
+    }
 
     {
         let mut p = progress.lock().unwrap();
-        p.message = "Uploading to R2…".to_string();
+        p.message = "Finalizing…".to_string();
     }
 
-    // Reserve the version row first so we can key the parts by the version id.
-    let version_id = {
-        let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-        let placeholder = format!("v86/assets/systems/pending/{upload_id}");
-        let result = sqlx::query(
-            r#"INSERT INTO v86_system_versions
-               (system_id, version_number, original_file_name, storage_key, size_bytes,
-                sha256, chunk_size_bytes, chunk_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(system_id)
-        .bind(version_number)
-        .bind(original_file_name)
-        .bind(&placeholder)
-        .bind(size as i64)
-        .bind(&sha256)
-        .bind(chunk_size as i64)
-        .bind(chunk_count as i64)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-        tx.commit().await.map_err(|e| e.to_string())?;
-        result.last_insert_rowid()
-    };
+    // Insert the version row with the real storage_key (content-addressed).
+    sqlx::query(
+        r#"INSERT INTO v86_system_versions
+           (system_id, version_number, original_file_name, storage_key, size_bytes,
+            sha256, chunk_size_bytes, chunk_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(system_id)
+    .bind(version_number)
+    .bind(original_file_name)
+    .bind(storage_key)
+    .bind(expected_size as i64)
+    .bind(expected_sha)
+    .bind(chunk_size as i64)
+    .bind(chunk_count as i64)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("Failed to insert version row: {e}"))?;
 
-    let storage_key = format!("v86/assets/systems/{version_id}/{sha256}");
-    if let Err(error) = push_dir_to_r2(r2, &storage_key, &parts_dir).await {
-        let _ = r2.delete_prefix(&storage_key).await;
-        sqlx::query("DELETE FROM v86_system_versions WHERE id = ?")
-            .bind(version_id)
-            .execute(pool)
-            .await
-            .ok();
-        return Err(error);
-    }
-
-    // The transient upload object is owned by this session; delete it now.
-    let _ = r2.delete_object(transient_key).await;
-    let _ = tokio::fs::remove_file(&source).await;
-    let _ = tokio::fs::remove_dir_all(&parts_dir).await;
-
-    // Phase 3: Point the version row at its real R2 key and mark the session consumed.
-    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
-    sqlx::query("UPDATE v86_system_versions SET storage_key = ? WHERE id = ?")
-        .bind(&storage_key)
-        .bind(version_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
     sqlx::query(
         "UPDATE v86_system_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
     .bind(upload_id)
-    .execute(&mut *tx)
+    .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
-    tx.commit().await.map_err(|e| e.to_string())?;
 
     chunk_progress_map().lock().unwrap().remove(upload_id);
-
     Ok(())
 }
 
@@ -2047,12 +1622,21 @@ pub async fn delete_system_version(
         .bind(version_id)
         .execute(&state.project_service.pool)
         .await?;
-    if let Some(r2) = &state.r2 {
-        let _ = r2.delete_prefix(&format!("v86/assets/systems/{version_id}")).await;
+    // Content-addressed: only delete the prefix if no other version references it.
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?",
+    )
+    .bind(&storage_key)
+    .fetch_one(&state.project_service.pool)
+    .await?;
+    if remaining == 0 {
+        if let Some(r2) = &state.r2 {
+            let _ = r2.delete_prefix(&storage_key).await;
+        }
+        tokio::fs::remove_dir_all(state.project_demo_config.dir.join(&storage_key))
+            .await
+            .ok();
     }
-    tokio::fs::remove_dir_all(state.project_demo_config.dir.join(storage_key))
-        .await
-        .ok();
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2078,11 +1662,6 @@ pub async fn delete_system(
             .bind(system_id)
             .fetch_all(&state.project_service.pool)
             .await?;
-    let version_ids: Vec<i64> =
-        sqlx::query_scalar("SELECT id FROM v86_system_versions WHERE system_id = ?")
-            .bind(system_id)
-            .fetch_all(&state.project_service.pool)
-            .await?;
     sqlx::query(
         r#"DELETE FROM project_v86_upload_sessions
            WHERE system_version_id IN (
@@ -2100,16 +1679,30 @@ pub async fn delete_system(
         return Err(ProjectError::ProjectNotFound);
     }
     if let Some(r2) = &state.r2 {
-        for version_id in version_ids {
-            let _ = r2
-                .delete_prefix(&format!("v86/assets/systems/{version_id}"))
-                .await;
+        for key in &keys {
+            let remaining: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?",
+            )
+            .bind(key)
+            .fetch_one(&state.project_service.pool)
+            .await?;
+            if remaining == 0 {
+                let _ = r2.delete_prefix(key).await;
+            }
         }
     }
-    for key in keys {
-        tokio::fs::remove_dir_all(state.project_demo_config.dir.join(key))
-            .await
-            .ok();
+    for key in &keys {
+        let still_used: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?",
+        )
+        .bind(key)
+        .fetch_one(&state.project_service.pool)
+        .await?;
+        if still_used == 0 {
+            tokio::fs::remove_dir_all(state.project_demo_config.dir.join(key))
+                .await
+                .ok();
+        }
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -2118,7 +1711,7 @@ pub async fn start_game_upload(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     Json(request): Json<StartGameUploadRequest>,
-) -> Result<Json<StartUploadResponse>, ProjectError> {
+) -> Result<Json<StartGameUploadResponse>, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let manifest_sha = validate_manifest(&request.manifest)?;
     let active: Option<i64> = sqlx::query_scalar(
@@ -2133,83 +1726,122 @@ pub async fn start_game_upload(
             "The selected v86 system version is unavailable.".to_string(),
         ));
     }
+    let variants = parse_variants(&request.manifest)?;
+    if variants.is_empty() || variants.len() != request.plans.variants.len() {
+        return Err(ProjectError::InvalidDemo(
+            "The build plan does not match the manifest variants.".to_string(),
+        ));
+    }
     let upload_id = Uuid::new_v4().to_string();
-    let r2 = require_r2(&state)?;
-    let mut r2_upload_id: Option<String> = None;
-    let (file_name, expected_size, upload_required, temp_storage_key, received_size) =
-        if let Some(project_id) = request.source_project_id
-    {
-        require_project_owner(&state, project_id, uploader_id).await?;
-        let source = sqlx::query(
-                "SELECT original_file_name, zip_storage_key, zip_size_bytes, artifact_revision FROM project_v86_games WHERE project_id = ?",
-            )
-            .bind(project_id)
-            .fetch_optional(&state.project_service.pool)
-            .await?
-            .ok_or(ProjectError::ProjectNotFound)?;
-        if source.get::<i64, _>("artifact_revision") != request.expected_artifact_revision {
-            return Err(ProjectError::Conflict(
-                "The v86 artifact changed in another editor.".to_string(),
-            ));
-        }
-        if let (Some(file_name), Some(size)) = (request.file_name.as_ref(), request.size_bytes) {
-            validate_file_name(file_name, ".zip")?;
-            if size == 0 || size > state.project_demo_config.max_v86_game_zip_size {
-                return Err(ProjectError::InvalidDemo(
-                    "The game ZIP exceeds the configured limit.".to_string(),
+    let chunk_size = state.project_demo_config.v86_download_chunk_size;
+    let max_disk = state.project_demo_config.max_v86_game_extracted_size.saturating_mul(2);
+
+    // When editing an existing project, the stored artifact resolves the
+    // manifest-only fast path (no new ZIP) and validates the revision.
+    let stored = match request.source_project_id {
+        Some(project_id) => {
+            require_project_owner(&state, project_id, uploader_id).await?;
+            let artifact = fetch_stored_game_artifact(&state.project_service.pool, project_id)
+                .await
+                .map_err(ProjectError::InternalError)?
+                .ok_or(ProjectError::ProjectNotFound)?;
+            if artifact.artifact_revision != request.expected_artifact_revision {
+                return Err(ProjectError::Conflict(
+                    "The v86 artifact changed in another editor.".to_string(),
                 ));
             }
-            let transient_key = transient_r2_key("games", &upload_id, "zip");
-            let multipart = r2
-                .create_multipart(&transient_key)
-                .await
-                .map_err(r2_error)?;
-            r2_upload_id = multipart.upload_id().map(str::to_string);
-            (file_name.clone(), size, true, transient_key, 0)
-        } else {
-            let source_key: String = source.get("zip_storage_key");
-            // Manifest-only edit: the stored disk is reused and the launcher CD
-            // is regenerated from static assets, so the ZIP object itself is
-            // never required (it is no longer persisted at all).
-            (
-                source.get::<String, _>("original_file_name"),
-                source.get::<i64, _>("zip_size_bytes") as u64,
-                false,
-                source_key,
-                source.get::<i64, _>("zip_size_bytes") as i64,
-            )
+            Some(artifact)
         }
-    } else {
-        let file_name = request.file_name.ok_or_else(|| {
-            ProjectError::InvalidDemo("A game ZIP file name is required.".to_string())
-        })?;
-        validate_file_name(&file_name, ".zip")?;
-        let size = request
-            .size_bytes
-            .ok_or_else(|| ProjectError::InvalidDemo("A game ZIP size is required.".to_string()))?;
-        if size == 0 || size > state.project_demo_config.max_v86_game_zip_size {
+        None => None,
+    };
+
+    // Disk plan. A new ZIP (disk plan present) is deduplicated against any
+    // project that already built the same disk; a manifest-only edit (no plan)
+    // reuses the source project's stored disk wholesale.
+    let disk = match &request.plans.disk {
+        Some(plan) => {
+            if plan.size_bytes == 0 || plan.size_bytes > max_disk {
+                return Err(ProjectError::InvalidDemo(
+                    "The game disk exceeds the configured limit.".to_string(),
+                ));
+            }
+            let existing: Option<i64> = sqlx::query_scalar(
+                "SELECT chunk_count FROM project_v86_games
+                 WHERE disk_sha256 = ? AND disk_storage_key IS NOT NULL LIMIT 1",
+            )
+            .bind(&plan.sha256)
+            .fetch_optional(&state.project_service.pool)
+            .await?;
+            Some(match existing {
+                Some(chunk_count) => DiskUploadSpec {
+                    sha256: plan.sha256.clone(),
+                    size_bytes: plan.size_bytes,
+                    chunk_size_bytes: chunk_size,
+                    chunk_count: chunk_count as u64,
+                    reuse: true,
+                },
+                None => DiskUploadSpec {
+                    sha256: plan.sha256.clone(),
+                    size_bytes: plan.size_bytes,
+                    chunk_size_bytes: chunk_size,
+                    chunk_count: plan.size_bytes.div_ceil(chunk_size),
+                    reuse: false,
+                },
+            })
+        }
+        None => {
+            let artifact = stored.as_ref().ok_or_else(|| {
+                ProjectError::InvalidDemo(
+                    "A game disk is required for new projects.".to_string(),
+                )
+            })?;
+            let disk_sha = artifact.disk_sha256.clone().ok_or_else(|| {
+                ProjectError::InvalidDemo("The source project has no game disk.".to_string())
+            })?;
+            let disk_size = artifact.disk_size_bytes.ok_or_else(|| {
+                ProjectError::InvalidDemo("The source project has no game disk.".to_string())
+            })?;
+            Some(DiskUploadSpec {
+                sha256: disk_sha,
+                size_bytes: disk_size as u64,
+                chunk_size_bytes: chunk_size,
+                chunk_count: artifact.chunk_count as u64,
+                reuse: true,
+            })
+        }
+    };
+
+    // Per-variant launcher CDs: deduplicate by the ISO content hash so
+    // manifest-only edits that produce identical CDs skip re-uploading.
+    let mut variants_out = Vec::with_capacity(request.plans.variants.len());
+    for plan in &request.plans.variants {
+        if plan.size_bytes == 0 {
             return Err(ProjectError::InvalidDemo(
-                "The game ZIP exceeds the configured limit.".to_string(),
+                "A launcher CD plan has a zero size.".to_string(),
             ));
         }
-        let transient_key = transient_r2_key("games", &upload_id, "zip");
-        let multipart = r2
-            .create_multipart(&transient_key)
-            .await
-            .map_err(r2_error)?;
-        r2_upload_id = multipart.upload_id().map(str::to_string);
-        (file_name, size, true, transient_key, 0)
-    };
+        let existing: Option<String> = sqlx::query_scalar(
+            r#"SELECT iso_storage_key FROM (
+                 SELECT g.iso_storage_key FROM project_v86_games g WHERE g.iso_sha256 = ?
+                 UNION
+                 SELECT v.iso_storage_key FROM project_v86_variants v WHERE v.iso_sha256 = ?
+               ) LIMIT 1"#,
+        )
+        .bind(&plan.sha256)
+        .bind(&plan.sha256)
+        .fetch_optional(&state.project_service.pool)
+        .await?;
+        variants_out.push(VariantUploadSpec {
+            index: plan.index,
+            sha256: plan.sha256.clone(),
+            size_bytes: plan.size_bytes,
+            reuse: existing.is_some(),
+        });
+    }
+
     let expires_at =
         Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
-    // Manifest-only edits reuse the project's permanent zip_storage_key as the
-    // temp_storage_key. That column is UNIQUE and stale session rows are never
-    // deleted, so drop any row already holding the key before inserting, and
-    // clear out the project's finished sessions so they cannot pile up.
-    sqlx::query("DELETE FROM project_v86_upload_sessions WHERE temp_storage_key = ?")
-        .bind(&temp_storage_key)
-        .execute(&state.project_service.pool)
-        .await?;
+    // Finished sessions of the same project cannot pile up.
     if let Some(project_id) = request.source_project_id {
         sqlx::query(
             "DELETE FROM project_v86_upload_sessions WHERE source_project_id = ? AND status != 'active'",
@@ -2218,13 +1850,20 @@ pub async fn start_game_upload(
         .execute(&state.project_service.pool)
         .await?;
     }
+    let first = variants_out.first().ok_or_else(|| {
+        ProjectError::InvalidDemo("The build plan has no launcher CDs.".to_string())
+    })?;
+    let disk_key = disk.as_ref().map(|d| format!("v86/games/{}", d.sha256));
+    let disk_reuse = disk.as_ref().map_or(false, |d| d.reuse);
     sqlx::query(
         r#"INSERT INTO project_v86_upload_sessions
            (id, uploader_id, source_project_id, system_version_id,
             expected_artifact_revision, manifest_text, manifest_sha256,
-            original_file_name, expected_size_bytes, received_size_bytes,
-            upload_chunk_size_bytes, temp_storage_key, r2_upload_id, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            staged_disk_storage_key, staged_disk_sha256, staged_disk_size_bytes,
+            staged_disk_chunk_count, disk_reuse, received_disk_parts,
+            staged_iso_storage_key, staged_iso_sha256, staged_iso_size_bytes,
+            expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -2233,66 +1872,163 @@ pub async fn start_game_upload(
     .bind(request.expected_artifact_revision)
     .bind(&request.manifest)
     .bind(manifest_sha)
-    .bind(&file_name)
-    .bind(expected_size as i64)
-    .bind(received_size)
-    .bind(state.project_demo_config.v86_upload_chunk_size as i64)
-    .bind(&temp_storage_key)
-    .bind(&r2_upload_id)
+    .bind(&disk_key)
+    .bind(disk.as_ref().map(|d| &d.sha256))
+    .bind(disk.as_ref().map(|d| d.size_bytes as i64))
+    .bind(disk.as_ref().map(|d| d.chunk_count as i64))
+    .bind(disk_reuse)
+    .bind(Option::<String>::None)
+    .bind(&first.sha256)
+    .bind(&first.sha256)
+    .bind(first.size_bytes as i64)
     .bind(expires_at.to_rfc3339())
     .execute(&state.project_service.pool)
-    .await
-    .map_err(|error| {
-        if let Some(upload_id) = &r2_upload_id {
-            let r2 = r2.clone();
-            let transient_key = temp_storage_key.clone();
-            let upload_id = upload_id.clone();
-            tokio::spawn(async move {
-                let _ = r2.abort_multipart(&transient_key, &upload_id).await;
-            });
-        }
-        error
-    })?;
-    Ok(Json(StartUploadResponse {
+    .await?;
+    for (variant, plan) in variants.iter().zip(&request.plans.variants) {
+        let spec = variants_out.iter().find(|s| s.index == plan.index).unwrap();
+        sqlx::query(
+            r#"INSERT INTO project_v86_staged_variants
+               (upload_id, variant_index, name, exe, args, iso_storage_key,
+                iso_size_bytes, iso_sha256, reuse)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&upload_id)
+        .bind(variant.index)
+        .bind(&variant.name)
+        .bind(&variant.exe)
+        .bind(&variant.args)
+        .bind(&format!("v86/games/{}", plan.sha256))
+        .bind(plan.size_bytes as i64)
+        .bind(&plan.sha256)
+        .bind(spec.reuse)
+        .execute(&state.project_service.pool)
+        .await?;
+    }
+    Ok(Json(StartGameUploadResponse {
         upload_id,
-        chunk_size_bytes: state.project_demo_config.v86_upload_chunk_size,
-        next_chunk_index: 0,
-        expected_size_bytes: expected_size,
-        upload_required,
+        disk,
+        variants: variants_out,
     }))
 }
 
-pub async fn append_game_chunk(
+/// Stores one zstd-compressed disk part at its content-addressed key. The part
+/// name is the byte range `{offset}-{offset+chunk_size}.img.zst`, matching the
+/// layout the browser streams with `use_parts`.
+pub async fn upload_game_disk_part(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    AxumPath((upload_id, chunk_index)): AxumPath<(String, u64)>,
+    AxumPath((upload_id, part_index)): AxumPath<(String, u64)>,
     bytes: Bytes,
-) -> Result<Json<ChunkUploadResponse>, ProjectError> {
-    Ok(Json(
-        append_upload_chunk(
-            &state,
-            "project_v86_upload_sessions",
-            &upload_id,
-            user_id(&claims)?,
-            chunk_index,
-            bytes,
+) -> Result<StatusCode, ProjectError> {
+    let uploader_id = user_id(&claims)?;
+    let row = sqlx::query(
+        "SELECT staged_disk_storage_key, staged_disk_chunk_count, disk_reuse, received_disk_parts, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
+    )
+    .bind(&upload_id)
+    .bind(uploader_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    ensure_upload_not_expired(row.get::<String, _>("expires_at").as_str())?;
+    if row.get::<String, _>("status") != "active" {
+        return Err(ProjectError::InvalidDemo(
+            "The v86 game upload is no longer active.".to_string(),
+        ));
+    }
+    let chunk_count: i64 = row.get("staged_disk_chunk_count");
+    if row.get::<i64, _>("disk_reuse") != 0 {
+        return Err(ProjectError::Conflict(
+            "The game disk already exists; no parts are expected.".to_string(),
+        ));
+    }
+    let key: String = row.get("staged_disk_storage_key");
+    if part_index >= chunk_count as u64 {
+        return Err(ProjectError::InvalidDemo(
+            "Disk part index is out of range.".to_string(),
+        ));
+    }
+    let part = disk_part_name(&key, part_index, state.project_demo_config.v86_download_chunk_size);
+    let r2 = require_r2(&state)?;
+    r2.put_object_bytes(&part, bytes.to_vec())
+        .await
+        .map_err(r2_error)?;
+    let mut received: Vec<u64> =
+        serde_json::from_str(row.get::<Option<String>, _>("received_disk_parts").as_deref().unwrap_or("[]"))
+            .unwrap_or_default();
+    if !received.contains(&part_index) {
+        received.push(part_index);
+        sqlx::query(
+            "UPDATE project_v86_upload_sessions SET received_disk_parts = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
-        .await?,
-    ))
+        .bind(serde_json::to_string(&received).unwrap())
+        .bind(&upload_id)
+        .execute(&state.project_service.pool)
+        .await?;
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
-/// The stored artifact of a project, used to decide whether a rebuild is
-/// needed when only the manifest changed.
+/// Stores one variant's launcher CD. The SHA-256 of the received bytes must
+/// match the client's plan, so content-addressed keys stay truthful even though
+/// the server no longer builds the CD itself.
+pub async fn upload_game_variant_iso(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath((upload_id, variant_index)): AxumPath<(String, i32)>,
+    bytes: Bytes,
+) -> Result<StatusCode, ProjectError> {
+    let uploader_id = user_id(&claims)?;
+    let row = sqlx::query(
+        r#"SELECT s.expires_at, s.status, v.iso_storage_key, v.iso_sha256, v.reuse
+           FROM project_v86_upload_sessions s
+           JOIN project_v86_staged_variants v ON v.upload_id = s.id
+           WHERE s.id = ? AND s.uploader_id = ? AND v.variant_index = ?"#,
+    )
+    .bind(&upload_id)
+    .bind(uploader_id)
+    .bind(variant_index)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    ensure_upload_not_expired(row.get::<String, _>("expires_at").as_str())?;
+    if row.get::<String, _>("status") != "active" {
+        return Err(ProjectError::InvalidDemo(
+            "The v86 game upload is no longer active.".to_string(),
+        ));
+    }
+    if row.get::<i64, _>("reuse") != 0 {
+        return Err(ProjectError::Conflict(
+            "The launcher CD already exists; no upload is expected.".to_string(),
+        ));
+    }
+    let expected: String = row.get("iso_sha256");
+    let actual = hex::encode(Sha256::digest(&bytes));
+    if actual != expected {
+        return Err(ProjectError::InvalidDemo(
+            "The launcher CD failed its checksum check.".to_string(),
+        ));
+    }
+    let key: String = row.get("iso_storage_key");
+    let r2 = require_r2(&state)?;
+    r2.put_object_bytes(&format!("{key}/full.iso"), bytes.to_vec())
+        .await
+        .map_err(r2_error)?;
+    sqlx::query(
+        "UPDATE project_v86_staged_variants SET received = 1 WHERE upload_id = ? AND variant_index = ?",
+    )
+    .bind(&upload_id)
+    .bind(variant_index)
+    .execute(&state.project_service.pool)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The stored artifact of a project, used to resolve the manifest-only fast
+/// path (reuse the stored disk) and to validate the expected revision.
 struct StoredGameArtifact {
-    zip_storage_key: String,
-    zip_sha256: String,
-    manifest_sha256: String,
-    disk_storage_key: String,
-    disk_sha256: String,
-    disk_size_bytes: i64,
-    iso_storage_key: String,
-    iso_sha256: String,
-    iso_size_bytes: i64,
+    artifact_revision: i64,
+    disk_sha256: Option<String>,
+    disk_size_bytes: Option<i64>,
     chunk_count: i64,
 }
 
@@ -2301,9 +2037,7 @@ async fn fetch_stored_game_artifact(
     project_id: i64,
 ) -> Result<Option<StoredGameArtifact>, String> {
     let row = sqlx::query(
-        r#"SELECT zip_storage_key, zip_sha256, manifest_sha256,
-                  disk_storage_key, disk_sha256, disk_size_bytes,
-                  iso_storage_key, iso_sha256, iso_size_bytes, chunk_count
+        r#"SELECT artifact_revision, disk_sha256, disk_size_bytes, chunk_count
            FROM project_v86_games WHERE project_id = ?"#,
     )
     .bind(project_id)
@@ -2311,450 +2045,114 @@ async fn fetch_stored_game_artifact(
     .await
     .map_err(|e| e.to_string())?;
     Ok(row.map(|row| StoredGameArtifact {
-        zip_storage_key: row.get("zip_storage_key"),
-        zip_sha256: row.get("zip_sha256"),
-        manifest_sha256: row.get("manifest_sha256"),
-        disk_storage_key: row.get("disk_storage_key"),
+        artifact_revision: row.get("artifact_revision"),
         disk_sha256: row.get("disk_sha256"),
         disk_size_bytes: row.get("disk_size_bytes"),
-        iso_storage_key: row.get("iso_storage_key"),
-        iso_sha256: row.get("iso_sha256"),
-        iso_size_bytes: row.get("iso_size_bytes"),
         chunk_count: row.get("chunk_count"),
     }))
 }
 
-/// Looks up any project that already has a game disk for the given ZIP sha.
-/// Enables cross-project dedup: multiple projects can share the same content-
-/// addressed game artifacts.
-async fn fetch_shared_game_artifact(
+/// Deletes the content-addressed artifacts this session uploaded, but never
+/// shared/reused objects: the parts live under the disk sha prefix only when
+/// the client actually uploaded them, and reused variant CDs are skipped.
+async fn delete_uploaded_game_artifacts(
+    r2: &R2Client,
     pool: &sqlx::SqlitePool,
-    zip_sha: &str,
-) -> Result<Option<StoredGameArtifact>, String> {
-    let row = sqlx::query(
-        r#"SELECT zip_storage_key, zip_sha256, manifest_sha256,
-                  disk_storage_key, disk_sha256, disk_size_bytes,
-                  iso_storage_key, iso_sha256, iso_size_bytes, chunk_count
-           FROM project_v86_games
-           WHERE zip_sha256 = ? AND disk_storage_key IS NOT NULL
-           LIMIT 1"#,
+    upload_id: &str,
+    disk_storage_key: Option<&str>,
+    disk_reuse: bool,
+) {
+    if !disk_reuse {
+        if let Some(key) = disk_storage_key {
+            let _ = r2.delete_prefix(key).await;
+        }
+    }
+    let uploaded_isos: Vec<String> = sqlx::query_scalar(
+        "SELECT iso_storage_key FROM project_v86_staged_variants WHERE upload_id = ? AND reuse = 0",
     )
-    .bind(zip_sha)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(row.map(|row| StoredGameArtifact {
-        zip_storage_key: row.get("zip_storage_key"),
-        zip_sha256: row.get("zip_sha256"),
-        manifest_sha256: row.get("manifest_sha256"),
-        disk_storage_key: row.get("disk_storage_key"),
-        disk_sha256: row.get("disk_sha256"),
-        disk_size_bytes: row.get("disk_size_bytes"),
-        iso_storage_key: row.get("iso_storage_key"),
-        iso_sha256: row.get("iso_sha256"),
-        iso_size_bytes: row.get("iso_size_bytes"),
-        chunk_count: row.get("chunk_count"),
-    }))
-}
-
-/// Loads the already-built variant CDs for a project so a manifest-only edit
-/// that produced no changes can reuse them without rebuilding.
-async fn fetch_stored_variants(
-    pool: &sqlx::SqlitePool,
-    project_id: i64,
-) -> Result<Vec<BuiltVariant>, String> {
-    let rows = sqlx::query(
-        r#"SELECT variant_index, name, exe, args,
-                  iso_storage_key, iso_sha256, iso_size_bytes
-           FROM project_v86_variants WHERE project_id = ? ORDER BY variant_index"#,
-    )
-    .bind(project_id)
+    .bind(upload_id)
     .fetch_all(pool)
     .await
-    .map_err(|e| e.to_string())?;
-    Ok(rows
-        .into_iter()
-        .map(|row| BuiltVariant {
-            spec: VariantSpec {
-                index: row.get("variant_index"),
-                name: row.get("name"),
-                exe: row.get("exe"),
-                args: row.get("args"),
-            },
-            iso_storage_key: row.get("iso_storage_key"),
-            iso_size_bytes: row.get("iso_size_bytes"),
-            iso_sha256: row.get("iso_sha256"),
-        })
-        .collect())
-}
-
-/// Hashes and uploads a set of built autorun CDs (one per variant), returning
-/// the content-addressed artifacts. Also cleans up the transient build dir.
-async fn build_and_store_variants(
-    r2: &R2Client,
-    build_dir: &Path,
-    variants: &[VariantSpec],
-    cdrom_paths: &[PathBuf],
-) -> Result<Vec<BuiltVariant>, String> {
-    let mut out = Vec::new();
-    for (variant, cdrom) in variants.iter().zip(cdrom_paths.iter()) {
-        let (idx, name, exe, args) = (
-            variant.index,
-            variant.name.clone(),
-            variant.exe.clone(),
-            variant.args.clone(),
-        );
-        let (size_raw, sha) = tokio::task::spawn_blocking({
-            let cdrom = cdrom.clone();
-            move || sha256_file(&cdrom)
-        })
-        .await
-        .map_err(|e| format!("sha256 task panicked: {e}"))?
-        .map_err(|e| e.to_string())?;
-        let key = format!("v86/games/{sha}");
-        r2.put_object_from_file(&format!("{key}/full.iso"), cdrom)
-            .await
-            .map_err(|e| e.to_string())?;
-        let _ = tokio::fs::remove_file(cdrom).await;
-        out.push(BuiltVariant {
-            spec: VariantSpec { index: idx, name, exe, args },
-            iso_storage_key: key,
-            iso_size_bytes: size_raw as i64,
-            iso_sha256: sha,
-        });
+    .unwrap_or_default();
+    for key in uploaded_isos {
+        let _ = r2.delete_object(&format!("{key}/full.iso")).await;
     }
-    let _ = tokio::fs::remove_dir_all(build_dir).await;
-    Ok(out)
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn process_game_upload(
+/// Decompresses every received disk part, verifies its byte range and that the
+/// streamed SHA-256 matches the client's plan, then marks the session ready.
+/// This is what keeps the content-addressed keys truthful now that the server
+/// no longer builds the disk itself.
+async fn verify_game_upload(
     pool: &sqlx::SqlitePool,
     r2: &R2Client,
-    config_dir: &Path,
-    assets_dir: &Path,
-    xorriso_bin: &str,
-    mtools_bin: &str,
     upload_id: &str,
-    transient_key: &str,
-    local_download: &Path,
-    manifest: &str,
-    max_files: usize,
-    max_extracted_size: u64,
+    disk_reuse: bool,
+    disk_storage_key: Option<&str>,
+    disk_sha: Option<&str>,
+    disk_size: Option<i64>,
+    chunk_count: Option<i64>,
     chunk_size: u64,
-    source_project_id: Option<i64>,
-    manifest_only: bool,
     progress: Arc<Mutex<ChunkProgress>>,
 ) -> Result<(), String> {
-    let stored = match source_project_id {
-        Some(project_id) => fetch_stored_game_artifact(pool, project_id).await?,
-        None => None,
-    };
-
-    let manifest_sha = hex::encode(Sha256::digest(manifest.as_bytes()));
-    let variants = parse_variants(manifest).map_err(|e| e.to_string())?;
-
-    let (zip_key, zip_sha, disk_key, disk_sha, disk_size, disk_chunk_count);
-    let build_dir = config_dir.join("v86").join("tmp").join("build").join(upload_id);
-    let mut built_variants: Option<Vec<BuiltVariant>> = None;
-    // When true, no ISO was rebuilt and the stored variants should be reused.
-    let mut reuse_variants = false;
-
-    if manifest_only {
-        // Manifest-only edit: the stored disk is reused as-is; the ZIP is never
-        // downloaded. Only the launcher CDs are (re)generated from static assets
-        // when the manifest changed, so tagging it onto an empty source.
-        let artifact = stored
-            .as_ref()
-            .ok_or_else(|| "source project artifact missing".to_string())?;
-        zip_key = artifact.zip_storage_key.clone();
-        zip_sha = artifact.zip_sha256.clone();
-        disk_key = artifact.disk_storage_key.clone();
-        disk_sha = artifact.disk_sha256.clone();
-        disk_size = artifact.disk_size_bytes;
-        disk_chunk_count = artifact.chunk_count;
-        if artifact.manifest_sha256 == manifest_sha {
-            // No-op: reuse the stored variant CDs as well; nothing to build or upload.
-            {
-                let mut p = progress.lock().unwrap();
-                p.message = "No changes to rebuild.".to_string();
-            }
-            reuse_variants = true;
-        } else {
-            // ISO-only: the manifest changed, so rebuild just the launcher CDs.
-            {
-                let mut p = progress.lock().unwrap();
-                p.message = "Rebuilding launcher…".to_string();
-            }
-            let (state_dir, assets, xorriso, uid, mf, vv) = (
-                config_dir.to_path_buf(),
-                assets_dir.to_path_buf(),
-                xorriso_bin.to_string(),
-                upload_id.to_string(),
-                manifest.to_string(),
-                variants.clone(),
-            );
-            let cdrom_paths = tokio::task::spawn_blocking(move || {
-                build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf, &vv)
-            })
-            .await
-            .map_err(|e| format!("cdrom build task panicked: {e}"))?
-            .map_err(|e| e.to_string())?;
-            built_variants =
-                Some(build_and_store_variants(r2, &build_dir, &variants, &cdrom_paths).await?);
+    if !disk_reuse {
+        let key = disk_storage_key.ok_or("missing disk storage key")?;
+        let sha = disk_sha.ok_or("missing disk sha")?;
+        let size = disk_size.ok_or("missing disk size")? as u64;
+        let chunks = chunk_count.ok_or("missing chunk count")? as u64;
+        if chunks == 0 {
+            return Err("disk chunk count is zero".to_string());
         }
-    } else {
-        if let Some(parent) = local_download.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| e.to_string())?;
-        }
-        r2.download_to_file(transient_key, local_download)
-            .await
-            .map_err(|e| e.to_string())?;
-        let source = local_download.to_path_buf();
-
-        let (_zip_size, computed_zip_sha) = tokio::task::spawn_blocking({
-            let source = source.clone();
-            move || sha256_file(&source)
-        })
-        .await
-        .map_err(|e| format!("sha256 task panicked: {e}"))?
-        .map_err(|e| e.to_string())?;
-        zip_sha = computed_zip_sha;
-
-        // Also look for an existing project with the same ZIP content to enable
-        // cross-project dedup. Only consider rows that already have a game disk.
-        let shared = fetch_shared_game_artifact(pool, &zip_sha).await?;
-        // Reuse the stored disk when this source project already built it from
-        // the same ZIP, or another project has a game disk for this content.
-        let reuse_disk = stored
-            .as_ref()
-            .is_some_and(|artifact| artifact.zip_sha256 == zip_sha)
-            || shared.is_some();
-
-        if reuse_disk {
-            let artifact = stored
-                .filter(|a| a.zip_sha256 == zip_sha)
-                .or(shared);
-            let Some(artifact) = artifact.as_ref() else {
-                return Err("reuse_disk implies a stored or shared artifact".to_string());
-            };
-            zip_key = format!("v86/games/zips/{zip_sha}.zip");
-            disk_key = artifact.disk_storage_key.clone();
-            disk_sha = artifact.disk_sha256.clone();
-            disk_size = artifact.disk_size_bytes;
-            disk_chunk_count = artifact.chunk_count;
-            if artifact.manifest_sha256 == manifest_sha {
-                // No-op: reuse the stored variant CDs as well; nothing to build or upload.
-                {
-                    let mut p = progress.lock().unwrap();
-                    p.message = "No changes to rebuild.".to_string();
+        let mut hasher = Sha256::new();
+        for index in 0..chunks {
+            let part = disk_part_name(key, index, chunk_size);
+            let bytes = r2.get_object(&part).await.map_err(|e| e.to_string())?;
+            let mut decoder = zstd::stream::read::Decoder::new(&bytes[..])
+                .map_err(|e| format!("disk part {index} is not valid zstd: {e}"))?;
+            let mut total: u64 = 0;
+            let mut buf = [0u8; 65536];
+            loop {
+                let n = decoder
+                    .read(&mut buf)
+                    .map_err(|e| format!("disk part {index} failed to decode: {e}"))?;
+                if n == 0 {
+                    break;
                 }
-                reuse_variants = true;
-            } else {
-                // ISO-only: the manifest changed, so rebuild just the launcher CDs.
-                {
-                    let mut p = progress.lock().unwrap();
-                    p.message = "Rebuilding launcher…".to_string();
-                }
-                let (state_dir, assets, xorriso, uid, mf, vv) = (
-                    config_dir.to_path_buf(),
-                    assets_dir.to_path_buf(),
-                    xorriso_bin.to_string(),
-                    upload_id.to_string(),
-                    manifest.to_string(),
-                    variants.clone(),
-                );
-                let cdrom_paths = tokio::task::spawn_blocking(move || {
-                    build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf, &vv)
-                })
-                .await
-                .map_err(|e| format!("cdrom build task panicked: {e}"))?
-                .map_err(|e| e.to_string())?;
-                built_variants =
-                    Some(build_and_store_variants(r2, &build_dir, &variants, &cdrom_paths).await?);
+                hasher.update(&buf[..n]);
+                total += n as u64;
             }
-        } else {
-            // Full build: a new or changed ZIP. Extract, partition the disk,
-            // split it into zstd chunks and upload everything.
+            let expected = chunk_size.min(size.saturating_sub(index * chunk_size));
+            if total != expected {
+                return Err(format!(
+                    "disk part {index} is {total} bytes, expected {expected}"
+                ));
+            }
             {
                 let mut p = progress.lock().unwrap();
-                p.message = "Building game disc…".to_string();
-            }
-            let (disk_path, cdrom_paths, _extracted_bytes) = {
-                let state_dir = config_dir.to_path_buf();
-                let assets = assets_dir.to_path_buf();
-                let xorriso = xorriso_bin.to_string();
-                let mtools = mtools_bin.to_string();
-                let uid = upload_id.to_string();
-                let mf = manifest.to_string();
-                let vv = variants.clone();
-                let src = source.clone();
-                tokio::task::spawn_blocking(move || {
-                    build_windows95_disk(
-                        &state_dir, &assets, &xorriso, &mtools, &uid, &src, &mf, &vv,
-                        max_files, max_extracted_size,
-                    )
-                })
-                .await
-                .map_err(|e| format!("disk build task panicked: {e}"))?
-                .map_err(|e| e.to_string())?
-            };
-
-            let (disk_size_raw, disk_sha_raw) = tokio::task::spawn_blocking({
-                let disk = disk_path.clone();
-                move || sha256_file(&disk)
-            })
-            .await
-            .map_err(|e| format!("sha256 task panicked: {e}"))?
-            .map_err(|e| e.to_string())?;
-            disk_sha = disk_sha_raw;
-            disk_size = disk_size_raw as i64;
-
-            // Split the raw FAT image into the same zstd chunk layout as the
-            // base disk so the browser can stream it with use_parts.
-            let parts_dir = config_dir
-                .join("v86")
-                .join("tmp")
-                .join("games")
-                .join(format!("{upload_id}.diskparts"));
-            disk_chunk_count = tokio::task::spawn_blocking({
-                let disk = disk_path.clone();
-                let parts = parts_dir.clone();
-                move || split_asset(&disk, &parts, chunk_size, "img.zst", None, 6)
-            })
-            .await
-            .map_err(|e| format!("disk split task panicked: {e}"))?
-            .map_err(|e| e.to_string())?
-            .try_into()
-            .unwrap();
-
-            {
-                let mut p = progress.lock().unwrap();
-                p.message = "Uploading to R2…".to_string();
-            }
-
-            // Content-addressed artifacts the browser serves straight from R2.
-            // The ZIP itself is no longer persisted: only the disk chunks and
-            // the per-variant launcher CDs are stored, keyed by content hash.
-            zip_key = format!("v86/games/zips/{zip_sha}.zip");
-            disk_key = format!("v86/games/{disk_sha}");
-            if let Err(error) = push_dir_to_r2(r2, &disk_key, &parts_dir).await {
-                let _ = r2.delete_prefix(&disk_key).await;
-                return Err(error);
-            }
-            built_variants =
-                Some(build_and_store_variants(r2, &build_dir, &variants, &cdrom_paths).await?);
-            let _ = tokio::fs::remove_file(&disk_path).await;
-            let _ = tokio::fs::remove_dir_all(&parts_dir).await;
-        }
-    }
-
-    // Holdover check: the full/reuse branches always produce variant ISOs. If
-    // none were built we must reuse the existing stored variants for the source
-    // project (falling back to a fresh rebuild when they do not match).
-    if built_variants.is_none() {
-        if reuse_variants {
-            if let Some(pid) = source_project_id {
-                let existing = fetch_stored_variants(pool, pid).await?;
-                if existing.len() == variants.len() {
-                    built_variants = Some(existing);
-                }
+                p.total_chunks = chunks;
+                p.completed_chunks = index + 1;
+                p.message = format!("Verifying game disc… {}/{}", index + 1, chunks);
             }
         }
-        if built_variants.is_none() {
-            {
-                let mut p = progress.lock().unwrap();
-                p.message = "Rebuilding launcher…".to_string();
-            }
-            let (state_dir, assets, xorriso, uid, mf, vv) = (
-                config_dir.to_path_buf(),
-                assets_dir.to_path_buf(),
-                xorriso_bin.to_string(),
-                upload_id.to_string(),
-                manifest.to_string(),
-                variants.clone(),
-            );
-            let cdrom_paths = tokio::task::spawn_blocking(move || {
-                build_windows95_cdrom_only(&state_dir, &assets, &xorriso, &uid, &mf, &vv)
-            })
-            .await
-            .map_err(|e| format!("cdrom build task panicked: {e}"))?
-            .map_err(|e| e.to_string())?;
-            built_variants =
-                Some(build_and_store_variants(r2, &build_dir, &variants, &cdrom_paths).await?);
+        let actual = hex::encode(hasher.finalize());
+        if actual != sha {
+            return Err(format!(
+                "game disk checksum mismatch: {actual} != {sha}"
+            ));
         }
     }
-    let built_variants = built_variants.ok_or_else(|| "no variants produced".to_string())?;
-    let first = built_variants.first().ok_or_else(|| "no variants produced".to_string())?;
-    let iso_key = first.iso_storage_key.clone();
-    let iso_sha = first.iso_sha256.clone();
-    let iso_size = first.iso_size_bytes;
-
-    // Stage every built variant for the attach step.
-    sqlx::query("DELETE FROM project_v86_staged_variants WHERE upload_id = ?")
-        .bind(upload_id)
-        .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    for v in &built_variants {
-        sqlx::query(
-            r#"INSERT INTO project_v86_staged_variants
-               (upload_id, variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(upload_id)
-        .bind(v.spec.index)
-        .bind(&v.spec.name)
-        .bind(&v.spec.exe)
-        .bind(&v.spec.args)
-        .bind(&v.iso_storage_key)
-        .bind(v.iso_size_bytes)
-        .bind(&v.iso_sha256)
-        .execute(pool)
-        .await
-        .map_err(|e| e.to_string())?;
+    {
+        let mut p = progress.lock().unwrap();
+        p.message = "Finalizing…".to_string();
     }
-
-    // Drop the session-owned transient ZIP. Manifest-only edits reuse the
-    // stored disk key as the session key, which is not a transient object, so
-    // it is never removed here.
-    if transient_key.starts_with("v86/tmp/games/") {
-        let _ = r2.delete_object(transient_key).await;
-    }
-    if manifest_only {
-        let _ = tokio::fs::remove_dir_all(&build_dir).await;
-    } else {
-        let _ = tokio::fs::remove_file(&local_download).await;
-    }
-
     sqlx::query(
-        r#"UPDATE project_v86_upload_sessions
-           SET status = 'ready',
-               staged_zip_storage_key = ?, staged_zip_sha256 = ?,
-               staged_disk_storage_key = ?, staged_disk_sha256 = ?, staged_disk_size_bytes = ?,
-               staged_iso_storage_key = ?, staged_iso_sha256 = ?, staged_iso_size_bytes = ?,
-               staged_iso_chunk_count = ?,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE id = ? AND status = 'building'"#,
+        "UPDATE project_v86_upload_sessions SET status = 'ready', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'building'",
     )
-    .bind(&zip_key)
-    .bind(&zip_sha)
-    .bind(&disk_key)
-    .bind(&disk_sha)
-    .bind(disk_size)
-    .bind(&iso_key)
-    .bind(&iso_sha)
-    .bind(iso_size)
-    .bind(disk_chunk_count)
     .bind(upload_id)
     .execute(pool)
     .await
     .map_err(|e| e.to_string())?;
-
     chunk_progress_map().lock().unwrap().remove(upload_id);
-
     Ok(())
 }
 
@@ -2765,7 +2163,10 @@ pub async fn complete_game_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT manifest_text, source_project_id, original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
+        r#"SELECT manifest_text, source_project_id, staged_disk_storage_key,
+                  staged_disk_sha256, staged_disk_size_bytes, staged_disk_chunk_count,
+                  disk_reuse, received_disk_parts, status, expires_at
+           FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -2773,22 +2174,49 @@ pub async fn complete_game_upload(
     .await?
     .ok_or(ProjectError::ProjectNotFound)?;
     ensure_upload_not_expired(row.get::<String, _>("expires_at").as_str())?;
-    if row.get::<String, _>("status") != "active"
-        || row.get::<i64, _>("expected_size_bytes") != row.get::<i64, _>("received_size_bytes")
-    {
+    if row.get::<String, _>("status") != "active" {
         return Err(ProjectError::InvalidDemo(
-            "The game ZIP upload is incomplete.".to_string(),
+            "The v86 game upload is no longer active.".to_string(),
         ));
     }
-    let uploaded_transient = row.get::<Option<String>, _>("r2_upload_id").is_some();
-    if let Some(r2_upload_id) = row.get::<Option<String>, _>("r2_upload_id") {
-        let r2 = require_r2(&state)?;
-        let temp_key: String = row.get("temp_storage_key");
-        let etags = parse_r2_part_etags(row.get::<Option<String>, _>("r2_part_etags").as_deref());
-        r2.complete_multipart(&temp_key, &r2_upload_id, etags)
-            .await
-            .map_err(r2_error)?;
+
+    // Every non-reused artifact must have arrived before the session can be
+    // finalized. The disk is verified (decompress + hash) in the background.
+    let disk_reuse: i64 = row.get("disk_reuse");
+    if disk_reuse == 0 {
+        let chunk_count: i64 = row.get("staged_disk_chunk_count");
+        let received: Vec<u64> = serde_json::from_str(
+            row.get::<Option<String>, _>("received_disk_parts")
+                .as_deref()
+                .unwrap_or("[]"),
+        )
+        .unwrap_or_default();
+        if received.len() as i64 != chunk_count {
+            return Err(ProjectError::InvalidDemo(
+                "The game disk upload is incomplete.".to_string(),
+            ));
+        }
+        for index in 0..chunk_count as u64 {
+            if !received.contains(&index) {
+                return Err(ProjectError::InvalidDemo(
+                    "The game disk upload is incomplete.".to_string(),
+                ));
+            }
+        }
     }
+    let missing_isos: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM project_v86_staged_variants
+           WHERE upload_id = ? AND reuse = 0 AND received = 0"#,
+    )
+    .bind(&upload_id)
+    .fetch_one(&state.project_service.pool)
+    .await?;
+    if missing_isos > 0 {
+        return Err(ProjectError::InvalidDemo(
+            "The v86 game upload is incomplete.".to_string(),
+        ));
+    }
+
     sqlx::query(
         "UPDATE project_v86_upload_sessions SET status = 'building', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'",
     )
@@ -2796,20 +2224,12 @@ pub async fn complete_game_upload(
     .execute(&state.project_service.pool)
     .await?;
 
-    let manifest: String = row.get("manifest_text");
-    let temp_key: String = row.get("temp_storage_key");
-    let xorriso = state.project_demo_config.xorriso_bin.clone();
-    let mtools = state.project_demo_config.mtools_bin.clone();
-    let chunk_size = state.project_demo_config.v86_download_chunk_size;
-    let max_files = state.project_demo_config.max_v86_game_files;
-    let max_extracted = state.project_demo_config.max_v86_game_extracted_size;
-
     let progress = Arc::new(Mutex::new(ChunkProgress {
         upload_id: upload_id.clone(),
         kind: "game".to_string(),
         total_chunks: 0,
         completed_chunks: 0,
-        message: "Preparing…".to_string(),
+        message: "Verifying game disc…".to_string(),
     }));
     chunk_progress_map()
         .lock()
@@ -2819,54 +2239,42 @@ pub async fn complete_game_upload(
     let pool = state.project_service.pool.clone();
     let r2 = require_r2(&state)?;
     let r2_c = r2.clone();
-    let config_dir = state.project_demo_config.dir.clone();
-    let assets_dir = state.project_demo_config.v86_assets_dir.clone();
     let upload_id_c = upload_id.clone();
-    let temp_key_c = temp_key.clone();
-    let source_project_id: Option<i64> = row.get("source_project_id");
-    // A source project with no fresh ZIP upload means a manifest-only edit:
-    // the stored disk is reused and the launcher CD is rebuilt from static
-    // assets — the ZIP is neither downloaded nor stored.
-    let manifest_only = source_project_id.is_some() && !uploaded_transient;
-    let local_download = temp_upload_path(&state, "games", &upload_id);
-    let local_download_c = local_download.clone();
-    let manifest_c = manifest.clone();
-    let xorriso_c = xorriso.clone();
-    let mtools_c = mtools.clone();
+    let disk_storage_key: Option<String> = row.get("staged_disk_storage_key");
+    let disk_sha: Option<String> = row.get("staged_disk_sha256");
+    let disk_size: Option<i64> = row.get("staged_disk_size_bytes");
+    let chunk_count: Option<i64> = row.get("staged_disk_chunk_count");
+    let chunk_size = state.project_demo_config.v86_download_chunk_size;
     let progress_c = progress.clone();
 
     tokio::spawn(async move {
-        let result = process_game_upload(
+        let result = verify_game_upload(
             &pool,
             &r2_c,
-            &config_dir,
-            &assets_dir,
-            &xorriso_c,
-            &mtools_c,
             &upload_id_c,
-            &temp_key_c,
-            &local_download_c,
-            &manifest_c,
-            max_files,
-            max_extracted,
+            disk_reuse != 0,
+            disk_storage_key.as_deref(),
+            disk_sha.as_deref(),
+            disk_size,
+            chunk_count,
             chunk_size,
-            source_project_id,
-            manifest_only,
             progress_c,
         )
         .await;
-        if let Err(e) = result {
-            tracing::error!("Background game upload failed for {upload_id_c}: {e}");
-            if uploaded_transient {
-                let _ = r2_c.delete_object(&temp_key_c).await;
-            }
-            let _ = tokio::fs::remove_file(&local_download_c).await;
-            let _ = tokio::fs::remove_dir_all(config_dir.join("v86/tmp/build").join(&upload_id_c))
-                .await;
+        if let Err(error) = result {
+            tracing::error!("Background game upload failed for {upload_id_c}: {error}");
+            delete_uploaded_game_artifacts(
+                &r2_c,
+                &pool,
+                &upload_id_c,
+                disk_storage_key.as_deref(),
+                disk_reuse != 0,
+            )
+            .await;
             let _ = sqlx::query(
                 "UPDATE project_v86_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             )
-            .bind(&e)
+            .bind(&error)
             .bind(&upload_id_c)
             .execute(&pool)
             .await;
@@ -2877,6 +2285,7 @@ pub async fn complete_game_upload(
     Ok(StatusCode::ACCEPTED)
 }
 
+
 pub async fn attach_ready_game_tx(
     tx: &mut Transaction<'_, Sqlite>,
     project_id: i64,
@@ -2886,11 +2295,11 @@ pub async fn attach_ready_game_tx(
 ) -> Result<i64, ProjectError> {
     let row = sqlx::query(
         r#"SELECT source_project_id, system_version_id, expected_artifact_revision,
-                  manifest_text, manifest_sha256, original_file_name,
-                  expected_size_bytes, staged_zip_storage_key, staged_zip_sha256,
+                  manifest_text, manifest_sha256,
                   staged_disk_storage_key, staged_disk_sha256, staged_disk_size_bytes,
+                  staged_disk_chunk_count,
                   staged_iso_storage_key, staged_iso_sha256, staged_iso_size_bytes,
-                  staged_iso_chunk_count, status, expires_at
+                  status, expires_at
            FROM project_v86_upload_sessions
            WHERE id = ? AND uploader_id = ?"#,
     )
@@ -2925,19 +2334,14 @@ pub async fn attach_ready_game_tx(
     let artifact_change = sqlx::query(
         r#"INSERT INTO project_v86_games
            (project_id, system_version_id, manifest_text, manifest_sha256,
-            original_file_name, zip_storage_key, zip_size_bytes, zip_sha256,
             disk_storage_key, disk_size_bytes, disk_sha256,
             iso_storage_key, iso_size_bytes, iso_sha256, chunk_size_bytes,
             chunk_count, artifact_revision)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(project_id) DO UPDATE SET
              system_version_id = excluded.system_version_id,
              manifest_text = excluded.manifest_text,
              manifest_sha256 = excluded.manifest_sha256,
-             original_file_name = excluded.original_file_name,
-             zip_storage_key = excluded.zip_storage_key,
-             zip_size_bytes = excluded.zip_size_bytes,
-             zip_sha256 = excluded.zip_sha256,
              disk_storage_key = excluded.disk_storage_key,
              disk_size_bytes = excluded.disk_size_bytes,
              disk_sha256 = excluded.disk_sha256,
@@ -2954,18 +2358,14 @@ pub async fn attach_ready_game_tx(
     .bind(row.get::<i64, _>("system_version_id"))
     .bind(row.get::<String, _>("manifest_text"))
     .bind(row.get::<String, _>("manifest_sha256"))
-    .bind(row.get::<String, _>("original_file_name"))
-    .bind(row.get::<String, _>("staged_zip_storage_key"))
-    .bind(row.get::<i64, _>("expected_size_bytes"))
-    .bind(row.get::<String, _>("staged_zip_sha256"))
-    .bind(row.get::<String, _>("staged_disk_storage_key"))
-    .bind(row.get::<i64, _>("staged_disk_size_bytes"))
-    .bind(row.get::<String, _>("staged_disk_sha256"))
+    .bind(row.get::<Option<String>, _>("staged_disk_storage_key"))
+    .bind(row.get::<Option<i64>, _>("staged_disk_size_bytes"))
+    .bind(row.get::<Option<String>, _>("staged_disk_sha256"))
     .bind(row.get::<String, _>("staged_iso_storage_key"))
     .bind(row.get::<i64, _>("staged_iso_size_bytes"))
     .bind(row.get::<String, _>("staged_iso_sha256"))
     .bind(chunk_size as i64)
-    .bind(row.get::<i64, _>("staged_iso_chunk_count"))
+    .bind(row.get::<i64, _>("staged_disk_chunk_count"))
     .bind(revision)
     .bind(expected)
     .execute(&mut **tx)
@@ -3038,7 +2438,7 @@ pub async fn abort_game_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT temp_storage_key, r2_upload_id, status FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT staged_disk_storage_key, disk_reuse, status FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -3057,25 +2457,21 @@ pub async fn abort_game_upload(
     .bind(&upload_id)
     .execute(&state.project_service.pool)
     .await?;
+    // Remove only the content this session uploaded. Shared/reused artifacts
+    // are left untouched.
+    let disk_key: Option<String> = row.get("staged_disk_storage_key");
+    let disk_reuse: i64 = row.get("disk_reuse");
     if let Some(r2) = &state.r2 {
-        let temp: String = row.get("temp_storage_key");
-        if let Some(r2_upload_id) = row.get::<Option<String>, _>("r2_upload_id") {
-            let _ = r2.abort_multipart(&temp, &r2_upload_id).await;
-        }
-        let _ = r2.delete_object(&temp).await;
+        delete_uploaded_game_artifacts(
+            r2,
+            &state.project_service.pool,
+            &upload_id,
+            disk_key.as_deref(),
+            disk_reuse != 0,
+        )
+        .await;
     }
-    tokio::fs::remove_file(temp_upload_path(&state, "games", &upload_id))
-        .await
-        .ok();
-    tokio::fs::remove_dir_all(
-        state
-            .project_demo_config
-            .dir
-            .join("v86/tmp/build")
-            .join(&upload_id),
-    )
-    .await
-    .ok();
+    chunk_progress_map().lock().unwrap().remove(&upload_id);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -3136,6 +2532,7 @@ pub async fn runtime_descriptor_for(
     };
     let sql = format!(
         r#"SELECT s.name AS system_name, s.platform_key, v.id AS system_version_id,
+                  v.storage_key AS base_storage_key,
                   v.size_bytes AS base_size, v.sha256 AS base_sha,
                   g.project_id, g.disk_size_bytes, g.disk_sha256,
                   g.iso_size_bytes, g.iso_sha256, g.manifest_text, g.manifest_sha256,
@@ -3160,6 +2557,7 @@ pub async fn runtime_descriptor_for(
     let slug = slug.as_str();
     let version_id: i64 = row.get("system_version_id");
     let base_sha: String = row.get("base_sha");
+    let base_storage_key: String = row.get("base_storage_key");
     let game_sha: String = row.get("disk_sha256");
     let iso_sha: String = row.get("iso_sha256");
     let project_id: i64 = row.get("project_id");
@@ -3250,13 +2648,13 @@ pub async fn runtime_descriptor_for(
         Some(r2) => {
             let base = r2.trim_end_matches('/');
             (
-                format!("{base}/v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
+                format!("{base}/{base_storage_key}/.img.zst"),
                 format!("{base}/v86/games/{game_sha}/.img.zst"),
                 format!("{base}/v86/games/{iso_sha}/full.iso"),
             )
         }
         None => (
-            format!("v86/assets/systems/{version_id}/{base_sha}/.img.zst"),
+            format!("{base_storage_key}/.img.zst"),
             format!("projects/s/{slug}/v86/disk/{game_sha}/.img.zst"),
             format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
         ),
@@ -3916,22 +3314,49 @@ fn immutable_chunk_response(bytes: Vec<u8>, content_type: &'static str) -> Respo
     response
 }
 
+/// Serves the static Windows 9x in-guest launcher so the editor can build the
+/// autorun CDs in the browser. The launcher changes rarely and feeds the
+/// content hash of every CD, so it is cached for an hour.
+pub async fn get_game_launcher(
+    State(state): State<Arc<AppState>>,
+) -> Result<Response, ProjectError> {
+    let assets_dir = &state.project_demo_config.v86_assets_dir;
+    // The env var points at the assets root; the launcher lives under the
+    // platform folder. Fall back to a direct LAUNCHER.EXE for installs that
+    // configured the platform folder directly.
+    let platform_dir = assets_dir.join("v86").join("windows9x");
+    let launcher = if platform_dir.join("LAUNCHER.EXE").is_file() {
+        platform_dir.join("LAUNCHER.EXE")
+    } else {
+        assets_dir.join("LAUNCHER.EXE")
+    };
+    let bytes = tokio::fs::read(&launcher)
+        .await
+        .map_err(|_| ProjectError::ProjectNotFound)?;
+    let mut response = bytes.into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=3600"),
+    );
+    Ok(response)
+}
+
 pub async fn get_system_chunk(
     State(state): State<Arc<AppState>>,
-    AxumPath((version_id, sha256, part)): AxumPath<(i64, String, String)>,
+    AxumPath((sha256, part)): AxumPath<(String, String)>,
 ) -> Result<Response, ProjectError> {
     let storage_key: Option<String> = sqlx::query_scalar(
         r#"SELECT v.storage_key FROM v86_system_versions v
-           WHERE v.id = ? AND v.sha256 = ?
-             AND EXISTS (
-               SELECT 1 FROM project_v86_games g
-               JOIN projects p ON p.id = g.project_id
-               JOIN posts ON posts.id = p.post_id
-               WHERE g.system_version_id = v.id
-                 AND p.demo_type = 'v86' AND posts.status = 'published'
-             )"#,
+           JOIN v86_systems s ON s.id = v.system_id
+           WHERE v.sha256 = ?
+             AND s.is_active = 1
+             AND v.version_number = s.current_version
+           LIMIT 1"#,
     )
-    .bind(version_id)
     .bind(&sha256)
     .fetch_optional(&state.project_service.pool)
     .await?;
@@ -3940,7 +3365,7 @@ pub async fn get_system_chunk(
         return Err(ProjectError::ProjectNotFound);
     }
     if let Some(r2) = &state.r2 {
-        let key = format!("v86/assets/systems/{version_id}/{sha256}/{part}");
+        let key = format!("{storage_key}/{part}");
         let bytes = r2
             .get_object(&key)
             .await
@@ -3951,8 +3376,7 @@ pub async fn get_system_chunk(
         state
             .project_demo_config
             .dir
-            .join(storage_key)
-            .join("parts")
+            .join(&storage_key)
             .join(part),
     )
     .await
@@ -4328,18 +3752,6 @@ pub async fn delete_game_save(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zip::{CompressionMethod, ZipWriter, write::FileOptions};
-
-    fn write_zip(path: &Path, files: &[(&str, &[u8])]) {
-        let file = File::create(path).unwrap();
-        let mut writer = ZipWriter::new(file);
-        let options = FileOptions::default().compression_method(CompressionMethod::Stored);
-        for (name, contents) in files {
-            writer.start_file(*name, options).unwrap();
-            writer.write_all(contents).unwrap();
-        }
-        writer.finish().unwrap();
-    }
 
     #[test]
     fn manifest_is_exact_but_rejects_nul_and_oversize() {
@@ -4350,27 +3762,6 @@ mod tests {
         );
         assert!(validate_manifest("exe=a.exe\0args=-m").is_err());
         assert!(validate_manifest(&"x".repeat(MANIFEST_MAX_BYTES + 1)).is_err());
-    }
-
-    #[test]
-    fn zip_validation_extracts_safe_files_and_rejects_traversal() {
-        let root = std::env::temp_dir().join(format!("v86-zip-test-{}", Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let safe_zip = root.join("safe.zip");
-        let safe_out = root.join("safe");
-        write_zip(
-            &safe_zip,
-            &[("Doraemon.exe", b"game"), ("DATA/file.dat", b"data")],
-        );
-        assert!(validate_and_extract_game_zip(&safe_zip, &safe_out, 10, 1024).is_ok());
-        assert_eq!(fs::read(safe_out.join("Doraemon.exe")).unwrap(), b"game");
-
-        let unsafe_zip = root.join("unsafe.zip");
-        write_zip(&unsafe_zip, &[("../outside.exe", b"bad")]);
-        assert!(
-            validate_and_extract_game_zip(&unsafe_zip, &root.join("unsafe"), 10, 1024).is_err()
-        );
-        fs::remove_dir_all(root).ok();
     }
 
     #[test]
@@ -4437,142 +3828,5 @@ mod tests {
                 "{bad} should be rejected"
             );
         }
-    }
-
-    #[test]
-    fn windows95_manifest_resolves_a_unique_nested_executable() {
-        let root = std::env::temp_dir().join(format!("v86-manifest-test-{}", Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        fs::write(root.join("Doraemon.exe"), b"game").unwrap();
-
-        let config = windows95_launcher_config(
-            "exe=Game/Doraemon.exe\nargs=-m\nsave_paths=Save0001.dat; A/save0001.dat; backup/what.bak",
-        )
-        .ok()
-        .unwrap();
-        assert!(config.contains(r"executable=D:\Game\Doraemon.exe"));
-        assert!(config.contains(r"working_directory=D:\Game"));
-        assert!(config.contains("arguments=-m"));
-        assert!(config.contains("delay_ms=1000"));
-        assert!(config.contains("[saves]\r\n"));
-        assert!(config.contains(r"file=Save0001.dat"));
-        assert!(config.contains(r"file=A\save0001.dat"));
-        assert!(config.contains(r"file=backup\what.bak"));
-        fs::remove_dir_all(root).ok();
-    }
-
-    #[test]
-    fn manifest_root_exe_uses_drive_root_as_working_directory() {
-        // A bare exe at the drive root resolves with no working directory.
-        let config = windows95_launcher_config("exe=Doraemon.exe")
-            .ok()
-            .unwrap();
-        assert!(config.contains(r"executable=D:\Doraemon.exe"));
-        assert!(config.contains(r"working_directory=D:\"));
-    }
-
-    #[test]
-    fn unwrap_single_top_level_folder_flattens_nested_wrappers() {
-        let root = std::env::temp_dir().join(format!("v86-unwrap-test-{}", Uuid::new_v4()));
-        let nested = root.join("Game").join("Game");
-        fs::create_dir_all(&nested).unwrap();
-        fs::write(nested.join("Doraemon.exe"), b"game").unwrap();
-        unwrap_single_top_level_dir(&root).unwrap();
-        assert!(fs::read(root.join("Doraemon.exe")).is_ok());
-        assert!(!root.join("Game").exists());
-        fs::remove_dir_all(root).ok();
-    }
-
-    #[test]
-    fn zip_extraction_skips_macos_junk_and_unwraps_single_folder() {
-        let root = std::env::temp_dir().join(format!("v86-junk-test-{}", Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let zip_path = root.join("game.zip");
-        let out = root.join("out");
-        write_zip(
-            &zip_path,
-            &[
-                ("Doraemon/Doraemon.exe", b"game"),
-                ("__MACOSX/._Doraemon.exe", b"junk"),
-                ("Doraemon/.DS_Store", b"junk"),
-            ],
-        );
-        validate_and_extract_game_zip(&zip_path, &out, 10, 1024).unwrap();
-        assert!(out.join("Doraemon").join("Doraemon.exe").is_file());
-        assert!(!out.join("__MACOSX").exists());
-        assert!(!out.join("Doraemon").join(".DS_Store").exists());
-        unwrap_single_top_level_dir(&out).unwrap();
-        assert!(out.join("Doraemon.exe").is_file());
-        assert!(!out.join("Doraemon").exists());
-
-        let junk_only = root.join("junk.zip");
-        write_zip(&junk_only, &[("__MACOSX/x", b"junk"), ("a/.DS_Store", b"junk")]);
-        assert!(validate_and_extract_game_zip(&junk_only, &root.join("junk_out"), 10, 1024).is_err());
-        fs::remove_dir_all(root).ok();
-    }
-
-    #[test]
-    fn windows95_strategy_builds_disk_launcher_manifest_and_cd() {
-        if Command::new("xorriso").arg("-version").output().is_err() {
-            return;
-        }
-        if Command::new("mformat").arg("-h").output().is_err() {
-            return;
-        }
-        if Command::new("mcopy").arg("-h").output().is_err() {
-            return;
-        }
-        let root = std::env::temp_dir().join(format!("v86-disk-test-{}", Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let game_zip = root.join("game.zip");
-        write_zip(&game_zip, &[("Doraemon.exe", b"game")]);
-        let manifest = "[game]\r\nexecutable=D:\\Doraemon.exe\r\narguments=-m\r\ndelay_ms=1000\r\n";
-        let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
-        let (disk, iso, extracted) = build_windows95_disk(
-            &root,
-            &assets_dir,
-            "xorriso",
-            "",
-            "proof",
-            &game_zip,
-            manifest,
-            10,
-            1024,
-        )
-        .map_err(|error| panic!("build_windows95_disk failed: {error:?}"))
-        .unwrap();
-        assert_eq!(extracted, 4);
-        assert!(disk.is_file());
-        assert!(iso.is_file());
-        let listing = Command::new("xorriso")
-            .args(["-indev"])
-            .arg(&iso)
-            .args(["-find", "/", "-type", "f"])
-            .output()
-            .unwrap();
-        let listed = String::from_utf8_lossy(&listing.stdout);
-        assert!(listed.contains("AUTORUN.INF"));
-        assert!(listed.contains("LAUNCHER.EXE"));
-        assert!(listed.contains("V86GAME.INI"));
-        assert!(!listed.contains("Doraemon.exe"));
-        let mbr = fs::read(&disk).unwrap();
-        assert_ne!(mbr[450], 0, "MBR partition type byte must be set");
-        let disk_listing = Command::new("mdir")
-            .arg("-i")
-            .arg(format!("{}@@{}", disk.display(), 63 * 512))
-            .arg("-/")
-            .arg("::/")
-            .output()
-            .unwrap();
-        let disk_listed = String::from_utf8_lossy(&disk_listing.stdout);
-        assert!(disk_listed.contains("Doraemon.exe"));
-        assert!(disk_listed.contains("DORAEMON EXE"));
-        // The game must sit at the drive root: no wrapper subdirectory like
-        // `Directory for ::/game` may appear in the recursive listing.
-        assert!(
-            !disk_listed.to_ascii_lowercase().contains("directory for ::/game"),
-            "game files must not be nested under a wrapper folder"
-        );
-        fs::remove_dir_all(root).ok();
     }
 }

@@ -17,7 +17,7 @@ export async function load({ fetch, setHeaders }) {
 			id: system.id,
 			system_name: system.system_name,
 			version_number: system.version_number,
-			base_url: fixClientRoute(`v86/assets/systems/${system.id}/${system.sha256}/.img.zst`),
+			base_url: fixClientRoute(`${system.storage_key}/.img.zst`),
 			base_size_bytes: system.size_bytes,
 			chunk_size_bytes: system.chunk_size_bytes
 		}))
