@@ -96,7 +96,7 @@
 					{/each}
 				</select>
 			</div>
-			<div class="flex flex-col gap-1">
+			<div class="flex flex-col gap-4">
 				<label class="text-sm font-medium text-dark/60" for="v86-manifest">Manifest</label>
 				<textarea
 					id="v86-manifest"

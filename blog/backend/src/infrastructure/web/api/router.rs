@@ -547,6 +547,13 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/analytics", analytics_routes)
         .nest("/dashboard", dashboard_routes)
         .merge(graphql_routes)
+        // Routers merged with auth layers carry their own wrapped default
+        // fallback, and the last one to be merged wins it. An unmatched path
+        // (e.g. a stale v86 chunk URL) would otherwise surface as a misleading
+        // `401 Invalid tokens` from that fallback's user_guard instead of a
+        // plain 404. Pin an explicit public fallback so unmatched paths answer
+        // 404, never auth errors.
+        .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .with_state(state)
