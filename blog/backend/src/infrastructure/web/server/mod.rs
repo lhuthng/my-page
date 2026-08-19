@@ -75,14 +75,10 @@ pub struct ProjectDemoConfig {
     pub jsdos_chunk_size: u64,
     pub upload_session_ttl_hours: u64,
     pub max_v86_base_size: u64,
-    pub max_v86_game_zip_size: u64,
     pub max_v86_game_extracted_size: u64,
-    pub max_v86_game_files: usize,
     pub v86_upload_chunk_size: u64,
     pub v86_download_chunk_size: u64,
     pub v86_assets_dir: PathBuf,
-    pub xorriso_bin: String,
-    pub mtools_bin: String,
 }
 
 pub struct AppState {
@@ -192,18 +188,10 @@ impl ProjectDemoConfig {
             .unwrap_or_else(|_| (2 * 1024 * 1024 * 1024_u64).to_string())
             .parse::<u64>()
             .expect("PROJECT_V86_BASE_MAX_BYTES must be an integer");
-        let max_v86_game_zip_size = env::var("PROJECT_V86_GAME_ZIP_MAX_BYTES")
-            .unwrap_or_else(|_| (500 * 1024 * 1024_u64).to_string())
-            .parse::<u64>()
-            .expect("PROJECT_V86_GAME_ZIP_MAX_BYTES must be an integer");
         let max_v86_game_extracted_size = env::var("PROJECT_V86_GAME_EXTRACTED_MAX_BYTES")
             .unwrap_or_else(|_| (1024 * 1024 * 1024_u64).to_string())
             .parse::<u64>()
             .expect("PROJECT_V86_GAME_EXTRACTED_MAX_BYTES must be an integer");
-        let max_v86_game_files = env::var("PROJECT_V86_GAME_MAX_FILES")
-            .unwrap_or_else(|_| "10000".to_string())
-            .parse::<usize>()
-            .expect("PROJECT_V86_GAME_MAX_FILES must be an integer");
         let v86_upload_chunk_size = env::var("PROJECT_V86_UPLOAD_CHUNK_BYTES")
             .unwrap_or_else(|_| (8 * 1024 * 1024_u64).to_string())
             .parse::<u64>()
@@ -212,9 +200,6 @@ impl ProjectDemoConfig {
             .unwrap_or_else(|_| (256 * 1024_u64).to_string())
             .parse::<u64>()
             .expect("PROJECT_V86_DOWNLOAD_CHUNK_BYTES must be an integer");
-        let xorriso_bin =
-            env::var("PROJECT_V86_XORRISO_BIN").unwrap_or_else(|_| "xorriso".to_string());
-        let mtools_bin = env::var("PROJECT_V86_MTOOLS_BIN").unwrap_or_default();
         let v86_assets_dir = env::var("PROJECT_V86_ASSETS_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"));
@@ -228,14 +213,10 @@ impl ProjectDemoConfig {
             jsdos_chunk_size,
             upload_session_ttl_hours,
             max_v86_base_size,
-            max_v86_game_zip_size,
             max_v86_game_extracted_size,
-            max_v86_game_files,
             v86_upload_chunk_size,
             v86_download_chunk_size,
             v86_assets_dir,
-            xorriso_bin,
-            mtools_bin,
         }
     }
 }
@@ -423,40 +404,84 @@ async fn cleanup_orphaned_uploads(
     r2: &Option<crate::infrastructure::storage::r2::R2Client>,
     demos_dir: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    async fn clean_session(
+    async fn clean_game_session(
         pool: &sqlx::SqlitePool,
         r2: &Option<crate::infrastructure::storage::r2::R2Client>,
         demos_dir: &std::path::Path,
-        table: &str,
         session_id: &str,
     ) {
         use sqlx::Row;
-        let row = sqlx::query(&format!(
-            "SELECT temp_storage_key, r2_upload_id FROM {table} WHERE id = ?"
-        ))
+        let row = sqlx::query(
+            "SELECT staged_disk_storage_key, disk_reuse FROM project_v86_upload_sessions WHERE id = ?",
+        )
         .bind(session_id)
         .fetch_optional(pool)
         .await
         .ok()
         .flatten();
         if let Some(row) = row {
+            // Game sessions upload straight to content-addressed keys; only the
+            // objects this session uploaded (never shared/reused ones) are
+            // removed, matching the abort path.
             if let Some(client) = r2 {
-                let temp_key: String = row.get("temp_storage_key");
-                if let Some(upload_id) = row.get::<Option<String>, _>("r2_upload_id") {
-                    let _ = client.abort_multipart(&temp_key, &upload_id).await;
+                let disk_reuse: i64 = row.get("disk_reuse");
+                if disk_reuse == 0 {
+                    if let Some(key) = row.get::<Option<String>, _>("staged_disk_storage_key") {
+                        let _ = client.delete_prefix(&key).await;
+                    }
                 }
-                let _ = client.delete_object(&temp_key).await;
+                let uploaded_isos: Vec<String> = sqlx::query_scalar(
+                    "SELECT iso_storage_key FROM project_v86_staged_variants WHERE upload_id = ? AND reuse = 0",
+                )
+                .bind(session_id)
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
+                for key in uploaded_isos {
+                    let _ = client.delete_object(&format!("{key}/full.iso")).await;
+                }
             }
-            let _ = tokio::fs::remove_file(
-                demos_dir.join("v86/tmp").join(table).join(format!("{session_id}.upload")),
-            )
-            .await;
-            let _ = tokio::fs::remove_dir_all(
-                demos_dir.join("v86/tmp").join(table).join(format!("{session_id}.parts")),
-            )
-            .await;
             let _ = tokio::fs::remove_dir_all(demos_dir.join("v86/tmp/build").join(session_id))
                 .await;
+        }
+    }
+
+    async fn clean_system_session(
+        pool: &sqlx::SqlitePool,
+        r2: &Option<crate::infrastructure::storage::r2::R2Client>,
+        session_id: &str,
+    ) {
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT staged_storage_key, reuse FROM v86_system_upload_sessions WHERE id = ?",
+        )
+        .bind(session_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        if let Some(row) = row {
+            let reuse: i64 = row.get("reuse");
+            if reuse == 0 {
+                if let Some(client) = r2 {
+                    if let Some(key) = row.get::<Option<String>, _>("staged_storage_key") {
+                        // Only delete if no other active session still owns this key.
+                        let other_owners: i64 = sqlx::query_scalar(
+                            "SELECT COUNT(*) FROM v86_system_upload_sessions
+                             WHERE id != ? AND staged_storage_key = ?
+                             AND status IN ('active', 'building')",
+                        )
+                        .bind(session_id)
+                        .bind(&key)
+                        .fetch_one(pool)
+                        .await
+                        .unwrap_or(0);
+                        if other_owners == 0 {
+                            let _ = client.delete_prefix(&key).await;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -512,7 +537,7 @@ async fn cleanup_orphaned_uploads(
         .bind(session_id)
         .execute(pool)
         .await?;
-        clean_session(pool, r2, demos_dir, "systems", session_id).await;
+        clean_system_session(pool, r2, session_id).await;
     }
 
     let stale_games: Vec<String> = sqlx::query_scalar(
@@ -529,7 +554,7 @@ async fn cleanup_orphaned_uploads(
         .bind(session_id)
         .execute(pool)
         .await?;
-        clean_session(pool, r2, demos_dir, "games", session_id).await;
+        clean_game_session(pool, r2, demos_dir, session_id).await;
     }
 
     // Finished sessions (consumed/aborted/ready/expired) are never removed

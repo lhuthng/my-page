@@ -314,10 +314,15 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/systems/active", get(handlers::v86::list_active_systems))
+                .route("/launcher", get(handlers::v86::get_game_launcher))
                 .route("/games/upload", post(handlers::v86::start_game_upload))
                 .route(
-                    "/games/upload/{upload_id}/chunk/{chunk_index}",
-                    put(handlers::v86::append_game_chunk),
+                    "/games/upload/{upload_id}/disk/{part_index}",
+                    put(handlers::v86::upload_game_disk_part),
+                )
+                .route(
+                    "/games/upload/{upload_id}/iso/{variant_index}",
+                    put(handlers::v86::upload_game_variant_iso),
                 )
                 .route(
                     "/games/upload/{upload_id}/complete",
@@ -371,8 +376,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/systems", get(handlers::v86::list_systems))
                 .route("/systems/upload", post(handlers::v86::start_system_upload))
                 .route(
-                    "/systems/upload/{upload_id}/chunk/{chunk_index}",
-                    put(handlers::v86::append_system_chunk),
+                    "/systems/upload/{upload_id}/part/{part_index}",
+                    put(handlers::v86::upload_system_part),
                 )
                 .route(
                     "/systems/upload/{upload_id}/complete",
@@ -401,7 +406,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         )
         .route("/systems/public", get(handlers::v86::list_public_systems))
         .route(
-            "/assets/systems/{version_id}/{sha256}/{part}",
+            "/assets/systems/{sha256}/{part}",
             get(handlers::v86::get_system_chunk),
         )
         .route(

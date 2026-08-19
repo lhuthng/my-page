@@ -877,27 +877,16 @@ async fn v86_variant_iso_keys(state: &AppState, project_id: i64) -> Vec<String> 
 /// per-user cloud saves. Content-addressed objects are only removed once no
 /// other project references them. `variant_iso_keys` are the per-variant autorun
 /// CD keys (from project_v86_variants) that are about to be removed alongside
-/// the primary `keys` (from project_v86_games).
+/// the primary `keys` (from project_v86_games). There is no ZIP to delete: the
+/// game disk is built in the browser and the ZIP is never stored.
 async fn delete_v86_game_objects(
     state: &AppState,
     project_id: i64,
-    keys: &(Option<String>, Option<String>, Option<String>),
+    keys: &(Option<String>, Option<String>),
     variant_iso_keys: &[String],
 ) {
-    let (zip_key, iso_key, disk_key) = keys;
+    let (iso_key, disk_key) = keys;
     if let Some(r2) = &state.r2 {
-        if let Some(zip) = zip_key {
-            let refs: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM project_v86_games WHERE zip_storage_key = ?",
-            )
-            .bind(zip)
-            .fetch_one(&state.project_service.pool)
-            .await
-            .unwrap_or(1);
-            if refs == 0 {
-                let _ = r2.delete_object(zip).await;
-            }
-        }
         if let Some(disk) = disk_key {
             let refs: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM project_v86_games WHERE disk_storage_key = ?",
@@ -934,9 +923,6 @@ async fn delete_v86_game_objects(
                 let _ = r2.delete_prefix(&iso).await;
             }
         }
-    }
-    if let Some(zip) = zip_key {
-        let _ = tokio::fs::remove_file(state.project_demo_config.dir.join(zip)).await;
     }
     if let Some(disk) = disk_key {
         let _ = tokio::fs::remove_dir_all(state.project_demo_config.dir.join(disk)).await;
@@ -1217,8 +1203,8 @@ pub async fn delete_project_draft(
             "Only draft projects can be automatically cleaned up.".to_string(),
         ));
     }
-    let v86_storage = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
-        "SELECT zip_storage_key, iso_storage_key, disk_storage_key FROM project_v86_games WHERE project_id = ?",
+    let v86_storage = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        "SELECT iso_storage_key, disk_storage_key FROM project_v86_games WHERE project_id = ?",
     )
     .bind(project_id)
     .fetch_optional(&mut *tx)
@@ -1271,13 +1257,13 @@ pub async fn update_project(
         .to_string();
     // A project only has a project_v86_games row when its demo type is v86;
     // fetch_one would surface RowNotFound as a 500 for every other type.
-    let old_v86_storage = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>(
-        "SELECT zip_storage_key, iso_storage_key, disk_storage_key FROM project_v86_games WHERE project_id = ?",
+    let old_v86_storage = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        "SELECT iso_storage_key, disk_storage_key FROM project_v86_games WHERE project_id = ?",
     )
     .bind(project_id)
     .fetch_optional(&state.project_service.pool)
     .await?
-    .unwrap_or((None, None, None));
+    .unwrap_or((None, None));
     let old_v86_variant_keys = v86_variant_iso_keys(&state, project_id).await;
 
     let has_demo_url = data.demo_url.as_ref().is_some_and(|u| !u.trim().is_empty());
@@ -1432,7 +1418,7 @@ pub async fn update_project(
         )
         .await?;
         tx.commit().await?;
-        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some()
+        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some()
         {
             delete_v86_game_objects(&state, project_id, &old_v86_storage, &old_v86_variant_keys)
                 .await;
@@ -1462,7 +1448,7 @@ pub async fn update_project(
             .bind(project_id)
             .execute(&state.project_service.pool)
             .await?;
-        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some() || old_v86_storage.2.is_some()
+        if old_v86_storage.0.is_some() || old_v86_storage.1.is_some()
         {
             delete_v86_game_objects(&state, project_id, &old_v86_storage, &old_v86_variant_keys)
                 .await;
@@ -1708,7 +1694,7 @@ pub async fn get_project_by_slug(
         )
         .await?;
         let game = sqlx::query(
-            "SELECT system_version_id, manifest_text, artifact_revision, original_file_name FROM project_v86_games WHERE project_id = ?",
+            "SELECT system_version_id, manifest_text, artifact_revision FROM project_v86_games WHERE project_id = ?",
         )
         .bind(response.id)
         .fetch_optional(&state.project_service.pool)
@@ -1718,7 +1704,6 @@ pub async fn get_project_by_slug(
             response.v86_system_version_id = Some(game.get("system_version_id"));
             response.v86_manifest = Some(game.get("manifest_text"));
             response.v86_artifact_revision = Some(game.get("artifact_revision"));
-            response.v86_game_file_name = Some(game.get("original_file_name"));
         }
     }
     Ok(Json(response))
@@ -1745,7 +1730,7 @@ pub async fn get_project_details(
     let mut response = project_response(project, true);
     if response.demo_type == "v86" {
         let game = sqlx::query(
-            "SELECT system_version_id, manifest_text, artifact_revision, original_file_name FROM project_v86_games WHERE project_id = ?",
+            "SELECT system_version_id, manifest_text, artifact_revision FROM project_v86_games WHERE project_id = ?",
         )
         .bind(response.id)
         .fetch_optional(&state.project_service.pool)
@@ -1755,7 +1740,6 @@ pub async fn get_project_details(
             response.v86_system_version_id = Some(game.get("system_version_id"));
             response.v86_manifest = Some(game.get("manifest_text"));
             response.v86_artifact_revision = Some(game.get("artifact_revision"));
-            response.v86_game_file_name = Some(game.get("original_file_name"));
         }
     }
     Ok(Json(response))
