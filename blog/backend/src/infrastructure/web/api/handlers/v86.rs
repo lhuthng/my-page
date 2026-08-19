@@ -1308,6 +1308,8 @@ pub async fn complete_system_upload(
         return Ok(StatusCode::OK);
     }
 
+    let chunk_count: i64 = row.get("staged_chunk_count");
+
     // Non-reuse: spawn background verify task.
     sqlx::query(
         "UPDATE v86_system_upload_sessions SET status = 'building', system_id = COALESCE(system_id, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -1320,7 +1322,7 @@ pub async fn complete_system_upload(
     let progress = Arc::new(Mutex::new(ChunkProgress {
         upload_id: upload_id.clone(),
         kind: "system".to_string(),
-        total_chunks: 0,
+        total_chunks: chunk_count as u64,
         completed_chunks: 0,
         message: "Preparing…".to_string(),
     }));
@@ -1336,7 +1338,6 @@ pub async fn complete_system_upload(
     let storage_key: String = row.get("staged_storage_key");
     let sha256: String = row.get("staged_sha256");
     let expected_size: i64 = row.get("expected_size_bytes");
-    let chunk_count: i64 = row.get("staged_chunk_count");
     let original_file_name_c = original_file_name.clone();
 
     tokio::spawn(async move {
@@ -1580,6 +1581,27 @@ pub async fn get_system_upload_status(
         status: row.get("status"),
         error_message: row.get("error_message"),
         chunk_progress: progress,
+        active_uploads,
+    }))
+}
+
+#[derive(Serialize)]
+pub struct ServerStatusResponse {
+    pub ok: bool,
+    pub active_uploads: Vec<ChunkProgress>,
+}
+
+pub async fn get_server_status(
+    State(_state): State<Arc<AppState>>,
+) -> Result<Json<ServerStatusResponse>, ProjectError> {
+    let active_uploads = chunk_progress_map()
+        .lock()
+        .unwrap()
+        .values()
+        .cloned()
+        .collect();
+    Ok(Json(ServerStatusResponse {
+        ok: true,
         active_uploads,
     }))
 }
@@ -3363,14 +3385,6 @@ pub async fn get_system_chunk(
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
     if part == ".img" || part.contains('/') || !(part.ends_with(".img") || part.ends_with(".img.zst")) {
         return Err(ProjectError::ProjectNotFound);
-    }
-    if let Some(r2) = &state.r2 {
-        let key = format!("{storage_key}/{part}");
-        let bytes = r2
-            .get_object(&key)
-            .await
-            .map_err(|_| ProjectError::ProjectNotFound)?;
-        return Ok(immutable_chunk_response(bytes, "application/octet-stream"));
     }
     let bytes = tokio::fs::read(
         state

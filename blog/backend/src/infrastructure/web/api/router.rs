@@ -374,6 +374,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/systems", get(handlers::v86::list_systems))
+                .route("/systems/status", get(handlers::v86::get_server_status))
                 .route("/systems/upload", post(handlers::v86::start_system_upload))
                 .route(
                     "/systems/upload/{upload_id}/part/{part_index}",
