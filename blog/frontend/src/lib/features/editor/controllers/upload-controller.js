@@ -29,7 +29,7 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 	let launcherCache = null;
 	async function getLauncher() {
 		if (launcherCache) return launcherCache;
-		const res = await fetchImpl('/api/v86/launcher');
+		const res = await fetchImpl('/api/v86/launcher', { headers: authHeaders() });
 		if (!res.ok) throw new Error(await res.text());
 		launcherCache = new Uint8Array(await res.arrayBuffer());
 		return launcherCache;

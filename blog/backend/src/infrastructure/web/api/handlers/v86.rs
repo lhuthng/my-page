@@ -817,6 +817,11 @@ pub struct PublicSystemVersion {
     pub platform_key: String,
     pub sha256: String,
     pub storage_key: String,
+    /// The disk image URL the sandbox boots from, resolved exactly like the
+    /// game runtime descriptor: the R2 public URL when configured (the browser
+    /// fetches chunks straight from the CDN), otherwise a relative path the
+    /// frontend proxies to `get_system_chunk`.
+    pub base_url: String,
     pub size_bytes: i64,
     pub chunk_size_bytes: i64,
 }
@@ -839,17 +844,26 @@ pub async fn list_public_systems(
     )
     .fetch_all(&state.project_service.pool)
     .await?;
+    let r2_public_url = state.config.r2_public_url.as_deref();
     Ok(Json(
         rows.into_iter()
-            .map(|row| PublicSystemVersion {
-                id: row.get("id"),
-                version_number: row.get("version_number"),
-                system_name: row.get("system_name"),
-                platform_key: row.get("platform_key"),
-                sha256: row.get("sha256"),
-                storage_key: row.get("storage_key"),
-                size_bytes: row.get("size_bytes"),
-                chunk_size_bytes: row.get("chunk_size_bytes"),
+            .map(|row| {
+                let storage_key: String = row.get("storage_key");
+                let base_url = match r2_public_url {
+                    Some(r2) => format!("{}/{storage_key}/.img.zst", r2.trim_end_matches('/')),
+                    None => format!("{storage_key}/.img.zst"),
+                };
+                PublicSystemVersion {
+                    id: row.get("id"),
+                    version_number: row.get("version_number"),
+                    system_name: row.get("system_name"),
+                    platform_key: row.get("platform_key"),
+                    sha256: row.get("sha256"),
+                    storage_key,
+                    base_url,
+                    size_bytes: row.get("size_bytes"),
+                    chunk_size_bytes: row.get("chunk_size_bytes"),
+                }
             })
             .collect(),
     ))
