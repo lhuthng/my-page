@@ -2,6 +2,7 @@
 	import { auth } from '$lib/auth/user.svelte.js';
 	import { Sha256 } from '$lib/features/v86/sha256.js';
 	import { createZstdCompress, teardownZstd } from '$lib/features/v86/zstd.js';
+	import { onMount } from 'svelte';
 
 	let { data } = $props();
 	let systems = $state(data.systems);
@@ -11,6 +12,8 @@
 	let busy = $state(false);
 	let status = $state('');
 	let critical = $state(false);
+	let serverOk = $state(false);
+	let activeUploads = $state([]);
 
 	const CHUNK_SIZE = 256 * 1024;
 
@@ -22,6 +25,28 @@
 		if (!response.ok) throw new Error(await response.text());
 		return response;
 	};
+
+	const refreshSystems = async () => {
+		const res = await fetch('/api/v86/systems', { headers: { Authorization: auth() } });
+		if (res.ok) systems = await res.json();
+	};
+
+	onMount(async () => {
+		try {
+			const res = await request('/api/v86/systems/status');
+			const data = await res.json();
+			serverOk = data.ok === true;
+			activeUploads = data.active_uploads ?? [];
+			if (activeUploads.length > 0) {
+				busy = true;
+				critical = false;
+				const latest = activeUploads[0];
+				status = latest.message ?? 'An upload is in progress…';
+			}
+		} catch {
+			serverOk = false;
+		}
+	});
 
 	const hashFile = async (file) => {
 		const hasher = new Sha256();
@@ -44,7 +69,6 @@
 		try {
 			const sha256 = await hashFile(image);
 			const existing = systems.find((system) => system.id === Number(replacingSystemId));
-			console.log('[upload] creating session', { name: name.trim(), sha256 });
 			const response = await request('/api/v86/systems/upload', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -60,7 +84,6 @@
 			});
 			const session = await response.json();
 			uploadId = session.upload_id;
-			console.log('[upload] session created', { uploadId, reuse: session.reuse });
 
 			if (!session.reuse) {
 				const zstdCompress = createZstdCompress({ workers: 3 });
@@ -112,37 +135,33 @@
 					});
 					if (res.ok) {
 						const data = await res.json();
-						console.log('[upload] poll', { status: data.status, progress: data.chunk_progress });
 						if (data.chunk_progress) {
 							status =
 								data.chunk_progress.message ||
 								`Verifying chunk ${data.chunk_progress.completed_chunks}/${data.chunk_progress.total_chunks}`;
 						} else if (data.status === 'consumed') {
-							console.log('[upload] done — system ready');
 							clearInterval(interval);
 							busy = false;
+							critical = false;
 							status = 'System version ready.';
 							image = undefined;
-							const res = await fetch('/api/v86/systems', { headers: { Authorization: auth() } });
-							if (res.ok) systems = await res.json();
+							replacingSystemId = '';
+							await refreshSystems();
 						} else if (data.status === 'failed') {
-							console.log('[upload] failed:', data.error_message);
 							clearInterval(interval);
 							busy = false;
 							critical = true;
 							status = data.error_message ?? 'Image preparation failed.';
 						}
 					}
-				} catch (e) {
-					console.log('[upload] poll error', e);
+				} catch {
+					/* transient poll failure; keep polling */
 				}
 			}, 800);
 			await request(`/api/v86/systems/upload/${uploadId}/complete`, {
 				method: 'POST'
 			});
-			console.log('[upload] /complete returned, background task running');
 		} catch (error) {
-			console.log('[upload] error in main flow', error);
 			if (interval) clearInterval(interval);
 			if (uploadId) {
 				await fetch(`/api/v86/systems/upload/${uploadId}`, {
@@ -192,7 +211,7 @@
 			await request(`/api/v86/systems/${system.id}/versions/${version.id}`, {
 				method: 'DELETE'
 			});
-			system.versions = system.versions.filter((v) => v.id !== version.id);
+			await refreshSystems();
 		} catch (error) {
 			critical = true;
 			status = error?.message ?? 'Version deletion failed.';
@@ -203,7 +222,8 @@
 		if (!confirm(`Delete ${system.name} and every unreferenced image version?`)) return;
 		try {
 			await request(`/api/v86/systems/${system.id}`, { method: 'DELETE' });
-			systems = systems.filter((s) => s.id !== system.id);
+			await refreshSystems();
+			if (replacingSystemId === String(system.id)) replacingSystemId = '';
 		} catch (error) {
 			critical = true;
 			status = error?.message ?? 'System deletion failed.';
@@ -221,6 +241,21 @@
 			pinned.
 		</p>
 	</div>
+
+	{#if !serverOk}
+		<div class="rounded-xl bg-accent-red/10 p-3 text-sm text-accent-red">
+			Could not reach the server status endpoint. Upload progress may be unavailable.
+		</div>
+	{:else if activeUploads.length > 0}
+		<div class="rounded-xl bg-amber-50 p-3 text-sm text-amber-700">
+			{#each activeUploads as upload}
+				<div>
+					<span class="font-semibold">Upload in progress:</span>
+					{upload.message ?? `${upload.completed_chunks}/${upload.total_chunks}`}
+				</div>
+			{/each}
+		</div>
+	{/if}
 
 	<form
 		class="grid grid-cols-1 gap-4 rounded-xl bg-white p-4 drop-shadow-xl lg:grid-cols-2"
