@@ -148,7 +148,7 @@
 					/>
 					<span
 						class="underline decoration-dashed underline-offset-2 cursor-help"
-						title="Windows 95's stock PS/2 driver has no wheel support, so scroll events reach the game as bogus mouse interrupts and can crash it. Leave this on unless a game actually needs the wheel."
+						title="Windows 9x's stock PS/2 driver has no wheel support, so scroll events reach the game as bogus mouse interrupts and can crash it. Leave this on unless a game actually needs the wheel."
 					>
 						Disable mousewheel
 					</span>

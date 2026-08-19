@@ -105,3 +105,50 @@ async fn relax_media_hash_migration_applies_with_data_and_fk_off() {
     let _ = std::fs::remove_file(db.with_extension("db-wal"));
     let _ = std::fs::remove_file(db.with_extension("db-shm"));
 }
+
+#[tokio::test]
+async fn v86_platform_key_accepts_windows9x_and_converts_old_rows() {
+    let db = std::env::temp_dir().join("opencode_v86_platform_migration_test.db");
+    let _ = std::fs::remove_file(&db);
+    let url = format!("sqlite://{}", db.display());
+    run_migrations(&url, false).await;
+
+    let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+    // The migration converted the platform key to the Windows 9x family.
+    let keys: Vec<String> = sqlx::query_scalar("SELECT platform_key FROM v86_systems")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert!(keys.is_empty(), "fresh DB has no seeded systems");
+
+    // The new CHECK accepts the renamed key and rejects the old one.
+    sqlx::query(
+        "INSERT INTO v86_systems (name, platform_key) VALUES ('Windows 9x', 'windows9x')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let rejected = sqlx::query(
+        "INSERT INTO v86_systems (name, platform_key) VALUES ('Old', 'windows95')",
+    )
+    .execute(&pool)
+    .await;
+    assert!(rejected.is_err(), "the windows95 key must be rejected by the CHECK");
+
+    // The upload-session CHECK follows the same rule.
+    let session_rejected = sqlx::query(
+        "INSERT INTO v86_system_upload_sessions
+           (id, uploader_id, system_id, name, platform_key, original_file_name,
+            expected_size_bytes, staged_storage_key, staged_sha256, staged_chunk_count,
+            expires_at)
+         VALUES ('s1', 1, 1, 'n', 'windows95', 'f.img', 100, 'k', 'h', 1, '2099-01-01T00:00:00Z')",
+    )
+    .execute(&pool)
+    .await;
+    assert!(session_rejected.is_err(), "session must reject the windows95 key");
+    pool.close().await;
+
+    let _ = std::fs::remove_file(&db);
+    let _ = std::fs::remove_file(db.with_extension("db-wal"));
+    let _ = std::fs::remove_file(db.with_extension("db-shm"));
+}

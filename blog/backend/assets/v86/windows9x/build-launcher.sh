@@ -3,8 +3,8 @@
 # Rebuilds LAUNCHER.EXE from game_launcher.c.
 #
 # The launcher is a freestanding Win32 binary: no CRT, entry point is
-# WinMainCRTStartup, and it only calls plain Win95-era APIs so it runs on the
-# shared Windows 95 base image. It is committed as a binary because the build
+# WinMainCRTStartup, and it only calls plain Windows 9x-era APIs so it runs on
+# the shared Windows 9x base image. It is committed as a binary because the build
 # needs a Windows cross-compiler that CI does not have.
 #
 # Requires mingw-w64 (brew install mingw-w64).
