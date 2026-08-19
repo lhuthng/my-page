@@ -505,14 +505,31 @@ async fn cleanup_orphaned_uploads(
         .fetch_optional(pool)
         .await?;
         if let Some(version_id) = orphan_version_id {
+            // Grab the content-addressed storage key before dropping the row.
+            let orphan_key: Option<String> = sqlx::query_scalar(
+                "SELECT storage_key FROM v86_system_versions WHERE id = ?",
+            )
+            .bind(version_id)
+            .fetch_optional(pool)
+            .await?;
             sqlx::query("DELETE FROM v86_system_versions WHERE id = ?")
                 .bind(version_id)
                 .execute(pool)
                 .await?;
-            if let Some(client) = r2 {
-                let _ = client
-                    .delete_prefix(&format!("v86/assets/systems/{version_id}"))
-                    .await;
+            // Only free the objects if no other version (e.g. a shared/deduped
+            // image) still references the same content-addressed key.
+            if let Some(key) = orphan_key {
+                let remaining: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?",
+                )
+                .bind(&key)
+                .fetch_one(pool)
+                .await?;
+                if remaining == 0 {
+                    if let Some(client) = r2 {
+                        let _ = client.delete_prefix(&key).await;
+                    }
+                }
             }
         }
 
