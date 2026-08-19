@@ -501,28 +501,38 @@ export function buildFatDisk(files, { now = new Date() } = {}) {
 }
 
 /**
+ * Materializes one chunk of a sparse image into a chunk-sized buffer (the
+ * last chunk is zero-padded to exactly `chunkSize`, matching the server's
+ * `split_asset` so v86's `use_parts` offsets line up). Chunks are independent,
+ * so parallel workers can build them in any order.
+ */
+export function sparseChunkAt(sparse, chunkSize, chunkIndex) {
+	const { size, segments } = sparse;
+	const start = chunkIndex * chunkSize;
+	const end = Math.min(start + chunkSize, size);
+	const buffer = new Uint8Array(chunkSize);
+	for (const offset of [...segments.keys()].sort((a, b) => a - b)) {
+		if (offset >= end) break;
+		const seg = segments.get(offset);
+		if (offset + seg.length <= start) continue;
+		const copyFrom = Math.max(0, start - offset);
+		const copyLen = Math.min(seg.length - copyFrom, end - offset - copyFrom);
+		if (copyLen > 0) {
+			buffer.set(seg.subarray(copyFrom, copyFrom + copyLen), offset + copyFrom - start);
+		}
+	}
+	return buffer;
+}
+
+/**
  * Materializes a sparse image into chunk-sized buffers, one standalone zstd
  * frame per chunk. The last chunk is zero-padded to exactly `chunkSize`,
  * matching the server's `split_asset` so v86's `use_parts` offsets line up.
  */
 export function* sparseChunks(sparse, chunkSize) {
-	const { size, segments } = sparse;
-	const offsets = [...segments.keys()].sort((a, b) => a - b);
+	const { size } = sparse;
 	const totalChunks = Math.ceil(size / chunkSize);
 	for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-		const start = chunkIndex * chunkSize;
-		const end = Math.min(start + chunkSize, size);
-		const buffer = new Uint8Array(chunkSize);
-		for (const offset of offsets) {
-			if (offset >= end) break;
-			const seg = segments.get(offset);
-			if (offset + seg.length <= start) continue;
-			const copyFrom = Math.max(0, start - offset);
-			const copyLen = Math.min(seg.length - copyFrom, end - offset - copyFrom);
-			if (copyLen > 0) {
-				buffer.set(seg.subarray(copyFrom, copyFrom + copyLen), offset + copyFrom - start);
-			}
-		}
-		yield buffer;
+		yield sparseChunkAt(sparse, chunkSize, chunkIndex);
 	}
 }

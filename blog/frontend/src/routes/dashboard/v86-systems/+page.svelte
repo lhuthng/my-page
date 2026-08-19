@@ -60,6 +60,15 @@
 		return hasher.digestHex();
 	};
 
+	// The base IMG must be a bootable disk image. The server used to check this
+	// after upload; it now runs client-side before anything is sent.
+	const checkBootSignature = async (file) => {
+		const head = new Uint8Array(await file.slice(0, 512).arrayBuffer());
+		if (head.length < 512 || head[510] !== 0x55 || head[511] !== 0xaa) {
+			throw new Error('The image does not contain a valid boot-sector signature (0x55AA).');
+		}
+	};
+
 	const upload = async () => {
 		if (!image || !name.trim() || busy) return;
 		busy = true;
@@ -67,6 +76,7 @@
 		let uploadId;
 		let interval;
 		try {
+			await checkBootSignature(image);
 			const sha256 = await hashFile(image);
 			const existing = systems.find((system) => system.id === Number(replacingSystemId));
 			const response = await request('/api/v86/systems/upload', {

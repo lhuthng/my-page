@@ -251,7 +251,7 @@
 						<label class="text-sm font-medium text-dark/60" for="excerpt">Excerpt</label>
 						<textarea
 							id="excerpt"
-							class="w-full rounded-xl border px-3 py-2 text-dark outline-none border-2 border-dark transition-colors resize-none custom-scrollbar focus:bg-primary focus:text-white"
+							class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 border-dark transition-colors resize-none custom-scrollbar focus:bg-primary focus:text-white"
 							autocorrect="off"
 							autocomplete="off"
 							rows={excerptRows}
@@ -262,7 +262,7 @@
 			</section>
 
 			<section
-				class="rounded-xl border border-dark/10 bg-white p-4 shadow-sm max-h-112 overflow-y-auto custom-scrollbar"
+				class="rounded-xl border border-dark/10 bg-white p-4 shadow-sm max-h-112 space-y-4 overflow-y-auto custom-scrollbar"
 			>
 				<h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-dark/50">More</h3>
 				{@render extraFields?.()}

@@ -17,6 +17,11 @@
  * @param {typeof fetch} [deps.fetchImpl]
  * @param {(message: string) => void} [deps.onProgress]
  */
+
+// How many disk parts compress / upload at once. The server records each part
+// atomically, so concurrent PUTs are safe (mirrors the systems-image upload).
+const ZSTD_WORKERS = 4;
+const UPLOAD_CONCURRENCY = 8;
 import {
 	buildGame,
 	buildLauncherIsos,
@@ -57,7 +62,7 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 		let variants;
 		if (file) {
 			const built = await buildGame({
-				zipBytes: await file.arrayBuffer(),
+				zipBytes: new Uint8Array(await file.arrayBuffer()),
 				manifest,
 				launcherExe,
 				onProgress
@@ -90,7 +95,7 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 		if (!start.ok) throw new Error(await start.text());
 		const session = await start.json();
 		try {
-			const zstdCompress = createZstdCompress();
+			const zstdCompress = createZstdCompress({ workers: ZSTD_WORKERS });
 			if (session.disk && !session.disk.reuse && disk) {
 				if (session.disk.sha256 !== disk.sha256) {
 					throw new Error('The server disc plan does not match the built disc.');
@@ -99,23 +104,41 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 					disk.sparse,
 					session.disk.chunk_size_bytes,
 					zstdCompress,
-					(done, total) => onProgress(`Compressing game disc ${done}/${total}…`)
+					(done, total) => onProgress(`Compressing game disc ${done}/${total}…`),
+					{ workers: ZSTD_WORKERS }
 				);
 				if (parts.chunk_count !== session.disk.chunk_count) {
 					throw new Error('The disc chunk count does not match the server plan.');
 				}
-				for (let index = 0; index < parts.parts.length; index++) {
-					const part = parts.parts[index];
-					const res = await fetchImpl(`/api/v86/games/upload/${session.upload_id}/disk/${index}`, {
-						method: 'PUT',
-						headers: octetHeaders(),
-						body: part.compressed
-					});
-					if (!res.ok) throw new Error(await res.text());
-					onProgress(
-						`Uploading game disc… ${Math.round(((index + 1) / parts.parts.length) * 100)}%`
-					);
-				}
+				// Upload parts concurrently; the server records each part
+				// atomically, so indices are never lost to races.
+				let nextPart = 0;
+				let uploadError = null;
+				const totalParts = parts.parts.length;
+				await Promise.all(
+					Array.from({ length: UPLOAD_CONCURRENCY }, async () => {
+						while (nextPart < totalParts && !uploadError) {
+							const index = nextPart++;
+							try {
+								const part = parts.parts[index];
+								const res = await fetchImpl(
+									`/api/v86/games/upload/${session.upload_id}/disk/${index}`,
+									{
+										method: 'PUT',
+										headers: octetHeaders(),
+										body: part.compressed
+									}
+								);
+								if (!res.ok) throw new Error(await res.text());
+								onProgress(`Uploading game disc… ${Math.round(((index + 1) / totalParts) * 100)}%`);
+							} catch (error) {
+								uploadError = error;
+								throw error;
+							}
+						}
+					})
+				);
+				if (uploadError) throw uploadError;
 			}
 			for (const spec of session.variants) {
 				if (spec.reuse) continue;

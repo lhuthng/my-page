@@ -441,38 +441,6 @@ fn split_asset(
 }
 
 
-async fn rollback_system_version(
-    pool: &sqlx::SqlitePool,
-    upload_id: &str,
-    system_id: i64,
-    version_number: i64,
-    is_new_system: bool,
-) -> Result<(), sqlx::Error> {
-    if is_new_system {
-        sqlx::query("DELETE FROM v86_systems WHERE id = ?")
-            .bind(system_id)
-            .execute(pool)
-            .await?;
-    } else {
-        sqlx::query(
-            "UPDATE v86_systems SET current_version = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND current_version = ?",
-        )
-        .bind(version_number - 1)
-        .bind(system_id)
-        .bind(version_number)
-        .execute(pool)
-        .await?;
-    }
-    sqlx::query(
-        "UPDATE v86_system_upload_sessions SET status = 'failed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    )
-    .bind(upload_id)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-
 fn normalize_manifest_path(value: &str) -> Result<String, ProjectError> {
     let mut normalized = value.trim().trim_matches('"').replace('\\', "/");
     let upper = normalized.to_ascii_uppercase();
@@ -1240,7 +1208,6 @@ pub async fn complete_system_upload(
     let name: String = row.get("name");
     let platform_key: String = row.get("platform_key");
     let original_file_name: String = row.get("original_file_name");
-    let is_new_system = system_id_opt.is_none();
 
     let existing: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM v86_systems WHERE name = ? AND id != COALESCE(?, 0)",
@@ -1323,138 +1290,14 @@ pub async fn complete_system_upload(
     }
 
     let chunk_count: i64 = row.get("staged_chunk_count");
-
-    // Non-reuse: spawn background verify task.
-    sqlx::query(
-        "UPDATE v86_system_upload_sessions SET status = 'building', system_id = COALESCE(system_id, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    )
-    .bind(system_id)
-    .bind(&upload_id)
-    .execute(&state.project_service.pool)
-    .await?;
-
-    let progress = Arc::new(Mutex::new(ChunkProgress {
-        upload_id: upload_id.clone(),
-        kind: "system".to_string(),
-        total_chunks: chunk_count as u64,
-        completed_chunks: 0,
-        message: "Preparing…".to_string(),
-    }));
-    chunk_progress_map()
-        .lock()
-        .unwrap()
-        .insert(upload_id.clone(), progress.lock().unwrap().clone());
-
-    let pool = state.project_service.pool.clone();
-    let r2 = require_r2(&state)?.clone();
-    let chunk_size = state.project_demo_config.v86_download_chunk_size;
-    let upload_id_c = upload_id.clone();
     let storage_key: String = row.get("staged_storage_key");
     let sha256: String = row.get("staged_sha256");
     let expected_size: i64 = row.get("expected_size_bytes");
-    let original_file_name_c = original_file_name.clone();
+    let chunk_size: i64 = state.project_demo_config.v86_download_chunk_size as i64;
 
-    tokio::spawn(async move {
-        let result = verify_system_upload(
-            &pool,
-            &r2,
-            &upload_id_c,
-            &storage_key,
-            &sha256,
-            expected_size as u64,
-            chunk_count as u64,
-            chunk_size,
-            progress,
-            system_id,
-            version_number,
-            is_new_system,
-            &original_file_name_c,
-        )
-        .await;
-        if let Err(e) = result {
-            tracing::error!("Background system verify failed for {upload_id_c}: {e}");
-            let _ = rollback_system_version(
-                &pool, &upload_id_c, system_id, version_number, is_new_system,
-            )
-            .await;
-            chunk_progress_map().lock().unwrap().remove(&upload_id_c);
-        }
-    });
-
-    Ok(StatusCode::ACCEPTED)
-}
-
-async fn verify_system_upload(
-    pool: &sqlx::SqlitePool,
-    r2: &R2Client,
-    upload_id: &str,
-    storage_key: &str,
-    expected_sha: &str,
-    expected_size: u64,
-    chunk_count: u64,
-    chunk_size: u64,
-    progress: Arc<Mutex<ChunkProgress>>,
-    system_id: i64,
-    version_number: i64,
-    _is_new_system: bool,
-    original_file_name: &str,
-) -> Result<(), String> {
-    let mut hasher = Sha256::new();
-    let mut total_size: u64 = 0;
-    let mut boot_signature_valid = false;
-
-    for index in 0..chunk_count {
-        let offset = index * chunk_size;
-        let end = (offset + chunk_size).min(expected_size);
-        let part_name = format!("{storage_key}/{offset}-{end}.img.zst");
-        let bytes = r2.get_object(&part_name).await.map_err(|e| e.to_string())?;
-        let mut decoder = zstd::stream::read::Decoder::new(&bytes[..])
-            .map_err(|e| format!("system part {index} is not valid zstd: {e}"))?;
-        let mut decompressed = Vec::new();
-        decoder
-            .read_to_end(&mut decompressed)
-            .map_err(|e| format!("system part {index} failed to decode: {e}"))?;
-        let expected_part_size = chunk_size.min(expected_size.saturating_sub(offset));
-        if decompressed.len() as u64 != expected_part_size {
-            return Err(format!(
-                "system part {index} decompressed to {} bytes, expected {expected_part_size}",
-                decompressed.len()
-            ));
-        }
-        if index == 0 && decompressed.len() >= 512 && decompressed[510..512] == [0x55, 0xaa] {
-            boot_signature_valid = true;
-        }
-        hasher.update(&decompressed);
-        total_size += decompressed.len() as u64;
-        {
-            let mut p = progress.lock().unwrap();
-            p.total_chunks = chunk_count;
-            p.completed_chunks = index + 1;
-            p.message = format!("Verifying system image… {}/{}", index + 1, chunk_count);
-        }
-    }
-
-    if !boot_signature_valid {
-        return Err("The base IMG does not contain a valid boot-sector signature.".to_string());
-    }
-    let actual_sha = hex::encode(hasher.finalize());
-    if actual_sha != expected_sha {
-        return Err(format!(
-            "system image checksum mismatch: {actual_sha} != {expected_sha}"
-        ));
-    }
-    if total_size != expected_size {
-        return Err(format!(
-            "system image size mismatch: {total_size} != {expected_size}"
-        ));
-    }
-
-    {
-        let mut p = progress.lock().unwrap();
-        p.message = "Finalizing…".to_string();
-    }
-
-    // Insert the version row with the real storage_key (content-addressed).
+    // The client hashes the IMG and validates its boot sector before uploading,
+    // so the server only records arrival — no decompression or re-hashing. The
+    // parts are content-addressed under the sha the client reported.
     sqlx::query(
         r#"INSERT INTO v86_system_versions
            (system_id, version_number, original_file_name, storage_key, size_bytes,
@@ -1463,26 +1306,22 @@ async fn verify_system_upload(
     )
     .bind(system_id)
     .bind(version_number)
-    .bind(original_file_name)
-    .bind(storage_key)
-    .bind(expected_size as i64)
-    .bind(expected_sha)
-    .bind(chunk_size as i64)
-    .bind(chunk_count as i64)
-    .execute(pool)
+    .bind(&original_file_name)
+    .bind(&storage_key)
+    .bind(expected_size)
+    .bind(&sha256)
+    .bind(chunk_size)
+    .bind(chunk_count)
+    .execute(&state.project_service.pool)
     .await
-    .map_err(|e| format!("Failed to insert version row: {e}"))?;
-
+    .map_err(|e| ProjectError::InternalError(format!("Failed to create version: {e}")))?;
     sqlx::query(
         "UPDATE v86_system_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
-    .bind(upload_id)
-    .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    chunk_progress_map().lock().unwrap().remove(upload_id);
-    Ok(())
+    .bind(&upload_id)
+    .execute(&state.project_service.pool)
+    .await?;
+    Ok(StatusCode::OK)
 }
 
 pub async fn update_system(
@@ -1958,7 +1797,7 @@ pub async fn upload_game_disk_part(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT staged_disk_storage_key, staged_disk_chunk_count, disk_reuse, received_disk_parts, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT staged_disk_storage_key, staged_disk_chunk_count, disk_reuse, status, expires_at FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -1988,19 +1827,16 @@ pub async fn upload_game_disk_part(
     r2.put_object_bytes(&part, bytes.to_vec())
         .await
         .map_err(r2_error)?;
-    let mut received: Vec<u64> =
-        serde_json::from_str(row.get::<Option<String>, _>("received_disk_parts").as_deref().unwrap_or("[]"))
-            .unwrap_or_default();
-    if !received.contains(&part_index) {
-        received.push(part_index);
-        sqlx::query(
-            "UPDATE project_v86_upload_sessions SET received_disk_parts = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        )
-        .bind(serde_json::to_string(&received).unwrap())
-        .bind(&upload_id)
-        .execute(&state.project_service.pool)
-        .await?;
-    }
+    // Record the part atomically so parallel PUTs cannot drop indices (a plain
+    // INSERT, unlike the old read-modify-write of the received_disk_parts JSON
+    // column which raced under parallel uploads). Re-uploading a part is a no-op.
+    sqlx::query(
+        "INSERT OR IGNORE INTO project_v86_received_disk_parts (upload_id, part_index) VALUES (?, ?)",
+    )
+    .bind(&upload_id)
+    .bind(part_index as i64)
+    .execute(&state.project_service.pool)
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2115,83 +1951,6 @@ async fn delete_uploaded_game_artifacts(
     }
 }
 
-/// Decompresses every received disk part, verifies its byte range and that the
-/// streamed SHA-256 matches the client's plan, then marks the session ready.
-/// This is what keeps the content-addressed keys truthful now that the server
-/// no longer builds the disk itself.
-async fn verify_game_upload(
-    pool: &sqlx::SqlitePool,
-    r2: &R2Client,
-    upload_id: &str,
-    disk_reuse: bool,
-    disk_storage_key: Option<&str>,
-    disk_sha: Option<&str>,
-    disk_size: Option<i64>,
-    chunk_count: Option<i64>,
-    chunk_size: u64,
-    progress: Arc<Mutex<ChunkProgress>>,
-) -> Result<(), String> {
-    if !disk_reuse {
-        let key = disk_storage_key.ok_or("missing disk storage key")?;
-        let sha = disk_sha.ok_or("missing disk sha")?;
-        let size = disk_size.ok_or("missing disk size")? as u64;
-        let chunks = chunk_count.ok_or("missing chunk count")? as u64;
-        if chunks == 0 {
-            return Err("disk chunk count is zero".to_string());
-        }
-        let mut hasher = Sha256::new();
-        for index in 0..chunks {
-            let part = disk_part_name(key, index, chunk_size);
-            let bytes = r2.get_object(&part).await.map_err(|e| e.to_string())?;
-            let mut decoder = zstd::stream::read::Decoder::new(&bytes[..])
-                .map_err(|e| format!("disk part {index} is not valid zstd: {e}"))?;
-            let mut total: u64 = 0;
-            let mut buf = [0u8; 65536];
-            loop {
-                let n = decoder
-                    .read(&mut buf)
-                    .map_err(|e| format!("disk part {index} failed to decode: {e}"))?;
-                if n == 0 {
-                    break;
-                }
-                hasher.update(&buf[..n]);
-                total += n as u64;
-            }
-            let expected = chunk_size.min(size.saturating_sub(index * chunk_size));
-            if total != expected {
-                return Err(format!(
-                    "disk part {index} is {total} bytes, expected {expected}"
-                ));
-            }
-            {
-                let mut p = progress.lock().unwrap();
-                p.total_chunks = chunks;
-                p.completed_chunks = index + 1;
-                p.message = format!("Verifying game disc… {}/{}", index + 1, chunks);
-            }
-        }
-        let actual = hex::encode(hasher.finalize());
-        if actual != sha {
-            return Err(format!(
-                "game disk checksum mismatch: {actual} != {sha}"
-            ));
-        }
-    }
-    {
-        let mut p = progress.lock().unwrap();
-        p.message = "Finalizing…".to_string();
-    }
-    sqlx::query(
-        "UPDATE project_v86_upload_sessions SET status = 'ready', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'building'",
-    )
-    .bind(upload_id)
-    .execute(pool)
-    .await
-    .map_err(|e| e.to_string())?;
-    chunk_progress_map().lock().unwrap().remove(upload_id);
-    Ok(())
-}
-
 pub async fn complete_game_upload(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
@@ -2199,9 +1958,7 @@ pub async fn complete_game_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        r#"SELECT manifest_text, source_project_id, staged_disk_storage_key,
-                  staged_disk_sha256, staged_disk_size_bytes, staged_disk_chunk_count,
-                  disk_reuse, received_disk_parts, status, expires_at
+        r#"SELECT staged_disk_chunk_count, disk_reuse, status, expires_at
            FROM project_v86_upload_sessions WHERE id = ? AND uploader_id = ?"#,
     )
     .bind(&upload_id)
@@ -2217,27 +1974,24 @@ pub async fn complete_game_upload(
     }
 
     // Every non-reused artifact must have arrived before the session can be
-    // finalized. The disk is verified (decompress + hash) in the background.
+    // finalized. The client already built, hashed, and self-checked the disk
+    // and CD images against this plan (see upload-controller.js), so the
+    // server only records arrival — no decompression or re-hashing. Parts are
+    // tracked atomically, and a part's R2 object is written before its
+    // tracking row, so a complete session has all its content in R2.
     let disk_reuse: i64 = row.get("disk_reuse");
     if disk_reuse == 0 {
         let chunk_count: i64 = row.get("staged_disk_chunk_count");
-        let received: Vec<u64> = serde_json::from_str(
-            row.get::<Option<String>, _>("received_disk_parts")
-                .as_deref()
-                .unwrap_or("[]"),
+        let received: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM project_v86_received_disk_parts WHERE upload_id = ?",
         )
-        .unwrap_or_default();
-        if received.len() as i64 != chunk_count {
+        .bind(&upload_id)
+        .fetch_one(&state.project_service.pool)
+        .await?;
+        if received != chunk_count {
             return Err(ProjectError::InvalidDemo(
                 "The game disk upload is incomplete.".to_string(),
             ));
-        }
-        for index in 0..chunk_count as u64 {
-            if !received.contains(&index) {
-                return Err(ProjectError::InvalidDemo(
-                    "The game disk upload is incomplete.".to_string(),
-                ));
-            }
         }
     }
     let missing_isos: i64 = sqlx::query_scalar(
@@ -2254,71 +2008,12 @@ pub async fn complete_game_upload(
     }
 
     sqlx::query(
-        "UPDATE project_v86_upload_sessions SET status = 'building', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'",
+        "UPDATE project_v86_upload_sessions SET status = 'ready', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'",
     )
     .bind(&upload_id)
     .execute(&state.project_service.pool)
     .await?;
-
-    let progress = Arc::new(Mutex::new(ChunkProgress {
-        upload_id: upload_id.clone(),
-        kind: "game".to_string(),
-        total_chunks: 0,
-        completed_chunks: 0,
-        message: "Verifying game disc…".to_string(),
-    }));
-    chunk_progress_map()
-        .lock()
-        .unwrap()
-        .insert(upload_id.clone(), progress.lock().unwrap().clone());
-
-    let pool = state.project_service.pool.clone();
-    let r2 = require_r2(&state)?;
-    let r2_c = r2.clone();
-    let upload_id_c = upload_id.clone();
-    let disk_storage_key: Option<String> = row.get("staged_disk_storage_key");
-    let disk_sha: Option<String> = row.get("staged_disk_sha256");
-    let disk_size: Option<i64> = row.get("staged_disk_size_bytes");
-    let chunk_count: Option<i64> = row.get("staged_disk_chunk_count");
-    let chunk_size = state.project_demo_config.v86_download_chunk_size;
-    let progress_c = progress.clone();
-
-    tokio::spawn(async move {
-        let result = verify_game_upload(
-            &pool,
-            &r2_c,
-            &upload_id_c,
-            disk_reuse != 0,
-            disk_storage_key.as_deref(),
-            disk_sha.as_deref(),
-            disk_size,
-            chunk_count,
-            chunk_size,
-            progress_c,
-        )
-        .await;
-        if let Err(error) = result {
-            tracing::error!("Background game upload failed for {upload_id_c}: {error}");
-            delete_uploaded_game_artifacts(
-                &r2_c,
-                &pool,
-                &upload_id_c,
-                disk_storage_key.as_deref(),
-                disk_reuse != 0,
-            )
-            .await;
-            let _ = sqlx::query(
-                "UPDATE project_v86_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            )
-            .bind(&error)
-            .bind(&upload_id_c)
-            .execute(&pool)
-            .await;
-            chunk_progress_map().lock().unwrap().remove(&upload_id_c);
-        }
-    });
-
-    Ok(StatusCode::ACCEPTED)
+    Ok(StatusCode::OK)
 }
 
 

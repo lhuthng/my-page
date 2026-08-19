@@ -1,5 +1,5 @@
 import { unzip as fflateUnzip } from 'fflate';
-import { buildFatDisk, sparseChunks, DiskBuildError } from './fat-disk.js';
+import { buildFatDisk, sparseChunks, sparseChunkAt, DiskBuildError } from './fat-disk.js';
 import { buildIsoImage } from '../../players/iso9660.js';
 import { parseVariants, launcherConfigFor, ManifestError } from './manifest.js';
 import { Sha256 } from './sha256.js';
@@ -70,7 +70,9 @@ export async function unzipGame(zipBytes, limits = {}) {
 			fflateUnzip(zipBytes, (error, result) => (error ? reject(error) : resolve(result)));
 		});
 	} catch (error) {
-		throw new GameBuildError(`Invalid game ZIP: ${error?.message ?? error}`);
+		throw new GameBuildError(
+			`Invalid game ZIP: ${error?.message ?? error}${error?.code != null ? ` (code=${error.code})` : ''}`
+		);
 	}
 	const raw = Object.entries(decoded);
 	if (raw.length > maxFiles) {
@@ -183,29 +185,43 @@ export function diskSha(sparse) {
  * server build. `zstdCompress` is injected (worker-backed in the browser); it
  * receives the raw chunk and returns its compressed bytes. The upload flow
  * splits at the server-returned `chunk_size_bytes`, not a fixed 8 MiB default.
+ * Compression runs `workers` chunks concurrently; parts are stored by index so
+ * the output stays ordered regardless of completion order.
  */
-export async function buildDiskParts(sparse, chunkSize, zstdCompress, onChunk = () => {}) {
-	const hasher = new Sha256();
-	const parts = [];
-	let offset = 0;
+export async function buildDiskParts(
+	sparse,
+	chunkSize,
+	zstdCompress,
+	onChunk = () => {},
+	{ workers = 4 } = {}
+) {
+	const sha256 = diskSha(sparse);
 	const totalChunks = Math.ceil(sparse.size / chunkSize);
-	for (const rawChunk of sparseChunks(sparse, chunkSize)) {
-		const bytes = Math.min(chunkSize, sparse.size - offset);
-		hasher.update(rawChunk.subarray(0, bytes));
-		// Compress only the real bytes: the server verifies each part
-		// decompresses to exactly `min(chunkSize, size - offset)` bytes.
-		const compressed = await zstdCompress(rawChunk.subarray(0, bytes));
-		parts.push({
-			offset,
-			name: `${offset}-${offset + chunkSize}.img.zst`,
-			rawBytes: bytes,
-			compressed
-		});
-		offset += chunkSize;
-		onChunk(parts.length, totalChunks);
-	}
+	const parts = new Array(totalChunks);
+	let next = 0;
+	let done = 0;
+	await Promise.all(
+		Array.from({ length: Math.min(workers, totalChunks) }, async () => {
+			while (next < totalChunks) {
+				const index = next++;
+				const start = index * chunkSize;
+				const rawChunk = sparseChunkAt(sparse, chunkSize, index);
+				const bytes = Math.min(chunkSize, sparse.size - start);
+				// Compress only the real bytes: the server verifies each part
+				// decompresses to exactly `min(chunkSize, size - offset)` bytes.
+				const compressed = await zstdCompress(rawChunk.subarray(0, bytes).slice().buffer);
+				parts[index] = {
+					offset: start,
+					name: `${start}-${start + chunkSize}.img.zst`,
+					rawBytes: bytes,
+					compressed
+				};
+				onChunk(++done, totalChunks);
+			}
+		})
+	);
 	return {
-		sha256: hasher.digestHex(),
+		sha256,
 		size_bytes: sparse.size,
 		chunk_size_bytes: chunkSize,
 		chunk_count: parts.length,
