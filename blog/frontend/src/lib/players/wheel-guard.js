@@ -1,7 +1,7 @@
 // v86 installs its own window-level "wheel" listener that forwards straight to
 // the emulated PS/2 mouse. A plain PS/2 mouse has no wheel: the guest's driver
 // has to knock first (sample rate 200, 100, 80) before the mouse ID upgrades
-// and packets grow a wheel byte. Windows 95's stock driver never does that —
+// and packets grow a wheel byte. Windows 9x's stock driver never does that —
 // IntelliPoint is what would — so mouse_id stays 0 and every scroll tick
 // arrives as a phantom mouse IRQ with no movement, which is enough to fault
 // EXPLORER.EXE. v86 sends it regardless of mouse_id.

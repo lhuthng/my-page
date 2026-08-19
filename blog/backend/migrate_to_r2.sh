@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# One-time migration of v86 assets (Win95 base systems + game ISOs) to
+# One-time migration of v86 assets (Windows 9x base systems + game ISOs) to
 # Cloudflare R2 so the browser can fetch them straight from the CDN instead
 # of being served in 256KB chunks by the backend.
 #
