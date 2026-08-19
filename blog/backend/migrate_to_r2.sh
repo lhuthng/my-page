@@ -5,7 +5,7 @@
 # of being served in 256KB chunks by the backend.
 #
 # R2 keys are content-addressed and mirror the URLs the frontend will use:
-#   systems -> v86/assets/systems/{version_id}/{sha256}/{start}-{end}.img.zst
+#   systems -> v86/assets/systems/{sha256}/{start}-{end}.img.zst
 #   games   -> v86/games/{iso_sha256}/full.iso
 #
 # Usage:
@@ -47,13 +47,15 @@ export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_A
 
 mkdir -p "$STAGING/v86/assets/systems" "$STAGING/v86/games"
 
-# ── Stage system parts → v86/assets/systems/{version_id}/{sha}/{part} ───────
+# ── Stage system parts → v86/assets/systems/{sha}/{part} ─────────────────────
+# The base image is content-addressed by its sha256, so the parts live under a
+# single sha key (no version_id): this matches both the on-disk layout the
+# backend writes and the /assets/systems/{sha256}/{part} serving route.
 system_count=0
 while IFS= read -r -d '' part; do
 	# part = .../v86/systems/{system_id}/{version_id}/{sha}/parts/{file}
 	sha="$(basename "$(dirname "$(dirname "$part")")")"
-	version_id="$(basename "$(dirname "$(dirname "$(dirname "$part")")")")"
-	key="$STAGING/v86/assets/systems/$version_id/$sha/$(basename "$part")"
+	key="$STAGING/v86/assets/systems/$sha/$(basename "$part")"
 	mkdir -p "$(dirname "$key")"
 	ln -f "$part" "$key" 2>/dev/null || cp "$part" "$key"
 	system_count=$((system_count + 1))
@@ -70,20 +72,7 @@ while IFS= read -r -d '' iso; do
 	game_count=$((game_count + 1))
 done < <(find "$PROJECT_DEMOS/v86/games" \( -name 'game.iso' -o -name 'full.iso' \) -print0)
 
-# ── Stage game ZIPs → v86/games/zips/{zip_sha}.zip ──────────────────────────
-# The reuse-source upload flow re-builds the ISO from the stored ZIP, so the
-# originals must live in R2 too (content-addressed by their sha256 name).
-zip_count=0
-while IFS= read -r -d '' zip; do
-	# zip = .../v86/games/{uuid}/{zip_sha}.zip
-	name="$(basename "$zip")"
-	key="$STAGING/v86/games/zips/$name"
-	mkdir -p "$(dirname "$key")"
-	ln -f "$zip" "$key" 2>/dev/null || cp "$zip" "$key"
-	zip_count=$((zip_count + 1))
-done < <(find "$PROJECT_DEMOS/v86/games" -name '*.zip' -print0)
-
-echo "Staged ${system_count} system parts + ${game_count} game ISOs + ${zip_count} game ZIPs under $STAGING"
+echo "Staged ${system_count} system parts + ${game_count} game ISOs under $STAGING"
 
 # ── Upload (aws s3 sync is resumable + idempotent) ─────────────────────────
 aws s3 sync "$STAGING/" "s3://$R2_BUCKET/" \
