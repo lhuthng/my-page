@@ -22,6 +22,10 @@ export class V86Player {
 	error = $state('');
 	running = $state(false);
 	mouseSensitivity = $state(0.4);
+	// Per-project mouse settings from the v86 manifest, applied on top of the
+	// visitor's own sensitivity slider.
+	revertMouseY = $state(false);
+	mouseSpeed = $state(1.0);
 	noiseReductionStrength = $state(isWeakDevice() ? 0 : 200);
 	disableMouseWheel = $state(true);
 	audioEnabled = $state(true);
@@ -39,15 +43,6 @@ export class V86Player {
 	// millions; a struggling machine drops an order of magnitude, which
 	// distinguishes "this device is too slow" from "this is waiting on I/O".
 	emulatedMips = $state(0);
-	/** User's frame-rate choice, -1 for auto. v86 draws from a
-	 *  requestAnimationFrame on the same thread that emulates the CPU, so it
-	 *  otherwise redraws at the display's refresh rate no matter how slowly the
-	 *  guest is producing frames. Skipping those redraws hands the time back to
-	 *  emulation. 60 is a free win on a 120Hz panel and a no-op on a 60Hz one. */
-	maxFpsPreference = $state(-1);
-	// The cap the throttle actually reads: the manual choice when set, otherwise
-	// whatever #tuneFrameCap last settled on.
-	maxFps = $state(60);
 
 	#emulator;
 	#pressed = new Set();
@@ -70,9 +65,6 @@ export class V86Player {
 	#mipsTimer = null;
 	#lastInstructionCount = 0;
 	#lastMipsAt = 0;
-	#autoCap = 60;
-	#autoCapChangedAt = 0;
-	#mipsHistory = [];
 	#progressFrame = null;
 	#pendingProgress = null;
 	// True once v86's emulator-ready has fired. A download-progress callback
@@ -120,6 +112,11 @@ export class V86Player {
 		// running and the state can be restored straight into it.
 		this.captureVariantIndex = captureVariantIndex;
 		if (captureVariantIndex > 0) this.selectedVariant = captureVariantIndex;
+		this.revertMouseY = Boolean(runtime?.revert_mouse_y);
+		this.mouseSpeed =
+			typeof runtime?.mouse_speed === 'number' && runtime.mouse_speed > 0
+				? runtime.mouse_speed
+				: 1.0;
 	}
 
 	// variant snapshot -> project-wide snapshot -> cold boot. A variant's own
@@ -283,40 +280,12 @@ export class V86Player {
 		this.diskFetching = false;
 	};
 
-	// Wraps update_screen so a skipped frame still reschedules itself but does
-	// no drawing. Reads maxFps per frame, so changing it takes effect live.
-	#applyFrameThrottle = () => {
-		const adapter = this.#emulator?.screen_adapter;
-		if (!adapter || adapter.v86FrameThrottled) return;
-		const original = adapter.update_screen;
-		if (typeof original !== 'function' || typeof adapter.timer !== 'function') return;
-		let lastDrawnAt = 0;
-		adapter.update_screen = () => {
-			const cap = this.maxFps;
-			if (cap > 0) {
-				const now = performance.now();
-				// The 2ms slack keeps a 60 cap from halving to 30 on a 60Hz
-				// display, where frames land a hair under the nominal interval.
-				if (now - lastDrawnAt < 1000 / cap - 2) {
-					adapter.timer();
-					return;
-				}
-				lastDrawnAt = now;
-			}
-			original.call(adapter);
-		};
-		adapter.v86FrameThrottled = true;
-	};
-
 	// The counter is a uint32 that wraps, so only deltas are meaningful and a
 	// wrap is discarded rather than reported as a spike.
 	#startMipsSampling = () => {
 		this.#stopMipsSampling();
 		this.#lastInstructionCount = this.#emulator?.get_instruction_counter?.() ?? 0;
 		this.#lastMipsAt = performance.now();
-		this.#autoCap = 60;
-		this.#autoCapChangedAt = 0;
-		this.#mipsHistory.length = 0;
 		this.#mipsTimer = setInterval(() => {
 			const count = this.#emulator?.get_instruction_counter?.();
 			if (count == null) return;
@@ -325,9 +294,6 @@ export class V86Player {
 			const delta = count - this.#lastInstructionCount;
 			if (elapsed > 0 && delta >= 0) {
 				this.emulatedMips = delta / elapsed / 1e6;
-				this.#mipsHistory.push(this.emulatedMips);
-				if (this.#mipsHistory.length > 16) this.#mipsHistory.shift();
-				this.#tuneFrameCap(now);
 			}
 			this.#lastInstructionCount = count;
 			this.#lastMipsAt = now;
@@ -337,33 +303,6 @@ export class V86Player {
 	#stopMipsSampling = () => {
 		if (this.#mipsTimer) clearInterval(this.#mipsTimer);
 		this.#mipsTimer = null;
-	};
-
-	// Auto frame-rate loop. A guest that's genuinely idle (HLT loops) reports
-	// sub-8 MIPS; that's not starvation, so it never triggers a drop. A machine
-	// that's actively computing below the current cap gets the cap lowered, and
-	// each skipped redraw becomes emulation time. The cap is raised again only
-	// after a sustained healthy window, so the two never oscillate.
-	#tuneFrameCap = (now) => {
-		if (this.maxFpsPreference >= 0 || this.#mipsHistory.length < 8) return;
-		if (now - this.#autoCapChangedAt < 30000) return;
-		const sorted = this.#mipsHistory.slice().sort((a, b) => a - b);
-		const median = sorted[sorted.length >> 1];
-		if (median < 8) return;
-		if (this.#autoCap === 60 && median < 40) this.#setAutoCap(30);
-		else if (this.#autoCap === 30 && median < 28) this.#setAutoCap(20);
-		else if (median >= 55 && this.#autoCap < 60) this.#setAutoCap(this.#autoCap === 20 ? 30 : 60);
-		this.#autoCapChangedAt = now;
-	};
-
-	#setAutoCap = (cap) => {
-		if (this.#autoCap === cap) return;
-		this.#autoCap = cap;
-		this.maxFps = cap;
-	};
-
-	applyMaxFpsPreference = () => {
-		this.maxFps = this.maxFpsPreference >= 0 ? this.maxFpsPreference : this.#autoCap;
 	};
 
 	start = async () => {
@@ -410,7 +349,6 @@ export class V86Player {
 				this.applyAudioState();
 				this.preloadLaunchers().catch(() => {});
 				this.#startMipsSampling();
-				this.#applyFrameThrottle();
 			});
 			// emulator-ready fires inside v86.init(), before restore_state runs.
 			// Inserting media there leaves a disc in a drive the state records as
@@ -522,7 +460,6 @@ export class V86Player {
 		this.diskFetching = false;
 		this.emulatedMips = 0;
 		this.#stopMipsSampling();
-		this.#mipsHistory.length = 0;
 		if (this.#progressFrame) {
 			cancelAnimationFrame(this.#progressFrame);
 			this.#progressFrame = null;
@@ -814,10 +751,13 @@ export class V86Player {
 		if (!this.#emulator || document.pointerLockElement === null) return;
 		if (typeof event.movementX !== 'number' || typeof event.movementY !== 'number') return;
 
-		// v86's bundled adapter negates movementY. Send the browser's natural
-		// direction here and keep fractional 10% movement between events.
-		this.#mouseRemainderX += event.movementX * this.mouseSensitivity;
-		this.#mouseRemainderY += event.movementY * this.mouseSensitivity;
+		// v86's bundled adapter negates movementY, which is the direction the
+		// guest expects. `revert_mouse_y` (from the project manifest) sends the
+		// browser's natural direction instead, and `mouse_speed` scales the
+		// project's preferred mouse speed on top of the visitor's slider.
+		const ySign = this.revertMouseY ? 1 : -1;
+		this.#mouseRemainderX += event.movementX * this.mouseSensitivity * this.mouseSpeed;
+		this.#mouseRemainderY += event.movementY * ySign * this.mouseSensitivity * this.mouseSpeed;
 		const deltaX =
 			this.#mouseRemainderX < 0
 				? Math.ceil(this.#mouseRemainderX)

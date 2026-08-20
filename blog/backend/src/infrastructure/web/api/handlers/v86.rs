@@ -280,6 +280,13 @@ pub struct V86RuntimeDescriptor {
     pub snapshot_url: Option<String>,
     pub snapshot_size_bytes: Option<u64>,
     pub snapshot_sha256: Option<String>,
+    /// Whether the emulated mouse's Y axis is inverted. v86's built-in mouse
+    /// adapter negates movementY; this restores the browser's natural
+    /// direction for guests whose drivers expect it.
+    pub revert_mouse_y: bool,
+    /// Per-project mouse speed multiplier applied on top of the visitor's own
+    /// sensitivity slider. Defaults to 1.0.
+    pub mouse_speed: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -487,6 +494,60 @@ fn parse_manifest_fields(manifest: &str) -> HashMap<String, String> {
         }
     }
     fields
+}
+
+/// Per-project mouse settings resolved from the manifest.
+#[derive(Debug, Clone, Copy)]
+pub struct MouseConfig {
+    pub revert_mouse_y: bool,
+    pub mouse_speed: f64,
+}
+
+impl Default for MouseConfig {
+    fn default() -> Self {
+        MouseConfig {
+            revert_mouse_y: false,
+            mouse_speed: 1.0,
+        }
+    }
+}
+
+/// Resolves `revert_mouse_y` and `mouse_speed` from the manifest. Missing keys
+/// fall back to the defaults (no revert, 1.0 speed); present-but-invalid
+/// values are rejected so a typo surfaces at upload instead of silently
+/// degrading every visitor's mouse.
+pub fn parse_mouse_config(manifest: &str) -> Result<MouseConfig, ProjectError> {
+    let fields = parse_manifest_fields(manifest);
+    let revert_mouse_y = match fields.get("revert_mouse_y").map(String::as_str) {
+        None | Some("") => false,
+        Some("1") | Some("true") | Some("yes") | Some("on") => true,
+        Some("0") | Some("false") | Some("no") | Some("off") => false,
+        Some(other) => {
+            return Err(ProjectError::InvalidDemo(format!(
+                "Invalid revert_mouse_y value '{other}': expected 0 or 1."
+            )));
+        }
+    };
+    let mouse_speed = match fields.get("mouse_speed").map(String::as_str) {
+        None | Some("") => 1.0,
+        Some(raw) => {
+            let value: f64 = raw.trim().parse().map_err(|_| {
+                ProjectError::InvalidDemo(format!(
+                    "Invalid mouse_speed value '{raw}': expected a number."
+                ))
+            })?;
+            if !value.is_finite() || value <= 0.0 {
+                return Err(ProjectError::InvalidDemo(
+                    "mouse_speed must be a positive number.".to_string(),
+                ));
+            }
+            value
+        }
+    };
+    Ok(MouseConfig {
+        revert_mouse_y,
+        mouse_speed,
+    })
 }
 
 /// Lowest suffix index (`name1` -> 1, `exe3` -> 3) for a `{base}{digits}` key,
@@ -1607,6 +1668,8 @@ pub async fn start_game_upload(
             "The build plan does not match the manifest variants.".to_string(),
         ));
     }
+    // Reject malformed mouse settings so a typo never reaches the descriptor.
+    parse_mouse_config(&request.manifest)?;
     let upload_id = Uuid::new_v4().to_string();
     let chunk_size = state.project_demo_config.v86_download_chunk_size;
     let max_disk = state.project_demo_config.max_v86_game_extracted_size.saturating_mul(2);
@@ -2427,6 +2490,8 @@ pub async fn runtime_descriptor_for(
         }
         None => (None, None, None),
     };
+    let mouse_config = parse_mouse_config(&row.get::<String, _>("manifest_text"))
+        .unwrap_or_else(|_| MouseConfig::default());
     Ok(Some(V86RuntimeDescriptor {
         platform_key: row.get("platform_key"),
         system_name: row.get("system_name"),
@@ -2465,6 +2530,8 @@ pub async fn runtime_descriptor_for(
         snapshot_url,
         snapshot_size_bytes,
         snapshot_sha256,
+        revert_mouse_y: mouse_config.revert_mouse_y,
+        mouse_speed: mouse_config.mouse_speed,
     }))
 }
 
@@ -3550,6 +3617,31 @@ mod tests {
                 save_files_from_manifest(&format!("exe=a.exe\n{bad}")).is_err(),
                 "{bad} should be rejected"
             );
+        }
+    }
+
+    #[test]
+    fn mouse_config_defaults_and_parses() {
+        let default = parse_mouse_config("exe=a.exe").ok().unwrap();
+        assert!(!default.revert_mouse_y);
+        assert_eq!(default.mouse_speed, 1.0);
+
+        let inverted = parse_mouse_config("exe=a.exe\nrevert_mouse_y=1").ok().unwrap();
+        assert!(inverted.revert_mouse_y);
+        assert_eq!(inverted.mouse_speed, 1.0);
+
+        let fast = parse_mouse_config("exe=a.exe\nmouse_speed=2.5").ok().unwrap();
+        assert!(!fast.revert_mouse_y);
+        assert_eq!(fast.mouse_speed, 2.5);
+
+        let both = parse_mouse_config("exe=a.exe\nrevert_mouse_y=true\nmouse_speed=0.5")
+            .ok()
+            .unwrap();
+        assert!(both.revert_mouse_y);
+        assert_eq!(both.mouse_speed, 0.5);
+
+        for bad in ["revert_mouse_y=banana", "mouse_speed=nope", "mouse_speed=-1", "mouse_speed=0"] {
+            assert!(parse_mouse_config(&format!("exe=a.exe\n{bad}")).is_err(), "{bad}");
         }
     }
 }
