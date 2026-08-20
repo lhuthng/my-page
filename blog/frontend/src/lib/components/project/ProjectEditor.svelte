@@ -105,8 +105,9 @@
 					bind:value={vm.entry.v86Manifest}
 					readonly={!isOwner}></textarea>
 				<p class="text-sm leading-relaxed text-dark/50">
-					v86 manifest keys: exe (required), plus optional args, delay_ms and save_paths. Paths are
-					relative to the game drive root.
+					v86 manifest keys: exe (required), plus optional args, delay_ms, save_paths,
+					revert_mouse_y (1 inverts the mouse's Y axis) and mouse_speed (a speed multiplier, e.g.
+					2.0). Paths are relative to the game drive root.
 				</p>
 				<p class="text-sm leading-relaxed text-dark/50">
 					Variants: name / name1, name2, name3… define launch variants (names must be contiguous).

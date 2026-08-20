@@ -160,24 +160,18 @@
 					</span>
 					<Slider min="0.05" max="1" step="0.05" bind:value={player.mouseSensitivity} />
 				</label>
-				<label class="flex flex-col gap-1 text-dark/75">
+				<label class="flex items-center gap-2 text-dark/75">
+					<input
+						type="checkbox"
+						class="accent-primary h-6 w-6"
+						bind:checked={player.revertMouseY}
+					/>
 					<span
-						class="cursor-help underline decoration-dashed underline-offset-2"
-						title="The emulator draws on the same thread that runs the virtual CPU. Drawing less often gives that time back to the game, which helps on slower machines."
+						class="underline decoration-dashed underline-offset-2 cursor-help"
+						title="v86's built-in mouse adapter negates movementY. Turning this on sends the browser's natural direction instead."
 					>
-						Frame rate limit
+						Revert mouse Y
 					</span>
-					<select
-						class="rounded-sm bg-white px-1 py-0.5"
-						bind:value={player.maxFpsPreference}
-						onchange={() => player.applyMaxFpsPreference()}
-					>
-						<option value={-1}>Auto — adjust to device (default)</option>
-						<option value={60}>60 fps</option>
-						<option value={30}>30 fps — slower devices</option>
-						<option value={20}>20 fps — very slow devices</option>
-						<option value={0}>Uncapped</option>
-					</select>
 				</label>
 			</div>
 		</Popover>

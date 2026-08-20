@@ -198,15 +198,14 @@
 		else screen?.querySelector('canvas')?.requestPointerLock?.();
 	};
 
-	// v86's bundled adapter negates movementY, which shows up as a flipped
-	// (top-down) axis on some platforms. Send the browser's natural direction
-	// instead, carrying fractional movement between events — the same approach
-	// the project player uses.
+	// v86's bundled adapter negates movementY, which is the direction the
+	// guest expects, so send it straight through while carrying fractional
+	// movement between events — the same approach the project player uses.
 	const handleCapturedMouseMove = (event) => {
 		if (!emulator || document.pointerLockElement === null) return;
 		if (typeof event.movementX !== 'number' || typeof event.movementY !== 'number') return;
 		mouseRemainderX += event.movementX;
-		mouseRemainderY += event.movementY;
+		mouseRemainderY -= event.movementY;
 		const deltaX = mouseRemainderX < 0 ? Math.ceil(mouseRemainderX) : Math.floor(mouseRemainderX);
 		const deltaY = mouseRemainderY < 0 ? Math.ceil(mouseRemainderY) : Math.floor(mouseRemainderY);
 		mouseRemainderX -= deltaX;
