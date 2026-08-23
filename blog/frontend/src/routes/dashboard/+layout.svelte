@@ -12,7 +12,8 @@
 		{ label: 'Games', path: '/dashboard/games', exact: true },
 		{ label: 'Series', path: '/dashboard/series' },
 		{ label: 'Users', path: '/dashboard/users' },
-		{ label: 'Newsletter', path: '/dashboard/newsletter' }
+		{ label: 'Newsletter', path: '/dashboard/newsletter' },
+		{ label: 'Trash', path: '/dashboard/trash' }
 	];
 
 	let tabs = $derived(

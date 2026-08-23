@@ -209,3 +209,62 @@ pub async fn delete_tag(
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
+
+#[derive(Serialize)]
+pub struct TrashItem {
+    pub post_id: i64,
+    pub project_id: Option<i64>,
+    pub game_id: Option<i64>,
+    pub title: String,
+    pub slug: String,
+    pub content_kind: String,
+    pub deleted_at: Option<String>,
+    pub scheduled_purge_at: Option<String>,
+    pub deletion_reason: Option<String>,
+    pub status: String,
+}
+
+pub async fn get_trash(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+) -> Result<impl IntoResponse, UserError> {
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|e| UserError::InternalError(e.to_string()))?;
+    let is_admin = claims.role == "admin";
+    let rows = if is_admin {
+        sqlx::query_as::<_, (i64, Option<i64>, Option<i64>, String, String, String, Option<String>, Option<String>, Option<String>, String)>(
+            "SELECT posts.id, projects.id, games.id, posts.title, posts.slug, posts.content_kind, posts.deleted_at, posts.scheduled_purge_at, posts.deletion_reason, posts.status FROM posts LEFT JOIN projects ON projects.post_id = posts.id LEFT JOIN games ON games.post_id = posts.id WHERE posts.deleted_at IS NOT NULL ORDER BY posts.deleted_at DESC LIMIT 100",
+        )
+        .fetch_all(&state.post_service.pool)
+        .await
+        .map_err(|e| UserError::InternalError(e.to_string()))?
+    } else {
+        sqlx::query_as::<_, (i64, Option<i64>, Option<i64>, String, String, String, Option<String>, Option<String>, Option<String>, String)>(
+            "SELECT posts.id, projects.id, games.id, posts.title, posts.slug, posts.content_kind, posts.deleted_at, posts.scheduled_purge_at, posts.deletion_reason, posts.status FROM posts LEFT JOIN projects ON projects.post_id = posts.id LEFT JOIN games ON games.post_id = posts.id WHERE posts.deleted_at IS NOT NULL AND posts.user_id = ? ORDER BY posts.deleted_at DESC LIMIT 100",
+        )
+        .bind(user_id)
+        .fetch_all(&state.post_service.pool)
+        .await
+        .map_err(|e| UserError::InternalError(e.to_string()))?
+    };
+    let items: Vec<TrashItem> = rows
+        .into_iter()
+        .map(
+            |(post_id, project_id, game_id, title, slug, content_kind, deleted_at, scheduled_purge_at, deletion_reason, status)| TrashItem {
+                post_id,
+                project_id,
+                game_id,
+                title,
+                slug,
+                content_kind,
+                deleted_at,
+                scheduled_purge_at,
+                deletion_reason,
+                status,
+            },
+        )
+        .collect();
+    Ok(Json(serde_json::json!({ "items": items })))
+}

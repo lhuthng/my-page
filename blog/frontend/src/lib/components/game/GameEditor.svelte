@@ -1,14 +1,46 @@
 <script>
 	import { onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { preventDefault } from '$lib/utils';
 	import { createEditorViewModel } from '$lib/features/editor/view-model/create-editor-vm.svelte.js';
 	import { GAME_DEMO_TYPES } from '$lib/features/editor/model/demo.js';
 	import PostEditorShell from '../editor/PostEditorShell.svelte';
+	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+	import { api } from '$lib/api/client.js';
 
 	let { mode = 'create', data, isOwner = true, v86Systems = [], games = [] } = $props();
 
 	const vm = createEditorViewModel({ mode, kind: 'game', data, isOwner });
 	onDestroy(() => vm.destroy());
+
+	let showDelete = $state(false);
+	let deleteBusy = $state(false);
+	let deleteReason = $state('user_request');
+	let deleteDetail = $state('');
+	let deleteTyped = $state('');
+	let forceNeeded = $state(false);
+
+	async function handleDelete(force = false) {
+		deleteBusy = true;
+		try {
+			const qs = new URLSearchParams({ reason: deleteReason });
+			if (deleteDetail) qs.set('detail', deleteDetail);
+			if (force) qs.set('force', 'true');
+			await api.delete(`games/id/${vm.entry.id}?${qs}`);
+			await goto('/dashboard/trash');
+		} catch (e) {
+			if (String(e.message).includes('delegated by') && !force) {
+				forceNeeded = true;
+			} else {
+				vm.ui.notice = e.message;
+				vm.ui.noticeCritical = true;
+				showDelete = false;
+			}
+		} finally {
+			deleteBusy = false;
+			if (!forceNeeded) showDelete = false;
+		}
+	}
 
 	const demoType = $derived(vm.entry.demoType);
 	const urlLabel = $derived(
@@ -256,3 +288,43 @@
 	excerptRows={4}
 	{extraFields}
 />
+
+{#if mode === 'edit' && isOwner}
+	<section class="rounded-xl border border-accent-red/30 bg-accent-red-light-4 p-4">
+		<h3 class="font-semibold text-accent-red">Danger zone</h3>
+		<p class="mt-1 text-sm text-dark/60">Delete this game. Projects delegating to it will show “Game unavailable” for 7 days.</p>
+		<div class="mt-3 flex flex-wrap gap-2">
+			<select bind:value={deleteReason} class="rounded-lg border border-dark/20 px-3 py-1 text-sm">
+				<option value="user_request">User request</option>
+				<option value="dmca">DMCA</option>
+				<option value="moderation">Moderation</option>
+				<option value="replaced">Replaced</option>
+				<option value="other">Other</option>
+			</select>
+			<input bind:value={deleteDetail} placeholder="Detail (optional)" class="rounded-lg border border-dark/20 px-3 py-1 text-sm" />
+			<button onclick={() => { forceNeeded = false; showDelete = true; }} class="rounded-full bg-accent-red px-4 py-2 text-sm font-medium text-white">Delete game</button>
+		</div>
+	</section>
+	<ConfirmDialog
+		open={showDelete && !forceNeeded}
+		title="Delete game?"
+		description="This will move the game to trash for 7 days. Delegated projects will keep their articles but lose the playable demo."
+		confirmLabel="Delete"
+		confirmColor="red"
+		busy={deleteBusy}
+		onconfirm={() => handleDelete(false)}
+		oncancel={() => (showDelete = false)}
+	/>
+	<ConfirmDialog
+		open={showDelete && forceNeeded}
+		title="Game is delegated by published projects"
+		description="Force delete will make those projects show “Game unavailable”. Type the game slug to confirm."
+		confirmLabel="Force delete"
+		confirmColor="red"
+		requireTyping={data.slug}
+		bind:typedValue={deleteTyped}
+		busy={deleteBusy}
+		onconfirm={() => handleDelete(true)}
+		oncancel={() => { showDelete = false; forceNeeded = false; }}
+	/>
+{/if}

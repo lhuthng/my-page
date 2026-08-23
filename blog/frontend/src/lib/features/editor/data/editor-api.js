@@ -98,3 +98,40 @@ export async function deleteEntryDraft(kind, id, authHeader, fetchImpl = fetch) 
 		headers: { Authorization: authHeader }
 	}).catch(() => {});
 }
+
+export async function deleteEntry(kind, id, authHeader, { reason, detail, force } = {}, fetchImpl = fetch) {
+	const params = new URLSearchParams();
+	if (reason) params.set('reason', reason);
+	if (detail) params.set('detail', detail);
+	if (force) params.set('force', 'true');
+	const qs = params.toString() ? `?${params}` : '';
+	const res = await fetchImpl(`/api/${PLURAL[kind]}/id/${id}${qs}`, {
+		method: 'DELETE',
+		headers: { Authorization: authHeader }
+	});
+	if (!res.ok) throw new Error(await res.text());
+}
+
+export async function restoreEntry(kind, id, authHeader, fetchImpl = fetch) {
+	const res = await fetchImpl(`/api/${PLURAL[kind]}/id/${id}/restore`, {
+		method: 'POST',
+		headers: { Authorization: authHeader }
+	});
+	if (!res.ok) throw new Error(await res.text());
+}
+
+export async function purgeEntry(kind, id, authHeader, fetchImpl = fetch) {
+	const res = await fetchImpl(`/api/${PLURAL[kind]}/id/${id}/purge`, {
+		method: 'DELETE',
+		headers: { Authorization: authHeader }
+	});
+	if (!res.ok) throw new Error(await res.text());
+}
+
+export async function getTrash(authHeader, fetchImpl = fetch) {
+	const res = await fetchImpl('/api/dashboard/trash', {
+		headers: { Authorization: authHeader }
+	});
+	if (!res.ok) throw new Error(await res.text());
+	return res.json();
+}

@@ -206,7 +206,7 @@ const TOP_POSTS_SQL: &str = r#"
     JOIN user_meta um ON um.user_id = p.user_id
     JOIN post_stats ps ON ps.post_id = p.id
     LEFT JOIN media m ON m.id = p.cover_media_id
-    WHERE p.status = 'published' AND p.content_kind = 'post'
+    WHERE p.status = 'published' AND p.deleted_at IS NULL AND p.content_kind = 'post'
     ORDER BY ps.{ORDER_COL} DESC
     LIMIT 5
 "#;
@@ -216,7 +216,7 @@ impl DashboardService for DashboardServiceImpl {
     async fn get_overview(&self, _cmd: GetOverviewCommand) -> Result<DashboardOverview, UserError> {
         // --- Scalar counts ---
         let total_published: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM posts WHERE status = 'published' AND content_kind = 'post'",
+            "SELECT COUNT(*) FROM posts WHERE status = 'published' AND deleted_at IS NULL AND content_kind = 'post'",
         )
         .fetch_one(&self.pool)
         .await?;
