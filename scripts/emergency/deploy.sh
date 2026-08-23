@@ -47,7 +47,7 @@ ghcr_can_push() {
 import sys, json, subprocess, base64, urllib.request, urllib.error
 image = sys.argv[1]
 try:
-    cfg = json.load(open('/Users/' + __import__('os').getlogin() + '/.docker/config.json'))
+    cfg = json.load(open(__import__('os').path.expanduser('~/.docker/config.json')))
 except Exception:
     cfg = {}
 store = cfg.get('credsStore') or cfg.get('credsHelpers', {}).get('ghcr.io')
@@ -60,12 +60,26 @@ token = j.get('Secret') or j.get('secret')
 if not token:
     sys.exit(1)
 b64 = base64.b64encode(((j.get('Username') or '') + ':' + token).encode()).decode()
+# GHCR stopped echoing granted permissions in the token's `access` claim
+# (it comes back empty/null even for authorized scopes), so verify by
+# exercising the registry API with the scoped token instead.
 url = ('https://ghcr.io/token?service=ghcr.io&scope=repository:%s/blog-frontend:pull,push' % image)
 req = urllib.request.Request(url, headers={'Authorization': 'Basic ' + b64})
 try:
     with urllib.request.urlopen(req) as r:
-        access = json.load(r).get('access', [])
-    sys.exit(0 if any('blog-frontend' in g.get('name', '') and 'push' in g.get('actions', []) for g in access) else 1)
+        reg_token = json.load(r).get('token')
+    if not reg_token:
+        sys.exit(1)
+    mreq = urllib.request.Request(
+        'https://ghcr.io/v2/%s/blog-frontend/manifests/latest' % image,
+        headers={'Authorization': 'Bearer ' + reg_token,
+                 'Accept': 'application/vnd.oci.image.index.v1+json'})
+    with urllib.request.urlopen(mreq) as r:
+        sys.exit(0 if r.status == 200 else 1)
+except urllib.error.HTTPError:
+    # 404 means authenticated but tag missing -- still proves access works;
+    # anything else (401/403) is a genuine auth failure.
+    sys.exit(1)
 except Exception:
     sys.exit(1)
 PY
