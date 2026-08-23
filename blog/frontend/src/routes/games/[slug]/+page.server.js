@@ -7,12 +7,12 @@ import { error } from '@sveltejs/kit';
 const md = createMarkdownRenderer();
 
 export async function load({ fetch, params, url, setHeaders }) {
-	const res = await fetch(route(`projects/s/${params.slug}`), {
+	const res = await fetch(route(`games/s/${params.slug}`), {
 		method: 'GET'
 	});
 
 	if (!res.ok) {
-		throw error(404, 'Project not found');
+		throw error(404, 'Game not found');
 	}
 
 	setHeaders({
@@ -30,6 +30,7 @@ export async function load({ fetch, params, url, setHeaders }) {
 		medium_urls,
 		medium_short_names,
 		demo_url,
+		jsdos_bundle_url,
 		...rest
 	} = data;
 
@@ -38,26 +39,21 @@ export async function load({ fetch, params, url, setHeaders }) {
 	cover_video_url = fixClientRoute(cover_video_url);
 	og_image_url = fixClientRoute(og_image_url);
 	demo_url = fixClientRoute(demo_url);
-	if (rest.delegated_game) {
-		rest.delegated_game.demo_url = fixClientRoute(rest.delegated_game.demo_url);
-		if (rest.delegated_game.jsdos_bundle_url) {
-			rest.delegated_game.jsdos_bundle_url = fixClientRoute(rest.delegated_game.jsdos_bundle_url);
+	jsdos_bundle_url = fixClientRoute(jsdos_bundle_url);
+	if (rest.v86_runtime) {
+		rest.v86_runtime.base_url = fixClientRoute(rest.v86_runtime.base_url);
+		rest.v86_runtime.iso_url = fixClientRoute(rest.v86_runtime.iso_url);
+		rest.v86_runtime.game_url = fixClientRoute(rest.v86_runtime.game_url);
+		if (rest.v86_runtime.snapshot_url) {
+			rest.v86_runtime.snapshot_url = fixClientRoute(rest.v86_runtime.snapshot_url);
 		}
-		const runtime = rest.delegated_game.v86_runtime;
-		if (runtime) {
-			runtime.base_url = fixClientRoute(runtime.base_url);
-			runtime.iso_url = fixClientRoute(runtime.iso_url);
-			runtime.game_url = fixClientRoute(runtime.game_url);
-			if (runtime.snapshot_url) {
-				runtime.snapshot_url = fixClientRoute(runtime.snapshot_url);
-			}
-			runtime.variants = runtime.variants?.map((variant) => ({
-				...variant,
-				iso_url: fixClientRoute(variant.iso_url),
-				snapshot_url: variant.snapshot_url ? fixClientRoute(variant.snapshot_url) : undefined
-			}));
-		}
+		rest.v86_runtime.variants = rest.v86_runtime.variants?.map((variant) => ({
+			...variant,
+			iso_url: fixClientRoute(variant.iso_url),
+			snapshot_url: variant.snapshot_url ? fixClientRoute(variant.snapshot_url) : undefined
+		}));
 	}
+	rest.related_games = rest.related_games ?? [];
 
 	const mediaDictionary = buildMediaDictionary(medium_urls, medium_short_names, fixClientRoute);
 
@@ -71,6 +67,7 @@ export async function load({ fetch, params, url, setHeaders }) {
 		cover_video_type,
 		og_image_url,
 		demo_url,
+		jsdos_bundle_url,
 		initialVariant: url.searchParams.get('variant'),
 		...rest
 	};

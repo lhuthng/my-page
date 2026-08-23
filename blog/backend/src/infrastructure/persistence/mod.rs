@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod analytics;
 pub mod dashboard;
+pub mod game;
 pub mod image_convert;
 pub mod media;
 pub mod newsletter;

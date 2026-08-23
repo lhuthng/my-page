@@ -24,7 +24,10 @@ use crate::{
     domain::{entities::secret::Claims, errors::project::ProjectError},
     infrastructure::{
         storage::r2::R2Client,
-        web::server::AppState,
+        web::{
+            api::handlers::game::require_game_owner,
+            server::AppState,
+        },
     },
 };
 
@@ -195,7 +198,7 @@ pub struct ChunkUploadResponse {
 
 #[derive(Deserialize)]
 pub struct StartSnapshotUploadRequest {
-    pub project_id: i64,
+    pub game_id: i64,
     /// 0 captures the project-wide machine with no disc in the drive; a
     /// variant index captures that variant's launcher CD already mounted.
     /// The player has to rebuild the same topology, so this decides whether
@@ -760,22 +763,6 @@ fn dir_size(root: &Path) -> u64 {
     total
 }
 
-async fn require_project_owner(
-    state: &AppState,
-    project_id: i64,
-    uploader_id: i64,
-) -> Result<(), ProjectError> {
-    let owner: Option<i64> = sqlx::query_scalar(
-        "SELECT posts.user_id FROM projects JOIN posts ON posts.id = projects.post_id WHERE projects.id = ?",
-    )
-    .bind(project_id)
-    .fetch_optional(&state.project_service.pool)
-    .await?;
-    if owner != Some(uploader_id) {
-        return Err(ProjectError::Forbidden);
-    }
-    Ok(())
-}
 
 pub async fn list_systems(
     State(state): State<Arc<AppState>>,
@@ -783,13 +770,13 @@ pub async fn list_systems(
     let rows = sqlx::query(
         r#"SELECT s.id, s.name, s.platform_key, s.is_active, s.is_default,
                   s.current_version,
-                  COUNT(g.project_id) AS project_count,
+                  COUNT(g.game_id) AS project_count,
                   SUM(CASE WHEN posts.status = 'published' THEN 1 ELSE 0 END) AS published_count
            FROM v86_systems s
            LEFT JOIN v86_system_versions v ON v.system_id = s.id
-           LEFT JOIN project_v86_games g ON g.system_version_id = v.id
-           LEFT JOIN projects p ON p.id = g.project_id
-           LEFT JOIN posts ON posts.id = p.post_id
+           LEFT JOIN game_v86_games g ON g.system_version_id = v.id
+           LEFT JOIN games gm ON gm.id = g.game_id
+           LEFT JOIN posts ON posts.id = gm.post_id
            GROUP BY s.id ORDER BY s.name"#,
     )
     .fetch_all(&state.project_service.pool)
@@ -1525,13 +1512,13 @@ pub async fn delete_system_version(
     AxumPath((system_id, version_id)): AxumPath<(i64, i64)>,
 ) -> Result<StatusCode, ProjectError> {
     let usage: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM project_v86_games WHERE system_version_id = ?")
+        sqlx::query_scalar("SELECT COUNT(*) FROM game_v86_games WHERE system_version_id = ?")
             .bind(version_id)
             .fetch_one(&state.project_service.pool)
             .await?;
     if usage > 0 {
         return Err(ProjectError::Conflict(format!(
-            "This system version is used by {usage} project(s) and cannot be deleted."
+            "This system version is used by {usage} game(s) and cannot be deleted."
         )));
     }
     let row = sqlx::query(
@@ -1581,7 +1568,7 @@ pub async fn delete_system(
     AxumPath(system_id): AxumPath<i64>,
 ) -> Result<StatusCode, ProjectError> {
     let usage: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM project_v86_games g
+        r#"SELECT COUNT(*) FROM game_v86_games g
            JOIN v86_system_versions v ON v.id = g.system_version_id
            WHERE v.system_id = ?"#,
     )
@@ -1590,7 +1577,7 @@ pub async fn delete_system(
     .await?;
     if usage > 0 {
         return Err(ProjectError::Conflict(format!(
-            "This system is referenced by {usage} project(s); deactivate it instead."
+            "This system is referenced by {usage} game(s); deactivate it instead."
         )));
     }
     let keys: Vec<String> =
@@ -1651,7 +1638,7 @@ pub async fn start_game_upload(
     let uploader_id = user_id(&claims)?;
     let manifest_sha = validate_manifest(&request.manifest)?;
     let active: Option<i64> = sqlx::query_scalar(
-        "SELECT v.id FROM v86_system_versions v JOIN v86_systems s ON s.id = v.system_id WHERE v.id = ? AND (s.is_active = 1 OR EXISTS (SELECT 1 FROM project_v86_games g WHERE g.system_version_id = v.id AND g.project_id = ?))",
+        "SELECT v.id FROM v86_system_versions v JOIN v86_systems s ON s.id = v.system_id WHERE v.id = ? AND (s.is_active = 1 OR EXISTS (SELECT 1 FROM game_v86_games g WHERE g.system_version_id = v.id AND g.game_id = ?))",
     )
     .bind(request.system_version_id)
     .bind(request.source_project_id)
@@ -1674,12 +1661,12 @@ pub async fn start_game_upload(
     let chunk_size = state.project_demo_config.v86_download_chunk_size;
     let max_disk = state.project_demo_config.max_v86_game_extracted_size.saturating_mul(2);
 
-    // When editing an existing project, the stored artifact resolves the
+    // When editing an existing game, the stored artifact resolves the
     // manifest-only fast path (no new ZIP) and validates the revision.
     let stored = match request.source_project_id {
-        Some(project_id) => {
-            require_project_owner(&state, project_id, uploader_id).await?;
-            let artifact = fetch_stored_game_artifact(&state.project_service.pool, project_id)
+        Some(game_id) => {
+            require_game_owner(&state, game_id, uploader_id).await?;
+            let artifact = fetch_stored_game_artifact(&state.project_service.pool, game_id)
                 .await
                 .map_err(ProjectError::InternalError)?
                 .ok_or(ProjectError::ProjectNotFound)?;
@@ -1704,7 +1691,7 @@ pub async fn start_game_upload(
                 ));
             }
             let existing: Option<i64> = sqlx::query_scalar(
-                "SELECT chunk_count FROM project_v86_games
+                "SELECT chunk_count FROM game_v86_games
                  WHERE disk_sha256 = ? AND disk_storage_key IS NOT NULL LIMIT 1",
             )
             .bind(&plan.sha256)
@@ -1760,9 +1747,9 @@ pub async fn start_game_upload(
         }
         let existing: Option<String> = sqlx::query_scalar(
             r#"SELECT iso_storage_key FROM (
-                 SELECT g.iso_storage_key FROM project_v86_games g WHERE g.iso_sha256 = ?
+                 SELECT g.iso_storage_key FROM game_v86_games g WHERE g.iso_sha256 = ?
                  UNION
-                 SELECT v.iso_storage_key FROM project_v86_variants v WHERE v.iso_sha256 = ?
+                 SELECT v.iso_storage_key FROM game_v86_variants v WHERE v.iso_sha256 = ?
                ) LIMIT 1"#,
         )
         .bind(&plan.sha256)
@@ -1969,13 +1956,13 @@ struct StoredGameArtifact {
 
 async fn fetch_stored_game_artifact(
     pool: &sqlx::SqlitePool,
-    project_id: i64,
+    game_id: i64,
 ) -> Result<Option<StoredGameArtifact>, String> {
     let row = sqlx::query(
         r#"SELECT artifact_revision, disk_sha256, disk_size_bytes, chunk_count
-           FROM project_v86_games WHERE project_id = ?"#,
+           FROM game_v86_games WHERE game_id = ?"#,
     )
-    .bind(project_id)
+    .bind(game_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -2082,7 +2069,7 @@ pub async fn complete_game_upload(
 
 pub async fn attach_ready_game_tx(
     tx: &mut Transaction<'_, Sqlite>,
-    project_id: i64,
+    game_id: i64,
     uploader_id: i64,
     upload_id: &str,
     chunk_size: u64,
@@ -2109,14 +2096,14 @@ pub async fn attach_ready_game_tx(
         ));
     }
     let source_project: Option<i64> = row.get("source_project_id");
-    if source_project.is_some() && source_project != Some(project_id) {
+    if source_project.is_some() && source_project != Some(game_id) {
         return Err(ProjectError::Forbidden);
     }
     let expected: i64 = row.get("expected_artifact_revision");
     let current: i64 = sqlx::query_scalar(
-        "SELECT COALESCE((SELECT artifact_revision FROM project_v86_games WHERE project_id = ?), 0)",
+        "SELECT COALESCE((SELECT artifact_revision FROM game_v86_games WHERE game_id = ?), 0)",
     )
-    .bind(project_id)
+    .bind(game_id)
     .fetch_one(&mut **tx)
     .await?;
     if current != expected {
@@ -2126,16 +2113,19 @@ pub async fn attach_ready_game_tx(
     }
     let revision = current + 1;
     let artifact_change = sqlx::query(
-        r#"INSERT INTO project_v86_games
-           (project_id, system_version_id, manifest_text, manifest_sha256,
+        r#"INSERT INTO game_v86_games
+           (game_id, system_version_id, manifest_text, manifest_sha256,
+            launcher_config_sha256, game_config_sha256,
             disk_storage_key, disk_size_bytes, disk_sha256,
             iso_storage_key, iso_size_bytes, iso_sha256, chunk_size_bytes,
             chunk_count, artifact_revision)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(project_id) DO UPDATE SET
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(game_id) DO UPDATE SET
              system_version_id = excluded.system_version_id,
              manifest_text = excluded.manifest_text,
              manifest_sha256 = excluded.manifest_sha256,
+             launcher_config_sha256 = excluded.launcher_config_sha256,
+             game_config_sha256 = excluded.game_config_sha256,
              disk_storage_key = excluded.disk_storage_key,
              disk_size_bytes = excluded.disk_size_bytes,
              disk_sha256 = excluded.disk_sha256,
@@ -2146,11 +2136,13 @@ pub async fn attach_ready_game_tx(
              chunk_count = excluded.chunk_count,
              artifact_revision = excluded.artifact_revision,
              updated_at = CURRENT_TIMESTAMP
-           WHERE project_v86_games.artifact_revision = ?"#,
+           WHERE game_v86_games.artifact_revision = ?"#,
     )
-    .bind(project_id)
+    .bind(game_id)
     .bind(row.get::<i64, _>("system_version_id"))
     .bind(row.get::<String, _>("manifest_text"))
+    .bind(row.get::<String, _>("manifest_sha256"))
+    .bind(row.get::<String, _>("manifest_sha256"))
     .bind(row.get::<String, _>("manifest_sha256"))
     .bind(row.get::<Option<String>, _>("staged_disk_storage_key"))
     .bind(row.get::<Option<i64>, _>("staged_disk_size_bytes"))
@@ -2169,19 +2161,19 @@ pub async fn attach_ready_game_tx(
             "The v86 artifact changed while this package was building.".to_string(),
         ));
     }
-    // Replace the project's variant CDs with the newly staged set. Variant 1
-    // mirrors the iso_* columns on project_v86_games (kept for compatibility).
-    sqlx::query("DELETE FROM project_v86_variants WHERE project_id = ?")
-        .bind(project_id)
+    // Replace the game's variant CDs with the newly staged set. Variant 1
+    // mirrors the iso_* columns on game_v86_games (kept for compatibility).
+    sqlx::query("DELETE FROM game_v86_variants WHERE game_id = ?")
+        .bind(game_id)
         .execute(&mut **tx)
         .await?;
     sqlx::query(
-        r#"INSERT INTO project_v86_variants
-           (project_id, variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256)
+        r#"INSERT INTO game_v86_variants
+           (game_id, variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256)
            SELECT ?, variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256
            FROM project_v86_staged_variants WHERE upload_id = ?"#,
     )
-    .bind(project_id)
+    .bind(game_id)
     .bind(upload_id)
     .execute(&mut **tx)
     .await?;
@@ -2197,32 +2189,6 @@ pub async fn attach_ready_game_tx(
         ));
     }
     Ok(revision)
-}
-
-pub async fn attach_ready_game(
-    State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<Claims>,
-    AxumPath((project_id, upload_id)): AxumPath<(i64, String)>,
-) -> Result<Json<serde_json::Value>, ProjectError> {
-    let uploader_id = user_id(&claims)?;
-    require_project_owner(&state, project_id, uploader_id).await?;
-    let mut tx = state.project_service.pool.begin().await?;
-    let revision = attach_ready_game_tx(
-        &mut tx,
-        project_id,
-        uploader_id,
-        &upload_id,
-        state.project_demo_config.v86_download_chunk_size,
-    )
-    .await?;
-    sqlx::query(
-        "UPDATE projects SET demo_type = 'v86', demo_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-    )
-    .bind(project_id)
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await?;
-    Ok(Json(serde_json::json!({ "artifact_revision": revision })))
 }
 
 pub async fn abort_game_upload(
@@ -2298,12 +2264,12 @@ pub async fn get_game_upload_status(
     }))
 }
 
-/// How to locate the project behind a runtime descriptor. The public player
-/// resolves a published slug; the admin snapshot studio resolves a project by
+/// How to locate the game behind a runtime descriptor. The public player
+/// resolves a published slug; the admin snapshot studio resolves a game by
 /// id so it can also work on drafts.
 pub enum RuntimeLookup<'a> {
     PublishedSlug(&'a str),
-    ProjectId(i64),
+    GameId(i64),
 }
 
 pub async fn runtime_descriptor(
@@ -2322,28 +2288,28 @@ pub async fn runtime_descriptor_for(
 ) -> Result<Option<V86RuntimeDescriptor>, ProjectError> {
     let filter = match lookup {
         RuntimeLookup::PublishedSlug(_) => "posts.slug = ? AND posts.status = 'published'",
-        RuntimeLookup::ProjectId(_) => "g.project_id = ?",
+        RuntimeLookup::GameId(_) => "g.game_id = ?",
     };
     let sql = format!(
         r#"SELECT s.name AS system_name, s.platform_key, v.id AS system_version_id,
                   v.storage_key AS base_storage_key,
                   v.size_bytes AS base_size, v.sha256 AS base_sha,
-                  g.project_id, g.disk_size_bytes, g.disk_sha256,
+                  g.game_id, g.disk_size_bytes, g.disk_sha256,
                   g.iso_size_bytes, g.iso_sha256, g.manifest_text, g.manifest_sha256,
                   g.chunk_size_bytes, g.artifact_revision,
                   posts.slug AS slug,
-                  p.demo_width, p.demo_height
-           FROM project_v86_games g
-           JOIN projects p ON p.id = g.project_id
-           JOIN posts ON posts.id = p.post_id
+                  gm.demo_width, gm.demo_height
+           FROM game_v86_games g
+           JOIN games gm ON gm.id = g.game_id
+           JOIN posts ON posts.id = gm.post_id
            JOIN v86_system_versions v ON v.id = g.system_version_id
            JOIN v86_systems s ON s.id = v.system_id
-           WHERE {filter} AND p.demo_type = 'v86'"#
+           WHERE {filter} AND gm.launcher_type = 'v86'"#
     );
     let query = sqlx::query(&sql);
     let query = match lookup {
         RuntimeLookup::PublishedSlug(slug) => query.bind(slug),
-        RuntimeLookup::ProjectId(id) => query.bind(id),
+        RuntimeLookup::GameId(id) => query.bind(id),
     };
     let row = query.fetch_optional(pool).await?;
     let Some(row) = row else { return Ok(None) };
@@ -2354,15 +2320,15 @@ pub async fn runtime_descriptor_for(
     let base_storage_key: String = row.get("base_storage_key");
     let game_sha: String = row.get("disk_sha256");
     let iso_sha: String = row.get("iso_sha256");
-    let project_id: i64 = row.get("project_id");
+    let game_id: i64 = row.get("game_id");
     let save_supported = has_save_paths(&row.get::<String, _>("manifest_text"));
 
     // Per-variant autorun CDs. Always at least one row (backfilled on migrate).
     let variant_rows = sqlx::query(
         r#"SELECT variant_index, name, exe, args, iso_storage_key, iso_size_bytes, iso_sha256
-           FROM project_v86_variants WHERE project_id = ? ORDER BY variant_index"#,
+           FROM game_v86_variants WHERE game_id = ? ORDER BY variant_index"#,
     )
-    .bind(project_id)
+    .bind(game_id)
     .fetch_all(pool)
     .await?;
     let iso_url_for = |sha: &str| match r2_public_url {
@@ -2370,7 +2336,7 @@ pub async fn runtime_descriptor_for(
             let base = r2.trim_end_matches('/');
             format!("{base}/v86/games/{sha}/full.iso")
         }
-        None => format!("projects/s/{slug}/v86/{sha}/full.iso"),
+        None => format!("games/s/{slug}/v86/{sha}/full.iso"),
     };
     let snapshot_url_for = |sha: &str| match r2_public_url {
         Some(r2) => {
@@ -2387,16 +2353,16 @@ pub async fn runtime_descriptor_for(
         false => HashMap::new(),
         true => sqlx::query(
             r#"SELECT s.variant_index, s.sha256, s.size_bytes
-               FROM project_v86_snapshots s
-               JOIN project_v86_variants v
-                 ON v.project_id = s.project_id AND v.variant_index = s.variant_index
-               WHERE s.project_id = ? AND s.variant_index > 0
+               FROM game_v86_snapshots s
+               JOIN game_v86_variants v
+                 ON v.game_id = s.game_id AND v.variant_index = s.variant_index
+               WHERE s.game_id = ? AND s.variant_index > 0
                  AND s.system_version_id = ? AND s.game_disk_sha256 = ?
                  AND s.iso_sha256 = v.iso_sha256
                  AND s.state_version = ? AND s.topology_version = ?
                  AND s.memory_size = ? AND s.vga_memory_size = ?"#,
         )
-        .bind(project_id)
+        .bind(game_id)
         .bind(version_id)
         .bind(&game_sha)
         .bind(V86_STATE_VERSION)
@@ -2449,8 +2415,8 @@ pub async fn runtime_descriptor_for(
         }
         None => (
             format!("{base_storage_key}/.img.zst"),
-            format!("projects/s/{slug}/v86/disk/{game_sha}/.img.zst"),
-            format!("projects/s/{slug}/v86/{iso_sha}/full.iso"),
+            format!("games/s/{slug}/v86/disk/{game_sha}/.img.zst"),
+            format!("games/s/{slug}/v86/{iso_sha}/full.iso"),
         ),
     };
 
@@ -2462,13 +2428,13 @@ pub async fn runtime_descriptor_for(
         false => None,
         true => {
             sqlx::query(
-                r#"SELECT sha256, size_bytes FROM project_v86_snapshots
-                   WHERE project_id = ? AND variant_index = 0
+                r#"SELECT sha256, size_bytes FROM game_v86_snapshots
+                   WHERE game_id = ? AND variant_index = 0
                      AND system_version_id = ? AND game_disk_sha256 = ?
                      AND state_version = ? AND topology_version = ?
                      AND memory_size = ? AND vga_memory_size = ?"#,
             )
-            .bind(project_id)
+            .bind(game_id)
             .bind(version_id)
             .bind(&game_sha)
             .bind(V86_STATE_VERSION)
@@ -2556,18 +2522,18 @@ fn validate_sha256_hex(value: &str) -> Result<(), ProjectError> {
     Ok(())
 }
 
-/// Runtime descriptor for the admin snapshot studio. Resolves by project id so
+/// Runtime descriptor for the admin snapshot studio. Resolves by game id so
 /// drafts work, and always omits the snapshot: capture must start from a cold
 /// boot, never from a previously captured state.
-pub async fn get_project_capture_runtime(
+pub async fn get_game_capture_runtime(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    AxumPath(project_id): AxumPath<i64>,
+    AxumPath(game_id): AxumPath<i64>,
 ) -> Result<Json<V86RuntimeDescriptor>, ProjectError> {
-    require_project_owner(&state, project_id, user_id(&claims)?).await?;
+    require_game_owner(&state, game_id, user_id(&claims)?).await?;
     runtime_descriptor_for(
         &state.project_service.pool,
-        RuntimeLookup::ProjectId(project_id),
+        RuntimeLookup::GameId(game_id),
         state.config.r2_public_url.as_deref(),
         false,
     )
@@ -2576,14 +2542,14 @@ pub async fn get_project_capture_runtime(
     .ok_or(ProjectError::ProjectNotFound)
 }
 
-pub async fn get_project_snapshot(
+pub async fn get_game_snapshot(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    AxumPath(project_id): AxumPath<i64>,
+    AxumPath(game_id): AxumPath<i64>,
 ) -> Result<Json<Vec<SnapshotStatusResponse>>, ProjectError> {
-    require_project_owner(&state, project_id, user_id(&claims)?).await?;
+    require_game_owner(&state, game_id, user_id(&claims)?).await?;
     // A variant row is only fresh if its disc still matches too, so the join
-    // to project_v86_variants is deliberately left (a deleted variant leaves
+    // to game_v86_variants is deliberately left (a deleted variant leaves
     // its snapshot present but stale rather than hiding it).
     let rows = sqlx::query(
         r#"SELECT s.variant_index, s.size_bytes, s.raw_size_bytes, s.created_at,
@@ -2594,18 +2560,18 @@ pub async fn get_project_snapshot(
                    AND s.memory_size = ?
                    AND s.vga_memory_size = ?
                    AND (s.variant_index = 0 OR s.iso_sha256 = v.iso_sha256)) AS fresh
-           FROM project_v86_snapshots s
-           JOIN project_v86_games g ON g.project_id = s.project_id
-           LEFT JOIN project_v86_variants v
-             ON v.project_id = s.project_id AND v.variant_index = s.variant_index
-           WHERE s.project_id = ?
+           FROM game_v86_snapshots s
+           JOIN game_v86_games g ON g.game_id = s.game_id
+           LEFT JOIN game_v86_variants v
+             ON v.game_id = s.game_id AND v.variant_index = s.variant_index
+           WHERE s.game_id = ?
            ORDER BY s.variant_index"#,
     )
     .bind(V86_STATE_VERSION)
     .bind(V86_TOPOLOGY_VERSION)
     .bind(V86_MEMORY_SIZE as i64)
     .bind(V86_VGA_MEMORY_SIZE as i64)
-    .bind(project_id)
+    .bind(game_id)
     .fetch_all(&state.project_service.pool)
     .await?;
     Ok(Json(
@@ -2628,7 +2594,7 @@ pub async fn start_snapshot_upload(
     Json(request): Json<StartSnapshotUploadRequest>,
 ) -> Result<Json<StartUploadResponse>, ProjectError> {
     let uploader_id = user_id(&claims)?;
-    require_project_owner(&state, request.project_id, uploader_id).await?;
+    require_game_owner(&state, request.game_id, uploader_id).await?;
     validate_sha256_hex(&request.sha256)?;
     validate_sha256_hex(&request.game_disk_sha256)?;
 
@@ -2659,12 +2625,12 @@ pub async fn start_snapshot_upload(
         ));
     }
 
-    // The snapshot embeds dirty blocks from these exact disks; if the project
+    // The snapshot embeds dirty blocks from these exact disks; if the game
     // has been re-uploaded since capture started, the state is already void.
     let game = sqlx::query(
-        "SELECT system_version_id, disk_sha256 FROM project_v86_games WHERE project_id = ?",
+        "SELECT system_version_id, disk_sha256 FROM game_v86_games WHERE game_id = ?",
     )
-    .bind(request.project_id)
+    .bind(request.game_id)
     .fetch_optional(&state.project_service.pool)
     .await?
     .ok_or(ProjectError::ProjectNotFound)?;
@@ -2673,14 +2639,14 @@ pub async fn start_snapshot_upload(
         || current_disk_sha.as_deref() != Some(request.game_disk_sha256.as_str())
     {
         return Err(ProjectError::Conflict(
-            "The project's disks changed while this snapshot was being captured. Recapture it."
+            "The game's disks changed while this snapshot was being captured. Recapture it."
                 .to_string(),
         ));
     }
 
     // A variant snapshot holds a machine with that variant's disc mounted, so
     // it is only replayable against the identical disc. Index 0 is the
-    // project-wide capture and must have no disc at all.
+    // game-wide capture and must have no disc at all.
     if request.variant_index < 0 {
         return Err(ProjectError::InvalidDemo(
             "The variant index cannot be negative.".to_string(),
@@ -2689,7 +2655,7 @@ pub async fn start_snapshot_upload(
     if request.variant_index == 0 {
         if request.iso_sha256.is_some() {
             return Err(ProjectError::InvalidDemo(
-                "A project-wide snapshot is captured with no disc, so it cannot record one."
+                "A game-wide snapshot is captured with no disc, so it cannot record one."
                     .to_string(),
             ));
         }
@@ -2701,16 +2667,16 @@ pub async fn start_snapshot_upload(
         })?;
         validate_sha256_hex(iso_sha)?;
         let current_iso_sha: Option<String> = sqlx::query_scalar(
-            "SELECT iso_sha256 FROM project_v86_variants WHERE project_id = ? AND variant_index = ?",
+            "SELECT iso_sha256 FROM game_v86_variants WHERE game_id = ? AND variant_index = ?",
         )
-        .bind(request.project_id)
+        .bind(request.game_id)
         .bind(request.variant_index)
         .fetch_optional(&state.project_service.pool)
         .await?;
         match current_iso_sha {
             None => {
                 return Err(ProjectError::InvalidDemo(
-                    "That launch variant does not exist for this project.".to_string(),
+                    "That launch variant does not exist for this game.".to_string(),
                 ));
             }
             Some(current) if current != iso_sha => {
@@ -2739,8 +2705,8 @@ pub async fn start_snapshot_upload(
     let expires_at =
         Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
     sqlx::query(
-        r#"INSERT INTO v86_snapshot_upload_sessions
-           (id, uploader_id, project_id, variant_index, iso_sha256,
+        r#"INSERT INTO game_v86_snapshot_upload_sessions
+           (id, uploader_id, game_id, variant_index, iso_sha256,
             system_version_id, game_disk_sha256,
             raw_size_bytes, sha256, state_version, memory_size, vga_memory_size,
             expected_size_bytes, upload_chunk_size_bytes, temp_storage_key,
@@ -2749,9 +2715,9 @@ pub async fn start_snapshot_upload(
     )
     .bind(&upload_id)
     .bind(uploader_id)
-    .bind(request.project_id)
+    .bind(request.game_id)
     .bind(request.variant_index)
-    .bind(&request.iso_sha256)
+    .bind(request.iso_sha256.clone().unwrap_or_default())
     .bind(request.system_version_id)
     .bind(&request.game_disk_sha256)
     .bind(request.raw_size_bytes as i64)
@@ -2791,7 +2757,7 @@ pub async fn append_snapshot_chunk(
     Ok(Json(
         append_upload_chunk(
             &state,
-            "v86_snapshot_upload_sessions",
+            "game_v86_snapshot_upload_sessions",
             &upload_id,
             user_id(&claims)?,
             chunk_index,
@@ -2803,7 +2769,7 @@ pub async fn append_snapshot_chunk(
 
 async fn fail_snapshot_session(state: &AppState, upload_id: &str, message: &str) {
     sqlx::query(
-        "UPDATE v86_snapshot_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE game_v86_snapshot_upload_sessions SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
     .bind(message)
     .bind(upload_id)
@@ -2823,12 +2789,12 @@ pub async fn complete_snapshot_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        r#"SELECT project_id, variant_index, iso_sha256, system_version_id,
+        r#"SELECT game_id, variant_index, iso_sha256, system_version_id,
                   game_disk_sha256, raw_size_bytes, sha256,
                   state_version, memory_size, vga_memory_size, expected_size_bytes,
                   received_size_bytes, temp_storage_key, r2_upload_id, r2_part_etags,
                   status, expires_at
-           FROM v86_snapshot_upload_sessions WHERE id = ? AND uploader_id = ?"#,
+           FROM game_v86_snapshot_upload_sessions WHERE id = ? AND uploader_id = ?"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -2843,8 +2809,8 @@ pub async fn complete_snapshot_upload(
             "The snapshot upload is incomplete.".to_string(),
         ));
     }
-    let project_id: i64 = row.get("project_id");
-    require_project_owner(&state, project_id, uploader_id).await?;
+    let game_id: i64 = row.get("game_id");
+    require_game_owner(&state, game_id, uploader_id).await?;
 
     let r2 = require_r2(&state)?;
     let temp_key: String = row.get("temp_storage_key");
@@ -2878,9 +2844,9 @@ pub async fn complete_snapshot_upload(
     // Re-check the disk pinning: the game disk may have been replaced while
     // the (slow) compress + upload was in flight.
     let game = sqlx::query(
-        "SELECT system_version_id, disk_sha256 FROM project_v86_games WHERE project_id = ?",
+        "SELECT system_version_id, disk_sha256 FROM game_v86_games WHERE game_id = ?",
     )
-    .bind(project_id)
+    .bind(game_id)
     .fetch_optional(&state.project_service.pool)
     .await?
     .ok_or(ProjectError::ProjectNotFound)?;
@@ -2890,7 +2856,7 @@ pub async fn complete_snapshot_upload(
         || current_disk_sha.as_deref() != Some(game_disk_sha.as_str())
     {
         let _ = r2.delete_object(&temp_key).await;
-        let message = "The project's disks changed while this snapshot was uploading.";
+        let message = "The game's disks changed while this snapshot was uploading.";
         fail_snapshot_session(&state, &upload_id, message).await;
         return Err(ProjectError::Conflict(message.to_string()));
     }
@@ -2900,9 +2866,9 @@ pub async fn complete_snapshot_upload(
     let iso_sha: Option<String> = row.get("iso_sha256");
     if variant_index > 0 {
         let current_iso_sha: Option<String> = sqlx::query_scalar(
-            "SELECT iso_sha256 FROM project_v86_variants WHERE project_id = ? AND variant_index = ?",
+            "SELECT iso_sha256 FROM game_v86_variants WHERE game_id = ? AND variant_index = ?",
         )
-        .bind(project_id)
+        .bind(game_id)
         .bind(variant_index)
         .fetch_optional(&state.project_service.pool)
         .await?;
@@ -2921,22 +2887,22 @@ pub async fn complete_snapshot_upload(
     let _ = r2.delete_object(&temp_key).await;
 
     let previous_key: Option<String> = sqlx::query_scalar(
-        "SELECT storage_key FROM project_v86_snapshots WHERE project_id = ? AND variant_index = ?",
+        "SELECT storage_key FROM game_v86_snapshots WHERE game_id = ? AND variant_index = ?",
     )
-    .bind(project_id)
+    .bind(game_id)
     .bind(variant_index)
     .fetch_optional(&state.project_service.pool)
     .await?
     .flatten();
 
     sqlx::query(
-        r#"INSERT INTO project_v86_snapshots
-           (project_id, variant_index, iso_sha256, system_version_id, game_disk_sha256,
+        r#"INSERT INTO game_v86_snapshots
+           (game_id, variant_index, iso_sha256, system_version_id, game_disk_sha256,
             storage_key, size_bytes,
             raw_size_bytes, sha256, state_version, topology_version,
             memory_size, vga_memory_size, created_by)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(project_id, variant_index) DO UPDATE SET
+           ON CONFLICT(game_id, variant_index) DO UPDATE SET
              iso_sha256 = excluded.iso_sha256,
              topology_version = excluded.topology_version,
              system_version_id = excluded.system_version_id,
@@ -2951,9 +2917,9 @@ pub async fn complete_snapshot_upload(
              created_by = excluded.created_by,
              updated_at = CURRENT_TIMESTAMP"#,
     )
-    .bind(project_id)
+    .bind(game_id)
     .bind(variant_index)
-    .bind(&iso_sha)
+    .bind(iso_sha.clone().unwrap_or_default())
     .bind(row.get::<i64, _>("system_version_id"))
     .bind(&game_disk_sha)
     .bind(&storage_key)
@@ -2969,7 +2935,7 @@ pub async fn complete_snapshot_upload(
     .await?;
 
     sqlx::query(
-        "UPDATE v86_snapshot_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE game_v86_snapshot_upload_sessions SET status = 'consumed', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
     .bind(&upload_id)
     .execute(&state.project_service.pool)
@@ -2982,7 +2948,7 @@ pub async fn complete_snapshot_upload(
     if let Some(previous) = previous_key {
         if previous != storage_key {
             let still_referenced: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM project_v86_snapshots WHERE storage_key = ?",
+                "SELECT COUNT(*) FROM game_v86_snapshots WHERE storage_key = ?",
             )
             .bind(&previous)
             .fetch_one(&state.project_service.pool)
@@ -3003,7 +2969,7 @@ pub async fn abort_snapshot_upload(
 ) -> Result<StatusCode, ProjectError> {
     let uploader_id = user_id(&claims)?;
     let row = sqlx::query(
-        "SELECT temp_storage_key, r2_upload_id, status FROM v86_snapshot_upload_sessions WHERE id = ? AND uploader_id = ?",
+        "SELECT temp_storage_key, r2_upload_id, status FROM game_v86_snapshot_upload_sessions WHERE id = ? AND uploader_id = ?",
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -3021,7 +2987,7 @@ pub async fn abort_snapshot_upload(
         }
     }
     sqlx::query(
-        "UPDATE v86_snapshot_upload_sessions SET status = 'aborted', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        "UPDATE game_v86_snapshot_upload_sessions SET status = 'aborted', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     )
     .bind(&upload_id)
     .execute(&state.project_service.pool)
@@ -3029,29 +2995,29 @@ pub async fn abort_snapshot_upload(
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn delete_project_snapshot(
+pub async fn delete_game_snapshot(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    AxumPath((project_id, variant_index)): AxumPath<(i64, i32)>,
+    AxumPath((game_id, variant_index)): AxumPath<(i64, i32)>,
 ) -> Result<StatusCode, ProjectError> {
-    require_project_owner(&state, project_id, user_id(&claims)?).await?;
+    require_game_owner(&state, game_id, user_id(&claims)?).await?;
     let storage_key: Option<String> = sqlx::query_scalar(
-        "SELECT storage_key FROM project_v86_snapshots WHERE project_id = ? AND variant_index = ?",
+        "SELECT storage_key FROM game_v86_snapshots WHERE game_id = ? AND variant_index = ?",
     )
-    .bind(project_id)
+    .bind(game_id)
     .bind(variant_index)
     .fetch_optional(&state.project_service.pool)
     .await?
     .flatten();
-    sqlx::query("DELETE FROM project_v86_snapshots WHERE project_id = ? AND variant_index = ?")
-        .bind(project_id)
+    sqlx::query("DELETE FROM game_v86_snapshots WHERE game_id = ? AND variant_index = ?")
+        .bind(game_id)
         .bind(variant_index)
         .execute(&state.project_service.pool)
         .await?;
     // Blobs are content-addressed, so another variant may share this object.
     if let (Some(r2), Some(key)) = (state.r2.clone(), storage_key) {
         let still_referenced: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM project_v86_snapshots WHERE storage_key = ?")
+            sqlx::query_scalar("SELECT COUNT(*) FROM game_v86_snapshots WHERE storage_key = ?")
                 .bind(&key)
                 .fetch_one(&state.project_service.pool)
                 .await
@@ -3077,10 +3043,10 @@ pub async fn get_snapshot_blob(
     // and ISO routes. A snapshot is a fully booted machine with the game on
     // it, so a draft's state must not be reachable before the post goes live.
     let storage_key: Option<String> = sqlx::query_scalar(
-        r#"SELECT s.storage_key FROM project_v86_snapshots s
-           JOIN projects p ON p.id = s.project_id
-           JOIN posts ON posts.id = p.post_id
-           WHERE s.sha256 = ? AND posts.status = 'published' AND p.demo_type = 'v86'
+        r#"SELECT s.storage_key FROM game_v86_snapshots s
+           JOIN games gm ON gm.id = s.game_id
+           JOIN posts ON posts.id = gm.post_id
+           WHERE s.sha256 = ? AND posts.status = 'published' AND gm.launcher_type = 'v86'
            LIMIT 1"#,
     )
     .bind(&sha256)
@@ -3181,17 +3147,17 @@ pub async fn get_game_chunk(
     let storage_key: Option<String> = sqlx::query_scalar(
         r#"SELECT iso_storage_key
            FROM (
-                SELECT g.iso_storage_key FROM project_v86_games g
-                JOIN projects p ON p.id = g.project_id
-                JOIN posts ON posts.id = p.post_id
+                SELECT g.iso_storage_key FROM game_v86_games g
+                JOIN games gm ON gm.id = g.game_id
+                JOIN posts ON posts.id = gm.post_id
                 WHERE posts.slug = ? AND posts.status = 'published'
-                  AND p.demo_type = 'v86' AND g.iso_sha256 = ?
+                  AND gm.launcher_type = 'v86' AND g.iso_sha256 = ?
              UNION
-                SELECT v.iso_storage_key FROM project_v86_variants v
-                JOIN projects p ON p.id = v.project_id
-                JOIN posts ON posts.id = p.post_id
+                SELECT v.iso_storage_key FROM game_v86_variants v
+                JOIN games gm ON gm.id = v.game_id
+                JOIN posts ON posts.id = gm.post_id
                 WHERE posts.slug = ? AND posts.status = 'published'
-                  AND p.demo_type = 'v86' AND v.iso_sha256 = ?
+                  AND gm.launcher_type = 'v86' AND v.iso_sha256 = ?
            ) LIMIT 1"#,
     )
     .bind(&slug)
@@ -3222,11 +3188,11 @@ pub async fn get_game_disk_chunk(
     AxumPath((slug, sha256, part)): AxumPath<(String, String, String)>,
 ) -> Result<Response, ProjectError> {
     let storage_key: Option<String> = sqlx::query_scalar(
-        r#"SELECT g.disk_storage_key FROM project_v86_games g
-           JOIN projects p ON p.id = g.project_id
-           JOIN posts ON posts.id = p.post_id
+        r#"SELECT g.disk_storage_key FROM game_v86_games g
+           JOIN games gm ON gm.id = g.game_id
+           JOIN posts ON posts.id = gm.post_id
            WHERE posts.slug = ? AND posts.status = 'published'
-             AND p.demo_type = 'v86' AND g.disk_sha256 = ?"#,
+             AND gm.launcher_type = 'v86' AND g.disk_sha256 = ?"#,
     )
     .bind(&slug)
     .bind(&sha256)
@@ -3264,17 +3230,17 @@ pub async fn get_game_iso(
     let storage_key: Option<String> = sqlx::query_scalar(
         r#"SELECT iso_storage_key
            FROM (
-                SELECT g.iso_storage_key FROM project_v86_games g
-                JOIN projects p ON p.id = g.project_id
-                JOIN posts ON posts.id = p.post_id
+                SELECT g.iso_storage_key FROM game_v86_games g
+                JOIN games gm ON gm.id = g.game_id
+                JOIN posts ON posts.id = gm.post_id
                 WHERE posts.slug = ? AND posts.status = 'published'
-                  AND p.demo_type = 'v86' AND g.iso_sha256 = ?
+                  AND gm.launcher_type = 'v86' AND g.iso_sha256 = ?
              UNION
-                SELECT v.iso_storage_key FROM project_v86_variants v
-                JOIN projects p ON p.id = v.project_id
-                JOIN posts ON posts.id = p.post_id
+                SELECT v.iso_storage_key FROM game_v86_variants v
+                JOIN games gm ON gm.id = v.game_id
+                JOIN posts ON posts.id = gm.post_id
                 WHERE posts.slug = ? AND posts.status = 'published'
-                  AND p.demo_type = 'v86' AND v.iso_sha256 = ?
+                  AND gm.launcher_type = 'v86' AND v.iso_sha256 = ?
            ) LIMIT 1"#,
     )
     .bind(&slug)
@@ -3378,8 +3344,8 @@ fn zstd_decode(data: &[u8]) -> Result<Vec<u8>, ProjectError> {
     Ok(output)
 }
 
-fn save_rate_limit_key(user_id: i64, project_id: i64) -> String {
-    format!("{user_id}:{project_id}")
+fn save_rate_limit_key(user_id: i64, game_id: i64) -> String {
+    format!("{user_id}:{game_id}")
 }
 
 fn save_rate_limited(key: &str) -> bool {
@@ -3396,14 +3362,14 @@ fn save_rate_limited(key: &str) -> bool {
     false
 }
 
-async fn save_project_id(
+async fn save_game_id(
     state: &AppState,
     slug: &str,
 ) -> Result<i64, ProjectError> {
     sqlx::query_scalar(
-        r#"SELECT p.id FROM projects p
-           JOIN posts ON posts.id = p.post_id
-           WHERE posts.slug = ? AND posts.status = 'published' AND p.demo_type = 'v86'"#,
+        r#"SELECT gm.id FROM games gm
+           JOIN posts ON posts.id = gm.post_id
+           WHERE posts.slug = ? AND posts.status = 'published' AND gm.launcher_type = 'v86'"#,
     )
     .bind(slug)
     .fetch_optional(&state.project_service.pool)
@@ -3420,11 +3386,11 @@ pub async fn get_game_save(
         return Err(ProjectError::ProjectNotFound);
     };
     let user_id = user_id(&claims)?;
-    let project_id = save_project_id(&state, &slug).await?;
+    let game_id = save_game_id(&state, &slug).await?;
     let row = sqlx::query(
-        "SELECT storage_key, size_bytes FROM v86_saves WHERE project_id = ? AND user_id = ?",
+        "SELECT storage_key, size_bytes FROM game_v86_saves WHERE game_id = ? AND user_id = ?",
     )
-    .bind(project_id)
+    .bind(game_id)
     .bind(user_id)
     .fetch_optional(&state.project_service.pool)
     .await?;
@@ -3465,20 +3431,20 @@ pub async fn put_game_save(
     bytes: Bytes,
 ) -> Result<StatusCode, ProjectError> {
     let user_id = user_id(&opt_claims.ok_or(ProjectError::Forbidden)?)?;
-    let project_id = save_project_id(&state, &slug).await?;
+    let game_id = save_game_id(&state, &slug).await?;
     if bytes.is_empty() || bytes.len() > V86_SAVE_MAX_UPLOAD_BYTES {
         return Err(ProjectError::InvalidDemo(
             "The save image exceeds the allowed size.".to_string(),
         ));
     }
-    let key = save_rate_limit_key(user_id, project_id);
+    let key = save_rate_limit_key(user_id, game_id);
     if save_rate_limited(&key) {
         return Err(ProjectError::Conflict(
             "Please wait before saving again.".to_string(),
         ));
     }
     let compressed = zstd_compress(&bytes)?;
-    let storage_key = format!("v86/saves/{user_id}/{project_id}/save.zst");
+    let storage_key = format!("v86/saves/{user_id}/{game_id}/save.zst");
     if let Some(r2) = &state.r2 {
         r2.put_object_bytes(&storage_key, compressed.clone())
             .await
@@ -3492,15 +3458,15 @@ pub async fn put_game_save(
     }
     let sha = hex::encode(Sha256::digest(&compressed));
     sqlx::query(
-        r#"INSERT INTO v86_saves (project_id, user_id, storage_key, size_bytes, sha256)
+        r#"INSERT INTO game_v86_saves (game_id, user_id, storage_key, size_bytes, sha256)
            VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(project_id, user_id) DO UPDATE SET
+           ON CONFLICT(game_id, user_id) DO UPDATE SET
              storage_key = excluded.storage_key,
              size_bytes = excluded.size_bytes,
              sha256 = excluded.sha256,
              updated_at = CURRENT_TIMESTAMP"#,
     )
-    .bind(project_id)
+    .bind(game_id)
     .bind(user_id)
     .bind(&storage_key)
     .bind(compressed.len() as i64)
@@ -3516,11 +3482,11 @@ pub async fn delete_game_save(
     AxumPath(slug): AxumPath<String>,
 ) -> Result<StatusCode, ProjectError> {
     let user_id = user_id(&opt_claims.ok_or(ProjectError::Forbidden)?)?;
-    let project_id = save_project_id(&state, &slug).await?;
+    let game_id = save_game_id(&state, &slug).await?;
     let row = sqlx::query(
-        "SELECT storage_key FROM v86_saves WHERE project_id = ? AND user_id = ?",
+        "SELECT storage_key FROM game_v86_saves WHERE game_id = ? AND user_id = ?",
     )
-    .bind(project_id)
+    .bind(game_id)
     .bind(user_id)
     .fetch_optional(&state.project_service.pool)
     .await?;
@@ -3530,8 +3496,8 @@ pub async fn delete_game_save(
             let _ = r2.delete_object(&storage_key).await;
         }
         let _ = tokio::fs::remove_file(state.project_demo_config.dir.join(&storage_key)).await;
-        sqlx::query("DELETE FROM v86_saves WHERE project_id = ? AND user_id = ?")
-            .bind(project_id)
+        sqlx::query("DELETE FROM game_v86_saves WHERE game_id = ? AND user_id = ?")
+            .bind(game_id)
             .bind(user_id)
             .execute(&state.project_service.pool)
             .await?;

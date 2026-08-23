@@ -62,19 +62,44 @@ test('loadEntryState maps a project including demo fields', () => {
 		demoWidth: '80%',
 		demoHeight: '400px',
 		rawDemoUrl: 'https://example.com/demo',
-		v86SystemVersionId: 3,
-		v86Manifest: 'exe=a.exe',
-		v86ArtifactRevision: 2,
+		delegateGameId: 3,
+		inheritThumbnail: false,
+		inheritTags: true,
 		links: [{ label: 'Repo', url: 'https://github.com/x' }]
 	};
 	const { entry, baseline } = loadEntryState(data, 'project');
 
 	assert.equal(entry.demoType, 'embed');
 	assert.equal(entry.demoUrl, 'https://example.com/demo');
-	assert.equal(entry.v86SystemVersionId, '3', 'should be stringified for the <select> binding');
+	assert.equal(entry.delegateGameId, '3', 'should be stringified for the <select> binding');
+	assert.equal(entry.inheritThumbnail, false);
 	assert.deepEqual(entry.links, [{ label: 'Repo', url: 'https://github.com/x' }]);
 
 	assert.ok(isPatchEmpty(buildPatch({ baseline, current: entry, kind: 'project' })));
+});
+
+test('loadEntryState maps a game including launcher and body fields', () => {
+	const data = {
+		...loadedPost(),
+		postId: 9,
+		demoType: 'v86',
+		rawDemoUrl: '',
+		v86SystemVersionId: 3,
+		v86Manifest: 'exe=a.exe',
+		v86ArtifactRevision: 2,
+		instruction: 'Arrows to move',
+		cheatcode: 'IDDQD',
+		story: 'A long story',
+		relatedGames: [{ id: 2, title: 'Other', slug: 'other' }]
+	};
+	const { entry, baseline } = loadEntryState(data, 'game');
+
+	assert.equal(entry.demoType, 'v86');
+	assert.equal(entry.v86SystemVersionId, '3', 'should be stringified for the <select> binding');
+	assert.equal(entry.instruction, 'Arrows to move');
+	assert.deepEqual(entry.relatedGames, [{ id: 2, title: 'Other', slug: 'other' }]);
+
+	assert.ok(isPatchEmpty(buildPatch({ baseline, current: entry, kind: 'game' })));
 });
 
 test('loadEntryState defaults an empty links list to the GitHub placeholder', () => {

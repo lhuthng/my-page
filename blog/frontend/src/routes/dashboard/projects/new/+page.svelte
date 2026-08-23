@@ -4,5 +4,5 @@
 </script>
 
 <div class="w-full">
-	<ProjectEditor v86Systems={data.v86Systems} />
+	<ProjectEditor games={data.games} />
 </div>

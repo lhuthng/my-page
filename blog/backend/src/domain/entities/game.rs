@@ -2,20 +2,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::entities::post::PostStats;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProjectLink {
-    pub label: String,
-    pub url: String,
-}
-
 #[derive(Debug, Clone, Serialize)]
-pub struct ProjectDemo {
-    pub demo_type: String,
-    pub entry_path: String,
+pub struct GameDemo {
+    pub launcher_type: String,
     pub width: Option<String>,
     pub height: Option<String>,
-    pub config: Option<String>,
     pub demo_url: Option<String>,
+    pub jsdos_bundle: Option<JsDosBundle>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -27,7 +20,7 @@ pub struct JsDosBundle {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ProjectSnapshot {
+pub struct GameSnapshot {
     pub id: i64,
     pub post_id: i64,
     pub title: String,
@@ -40,31 +33,19 @@ pub struct ProjectSnapshot {
     pub status: String,
     pub url: Option<String>,
     pub cover_media_type: Option<String>,
-    pub demo_type: String,
+    pub launcher_type: String,
     pub stats: PostStats,
     pub reading_time_minutes: i64,
 }
 
 #[derive(Debug, Clone)]
-pub struct ProjectSnapshotPage {
-    pub projects: Vec<ProjectSnapshot>,
+pub struct GameSnapshotPage {
+    pub games: Vec<GameSnapshot>,
     pub has_more: bool,
 }
 
 #[derive(Debug, Clone)]
-pub struct DelegatedGame {
-    pub id: i64,
-    pub title: String,
-    pub slug: String,
-    pub launcher_type: String,
-    pub demo_url: Option<String>,
-    pub width: Option<String>,
-    pub height: Option<String>,
-    pub jsdos_bundle: Option<JsDosBundle>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Project {
+pub struct Game {
     pub id: i64,
     pub post_id: i64,
     pub title: String,
@@ -85,12 +66,18 @@ pub struct Project {
     pub cover_video_url: Option<String>,
     pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
-    pub demo: ProjectDemo,
-    pub delegate_game_id: Option<i64>,
-    pub inherit_thumbnail: bool,
-    pub inherit_tags: bool,
-    pub delegated_game: Option<DelegatedGame>,
-    pub links: Vec<ProjectLink>,
+    pub demo: GameDemo,
+    pub instruction: String,
+    pub cheatcode: String,
+    pub story: String,
+    pub related_games: Vec<GameLink>,
     pub is_owner: bool,
     pub og_image_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameLink {
+    pub id: i64,
+    pub title: String,
+    pub slug: String,
 }

@@ -1,4 +1,4 @@
-.PHONY: backend frontend migrate docker-up docker-down docker-build setup minio-up minio-down backend-local-storage
+.PHONY: backend frontend dev migrate docker-up docker-down docker-build setup minio-up minio-down backend-local-storage
 
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
@@ -40,6 +40,14 @@ minio-down:
 backend-local-storage: minio-up
 	@trap '$(MAKE) minio-down' EXIT INT TERM; \
 	cd $(BACKEND_DIR) && cargo run --bin backend
+
+## Run the backend (auto-migrates on startup) + frontend dev servers together.
+## Ctrl-C stops both. The backend takes a few seconds to compile first.
+dev:
+	@trap 'kill 0' EXIT INT TERM; \
+	$(MAKE) backend & \
+	$(MAKE) frontend & \
+	wait
 
 ## Run the frontend dev server locally
 frontend:

@@ -5,8 +5,7 @@
 	import { isLiked, shouldSendView, VIEW_DELAY } from '$lib/utils/post';
 	import PostSection from '$lib/components/post/PostSection.svelte';
 	import CommentSection from '$lib/components/post/CommentSection.svelte';
-	import ProjectDemo from '$lib/components/project/ProjectDemo.svelte';
-	import BackButton from '$lib/components/ui/BackButton.svelte';
+	import GameDemo from '$lib/components/game/GameDemo.svelte';
 	import {
 		absoluteSiteUrl,
 		canonicalUrl,
@@ -41,30 +40,14 @@
 		demo_url,
 		demo_width,
 		demo_height,
-		demo_type,
-		delegated_game,
-		initialVariant,
-		links
+		launcher_type,
+		v86_runtime,
+		instruction,
+		cheatcode,
+		story,
+		related_games,
+		initialVariant
 	} = $derived(data);
-
-	// A delegated project plays its game's launcher.
-	let effectiveDemo = $derived(
-		demo_type === 'game' && delegated_game
-			? {
-					type: delegated_game.launcher_type,
-					url: delegated_game.demo_url,
-					width: delegated_game.demo_width,
-					height: delegated_game.demo_height,
-					v86Runtime: delegated_game.v86_runtime
-				}
-			: {
-					type: demo_type,
-					url: demo_url,
-					width: demo_width,
-					height: demo_height,
-					v86Runtime: undefined
-				}
-	);
 
 	let liked = $state();
 	$effect(() => {
@@ -85,8 +68,8 @@
 		'@context': 'https://schema.org',
 		'@graph': [
 			{
-				'@type': 'CreativeWork',
-				'@id': `${canonicalLink}#project`,
+				'@type': 'VideoGame',
+				'@id': `${canonicalLink}#game`,
 				mainEntityOfPage: canonicalLink,
 				url: canonicalLink,
 				name: title,
@@ -138,8 +121,8 @@
 					{
 						'@type': 'ListItem',
 						position: 2,
-						name: 'Projects',
-						item: `${SITE_ORIGIN}/projects`
+						name: 'Games',
+						item: `${SITE_ORIGIN}/games`
 					},
 					{
 						'@type': 'ListItem',
@@ -201,35 +184,31 @@
 </svelte:head>
 
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
-	{#if effectiveDemo.type !== 'none'}
-		<ProjectDemo
-			{title}
-			demoType={effectiveDemo.type}
-			demoUrl={effectiveDemo.url}
-			v86Runtime={effectiveDemo.v86Runtime}
-			{initialVariant}
-			width={effectiveDemo.width ?? '100%'}
-			height={effectiveDemo.height ?? '520px'}
-		/>
-	{/if}
+	<GameDemo
+		{title}
+		launcherType={launcher_type}
+		demoUrl={demo_url}
+		v86Runtime={v86_runtime}
+		{initialVariant}
+		width={demo_width ?? '100%'}
+		height={demo_height ?? '520px'}
+		{instruction}
+		{cheatcode}
+		{story}
+	/>
 
-	{#if links?.length > 0}
+	{#if related_games?.length > 0}
 		<section class="flex flex-col gap-2 bg-white rounded-xl p-4">
 			<div class="space-y-2">
-				{#if demo_type === 'none'}
-					<BackButton href="/projects" text="All projects" />
-				{/if}
 				<div class="flex items-center gap-3 mb-3">
-					<h2 class="text-xl lg:text-2xl">Sources</h2>
+					<h2 class="text-xl lg:text-2xl">Related games</h2>
 					<hr class="grow border" />
 				</div>
 			</div>
 			<ul class="flex flex-wrap gap-2">
-				{#each links as link}
+				{#each related_games as game (game.id)}
 					<li class="duo-btn" data-duo-color="blue">
-						<a class="no-underline!" href={link.url} target="_blank" rel="noopener noreferrer">
-							{link.label}
-						</a>
+						<a class="no-underline!" href="/games/{game.slug}">{game.title}</a>
 					</li>
 				{/each}
 			</ul>
@@ -244,13 +223,13 @@
 		{updateTime}
 		{content}
 		{liked}
-		editHref={`/dashboard/projects/id/${id}`}
+		editHref={`/dashboard/games/id/${id}`}
 		author={{
 			username: author_slug,
 			displayName: author_name,
 			avatarUrl: author_avatar_url
 		}}
-		hideBackButton={demo_type !== 'none' || links?.length > 0}
+		hideBackButton={related_games?.length > 0}
 	/>
 
 	<CommentSection postId={post_id} postAuthorUsername={author_slug} />

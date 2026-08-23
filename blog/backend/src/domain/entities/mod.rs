@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod dashboard;
+pub mod game;
 pub mod mail;
 pub mod newsletter;
 pub mod media;

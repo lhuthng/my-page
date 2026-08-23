@@ -12,7 +12,7 @@ import {
 	createEntry,
 	patchEntry,
 	publishEntry,
-	deleteProjectDraft
+	deleteEntryDraft
 } from '../data/editor-api.js';
 import { saveLocalDraft, loadLocalDraft, clearLocalDraft } from '../data/local-draft.js';
 import { createUploadController } from '../controllers/upload-controller.js';
@@ -38,7 +38,7 @@ function isIgnoredMediaKey(key) {
 }
 
 /**
- * The single `$state` owner for both the post and the project editor.
+ * The single `$state` owner for the post, project, and game editors.
  *
  * Replaces the pattern where `PostEditor.svelte`/`ProjectEditor.svelte` held
  * `editingData`/`editor` directly, wired seven function-valued `$state` slots
@@ -48,7 +48,7 @@ function isIgnoredMediaKey(key) {
  *
  * @param {object} args
  * @param {'create'|'edit'} args.mode
- * @param {'post'|'project'} args.kind
+ * @param {'post'|'project'|'game'} args.kind
  * @param {object} [args.data] loaded entry, required in edit mode
  * @param {object[]} [args.initialSeries]
  * @param {boolean} [args.isOwner]
@@ -93,7 +93,9 @@ export function createEditorViewModel({
 		createPromptBusy: false,
 		createPromptError: '',
 		createdEntryId: null,
-		...(kind === 'project' ? { demoZip: undefined, demoZipName: '', demoZipError: '' } : {})
+		...(kind === 'project' || kind === 'game'
+			? { demoZip: undefined, demoZipName: '', demoZipError: '' }
+			: {})
 	});
 
 	const media = createMediaDictionary({ fetchImpl });
@@ -252,9 +254,9 @@ export function createEditorViewModel({
 		if (fileType?.startsWith('video/')) entry.ogImageSeconds = ogImageSeconds;
 	}
 
-	// ---- project demo type ---------------------------------------------------
+	// ---- project/game demo type ---------------------------------------------------
 	function setDemoType(nextType) {
-		if (kind !== 'project' || nextType === entry.demoType) return;
+		if (kind === 'post' || nextType === entry.demoType) return;
 		const patch = applyDemoTypeTransition(nextType);
 		Object.assign(entry, {
 			demoType: patch.demoType,
@@ -443,8 +445,148 @@ export function createEditorViewModel({
 			demoUrl: entry.demoUrl,
 			zip: ui.demoZip,
 			mode: 'create',
+			delegateGameId: entry.delegateGameId
+		});
+		if (!demoValidation.valid) {
+			notify(demoValidation.error, { critical: true, autoClearMs: 0 });
+			return;
+		}
+
+		const { offlineKeys, missing } = collectOfflineKeys([entry.bodies.draft]);
+		if (missing.length > 0) {
+			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
+			return;
+		}
+
+		const payload = {
+			title: entry.title,
+			slug: entry.slug,
+			excerpt: entry.excerpt,
+			tags: splitTags(entry.tags),
+			content: entry.bodies.draft,
+			links: normalizedLinks(),
+			number_of_files: offlineKeys.length,
+			demo_type: entry.demoType,
+			demo_width: entry.demoWidth,
+			demo_height: entry.demoHeight
+		};
+		if (entry.demoType === 'game') {
+			payload.delegate_game_id = Number(entry.delegateGameId);
+			payload.inherit_thumbnail = entry.inheritThumbnail;
+			payload.inherit_tags = entry.inheritTags;
+		}
+		if (!['none', 'html5', 'webgl', 'game'].includes(entry.demoType)) {
+			payload.demo_url = entry.demoUrl;
+		}
+
+		const formData = new FormData();
+		formData.append(
+			'project_data',
+			new Blob([JSON.stringify(payload)], { type: 'application/json' })
+		);
+		appendCreateCover(formData, ui.createCoverFile, entry.ogImageSeconds);
+		if (ui.demoZip) {
+			formData.append('demo_zip', ui.demoZip, ui.demoZip.name);
+		}
+		appendInlineFiles(formData, offlineKeys);
+
+		try {
+			ui.save.status = 'saving';
+			const { id } = await createEntry('project', formData, auth(), fetchImpl);
+			ui.save.status = 'saved';
+			notify('OK!');
+			discardLocalDraft();
+			openCreatedDraftPrompt(ui, id);
+		} catch (error) {
+			ui.save.status = 'error';
+			notify(error.message ?? 'Save failed.', { critical: true, autoClearMs: 0 });
+		}
+	}
+
+	async function saveProject() {
+		if (ui.save.status === 'saving') return;
+		const demoValidation = validateDemoFields({
+			demoType: entry.demoType,
+			demoUrl: entry.demoUrl,
+			zip: ui.demoZip,
+			mode: 'edit',
+			previousDemoType: data?.demoType,
+			delegateGameId: entry.delegateGameId
+		});
+		if (!demoValidation.valid) {
+			notify(demoValidation.error, { critical: true, autoClearMs: 0 });
+			return;
+		}
+
+		const bothBodies = [entry.bodies.content, entry.bodies.draft];
+		const { offlineKeys, missing } = collectOfflineKeys(bothBodies);
+		if (missing.length > 0) {
+			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
+			return;
+		}
+
+		const patch = buildPatch({
+			baseline,
+			current: entry,
+			hasNewMedia: offlineKeys.length > 0,
+			kind: 'project'
+		});
+
+		// Checked before adding the bookkeeping fields below — `number_of_files`
+		// and `expected_updated_at` are always present, so testing emptiness
+		// after adding them would never be true and this early-return would be
+		// dead code.
+		if (isPatchEmpty(patch) && offlineKeys.length === 0 && !ui.demoZip) {
+			notify('Nothing to save.');
+			return;
+		}
+
+		patch.number_of_files = offlineKeys.length;
+		patch.expected_updated_at = baseline.updatedAt;
+
+		const formData = new FormData();
+		formData.append(
+			'project_data',
+			new Blob([JSON.stringify(patch)], { type: 'application/json' })
+		);
+		if (ui.demoZip) {
+			formData.append('demo_zip', ui.demoZip, ui.demoZip.name);
+		}
+		appendInlineFiles(formData, offlineKeys);
+
+		try {
+			ui.save.status = 'saving';
+			const response = await patchEntry('project', entry.id, formData, auth(), fetchImpl);
+			baseline = refreshBaseline(baseline, entry, { updatedAt: response.updated_at });
+			ui.save.status = 'saved';
+			notify('OK!');
+			media.clearNew(offlineKeys);
+			ui.demoZip = undefined;
+			ui.demoZipName = '';
+			discardLocalDraft();
+		} catch (error) {
+			if (error.conflict) {
+				ui.save.status = 'conflict';
+				ui.save.error = error.currentUpdatedAt;
+				notify('Someone else saved this in the meantime.', { critical: true, autoClearMs: 0 });
+				return;
+			}
+			ui.save.status = 'error';
+			notify(error.message ?? 'Save failed.', { critical: true, autoClearMs: 0 });
+		}
+	}
+
+	// ---- create / save (game) -----------------------------------------------
+	async function submitGame() {
+		if (ui.save.status === 'saving') return;
+		const demoValidation = validateDemoFields({
+			demoType: entry.demoType,
+			demoUrl: entry.demoUrl,
+			zip: ui.demoZip,
+			mode: 'create',
 			v86SystemVersionId: entry.v86SystemVersionId,
-			v86Manifest: entry.v86Manifest
+			v86Manifest: entry.v86Manifest,
+			kindLabel: 'games'
 		});
 		if (!demoValidation.valid) {
 			notify(demoValidation.error, { critical: true, autoClearMs: 0 });
@@ -473,25 +615,25 @@ export function createEditorViewModel({
 			excerpt: entry.excerpt,
 			tags: splitTags(entry.tags),
 			content: entry.bodies.draft,
-			links: normalizedLinks(),
 			number_of_files: offlineKeys.length,
-			demo_type: entry.demoType,
+			launcher_type: entry.demoType,
 			demo_width: entry.demoWidth,
-			demo_height: entry.demoHeight
+			demo_height: entry.demoHeight,
+			instruction: entry.instruction ?? '',
+			cheatcode: entry.cheatcode ?? '',
+			story: entry.story ?? '',
+			related_games: (entry.relatedGames ?? [])
+				.filter((link) => link.id !== '' && link.id != null)
+				.map((link) => ({ id: Number(link.id), title: link.title, slug: link.slug }))
 		};
 		if (v86UploadId) payload.v86_upload_id = v86UploadId;
-		if (!['none', 'html5', 'webgl', 'v86'].includes(entry.demoType)) {
+		if (!['html5', 'webgl', 'jsdos', 'v86'].includes(entry.demoType)) {
 			payload.demo_url = entry.demoUrl;
 		}
 
 		const formData = new FormData();
-		formData.append(
-			'project_data',
-			new Blob([JSON.stringify(payload)], { type: 'application/json' })
-		);
+		formData.append('game_data', new Blob([JSON.stringify(payload)], { type: 'application/json' }));
 		appendCreateCover(formData, ui.createCoverFile, entry.ogImageSeconds);
-		// Legacy js-dos bundles upload after creation so the chunked endpoint can
-		// handle large files; do not include them in the creation multipart body.
 		if (ui.demoZip && entry.demoType !== 'jsdos' && entry.demoType !== 'v86') {
 			formData.append('demo_zip', ui.demoZip, ui.demoZip.name);
 		}
@@ -499,15 +641,15 @@ export function createEditorViewModel({
 
 		try {
 			ui.save.status = 'saving';
-			const { id } = await createEntry('project', formData, auth(), fetchImpl);
+			const { id } = await createEntry('game', formData, auth(), fetchImpl);
 			ui.save.status = 'saved';
 			notify('OK!');
 			try {
 				if (entry.demoType === 'jsdos' && ui.demoZip) {
-					await upload.uploadJsDosBundle(id, ui.demoZip);
+					await upload.uploadJsDosBundle('game', id, ui.demoZip);
 				}
 			} catch (error) {
-				await deleteProjectDraft(id, auth(), fetchImpl);
+				await deleteEntryDraft('game', id, auth(), fetchImpl);
 				notify(error?.message ?? 'Game upload failed.', { critical: true, autoClearMs: 0 });
 				return;
 			}
@@ -519,7 +661,7 @@ export function createEditorViewModel({
 		}
 	}
 
-	async function saveProject() {
+	async function saveGame() {
 		if (ui.save.status === 'saving') return;
 		const demoValidation = validateDemoFields({
 			demoType: entry.demoType,
@@ -528,7 +670,8 @@ export function createEditorViewModel({
 			mode: 'edit',
 			previousDemoType: data?.demoType,
 			v86SystemVersionId: entry.v86SystemVersionId,
-			v86Manifest: entry.v86Manifest
+			v86Manifest: entry.v86Manifest,
+			kindLabel: 'games'
 		});
 		if (!demoValidation.valid) {
 			notify(demoValidation.error, { critical: true, autoClearMs: 0 });
@@ -563,13 +706,9 @@ export function createEditorViewModel({
 			baseline,
 			current: entry,
 			hasNewMedia: offlineKeys.length > 0,
-			kind: 'project'
+			kind: 'game'
 		});
 
-		// Checked before adding the bookkeeping fields below — `number_of_files`
-		// and `expected_updated_at` are always present, so testing emptiness
-		// after adding them would never be true and this early-return would be
-		// dead code.
 		if (isPatchEmpty(patch) && offlineKeys.length === 0 && !ui.demoZip && !v86UploadId) {
 			notify('Nothing to save.');
 			return;
@@ -580,10 +719,7 @@ export function createEditorViewModel({
 		patch.expected_updated_at = baseline.updatedAt;
 
 		const formData = new FormData();
-		formData.append(
-			'project_data',
-			new Blob([JSON.stringify(patch)], { type: 'application/json' })
-		);
+		formData.append('game_data', new Blob([JSON.stringify(patch)], { type: 'application/json' }));
 		if (ui.demoZip && entry.demoType !== 'jsdos' && entry.demoType !== 'v86') {
 			formData.append('demo_zip', ui.demoZip, ui.demoZip.name);
 		}
@@ -591,14 +727,14 @@ export function createEditorViewModel({
 
 		try {
 			ui.save.status = 'saving';
-			const response = await patchEntry('project', entry.id, formData, auth(), fetchImpl);
+			const response = await patchEntry('game', entry.id, formData, auth(), fetchImpl);
 			baseline = refreshBaseline(baseline, entry, { updatedAt: response.updated_at });
 			ui.save.status = 'saved';
 			notify('OK!');
 			media.clearNew(offlineKeys);
 			try {
 				if (entry.demoType === 'jsdos' && ui.demoZip) {
-					await upload.uploadJsDosBundle(entry.id, ui.demoZip);
+					await upload.uploadJsDosBundle(kind, entry.id, ui.demoZip);
 				}
 			} catch (error) {
 				notify(error?.message ?? 'Game upload failed.', { critical: true, autoClearMs: 0 });
@@ -655,7 +791,9 @@ export function createEditorViewModel({
 		baseline = { ...baseline, updatedAt: ui.save.error };
 		ui.save.status = 'idle';
 		ui.save.error = '';
-		return kind === 'post' ? savePost() : saveProject();
+		if (kind === 'post') return savePost();
+		if (kind === 'game') return saveGame();
+		return saveProject();
 	}
 
 	function destroy() {
@@ -707,8 +845,8 @@ export function createEditorViewModel({
 		setDemoZip,
 		notify,
 		setProgress,
-		submit: kind === 'post' ? submitPost : submitProject,
-		save: kind === 'post' ? savePost : saveProject,
+		submit: kind === 'post' ? submitPost : kind === 'game' ? submitGame : submitProject,
+		save: kind === 'post' ? savePost : kind === 'game' ? saveGame : saveProject,
 		publish,
 		finishCreateFlow,
 		acceptRemoteVersion,

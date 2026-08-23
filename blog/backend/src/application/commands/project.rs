@@ -9,6 +9,9 @@ pub struct NewProjectCommand {
     pub demo_config: Option<String>,
     pub demo_url: Option<String>,
     pub demo_url_dir: String,
+    pub delegate_game_id: Option<i64>,
+    pub inherit_thumbnail: bool,
+    pub inherit_tags: bool,
     pub links: Vec<ProjectLink>,
 }
 
@@ -21,6 +24,9 @@ pub struct UpdateProjectCommand {
     pub demo_height: Option<String>,
     pub demo_config: Option<String>,
     pub demo_url: Option<String>,
+    pub delegate_game_id: Option<i64>,
+    pub inherit_thumbnail: Option<bool>,
+    pub inherit_tags: Option<bool>,
     pub links: Option<Vec<ProjectLink>>,
 }
 

@@ -204,8 +204,9 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 		}
 	}
 
-	async function uploadJsDosBundle(projectId, file) {
-		const start = await fetchImpl(`/api/projects/id/${projectId}/jsdos/upload`, {
+	async function uploadJsDosBundle(kind, projectId, file) {
+		const base = `/api/${kind === 'game' ? 'games' : 'projects'}/id/${projectId}/jsdos/upload`;
+		const start = await fetchImpl(base, {
 			method: 'POST',
 			headers: jsonHeaders(),
 			body: JSON.stringify({ file_name: file.name, size_bytes: file.size })
@@ -223,22 +224,19 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 				startByte,
 				Math.min(startByte + session.chunk_size_bytes, file.size)
 			);
-			const chunkRes = await fetchImpl(
-				`/api/projects/id/${projectId}/jsdos/upload/${session.upload_id}/chunk/${index}`,
-				{
-					method: 'PUT',
-					headers: octetHeaders(),
-					body: chunk
-				}
-			);
+			const chunkRes = await fetchImpl(`${base}/${session.upload_id}/chunk/${index}`, {
+				method: 'PUT',
+				headers: octetHeaders(),
+				body: chunk
+			});
 			if (!chunkRes.ok) throw new Error(await chunkRes.text());
 			const progress = Math.round(((startByte + chunk.size) / file.size) * 100);
 			onProgress(`Uploading game… ${progress}%`);
 		}
-		const complete = await fetchImpl(
-			`/api/projects/id/${projectId}/jsdos/upload/${session.upload_id}/complete`,
-			{ method: 'POST', headers: authHeaders() }
-		);
+		const complete = await fetchImpl(`${base}/${session.upload_id}/complete`, {
+			method: 'POST',
+			headers: authHeaders()
+		});
 		if (!complete.ok) throw new Error(await complete.text());
 	}
 
