@@ -500,6 +500,188 @@ export function buildFatDisk(files, { now = new Date() } = {}) {
 	return { size: diskSize, segments, geometry: geo };
 }
 
+export function createEmptyFatDisk(diskSize) {
+	if (diskSize < 8 * 1024 * 1024) throw new DiskBuildError('HDD must be at least 8 MB.');
+	if (diskSize % BLOCK !== 0) diskSize = Math.ceil(diskSize / BLOCK) * BLOCK;
+	const totalSectors = diskSize / BLOCK;
+	const partSectors = totalSectors - PARTITION_START_SECTOR;
+	const { spc, fatBits } = chooseCluster(partSectors);
+	const geo = partitionGeometry(diskSize, spc, fatBits);
+	const partitionBase = PARTITION_START_SECTOR * BLOCK;
+	const segments = new Map();
+
+	// Boot sector for the partition (empty FAT)
+	const boot = new Uint8Array(512);
+	boot.set([0xeb, 0x3c, 0x90]);
+	boot.set([0x4d, 0x54, 0x4f, 0x4f, 0x34, 0x30, 0x34, 0x39], 3);
+	boot[11] = BLOCK & 0xff;
+	boot[12] = BLOCK >> 8;
+	boot[13] = spc;
+	boot[14] = RESERVED_SECTORS;
+	boot[16] = FAT_COUNT;
+	boot[17] = ROOT_ENTRIES & 0xff;
+	boot[18] = ROOT_ENTRIES >> 8;
+	boot[21] = 0xf8;
+	boot[22] = geo.fatSectors & 0xff;
+	boot[23] = geo.fatSectors >> 8;
+	boot[24] = 63 & 0xff;
+	boot[25] = 63 >> 8;
+	boot[26] = 16;
+	boot[36] = 0x80;
+	boot[38] = 0x29;
+	for (let i = 0; i < 11; i++) boot[43 + i] = 'NO NAME    '.charCodeAt(i);
+	const fsString = fatBits === 16 ? 'FAT16   ' : 'FAT12   ';
+	for (let i = 0; i < 8; i++) boot[54 + i] = fsString.charCodeAt(i);
+	if (geo.partSectors <= 0xffff) {
+		boot[19] = geo.partSectors & 0xff;
+		boot[20] = geo.partSectors >> 8;
+	} else {
+		const v = geo.partSectors;
+		boot[32] = v & 0xff;
+		boot[33] = (v >> 8) & 0xff;
+		boot[34] = (v >> 16) & 0xff;
+		boot[35] = (v >>> 24) & 0xff;
+	}
+	boot[510] = 0x55;
+	boot[511] = 0xaa;
+	segments.set(partitionBase, boot);
+
+	// FATs (empty, only media + EOF)
+	const fatBytes = geo.fatSectors * BLOCK;
+	const fat1 = new Uint8Array(fatBytes);
+	const fat2 = new Uint8Array(fatBytes);
+	if (fatBits === 16) {
+		fat1[0] = 0xf8; fat1[1] = 0xff; fat1[2] = 0xff; fat1[3] = 0xff;
+		fat2[0] = 0xf8; fat2[1] = 0xff; fat2[2] = 0xff; fat2[3] = 0xff;
+	} else {
+		fat1[0] = 0xf8; fat1[1] = 0xff; fat1[2] = 0xff;
+		fat2[0] = 0xf8; fat2[1] = 0xff; fat2[2] = 0xff;
+	}
+	const fatOffset = partitionBase + RESERVED_SECTORS * BLOCK;
+	segments.set(fatOffset, fat1);
+	segments.set(fatOffset + geo.fatSectors * BLOCK, fat2);
+
+	// Root directory (empty, just . and .. will be created on first write, but we init empty)
+	const rootOffset = partitionBase + (RESERVED_SECTORS + FAT_COUNT * geo.fatSectors) * BLOCK;
+	segments.set(rootOffset, new Uint8Array(ROOT_SECTORS * BLOCK));
+
+	// MBR
+	const endLba = PARTITION_START_SECTOR + geo.partSectors - 1;
+	const heads = 255; const spt = 63;
+	const endCyl = Math.floor(endLba / (heads * spt));
+	const remainder = endLba % (heads * spt);
+	const endHead = Math.floor(remainder / spt);
+	const endSector = (remainder % spt) + 1;
+	const entry = new Uint8Array(16);
+	entry[0] = 0x80; entry[2] = 1; entry[4] = 0x06;
+	entry[5] = endHead & 0xff; entry[6] = endSector & 0xff; entry[7] = endCyl & 0xff;
+	const start = 63;
+	entry[8] = start & 0xff; entry[9] = (start >> 8) & 0xff; entry[10] = (start >> 16) & 0xff; entry[11] = (start >>> 24) & 0xff;
+	entry[12] = geo.partSectors & 0xff; entry[13] = (geo.partSectors >> 8) & 0xff; entry[14] = (geo.partSectors >> 16) & 0xff; entry[15] = (geo.partSectors >>> 24) & 0xff;
+	segments.set(446, entry);
+	segments.set(510, new Uint8Array([0x55, 0xaa]));
+
+	// Materialize to flat buffer for v86 (which expects a flat hda/hdb url, not sparse parts)
+	const flat = new Uint8Array(diskSize);
+	for (const [off, seg] of segments) {
+		flat.set(seg, off);
+	}
+	return { size: diskSize, segments, flat, geometry: geo };
+}
+
+export function readHddFiles(image) {
+	if (!(image instanceof Uint8Array) || image.length < 512) return [];
+	// MBR partition entry at 446, check if it looks like a valid FAT partition
+	const partType = image[450 + 4];
+	// Accept 0x06 (FAT16), 0x0B/0x0C (FAT32), 0xE (FAT16 LBA) or 0x04/0x01 (FAT16/12) for our disks
+	const validTypes = new Set([0x01, 0x04, 0x06, 0x0b, 0x0c, 0x0e]);
+	if (!validTypes.has(partType)) {
+		// Try floppy-style directly (no partition) as fallback
+		return [];
+	}
+	const partStart = (image[454] | (image[455] << 8) | (image[456] << 16) | (image[457] << 24) >>> 0) * 512;
+	if (partStart === 0 || partStart >= image.length) return [];
+	const partBytes = image.subarray(partStart);
+	if (partBytes.length < 512) return [];
+	const view = new DataView(partBytes.buffer, partBytes.byteOffset, partBytes.byteLength);
+	const bytesPerSector = view.getUint16(11, true);
+	if (bytesPerSector !== 512) return [];
+	// Reuse floppy reader logic but with partition offset
+	const sectorsPerCluster = partBytes[13];
+	const reservedSectors = view.getUint16(14, true);
+	const fatCount = partBytes[16];
+	const rootEntries = view.getUint16(17, true);
+	let totalSectors = view.getUint16(19, true);
+	if (totalSectors === 0) totalSectors = view.getUint32(32, true);
+	const fatSectors = view.getUint16(22, true);
+	const rootStart = (reservedSectors + fatCount * fatSectors) * bytesPerSector;
+	const rootBytes = rootEntries * 32;
+	const dataStart = rootStart + rootBytes;
+	const clusterBytes = sectorsPerCluster * bytesPerSector;
+	if (clusterBytes <= 0) return [];
+	// Estimate fatBits from rootEntries/fat size similar to floppy
+	const dataSectors = totalSectors - reservedSectors - fatCount * fatSectors - rootEntries * 32 / bytesPerSector;
+	const clusters = Math.floor(dataSectors / sectorsPerCluster);
+	const fatBits = clusters < 4085 ? 12 : 16;
+	const fatStart = reservedSectors * bytesPerSector;
+
+	const u16 = (off) => view.getUint16(off, true);
+	const nextCluster = (n) => {
+		if (fatBits === 12) {
+			const off = fatStart + n + (n >> 1);
+			const lo = partBytes[off];
+			const hi = partBytes[off + 1];
+			return (n & 1) === 0 ? lo | ((hi & 0x0f) << 8) : (lo >> 4) | (hi << 4);
+		}
+		return u16(fatStart + n * 2);
+	};
+	const readChain = (start) => {
+		const parts = [];
+		let n = start;
+		while (n >= 2 && n < 0xfff8 && n < clusters + 2) {
+			const off = dataStart + (n - 2) * clusterBytes;
+			if (off + clusterBytes > partBytes.length) break;
+			parts.push(partBytes.subarray(off, off + clusterBytes));
+			n = nextCluster(n);
+		}
+		if (parts.length === 0) return new Uint8Array(0);
+		const total = parts.reduce((s, p) => s + p.length, 0);
+		const out = new Uint8Array(total);
+		let o = 0;
+		for (const p of parts) { out.set(p, o); o += p.length; }
+		return out;
+	};
+	const readName = (bytes) => String.fromCharCode(...bytes).replace(/[^\x20-\x7e]+/g, '').trim();
+	const files = [];
+	const readDir = (dirBytes, prefix) => {
+		const dirView = new DataView(dirBytes.buffer, dirBytes.byteOffset, dirBytes.byteLength);
+		for (let i = 0; i + 32 <= dirBytes.length; i += 32) {
+			if (dirBytes[i] === 0) break;
+			if (dirBytes[i] === 0xe5) continue;
+			const attr = dirBytes[i + 11];
+			if (attr === 0x0f) continue;
+			const short = (() => {
+				const base = readName(dirBytes.subarray(i, i + 8));
+				const ext = readName(dirBytes.subarray(i + 8, i + 11));
+				return ext ? `${base}.${ext}` : base;
+			})();
+			if (!short || short === '.' || short === '..') continue;
+			const firstCluster = dirView.getUint16(i + 26, true);
+			const size = dirView.getUint32(i + 28, true);
+			if (attr & 0x10) {
+				readDir(readChain(firstCluster), `${prefix}${short}/`);
+			} else {
+				const content = readChain(firstCluster);
+				files.push({ name: `${prefix}${short}`, data: content.slice(0, size) });
+			}
+		}
+	};
+	try {
+		readDir(partBytes.subarray(rootStart, rootStart + rootBytes), '');
+	} catch { return []; }
+	return files;
+}
+
 /**
  * Materializes one chunk of a sparse image into a chunk-sized buffer (the
  * last chunk is zero-padded to exactly `chunkSize`, matching the server's
