@@ -3,9 +3,9 @@
 import { nowToDate } from '../../../utils/index.js';
 
 /**
- * The blank entry state for a brand-new post or project.
+ * The blank entry state for a brand-new post, project, or game.
  *
- * @param {'post'|'project'} kind
+ * @param {'post'|'project'|'game'} kind
  * @param {object[]} [initialSeries] series list to seed the post picker with
  * @returns {object}
  */
@@ -34,6 +34,24 @@ export function createEntryState(kind, initialSeries = []) {
 		};
 	}
 
+	if (kind === 'game') {
+		return {
+			...base,
+			postId: '',
+			demoType: 'html5',
+			demoWidth: '100%',
+			demoHeight: '520px',
+			demoUrl: '',
+			v86SystemVersionId: '',
+			v86Manifest: '',
+			v86ArtifactRevision: 0,
+			instruction: '',
+			cheatcode: '',
+			story: '',
+			relatedGames: []
+		};
+	}
+
 	return {
 		...base,
 		postId: '',
@@ -41,9 +59,9 @@ export function createEntryState(kind, initialSeries = []) {
 		demoWidth: '100%',
 		demoHeight: '520px',
 		demoUrl: '',
-		v86SystemVersionId: '',
-		v86Manifest: '',
-		v86ArtifactRevision: 0,
+		delegateGameId: '',
+		inheritThumbnail: true,
+		inheritTags: true,
 		links: [{ label: 'GitHub', url: '' }]
 	};
 }
@@ -65,7 +83,7 @@ export function createEntryState(kind, initialSeries = []) {
  *
  * @param {object} data the loaded post/project, in the shape `+page.svelte`
  *   already unpacks it into (see `PostEditor.svelte` / `ProjectEditor.svelte`)
- * @param {'post'|'project'} kind
+ * @param {'post'|'project'|'game'} kind
  * @returns {{entry: object, baseline: object}}
  */
 export function loadEntryState(data, kind) {
@@ -82,6 +100,14 @@ export function loadEntryState(data, kind) {
 		coverMediaType: data.cover_media_type ?? data.coverMediaType
 	};
 
+	const demoExtra = {
+		postId: data.postId ?? '',
+		demoType: data.demoType ?? 'html5',
+		demoWidth: data.demoWidth ?? '100%',
+		demoHeight: data.demoHeight ?? '520px',
+		demoUrl: data.rawDemoUrl ?? ''
+	};
+
 	const extra =
 		kind === 'post'
 			? {
@@ -89,17 +115,24 @@ export function loadEntryState(data, kind) {
 					seriesSlug: data.seriesSlug ?? '',
 					relatedPosts: data.relatedPosts ?? []
 				}
-			: {
-					postId: data.postId ?? '',
-					demoType: data.demoType ?? 'html5',
-					demoWidth: data.demoWidth ?? '100%',
-					demoHeight: data.demoHeight ?? '520px',
-					demoUrl: data.rawDemoUrl ?? '',
-					v86SystemVersionId: data.v86SystemVersionId?.toString() ?? '',
-					v86Manifest: data.v86Manifest ?? '',
-					v86ArtifactRevision: data.v86ArtifactRevision ?? 0,
-					links: data.links?.length ? data.links : [{ label: 'GitHub', url: '' }]
-				};
+			: kind === 'game'
+				? {
+						...demoExtra,
+						v86SystemVersionId: data.v86SystemVersionId?.toString() ?? '',
+						v86Manifest: data.v86Manifest ?? '',
+						v86ArtifactRevision: data.v86ArtifactRevision ?? 0,
+						instruction: data.instruction ?? '',
+						cheatcode: data.cheatcode ?? '',
+						story: data.story ?? '',
+						relatedGames: data.relatedGames ?? []
+					}
+				: {
+						...demoExtra,
+						delegateGameId: data.delegateGameId?.toString() ?? '',
+						inheritThumbnail: data.inheritThumbnail ?? true,
+						inheritTags: data.inheritTags ?? true,
+						links: data.links?.length ? data.links : [{ label: 'GitHub', url: '' }]
+					};
 
 	const baseline = {
 		...common,
@@ -147,7 +180,22 @@ export function refreshBaseline(baseline, entry, serverResponse = {}) {
 					demoWidth: entry.demoWidth,
 					demoHeight: entry.demoHeight,
 					demoUrl: entry.demoUrl,
-					links: entry.links
+					...(entry.instruction !== undefined
+						? {
+								instruction: entry.instruction,
+								cheatcode: entry.cheatcode,
+								story: entry.story,
+								relatedGames: entry.relatedGames
+							}
+						: {}),
+					...(entry.links !== undefined ? { links: entry.links } : {}),
+					...(entry.delegateGameId !== undefined
+						? {
+								delegateGameId: entry.delegateGameId,
+								inheritThumbnail: entry.inheritThumbnail,
+								inheritTags: entry.inheritTags
+							}
+						: {})
 				}
 			: {}),
 		updatedAt: serverResponse.updatedAt ?? baseline.updatedAt

@@ -7,7 +7,7 @@
 
 	const player = new V86Player({ runtime: data.runtime, mode: 'capture' });
 
-	// 0 captures the project-wide machine with an empty drive; a variant index
+	// 0 captures the game-wide machine with an empty drive; a variant index
 	// captures with that variant's disc mounted, while the launcher waits out
 	// its delay and before it has touched A:.
 	let target = $state(0);
@@ -20,7 +20,7 @@
 	let critical = $state(false);
 
 	const targets = $derived([
-		{ index: 0, label: 'Project-wide (no disc)' },
+		{ index: 0, label: 'Game-wide (no disc)' },
 		...(data.runtime.variants ?? []).map((variant) => ({
 			index: variant.index,
 			label: variant.name || `Variant ${variant.index}`
@@ -55,7 +55,7 @@
 	};
 
 	const refreshStatus = async () => {
-		snapshots = await (await request(`/api/v86/projects/id/${data.projectId}/snapshot`)).json();
+		snapshots = await (await request(`/api/v86/games/id/${data.gameId}/snapshot`)).json();
 	};
 
 	onMount(() => {
@@ -175,7 +175,7 @@
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
-						project_id: data.projectId,
+						game_id: data.gameId,
 						variant_index: target,
 						iso_sha256: target > 0 ? currentVariant?.iso_sha256 : null,
 						system_version_id: data.runtime.system_version_id,
@@ -232,7 +232,7 @@
 		if (!confirm('Delete this snapshot?')) return;
 		busy = true;
 		try {
-			await request(`/api/v86/projects/id/${data.projectId}/snapshot/${target}`, {
+			await request(`/api/v86/games/id/${data.gameId}/snapshot/${target}`, {
 				method: 'DELETE'
 			});
 			await refreshStatus();
@@ -257,11 +257,8 @@
 					entirely.
 				</p>
 			</div>
-			<a
-				href="/dashboard/projects/id/{data.projectId}"
-				class="text-sm text-dark/60 hover:underline"
-			>
-				← Back to project
+			<a href="/dashboard/games/id/{data.gameId}" class="text-sm text-dark/60 hover:underline">
+				← Back to game
 			</a>
 		</div>
 

@@ -11,6 +11,9 @@
 		v86Runtime,
 		width = '100%',
 		height = '520px',
+		backHref = '/projects',
+		backLabel = 'All projects',
+		children,
 		...rest
 	} = $props();
 
@@ -26,7 +29,7 @@
 
 <section class="bg-white rounded-xl p-4 drop-shadow-xl">
 	<div class="space-y-2">
-		<BackButton href="/projects" text="All projects" />
+		<BackButton href={backHref} text={backLabel} />
 		<div class="flex items-center gap-3 mb-3">
 			<h2 class="text-xl lg:text-2xl">Demo</h2>
 			<hr class="grow border" />
@@ -87,4 +90,6 @@
 	</div>
 
 	<div bind:this={afterDemoPortal} class="mx-auto max-w-full" style:width></div>
+
+	{@render children?.()}
 </section>

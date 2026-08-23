@@ -4,36 +4,36 @@ use sqlx::{FromRow, SqlitePool};
 
 use crate::{
     application::{
-        commands::project::{
-            GetFeaturedProjectsCommand, GetLatestProjectsCommand, GetProjectBySlugCommand,
-            GetProjectDetailsCommand, GetProjectPostIdCommand, GetProjectsByTagCommand,
-            NewProjectCommand, SetFeaturedProjectCommand, UpdateProjectCommand,
+        commands::game::{
+            GetFeaturedGamesCommand, GetGameBySlugCommand, GetGameDetailsCommand,
+            GetGamePostIdCommand, GetGamesByTagCommand, GetLatestGamesCommand, NewGameCommand,
+            SetFeaturedGameCommand, UpdateGameCommand,
         },
-        services::project::ProjectService,
+        services::game::GameService,
     },
     domain::{
         entities::{
+            game::{Game, GameDemo, GameLink, GameSnapshot, GameSnapshotPage, JsDosBundle},
             post::PostStats,
-            project::{DelegatedGame, JsDosBundle, Project, ProjectDemo, ProjectLink, ProjectSnapshot, ProjectSnapshotPage},
         },
-        errors::project::ProjectError,
+        errors::game::GameError,
     },
     infrastructure::persistence::post::{MediumUsageWithNameRow, TagRow},
 };
 
-pub struct ProjectServiceImpl {
+pub struct GameServiceImpl {
     pub pool: SqlitePool,
 }
 
-impl ProjectServiceImpl {
+impl GameServiceImpl {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
 }
 
 #[derive(Debug, FromRow)]
-struct ProjectSnapshotRow {
-    project_id: i64,
+struct GameSnapshotRow {
+    game_id: i64,
     post_id: i64,
     title: String,
     slug: String,
@@ -43,7 +43,7 @@ struct ProjectSnapshotRow {
     status: String,
     url: Option<String>,
     cover_media_type: Option<String>,
-    demo_type: String,
+    launcher_type: String,
     views: i64,
     likes: i64,
     comments_count: i64,
@@ -51,8 +51,8 @@ struct ProjectSnapshotRow {
 }
 
 #[derive(Debug, FromRow)]
-struct ProjectContentRow {
-    project_id: i64,
+struct GameContentRow {
+    game_id: i64,
     post_id: i64,
     user_id: i64,
     author_name: String,
@@ -70,34 +70,26 @@ struct ProjectContentRow {
     cover_video_url: Option<String>,
     cover_video_type: Option<String>,
     og_image_seconds: i64,
-    demo_type: String,
-    demo_entry_path: String,
+    launcher_type: String,
     demo_width: Option<String>,
     demo_height: Option<String>,
-    demo_config: Option<String>,
     demo_url: Option<String>,
-    delegate_game_id: Option<i64>,
-    inherit_thumbnail: i64,
-    inherit_tags: i64,
+    instruction: String,
+    cheatcode: String,
+    story: String,
 }
 
 #[derive(Debug, FromRow)]
-struct ProjectLinkRow {
-    label: String,
-    url: String,
-}
-
-#[derive(Debug, FromRow)]
-struct ProjectTagRow {
-    project_id: i64,
+struct GameTagRow {
+    game_id: i64,
     tag_name: String,
     tag_slug: String,
 }
 
-impl ProjectSnapshotRow {
-    fn into_snapshot(self, tag_names: Vec<String>, tag_slugs: Vec<String>) -> ProjectSnapshot {
-        ProjectSnapshot {
-            id: self.project_id,
+impl GameSnapshotRow {
+    fn into_snapshot(self, tag_names: Vec<String>, tag_slugs: Vec<String>) -> GameSnapshot {
+        GameSnapshot {
+            id: self.game_id,
             post_id: self.post_id,
             title: self.title,
             slug: self.slug,
@@ -109,7 +101,7 @@ impl ProjectSnapshotRow {
             status: self.status,
             url: self.url,
             cover_media_type: self.cover_media_type,
-            demo_type: self.demo_type,
+            launcher_type: self.launcher_type,
             stats: PostStats {
                 views: self.views,
                 likes: self.likes,
@@ -120,11 +112,11 @@ impl ProjectSnapshotRow {
     }
 }
 
-impl ProjectServiceImpl {
-    async fn hydrate_project_rows(
+impl GameServiceImpl {
+    async fn hydrate_game_rows(
         &self,
-        rows: Vec<ProjectSnapshotRow>,
-    ) -> Result<Vec<ProjectSnapshot>, ProjectError> {
+        rows: Vec<GameSnapshotRow>,
+    ) -> Result<Vec<GameSnapshot>, GameError> {
         if rows.is_empty() {
             return Ok(vec![]);
         }
@@ -132,63 +124,62 @@ impl ProjectServiceImpl {
         let placeholders = rows.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
         let sql = format!(
             r#"
-            SELECT projects.id AS project_id, tags.name AS tag_name, tags.slug AS tag_slug
-            FROM projects
-            JOIN post_tags ON post_tags.post_id = projects.post_id
+            SELECT games.id AS game_id, tags.name AS tag_name, tags.slug AS tag_slug
+            FROM games
+            JOIN post_tags ON post_tags.post_id = games.post_id
             JOIN tags ON tags.id = post_tags.tag_id
-            WHERE projects.id IN ({})
+            WHERE games.id IN ({})
             "#,
             placeholders
         );
 
-        let mut query = sqlx::query_as::<_, ProjectTagRow>(&sql);
+        let mut query = sqlx::query_as::<_, GameTagRow>(&sql);
         let mut map = HashMap::<i64, usize>::new();
         let mut snapshots = vec![];
 
         for row in rows {
-            map.insert(row.project_id, snapshots.len());
-            query = query.bind(row.project_id);
+            map.insert(row.game_id, snapshots.len());
+            query = query.bind(row.game_id);
             snapshots.push(row.into_snapshot(vec![], vec![]));
         }
 
         let tag_rows = query.fetch_all(&self.pool).await?;
         for row in tag_rows {
-            if let Some(index) = map.get(&row.project_id)
-                && let Some(project) = snapshots.get_mut(*index)
+            if let Some(index) = map.get(&row.game_id)
+                && let Some(game) = snapshots.get_mut(*index)
             {
-                project.tag_names.push(row.tag_name);
-                project.tag_slugs.push(row.tag_slug);
+                game.tag_names.push(row.tag_name);
+                game.tag_slugs.push(row.tag_slug);
             }
         }
 
         Ok(snapshots)
     }
 
-    async fn links_for_project(&self, project_id: i64) -> Result<Vec<ProjectLink>, ProjectError> {
-        Ok(sqlx::query_as::<_, ProjectLinkRow>(
+    async fn related_games_for(&self, game_id: i64) -> Result<Vec<GameLink>, GameError> {
+        Ok(sqlx::query_as::<_, (i64, String, String)>(
             r#"
-            SELECT label, url
-            FROM project_links
-            WHERE project_id = ?
-            ORDER BY sort_order ASC, id ASC
+            SELECT g.id, posts.title, posts.slug
+            FROM related_games rg
+            JOIN games g ON g.id = rg.related_game_id
+            JOIN posts ON posts.id = g.post_id
+            WHERE rg.game_id = ?
+            ORDER BY rg.sort_order ASC, g.id ASC
             "#,
         )
-        .bind(project_id)
+        .bind(game_id)
         .fetch_all(&self.pool)
         .await?
         .into_iter()
-        .map(|row| ProjectLink {
-            label: row.label,
-            url: row.url,
-        })
+        .map(|(id, title, slug)| GameLink { id, title, slug })
         .collect())
     }
 
-    async fn project_from_row(
+    async fn game_from_row(
         &self,
-        row: ProjectContentRow,
+        row: GameContentRow,
         viewing_user_id: Option<i64>,
-    ) -> Result<Project, ProjectError> {
+    ) -> Result<Game, GameError> {
         let tag_rows = sqlx::query_as::<_, TagRow>(
             r#"
             SELECT post_id, tags.name AS tag_name, tags.slug AS tag_slug
@@ -218,8 +209,8 @@ impl ProjectServiceImpl {
         let mut medium_short_names = vec![String::new(); medium_rows.len()];
         for medium in medium_rows {
             if medium.code < 0 || medium.code >= len {
-                return Err(ProjectError::InternalError(
-                    "Out of range project media index found".to_string(),
+                return Err(GameError::InternalError(
+                    "Out of range game media index found".to_string(),
                 ));
             }
             let index = medium.code as usize;
@@ -227,117 +218,31 @@ impl ProjectServiceImpl {
             medium_short_names[index] = medium.short_name;
         }
 
+        let jsdos_bundle = sqlx::query_as::<_, (String, String, i64, String)>(
+            "SELECT storage_key, original_file_name, size_bytes, sha256 FROM game_jsdos_bundles WHERE game_id = ?",
+        )
+        .bind(row.game_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|(storage_key, original_file_name, size_bytes, sha256)| JsDosBundle {
+            storage_key,
+            original_file_name,
+            size_bytes,
+            sha256,
+        });
         let cover_url = row.cover_url;
         let cover_media_type = row.cover_media_type;
         let og_image_url = Some(format!("media/i/.post.{}.thumbnail", row.post_id));
 
-        // Delegation: a project with demo_type='game' plays the launcher of
-        // another game. Thumbnail/tag inheritance pulls that game's post data
-        // in at read time; the project keeps its own body and identity.
-        let mut delegated_game = None;
-        if let Some(game_id) = row.delegate_game_id {
-            let game_row = sqlx::query_as::<
-                _,
-                (
-                    i64,
-                    String,
-                    String,
-                    String,
-                    Option<String>,
-                    Option<String>,
-                    Option<String>,
-                ),
-            >(
-                r#"
-                SELECT g.id, posts.title, posts.slug, g.launcher_type, g.demo_url,
-                       g.demo_width, g.demo_height
-                FROM games g
-                JOIN posts ON posts.id = g.post_id
-                WHERE g.id = ? AND posts.status = 'published'
-                "#,
-            )
-            .bind(game_id)
-            .fetch_optional(&self.pool)
-            .await?;
-            if let Some((gid, title, slug, launcher_type, demo_url, width, height)) = game_row {
-                let bundle = sqlx::query_as::<_, (String, String, i64, String)>(
-                    "SELECT storage_key, original_file_name, size_bytes, sha256 FROM game_jsdos_bundles WHERE game_id = ?",
-                )
-                .bind(gid)
-                .fetch_optional(&self.pool)
-                .await?
-                .map(|(storage_key, original_file_name, size_bytes, sha256)| JsDosBundle {
-                    storage_key,
-                    original_file_name,
-                    size_bytes,
-                    sha256,
-                });
-                delegated_game = Some(DelegatedGame {
-                    id: gid,
-                    title,
-                    slug,
-                    launcher_type,
-                    demo_url,
-                    width,
-                    height,
-                    jsdos_bundle: bundle,
-                });
-            }
-        }
-
-        let mut tags: Vec<String> = tag_rows.into_iter().map(|row| row.tag_slug).collect();
-        let mut cover_url = cover_url;
-        let mut cover_media_type = cover_media_type;
-        if let Some(game) = &delegated_game {
-            if row.inherit_thumbnail != 0 {
-                let game_cover = sqlx::query_as::<_, (Option<String>, Option<String>)>(
-                    r#"
-                    SELECT 'media/i/' || media.short_name, media.file_type
-                    FROM games g
-                    JOIN posts ON posts.id = g.post_id
-                    LEFT JOIN media ON media.id = posts.cover_media_id
-                    WHERE g.id = ?
-                    "#,
-                )
-                .bind(game.id)
-                .fetch_optional(&self.pool)
-                .await?
-                .and_then(|(url, media_type)| url.map(|u| (Some(u), media_type)));
-                if let Some((url, media_type)) = game_cover {
-                    cover_url = url;
-                    cover_media_type = media_type;
-                }
-            }
-            if row.inherit_tags != 0 {
-                let game_tags = sqlx::query_scalar::<_, String>(
-                    r#"
-                    SELECT tags.slug
-                    FROM games g
-                    JOIN post_tags ON post_tags.post_id = g.post_id
-                    JOIN tags ON tags.id = post_tags.tag_id
-                    WHERE g.id = ?
-                    "#,
-                )
-                .bind(game.id)
-                .fetch_all(&self.pool)
-                .await?;
-                for tag in game_tags {
-                    if !tags.contains(&tag) {
-                        tags.push(tag);
-                    }
-                }
-            }
-        }
-
-        Ok(Project {
-            id: row.project_id,
+        Ok(Game {
+            id: row.game_id,
             post_id: row.post_id,
             title: row.title,
             slug: row.slug,
             author_name: row.author_name,
             author_slug: row.author_slug,
             author_avatar_url: row.author_avatar_url,
-            tags,
+            tags: tag_rows.into_iter().map(|row| row.tag_slug).collect(),
             excerpt: row.excerpt,
             content: row.content,
             draft: row.draft,
@@ -351,131 +256,96 @@ impl ProjectServiceImpl {
             cover_video_url: row.cover_video_url,
             cover_video_type: row.cover_video_type,
             og_image_seconds: row.og_image_seconds,
-            demo: ProjectDemo {
-                demo_type: row.demo_type,
-                entry_path: row.demo_entry_path,
+            demo: GameDemo {
+                launcher_type: row.launcher_type,
                 width: row.demo_width,
                 height: row.demo_height,
-                config: row.demo_config,
                 demo_url: row.demo_url,
+                jsdos_bundle,
             },
-            delegate_game_id: row.delegate_game_id,
-            inherit_thumbnail: row.inherit_thumbnail != 0,
-            inherit_tags: row.inherit_tags != 0,
-            delegated_game,
-            links: self.links_for_project(row.project_id).await?,
+            instruction: row.instruction,
+            cheatcode: row.cheatcode,
+            story: row.story,
+            related_games: self.related_games_for(row.game_id).await?,
             is_owner: viewing_user_id == Some(row.user_id),
         })
     }
 }
 
 #[async_trait::async_trait]
-impl ProjectService for ProjectServiceImpl {
-    async fn new_project(&self, cmd: NewProjectCommand) -> Result<i64, ProjectError> {
+impl GameService for GameServiceImpl {
+    async fn new_game(&self, cmd: NewGameCommand) -> Result<i64, GameError> {
         let mut tx = self.pool.begin().await?;
-        let initial_demo_url = cmd.demo_url.clone();
-        let demo_type = cmd.demo_type.clone();
-
-        let project_id: i64 = sqlx::query_scalar(
+        let game_id: i64 = sqlx::query_scalar(
             r#"
-            INSERT INTO projects (
-                post_id,
-                demo_type,
-                demo_entry_path,
-                demo_width,
-                demo_height,
-                demo_config,
-                demo_url,
-                delegate_game_id,
-                inherit_thumbnail,
-                inherit_tags
+            INSERT INTO games (
+                post_id, launcher_type, demo_width, demo_height, demo_url,
+                instruction, cheatcode, story
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
         .bind(cmd.post_id)
-        .bind(cmd.demo_type)
-        .bind(cmd.demo_entry_path)
+        .bind(cmd.launcher_type)
         .bind(cmd.demo_width)
         .bind(cmd.demo_height)
-        .bind(cmd.demo_config)
-        .bind(&initial_demo_url)
-        .bind(cmd.delegate_game_id)
-        .bind(cmd.inherit_thumbnail as i64)
-        .bind(cmd.inherit_tags as i64)
+        .bind(cmd.demo_url)
+        .bind(cmd.instruction)
+        .bind(cmd.cheatcode)
+        .bind(cmd.story)
         .fetch_one(&mut *tx)
         .await?;
 
-        if (demo_type == "html5" || demo_type == "webgl")
-            && (initial_demo_url.is_none()
-                || initial_demo_url.as_deref().unwrap_or("").trim().is_empty())
-        {
-            let local_demo_url = std::path::PathBuf::from(cmd.demo_url_dir)
-                .join(project_id.to_string())
-                .join("index.html");
-            let local_demo_url_str = local_demo_url.to_str().unwrap_or("").to_string();
-
-            sqlx::query("UPDATE projects SET demo_url = ? WHERE id = ?")
-                .bind(local_demo_url_str)
-                .bind(project_id)
-                .execute(&mut *tx)
-                .await?;
-        }
-
-        if !cmd.links.is_empty() {
+        if !cmd.related_games.is_empty() {
             let values = cmd
-                .links
+                .related_games
                 .iter()
-                .map(|_| "(?, ?, ?, ?)".to_string())
+                .map(|_| "(?, ?, ?)".to_string())
                 .collect::<Vec<_>>()
                 .join(", ");
             let sql = format!(
-                "INSERT INTO project_links (project_id, label, url, sort_order) VALUES {}",
+                "INSERT INTO related_games (game_id, related_game_id, sort_order) VALUES {}",
                 values
             );
             let mut query = sqlx::query(&sql);
-            for (index, link) in cmd.links.iter().enumerate() {
+            for (index, link) in cmd.related_games.iter().enumerate() {
                 query = query
-                    .bind(project_id)
-                    .bind(&link.label)
-                    .bind(&link.url)
+                    .bind(game_id)
+                    .bind(link.id)
                     .bind(index as i64);
             }
             query.execute(&mut *tx).await?;
         }
 
         tx.commit().await?;
-        Ok(project_id)
+        Ok(game_id)
     }
 
-    async fn update_project(&self, cmd: UpdateProjectCommand) -> Result<(), ProjectError> {
+    async fn update_game(&self, cmd: UpdateGameCommand) -> Result<(), GameError> {
         let post_user_id: Option<i64> = sqlx::query_scalar(
             r#"
             SELECT posts.user_id
-            FROM projects
-            JOIN posts ON posts.id = projects.post_id
-            WHERE projects.id = ?
+            FROM games
+            JOIN posts ON posts.id = games.post_id
+            WHERE games.id = ?
             "#,
         )
-        .bind(cmd.project_id)
+        .bind(cmd.game_id)
         .fetch_optional(&self.pool)
         .await?;
 
         if post_user_id.is_none() {
-            return Err(ProjectError::ProjectNotFound);
+            return Err(GameError::GameNotFound);
         }
         if post_user_id != Some(cmd.user_id) {
-            return Err(ProjectError::Forbidden);
+            return Err(GameError::Forbidden);
         }
 
         let mut tx = self.pool.begin().await?;
         let mut fields = vec![];
-        if cmd.demo_type.is_some() {
-            fields.push("demo_type = ?");
-        }
-        if cmd.demo_entry_path.is_some() {
-            fields.push("demo_entry_path = ?");
+        if cmd.launcher_type.is_some() {
+            fields.push("launcher_type = ?");
         }
         if cmd.demo_width.is_some() {
             fields.push("demo_width = ?");
@@ -483,30 +353,24 @@ impl ProjectService for ProjectServiceImpl {
         if cmd.demo_height.is_some() {
             fields.push("demo_height = ?");
         }
-        if cmd.demo_config.is_some() {
-            fields.push("demo_config = ?");
-        }
         if cmd.demo_url.is_some() {
             fields.push("demo_url = ?");
         }
-        if cmd.delegate_game_id.is_some() {
-            fields.push("delegate_game_id = ?");
+        if cmd.instruction.is_some() {
+            fields.push("instruction = ?");
         }
-        if cmd.inherit_thumbnail.is_some() {
-            fields.push("inherit_thumbnail = ?");
+        if cmd.cheatcode.is_some() {
+            fields.push("cheatcode = ?");
         }
-        if cmd.inherit_tags.is_some() {
-            fields.push("inherit_tags = ?");
+        if cmd.story.is_some() {
+            fields.push("story = ?");
         }
 
         if !fields.is_empty() {
             fields.push("updated_at = CURRENT_TIMESTAMP");
-            let sql = format!("UPDATE projects SET {} WHERE id = ?", fields.join(", "));
+            let sql = format!("UPDATE games SET {} WHERE id = ?", fields.join(", "));
             let mut query = sqlx::query(&sql);
-            if let Some(value) = cmd.demo_type {
-                query = query.bind(value);
-            }
-            if let Some(value) = cmd.demo_entry_path {
+            if let Some(value) = cmd.launcher_type {
                 query = query.bind(value);
             }
             if let Some(value) = cmd.demo_width {
@@ -515,45 +379,41 @@ impl ProjectService for ProjectServiceImpl {
             if let Some(value) = cmd.demo_height {
                 query = query.bind(value);
             }
-            if let Some(value) = cmd.demo_config {
-                query = query.bind(value);
-            }
             if let Some(value) = cmd.demo_url {
                 query = query.bind(value);
             }
-            if let Some(value) = cmd.delegate_game_id {
+            if let Some(value) = cmd.instruction {
                 query = query.bind(value);
             }
-            if let Some(value) = cmd.inherit_thumbnail {
-                query = query.bind(value as i64);
+            if let Some(value) = cmd.cheatcode {
+                query = query.bind(value);
             }
-            if let Some(value) = cmd.inherit_tags {
-                query = query.bind(value as i64);
+            if let Some(value) = cmd.story {
+                query = query.bind(value);
             }
-            query.bind(cmd.project_id).execute(&mut *tx).await?;
+            query.bind(cmd.game_id).execute(&mut *tx).await?;
         }
 
-        if let Some(links) = cmd.links {
-            sqlx::query("DELETE FROM project_links WHERE project_id = ?")
-                .bind(cmd.project_id)
+        if let Some(related) = cmd.related_games {
+            sqlx::query("DELETE FROM related_games WHERE game_id = ?")
+                .bind(cmd.game_id)
                 .execute(&mut *tx)
                 .await?;
-            if !links.is_empty() {
-                let values = links
+            if !related.is_empty() {
+                let values = related
                     .iter()
-                    .map(|_| "(?, ?, ?, ?)".to_string())
+                    .map(|_| "(?, ?, ?)".to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
                 let sql = format!(
-                    "INSERT INTO project_links (project_id, label, url, sort_order) VALUES {}",
+                    "INSERT INTO related_games (game_id, related_game_id, sort_order) VALUES {}",
                     values
                 );
                 let mut query = sqlx::query(&sql);
-                for (index, link) in links.iter().enumerate() {
+                for (index, link) in related.iter().enumerate() {
                     query = query
-                        .bind(cmd.project_id)
-                        .bind(&link.label)
-                        .bind(&link.url)
+                        .bind(cmd.game_id)
+                        .bind(link.id)
                         .bind(index as i64);
                 }
                 query.execute(&mut *tx).await?;
@@ -564,16 +424,16 @@ impl ProjectService for ProjectServiceImpl {
         Ok(())
     }
 
-    async fn get_project_by_slug(
+    async fn get_game_by_slug(
         &self,
-        cmd: GetProjectBySlugCommand,
-    ) -> Result<Project, ProjectError> {
+        cmd: GetGameBySlugCommand,
+    ) -> Result<Game, GameError> {
         if let Some(id) = cmd.as_id {
             let allowed: Option<i64> = sqlx::query_scalar(
                 r#"
                 SELECT posts.id
-                FROM projects
-                JOIN posts ON posts.id = projects.post_id
+                FROM games
+                JOIN posts ON posts.id = games.post_id
                 WHERE posts.user_id = ? AND posts.slug = ?
                 "#,
             )
@@ -583,14 +443,14 @@ impl ProjectService for ProjectServiceImpl {
             .await?;
 
             if allowed.is_none() {
-                return Err(ProjectError::Forbidden);
+                return Err(GameError::Forbidden);
             }
         }
 
-        let row = sqlx::query_as::<_, ProjectContentRow>(
+        let row = sqlx::query_as::<_, GameContentRow>(
             r#"
             SELECT
-                projects.id AS project_id,
+                games.id AS game_id,
                 posts.id AS post_id,
                 posts.user_id,
                 users.username AS author_slug,
@@ -608,17 +468,15 @@ impl ProjectService for ProjectServiceImpl {
                 'media/i/' || video.short_name AS cover_video_url,
                 video.file_type AS cover_video_type,
                 posts.og_image_seconds,
-                projects.demo_type,
-                projects.demo_entry_path,
-                projects.demo_width,
-                projects.demo_height,
-                projects.demo_config,
-                projects.demo_url,
-                projects.delegate_game_id,
-                projects.inherit_thumbnail,
-                projects.inherit_tags
-            FROM projects
-            JOIN posts ON posts.id = projects.post_id
+                games.launcher_type,
+                games.demo_width,
+                games.demo_height,
+                games.demo_url,
+                games.instruction,
+                games.cheatcode,
+                games.story
+            FROM games
+            JOIN posts ON posts.id = games.post_id
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = users.id
             LEFT JOIN media cover ON cover.id = posts.cover_media_id
@@ -630,19 +488,19 @@ impl ProjectService for ProjectServiceImpl {
         .bind(&cmd.slug)
         .fetch_optional(&self.pool)
         .await?
-        .ok_or(ProjectError::ProjectNotFound)?;
+        .ok_or(GameError::GameNotFound)?;
 
-        self.project_from_row(row, cmd.as_id).await
+        self.game_from_row(row, cmd.as_id).await
     }
 
-    async fn get_project_details(
+    async fn get_game_details(
         &self,
-        cmd: GetProjectDetailsCommand,
-    ) -> Result<Project, ProjectError> {
-        let row = sqlx::query_as::<_, ProjectContentRow>(
+        cmd: GetGameDetailsCommand,
+    ) -> Result<Game, GameError> {
+        let row = sqlx::query_as::<_, GameContentRow>(
             r#"
             SELECT
-                projects.id AS project_id,
+                games.id AS game_id,
                 posts.id AS post_id,
                 posts.user_id,
                 users.username AS author_slug,
@@ -660,65 +518,63 @@ impl ProjectService for ProjectServiceImpl {
                 'media/i/' || video.short_name AS cover_video_url,
                 video.file_type AS cover_video_type,
                 posts.og_image_seconds,
-                projects.demo_type,
-                projects.demo_entry_path,
-                projects.demo_width,
-                projects.demo_height,
-                projects.demo_config,
-                projects.demo_url,
-                projects.delegate_game_id,
-                projects.inherit_thumbnail,
-                projects.inherit_tags
-            FROM projects
-            JOIN posts ON posts.id = projects.post_id
+                games.launcher_type,
+                games.demo_width,
+                games.demo_height,
+                games.demo_url,
+                games.instruction,
+                games.cheatcode,
+                games.story
+            FROM games
+            JOIN posts ON posts.id = games.post_id
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = users.id
             LEFT JOIN media ON media.id = posts.cover_media_id
             LEFT JOIN media avatar ON avatar.id = user_meta.avatar_image_id
             LEFT JOIN media video ON video.short_name = '.post.' || posts.id
-            WHERE projects.id = ?
+            WHERE games.id = ?
             "#,
         )
-        .bind(cmd.project_id)
+        .bind(cmd.game_id)
         .fetch_optional(&self.pool)
         .await?
-        .ok_or(ProjectError::ProjectNotFound)?;
+        .ok_or(GameError::GameNotFound)?;
 
         if let Some(user_id) = cmd.required_author_id
             && user_id != row.user_id
         {
-            return Err(ProjectError::Forbidden);
+            return Err(GameError::Forbidden);
         }
 
-        self.project_from_row(row, Some(cmd.viewing_user_id)).await
+        self.game_from_row(row, Some(cmd.viewing_user_id)).await
     }
 
-    async fn get_project_post_id(&self, cmd: GetProjectPostIdCommand) -> Result<i64, ProjectError> {
+    async fn get_game_post_id(&self, cmd: GetGamePostIdCommand) -> Result<i64, GameError> {
         let row: Option<(i64, i64)> = sqlx::query_as(
             r#"
             SELECT posts.id, posts.user_id
-            FROM projects
-            JOIN posts ON posts.id = projects.post_id
-            WHERE projects.id = ?
+            FROM games
+            JOIN posts ON posts.id = games.post_id
+            WHERE games.id = ?
             "#,
         )
-        .bind(cmd.project_id)
+        .bind(cmd.game_id)
         .fetch_optional(&self.pool)
         .await?;
 
-        let (post_id, user_id) = row.ok_or(ProjectError::ProjectNotFound)?;
+        let (post_id, user_id) = row.ok_or(GameError::GameNotFound)?;
         if let Some(required) = cmd.required_author_id
             && required != user_id
         {
-            return Err(ProjectError::Forbidden);
+            return Err(GameError::Forbidden);
         }
         Ok(post_id)
     }
 
-    async fn get_latest_project_snapshots(
+    async fn get_latest_game_snapshots(
         &self,
-        cmd: GetLatestProjectsCommand,
-    ) -> Result<ProjectSnapshotPage, ProjectError> {
+        cmd: GetLatestGamesCommand,
+    ) -> Result<GameSnapshotPage, GameError> {
         let mut where_parts = Vec::<String>::new();
         if cmd.public_only {
             where_parts.push("posts.status = 'published'".to_string());
@@ -735,7 +591,7 @@ impl ProjectService for ProjectServiceImpl {
         let sql = format!(
             r#"
             SELECT
-                projects.id AS project_id,
+                games.id AS game_id,
                 posts.id AS post_id,
                 posts.title,
                 posts.slug,
@@ -745,13 +601,13 @@ impl ProjectService for ProjectServiceImpl {
                 posts.status,
                 'media/i/' || media.short_name AS url,
                 media.file_type AS cover_media_type,
-                projects.demo_type,
+                games.launcher_type,
                 post_stats.views,
                 post_stats.likes,
                 post_stats.comments_count,
                 posts.reading_time_minutes
-            FROM projects
-            JOIN posts ON posts.id = projects.post_id
+            FROM games
+            JOIN posts ON posts.id = games.post_id
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = posts.user_id
             JOIN post_stats ON post_stats.post_id = posts.id
@@ -764,7 +620,7 @@ impl ProjectService for ProjectServiceImpl {
             where_clause
         );
 
-        let mut query = sqlx::query_as::<_, ProjectSnapshotRow>(&sql);
+        let mut query = sqlx::query_as::<_, GameSnapshotRow>(&sql);
         if let Some(user_id) = cmd.required_author_id {
             query = query.bind(user_id);
         }
@@ -774,43 +630,43 @@ impl ProjectService for ProjectServiceImpl {
             .fetch_all(&self.pool)
             .await?;
 
-        let mut projects = self.hydrate_project_rows(rows).await?;
-        let has_more = projects.len() as i64 > cmd.limit;
+        let mut games = self.hydrate_game_rows(rows).await?;
+        let has_more = games.len() as i64 > cmd.limit;
         if has_more {
-            projects.truncate(cmd.limit as usize);
+            games.truncate(cmd.limit as usize);
         }
 
-        Ok(ProjectSnapshotPage { projects, has_more })
+        Ok(GameSnapshotPage { games, has_more })
     }
 
-    async fn set_project_featured(
+    async fn set_game_featured(
         &self,
-        cmd: SetFeaturedProjectCommand,
-    ) -> Result<(), ProjectError> {
+        cmd: SetFeaturedGameCommand,
+    ) -> Result<(), GameError> {
         let is_featured_val = if cmd.is_featured { 1 } else { 0 };
         sqlx::query(
             r#"
             UPDATE posts
             SET is_featured = ?
-            WHERE id = (SELECT post_id FROM projects WHERE id = ?)
+            WHERE id = (SELECT post_id FROM games WHERE id = ?)
             "#,
         )
         .bind(is_featured_val)
-        .bind(cmd.project_id)
+        .bind(cmd.game_id)
         .execute(&self.pool)
         .await?;
 
         Ok(())
     }
 
-    async fn get_featured_project_snapshots(
+    async fn get_featured_game_snapshots(
         &self,
-        cmd: GetFeaturedProjectsCommand,
-    ) -> Result<Vec<ProjectSnapshot>, ProjectError> {
-        let rows = sqlx::query_as::<_, ProjectSnapshotRow>(
+        cmd: GetFeaturedGamesCommand,
+    ) -> Result<Vec<GameSnapshot>, GameError> {
+        let rows = sqlx::query_as::<_, GameSnapshotRow>(
             r#"
             SELECT
-                projects.id AS project_id,
+                games.id AS game_id,
                 posts.id AS post_id,
                 posts.title,
                 posts.slug,
@@ -820,13 +676,13 @@ impl ProjectService for ProjectServiceImpl {
                 posts.status,
                 'media/i/' || media.short_name AS url,
                 media.file_type AS cover_media_type,
-                projects.demo_type,
+                games.launcher_type,
                 post_stats.views,
                 post_stats.likes,
                 post_stats.comments_count,
                 posts.reading_time_minutes
-            FROM projects
-            JOIN posts ON posts.id = projects.post_id
+            FROM games
+            JOIN posts ON posts.id = games.post_id
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = posts.user_id
             JOIN post_stats ON post_stats.post_id = posts.id
@@ -840,17 +696,17 @@ impl ProjectService for ProjectServiceImpl {
         .fetch_all(&self.pool)
         .await?;
 
-        self.hydrate_project_rows(rows).await
+        self.hydrate_game_rows(rows).await
     }
 
-    async fn get_project_snapshots_by_tag(
+    async fn get_game_snapshots_by_tag(
         &self,
-        cmd: GetProjectsByTagCommand,
-    ) -> Result<Vec<ProjectSnapshot>, ProjectError> {
-        let rows = sqlx::query_as::<_, ProjectSnapshotRow>(
+        cmd: GetGamesByTagCommand,
+    ) -> Result<Vec<GameSnapshot>, GameError> {
+        let rows = sqlx::query_as::<_, GameSnapshotRow>(
             r#"
             SELECT
-                projects.id AS project_id,
+                games.id AS game_id,
                 posts.id AS post_id,
                 posts.title,
                 posts.slug,
@@ -860,13 +716,13 @@ impl ProjectService for ProjectServiceImpl {
                 posts.status,
                 'media/i/' || media.short_name AS url,
                 media.file_type AS cover_media_type,
-                projects.demo_type,
+                games.launcher_type,
                 post_stats.views,
                 post_stats.likes,
                 post_stats.comments_count,
                 posts.reading_time_minutes
-            FROM projects
-            JOIN posts ON posts.id = projects.post_id
+            FROM games
+            JOIN posts ON posts.id = games.post_id
             JOIN users ON users.id = posts.user_id
             JOIN user_meta ON user_meta.user_id = posts.user_id
             JOIN post_stats ON post_stats.post_id = posts.id
@@ -888,6 +744,6 @@ impl ProjectService for ProjectServiceImpl {
         .fetch_all(&self.pool)
         .await?;
 
-        self.hydrate_project_rows(rows).await
+        self.hydrate_game_rows(rows).await
     }
 }

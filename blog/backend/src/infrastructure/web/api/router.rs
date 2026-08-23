@@ -215,12 +215,6 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     "/s/{project_slug}",
                     get(handlers::project::get_project_by_slug),
                 )
-                .route(
-                    "/s/{project_slug}/v86/saves",
-                    get(handlers::v86::get_game_save)
-                        .put(handlers::v86::put_game_save)
-                        .delete(handlers::v86::delete_game_save),
-                )
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::optional_user_guard,
@@ -231,26 +225,6 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .merge(
             Router::new()
                 .route("/new", post(handlers::project::new_project))
-                .route(
-                    "/id/{project_id}/jsdos/upload",
-                    post(handlers::project::start_jsdos_upload),
-                )
-                .route(
-                    "/id/{project_id}/jsdos/upload/{upload_id}/chunk/{chunk_index}",
-                    put(handlers::project::append_jsdos_chunk),
-                )
-                .route(
-                    "/id/{project_id}/jsdos/upload/{upload_id}/complete",
-                    post(handlers::project::complete_jsdos_upload),
-                )
-                .route(
-                    "/id/{project_id}/jsdos/upload/{upload_id}",
-                    delete(handlers::project::abort_jsdos_upload),
-                )
-                .route(
-                    "/id/{project_id}/v86/attach/{upload_id}",
-                    patch(handlers::v86::attach_ready_game),
-                )
                 .route("/all", get(handlers::project::get_all_projects))
                 .route("/id/{project_id}", post(handlers::project::publish_project))
                 .route(
@@ -289,25 +263,108 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // public routes
         .merge(
             Router::new()
-                .route(
-                    "/s/{project_slug}/jsdos",
-                    get(handlers::project::get_jsdos_bundle),
-                )
-                .route(
-                    "/s/{project_slug}/v86/{sha256}/full.iso",
-                    get(handlers::v86::get_game_iso),
-                )
-                .route(
-                    "/s/{project_slug}/v86/{sha256}/{part}",
-                    get(handlers::v86::get_game_chunk),
-                )
-                .route(
-                    "/s/{project_slug}/v86/disk/{sha256}/{part}",
-                    get(handlers::v86::get_game_disk_chunk),
-                )
                 .route("/latest", get(handlers::project::get_latest_projects))
                 .route("/featured", get(handlers::project::get_featured_projects))
                 .route("/check", get(handlers::project::check_project)),
+        );
+
+    let game_routes = Router::new()
+        // optional-auth routes
+        .merge(
+            Router::new()
+                .route(
+                    "/s/{game_slug}",
+                    get(handlers::game::get_game_by_slug),
+                )
+                .route(
+                    "/s/{game_slug}/v86/saves",
+                    get(handlers::v86::get_game_save)
+                        .put(handlers::v86::put_game_save)
+                        .delete(handlers::v86::delete_game_save),
+                )
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::optional_user_guard,
+                ))
+                .layer(DefaultBodyLimit::max(3 * 1024 * 1024)),
+        )
+        // mod-protected routes
+        .merge(
+            Router::new()
+                .route("/new", post(handlers::game::new_game))
+                .route(
+                    "/id/{game_id}/jsdos/upload",
+                    post(handlers::game::start_jsdos_upload),
+                )
+                .route(
+                    "/id/{game_id}/jsdos/upload/{upload_id}/chunk/{chunk_index}",
+                    put(handlers::game::append_jsdos_chunk),
+                )
+                .route(
+                    "/id/{game_id}/jsdos/upload/{upload_id}/complete",
+                    post(handlers::game::complete_jsdos_upload),
+                )
+                .route(
+                    "/id/{game_id}/jsdos/upload/{upload_id}",
+                    delete(handlers::game::abort_jsdos_upload),
+                )
+                .route("/all", get(handlers::game::get_all_games))
+                .route("/id/{game_id}", post(handlers::game::publish_game))
+                .route(
+                    "/id/{game_id}",
+                    get(handlers::game::get_game_details),
+                )
+                .route("/id/{game_id}", patch(handlers::game::update_game))
+                .route(
+                    "/id/{game_id}",
+                    delete(handlers::game::delete_game_draft),
+                )
+                .route(
+                    "/id/{game_id}/cover",
+                    patch(handlers::game::change_cover),
+                )
+                .layer(middleware::from_fn(middlewares::auth::mod_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                ))
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
+        )
+        // admin-protected routes
+        .merge(
+            Router::new()
+                .route(
+                    "/id/{game_id}/featured",
+                    put(handlers::game::set_game_featured),
+                )
+                .layer(middleware::from_fn(middlewares::auth::admin_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        )
+        // public routes
+        .merge(
+            Router::new()
+                .route(
+                    "/s/{game_slug}/jsdos",
+                    get(handlers::game::get_jsdos_bundle),
+                )
+                .route(
+                    "/s/{game_slug}/v86/{sha256}/full.iso",
+                    get(handlers::v86::get_game_iso),
+                )
+                .route(
+                    "/s/{game_slug}/v86/{sha256}/{part}",
+                    get(handlers::v86::get_game_chunk),
+                )
+                .route(
+                    "/s/{game_slug}/v86/disk/{sha256}/{part}",
+                    get(handlers::v86::get_game_disk_chunk),
+                )
+                .route("/latest", get(handlers::game::get_latest_games))
+                .route("/featured", get(handlers::game::get_featured_games))
+                .route("/check", get(handlers::game::check_game)),
         );
 
     let v86_routes = Router::new()
@@ -353,16 +410,16 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     delete(handlers::v86::abort_snapshot_upload),
                 )
                 .route(
-                    "/projects/id/{project_id}/snapshot",
-                    get(handlers::v86::get_project_snapshot),
+                    "/games/id/{game_id}/snapshot",
+                    get(handlers::v86::get_game_snapshot),
                 )
                 .route(
-                    "/projects/id/{project_id}/snapshot/{variant_index}",
-                    delete(handlers::v86::delete_project_snapshot),
+                    "/games/id/{game_id}/snapshot/{variant_index}",
+                    delete(handlers::v86::delete_game_snapshot),
                 )
                 .route(
-                    "/projects/id/{project_id}/capture-runtime",
-                    get(handlers::v86::get_project_capture_runtime),
+                    "/games/id/{game_id}/capture-runtime",
+                    get(handlers::v86::get_game_capture_runtime),
                 )
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
@@ -531,6 +588,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/users", user_routes)
         .nest("/posts", post_routes)
         .nest("/projects", project_routes)
+        .nest("/games", game_routes)
         .nest("/v86", v86_routes)
         .route(
             &format!("{project_demos_path}/v86/{{*path}}"),

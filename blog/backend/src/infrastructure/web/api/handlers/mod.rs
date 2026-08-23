@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod backup;
 pub mod common;
+pub mod game;
 pub mod dashboard;
 pub mod mail;
 pub mod media;

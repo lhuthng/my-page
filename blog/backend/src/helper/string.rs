@@ -130,11 +130,11 @@ mod tests {
     }
 
     #[test]
-    fn slug_rejects_bad_chars_and_uppercase() {
+    fn slug_rejects_bad_chars() {
         assert!(validate_slug("A B").is_err());
         assert!(validate_slug("über").is_err());
-        assert!(validate_slug("HelloWorld").is_err());
         assert!(validate_slug("a/b").is_err());
+        // Uppercase is normalized, not rejected (see `slug_normalizes_valid_input`).
     }
 
     #[test]

@@ -50,10 +50,21 @@ function buildProjectPatch({ baseline, current }) {
 	if (current.demoType === 'none') {
 		if (baseUrl !== '') patch.demo_url = '';
 	} else if (
-		!['none', 'html5', 'webgl', 'v86'].includes(current.demoType) &&
+		!['none', 'html5', 'webgl', 'game'].includes(current.demoType) &&
 		current.demoUrl !== baseUrl
 	) {
 		patch.demo_url = current.demoUrl;
+	}
+
+	const baseDelegate = baseline.delegateGameId ?? '';
+	if ((current.delegateGameId ?? '') !== baseDelegate) {
+		patch.delegate_game_id = current.delegateGameId ? Number(current.delegateGameId) : null;
+	}
+	if ((current.inheritThumbnail ?? true) !== (baseline.inheritThumbnail ?? true)) {
+		patch.inherit_thumbnail = current.inheritThumbnail ?? true;
+	}
+	if ((current.inheritTags ?? true) !== (baseline.inheritTags ?? true)) {
+		patch.inherit_tags = current.inheritTags ?? true;
 	}
 
 	// Both sides go through the same normalization: `baseline.links` can be the
@@ -71,9 +82,62 @@ function buildProjectPatch({ baseline, current }) {
 }
 
 /**
- * Build the partial PATCH payload for saving a post or project: only fields
- * that differ from `baseline` — the state the server last confirmed — are
- * included.
+ * Build the game-specific half of a PATCH payload. Games have no external
+ * links; instead they carry the "many bodies" (instruction/cheatcode/story)
+ * and related-game links.
+ *
+ * @param {{baseline: object, current: object}} args
+ */
+function buildGamePatch({ baseline, current }) {
+	const patch = {};
+
+	const baseDemoType = baseline.demoType ?? 'html5';
+	if (current.demoType !== baseDemoType) patch.launcher_type = current.demoType;
+
+	const baseWidth = baseline.demoWidth ?? '100%';
+	if (current.demoWidth !== baseWidth) patch.demo_width = current.demoWidth;
+
+	const baseHeight = baseline.demoHeight ?? '520px';
+	if (current.demoHeight !== baseHeight) patch.demo_height = current.demoHeight;
+
+	// jsdos/v86/html5/webgl never carry a URL.
+	const baseUrl = baseline.demoUrl ?? '';
+	if (
+		!['html5', 'webgl', 'jsdos', 'v86'].includes(current.demoType) &&
+		current.demoUrl !== baseUrl
+	) {
+		patch.demo_url = current.demoUrl;
+	}
+
+	if ((current.instruction ?? '') !== (baseline.instruction ?? '')) {
+		patch.instruction = current.instruction ?? '';
+	}
+	if ((current.cheatcode ?? '') !== (baseline.cheatcode ?? '')) {
+		patch.cheatcode = current.cheatcode ?? '';
+	}
+	if ((current.story ?? '') !== (baseline.story ?? '')) {
+		patch.story = current.story ?? '';
+	}
+
+	const related = (current.relatedGames ?? [])
+		.filter((link) => link.id !== '' && link.id != null)
+		.map((link) => ({ id: Number(link.id), title: link.title ?? '', slug: link.slug ?? '' }));
+	const baseRelated = (baseline.relatedGames ?? []).map((link) => ({
+		id: Number(link.id),
+		title: link.title ?? '',
+		slug: link.slug ?? ''
+	}));
+	if (JSON.stringify(related) !== JSON.stringify(baseRelated)) {
+		patch.related_games = related;
+	}
+
+	return patch;
+}
+
+/**
+ * Build the partial PATCH payload for saving a post, project, or game: only
+ * fields that differ from `baseline` — the state the server last confirmed —
+ * are included.
  *
  * This is the single place that decides "what changed." It replaces the
  * hand-written if-chains that used to live inline in `PostEditor.svelte` and
@@ -89,7 +153,7 @@ function buildProjectPatch({ baseline, current }) {
  * @param {boolean} [args.hasNewMedia] force content+draft even if the draft
  *   text itself is unchanged — newly uploaded inline media still needs its
  *   server-side usage rows, which the backend derives from the body text.
- * @param {'post'|'project'} [args.kind]
+ * @param {'post'|'project'|'game'} [args.kind]
  * @returns {Record<string, unknown>}
  */
 export function buildPatch({ baseline, current, hasNewMedia = false, kind = 'post' }) {
@@ -114,6 +178,8 @@ export function buildPatch({ baseline, current, hasNewMedia = false, kind = 'pos
 
 	if (kind === 'project') {
 		Object.assign(patch, buildProjectPatch({ baseline, current }));
+	} else if (kind === 'game') {
+		Object.assign(patch, buildGamePatch({ baseline, current }));
 	}
 
 	return patch;

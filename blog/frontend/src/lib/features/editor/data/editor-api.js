@@ -5,10 +5,10 @@
  * kinds — this only knows the URL shapes and response parsing.
  */
 
-const PLURAL = { post: 'posts', project: 'projects' };
+const PLURAL = { post: 'posts', project: 'projects', game: 'games' };
 
 /**
- * @param {'post'|'project'} kind
+ * @param {'post'|'project'|'game'} kind
  * @param {string} slug
  * @param {typeof fetch} fetchImpl
  */
@@ -23,7 +23,7 @@ export async function checkSlugAvailable(kind, slug, fetchImpl = fetch) {
 }
 
 /**
- * @param {'post'|'project'} kind
+ * @param {'post'|'project'|'game'} kind
  * @param {FormData} formData
  * @param {string} authHeader
  * @param {typeof fetch} fetchImpl
@@ -40,7 +40,7 @@ export async function createEntry(kind, formData, authHeader, fetchImpl = fetch)
 }
 
 /**
- * @param {'post'|'project'} kind
+ * @param {'post'|'project'|'game'} kind
  * @param {number|string} id
  * @param {FormData} formData
  * @param {string} authHeader
@@ -73,7 +73,7 @@ export async function patchEntry(kind, id, formData, authHeader, fetchImpl = fet
 }
 
 /**
- * @param {'post'|'project'} kind
+ * @param {'post'|'project'|'game'} kind
  * @param {number|string} id
  * @param {string} authHeader
  * @param {typeof fetch} fetchImpl
@@ -87,12 +87,13 @@ export async function publishEntry(kind, id, authHeader, fetchImpl = fetch) {
 }
 
 /**
+ * @param {'project'|'game'} kind
  * @param {number|string} id
  * @param {string} authHeader
  * @param {typeof fetch} fetchImpl
  */
-export async function deleteProjectDraft(id, authHeader, fetchImpl = fetch) {
-	await fetchImpl(`/api/projects/id/${id}`, {
+export async function deleteEntryDraft(kind, id, authHeader, fetchImpl = fetch) {
+	await fetchImpl(`/api/${PLURAL[kind]}/id/${id}`, {
 		method: 'DELETE',
 		headers: { Authorization: authHeader }
 	}).catch(() => {});

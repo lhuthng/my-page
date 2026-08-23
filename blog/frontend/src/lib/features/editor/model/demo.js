@@ -10,8 +10,21 @@ export const DEMO_TYPES = [
 	{ value: 'html5', label: 'HTML5', disabled: false },
 	{ value: 'embed', label: 'Embed', disabled: false },
 	{ value: 'webgl', label: 'WebGL', disabled: false },
+	{ value: 'download', label: 'Download', disabled: false },
+	{ value: 'video', label: 'Video', disabled: false },
+	{ value: 'game', label: 'Delegate to game', disabled: false }
+];
+
+/**
+ * Games always have a launcher — there is no "none".
+ * @type {{value: string, label: string, disabled: boolean}[]}
+ */
+export const GAME_DEMO_TYPES = [
+	{ value: 'html5', label: 'HTML5', disabled: false },
+	{ value: 'webgl', label: 'WebGL', disabled: false },
 	{ value: 'jsdos', label: 'js-dos', disabled: false },
 	{ value: 'v86', label: 'v86', disabled: false },
+	{ value: 'embed', label: 'Embed', disabled: false },
 	{ value: 'download', label: 'Download', disabled: false },
 	{ value: 'video', label: 'Video', disabled: false }
 ];
@@ -35,13 +48,13 @@ export function applyDemoTypeTransition(nextType) {
 		patch.demoZip = undefined;
 		patch.demoZipName = '';
 		patch.demoZipError = '';
-	} else if (nextType === 'none') {
+	} else if (nextType === 'none' || nextType === 'game') {
 		patch.demoZip = undefined;
 		patch.demoZipName = '';
 		patch.demoZipError = '';
 		patch.demoUrl = '';
 	} else {
-		// html5 / webgl / jsdos / v86: these never carry a URL.
+		// html5 / webgl: these never carry a URL.
 		patch.demoUrl = '';
 	}
 
@@ -130,7 +143,9 @@ export function validateDemoFields({
 	mode,
 	previousDemoType,
 	v86SystemVersionId,
-	v86Manifest
+	v86Manifest,
+	delegateGameId,
+	kindLabel = 'projects'
 }) {
 	switch (demoType) {
 		case 'none':
@@ -140,19 +155,19 @@ export function validateDemoFields({
 			if (mode === 'create' && !zip) {
 				return {
 					valid: false,
-					error: `Zip file is required for ${demoType.toUpperCase()} projects.`
+					error: `Zip file is required for ${demoType.toUpperCase()} ${kindLabel}.`
 				};
 			}
 			break;
 		case 'jsdos':
 			if (mode === 'create' && !zip) {
-				return { valid: false, error: 'A .jsdos bundle is required for js-dos projects.' };
+				return { valid: false, error: `A .jsdos bundle is required for js-dos ${kindLabel}.` };
 			}
 			break;
 		case 'v86': {
 			if (!v86SystemVersionId) return { valid: false, error: 'Select a v86 system.' };
 			if ((mode === 'create' || previousDemoType !== 'v86') && !zip) {
-				return { valid: false, error: 'A game ZIP is required for v86 projects.' };
+				return { valid: false, error: `A game ZIP is required for v86 ${kindLabel}.` };
 			}
 			if (new TextEncoder().encode(v86Manifest ?? '').length > 65536) {
 				return { valid: false, error: 'The v86 manifest cannot exceed 64 KiB.' };
@@ -162,13 +177,18 @@ export function validateDemoFields({
 			break;
 		}
 		case 'embed':
-			if (!demoUrl) return { valid: false, error: 'Demo URL is required for Embed projects.' };
+			if (!demoUrl) return { valid: false, error: `Demo URL is required for Embed ${kindLabel}.` };
 			break;
 		case 'download':
 			if (!demoUrl) return { valid: false, error: 'Download URL is required.' };
 			break;
 		case 'video':
 			if (!demoUrl) return { valid: false, error: 'Video URL is required.' };
+			break;
+		case 'game':
+			if (!delegateGameId) {
+				return { valid: false, error: 'Select a game to delegate to.' };
+			}
 			break;
 		default:
 			return { valid: false, error: `Unsupported demo type: ${demoType}` };
