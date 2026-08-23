@@ -1125,13 +1125,57 @@ pub async fn delete_game_draft(
     .fetch_optional(&state.game_service.pool)
     .await?
     .ok_or(GameError::GameNotFound)?;
-    if row.0 != "game" {
+    // For legacy shared posts (project and game share same post_id with content_kind='project'),
+    // allow deletion via the game endpoint — the kind guard would otherwise block it.
+    let is_shared = sqlx::query_scalar::<_, Option<i64>>("SELECT id FROM projects WHERE post_id = ?")
+        .bind(post_id)
+        .fetch_optional(&state.game_service.pool)
+        .await?
+        .is_some();
+    if row.0 != "game" && !(is_shared && row.0 == "project") {
         return Err(GameError::InvalidDemo(
             "Use the typed delete endpoint for this content kind.".to_string(),
         ));
     }
-    if row.3.is_some() {
+    if row.3.is_some() && !is_shared {
         return Err(GameError::Conflict("Game already in trash.".to_string()));
+    }
+    // Shared-post game: hard-delete the game row only, keep the post for the project
+    if is_shared {
+        // check delegated published projects (includes the shared project itself)
+        let delegating: Vec<i64> = sqlx::query_scalar(
+            "SELECT projects.id FROM projects JOIN posts p ON p.id = projects.post_id WHERE projects.delegate_game_id = ? AND p.deleted_at IS NULL AND p.status = 'published'",
+        )
+        .bind(game_id)
+        .fetch_all(&state.game_service.pool)
+        .await?;
+        if !delegating.is_empty() && query.force != Some(true) {
+            return Err(GameError::Conflict(format!(
+                "Game is delegated by {} published project(s); use ?force=true to confirm.",
+                delegating.len()
+            )));
+        }
+        let delegating_json = serde_json::to_string(&delegating).unwrap_or_else(|_| "[]".to_string());
+        sqlx::query(
+            "INSERT INTO game_deletion_log (game_id, slug, title, reason, detail, deleted_by, delegated_project_ids) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(game_id)
+        .bind(&row.2)
+        .bind(&row.1)
+        .bind(query.reason.clone().unwrap_or_else(|| "user_request".to_string()))
+        .bind(&query.detail)
+        .bind(claims.user_id.parse::<i64>().unwrap_or(0))
+        .bind(&delegating_json)
+        .execute(&state.game_service.pool)
+        .await
+        .ok();
+        sqlx::query("DELETE FROM games WHERE id = ?")
+            .bind(game_id)
+            .execute(&state.game_service.pool)
+            .await?;
+        let dir = state.project_demo_config.dir.join(format!("game-{}", game_id));
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+        return Ok(StatusCode::NO_CONTENT);
     }
     let reason = query.reason.unwrap_or_else(|| "user_request".to_string());
     let allowed = ["user_request", "dmca", "moderation", "replaced", "other"];

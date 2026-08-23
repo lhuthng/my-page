@@ -799,6 +799,22 @@ pub async fn delete_project_draft(
     Query(query): Query<DeleteProjectQuery>,
 ) -> Result<StatusCode, ProjectError> {
     let post_id = require_can_delete_project(&state, project_id, &claims).await?;
+    // If this project's post is shared with its delegated game (legacy migration),
+    // deleting the project must NOT soft-delete the shared post — that would also hide the game.
+    // In that case just hard-delete the project row and keep the post/game.
+    let shared_game: Option<i64> = sqlx::query_scalar(
+        "SELECT id FROM games WHERE post_id = ?",
+    )
+    .bind(post_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    if shared_game.is_some() {
+        sqlx::query("DELETE FROM projects WHERE id = ?")
+            .bind(project_id)
+            .execute(&state.project_service.pool)
+            .await?;
+        return Ok(StatusCode::NO_CONTENT);
+    }
     // kind guard: ensure this post is actually a project (content_kind check done via projects join, but also verify posts.content_kind)
     let row = sqlx::query_as::<_, (String, Option<String>, String)>(
         "SELECT content_kind, deleted_at, status FROM posts WHERE id = ?",
