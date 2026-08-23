@@ -165,6 +165,11 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route("/id/{post_id}", post(handlers::post::publish))
                 .route("/id/{post_id}", get(handlers::post::get_post_details))
                 .route("/id/{post_id}", patch(handlers::post::update_post))
+                .route("/id/{post_id}", delete(handlers::post::delete_post))
+                .route(
+                    "/id/{post_id}/restore",
+                    post(handlers::post::restore_post),
+                )
                 .route("/id/{post_id}/cover", patch(handlers::post::change_cover))
                 .route(
                     "/id/{post_id}/related",
@@ -176,6 +181,16 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     middlewares::auth::user_guard,
                 ))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
+        )
+        // admin purge
+        .merge(
+            Router::new()
+                .route("/id/{post_id}/purge", delete(handlers::post::purge_post_now))
+                .layer(middleware::from_fn(middlewares::auth::admin_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
         )
         // admin-protected routes
         .merge(
@@ -237,6 +252,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     delete(handlers::project::delete_project_draft),
                 )
                 .route(
+                    "/id/{project_id}/restore",
+                    post(handlers::project::restore_project),
+                )
+                .route(
                     "/id/{project_id}/cover",
                     patch(handlers::project::change_cover),
                 )
@@ -246,6 +265,18 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     middlewares::auth::user_guard,
                 ))
                 .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
+        )
+        .merge(
+            Router::new()
+                .route(
+                    "/id/{project_id}/purge",
+                    delete(handlers::project::purge_project_now),
+                )
+                .layer(middleware::from_fn(middlewares::auth::admin_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
         )
         // admin-protected routes
         .merge(
@@ -320,6 +351,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                     delete(handlers::game::delete_game_draft),
                 )
                 .route(
+                    "/id/{game_id}/restore",
+                    post(handlers::game::restore_game),
+                )
+                .route(
                     "/id/{game_id}/cover",
                     patch(handlers::game::change_cover),
                 )
@@ -336,6 +371,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 .route(
                     "/id/{game_id}/featured",
                     put(handlers::game::set_game_featured),
+                )
+                .route(
+                    "/id/{game_id}/purge",
+                    delete(handlers::game::purge_game_now),
                 )
                 .layer(middleware::from_fn(middlewares::auth::admin_check))
                 .layer(middleware::from_fn_with_state(
@@ -507,6 +546,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .route("/overview", get(handlers::dashboard::get_overview))
         .route("/posts", get(handlers::dashboard::get_posts))
         .route("/projects", get(handlers::dashboard::get_projects))
+        .route("/trash", get(handlers::dashboard::get_trash))
         .route("/users", get(handlers::dashboard::get_users))
         .route(
             "/newsletter/subscribers",

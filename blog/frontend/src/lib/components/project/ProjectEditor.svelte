@@ -1,14 +1,35 @@
 <script>
 	import { onDestroy } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { preventDefault } from '$lib/utils';
 	import { createEditorViewModel } from '$lib/features/editor/view-model/create-editor-vm.svelte.js';
 	import { DEMO_TYPES } from '$lib/features/editor/model/demo.js';
 	import PostEditorShell from '../editor/PostEditorShell.svelte';
+	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+	import { api } from '$lib/api/client.js';
 
 	let { mode = 'create', data, isOwner = true, games = [] } = $props();
 
 	const vm = createEditorViewModel({ mode, kind: 'project', data, isOwner });
 	onDestroy(() => vm.destroy());
+
+	let showDelete = $state(false);
+	let deleteBusy = $state(false);
+	let deleteReason = $state('user_request');
+
+	async function handleDelete() {
+		deleteBusy = true;
+		try {
+			await api.delete(`projects/id/${vm.entry.id}?reason=${deleteReason}`);
+			await goto('/dashboard/trash');
+		} catch (e) {
+			vm.ui.notice = e.message;
+			vm.ui.noticeCritical = true;
+		} finally {
+			deleteBusy = false;
+			showDelete = false;
+		}
+	}
 
 	const demoType = $derived(vm.entry.demoType);
 	const urlLabel = $derived(
@@ -184,3 +205,28 @@
 	excerptRows={4}
 	{extraFields}
 />
+
+{#if mode === 'edit' && isOwner}
+	<section class="rounded-xl border border-accent-red/30 bg-accent-red-light-4 p-4">
+		<h3 class="font-semibold text-accent-red">Danger zone</h3>
+		<p class="mt-1 text-sm text-dark/60">Delete this project. It will be moved to trash for 7 days and can be restored.</p>
+		<div class="mt-3 flex gap-2">
+			<select bind:value={deleteReason} class="rounded-lg border border-dark/20 px-3 py-1 text-sm">
+				<option value="user_request">User request</option>
+				<option value="replaced">Replaced</option>
+				<option value="other">Other</option>
+			</select>
+			<button onclick={() => (showDelete = true)} class="rounded-full bg-accent-red px-4 py-2 text-sm font-medium text-white">Delete project</button>
+		</div>
+	</section>
+	<ConfirmDialog
+		open={showDelete}
+		title="Delete project?"
+		description="This will move the project to trash for 7 days. You can restore it from the Trash page."
+		confirmLabel="Delete"
+		confirmColor="red"
+		busy={deleteBusy}
+		onconfirm={handleDelete}
+		oncancel={() => (showDelete = false)}
+	/>
+{/if}

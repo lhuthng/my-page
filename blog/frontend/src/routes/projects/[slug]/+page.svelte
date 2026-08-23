@@ -42,6 +42,7 @@
 		demo_width,
 		demo_height,
 		demo_type,
+		delegate_game_id,
 		delegated_game,
 		initialVariant,
 		links
@@ -64,6 +65,10 @@
 					height: demo_height,
 					v86Runtime: undefined
 				}
+	);
+
+	let isDelegationOrphan = $derived(
+		demo_type === 'game' && !delegated_game && delegate_game_id != null
 	);
 
 	let liked = $state();
@@ -201,7 +206,17 @@
 </svelte:head>
 
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
-	{#if effectiveDemo.type !== 'none'}
+	{#if isDelegationOrphan}
+		<section class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+			<h2 class="font-semibold">Game unavailable</h2>
+			<p class="mt-1 text-sm leading-relaxed">
+				This project’s playable demo pointed at a game that was removed or is no longer published.
+				The game’s files and saves were moved to trash and will be permanently deleted after 7 days.
+				The article remains. The author can restore the game or point this project at another game.
+			</p>
+			<a href="/games" class="mt-2 inline-block text-sm underline">Browse games</a>
+		</section>
+	{:else if effectiveDemo.type !== 'none'}
 		<ProjectDemo
 			{title}
 			demoType={effectiveDemo.type}

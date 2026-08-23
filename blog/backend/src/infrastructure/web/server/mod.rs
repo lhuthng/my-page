@@ -363,6 +363,18 @@ impl<'a> HTTPServer<'a> {
         let project_demo_config = ProjectDemoConfig::from_env();
         let r2 = crate::infrastructure::storage::r2::R2Client::from_env();
         cleanup_orphaned_uploads(&pool, &r2, &project_demo_config.dir).await?;
+        purge_expired_trash(&pool, &r2, &project_demo_config.dir).await?;
+        // spawn periodic purge every hour
+        let purge_pool = pool.clone();
+        let purge_r2 = r2.clone();
+        let purge_dir = project_demo_config.dir.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
+            loop {
+                interval.tick().await;
+                let _ = purge_expired_trash(&purge_pool, &purge_r2, &purge_dir).await;
+            }
+        });
         let graphql_schema = crate::infrastructure::web::graphql::build_schema(pool.clone());
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
@@ -600,6 +612,46 @@ async fn cleanup_orphaned_uploads(
         );
     }
 
+    Ok(())
+}
+
+async fn purge_expired_trash(
+    pool: &sqlx::SqlitePool,
+    _r2: &Option<crate::infrastructure::storage::r2::R2Client>,
+    demos_dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ids: Vec<i64> = sqlx::query_scalar(
+        "SELECT id FROM posts WHERE deleted_at IS NOT NULL AND scheduled_purge_at <= datetime('now')",
+    )
+    .fetch_all(pool)
+    .await?;
+    if ids.is_empty() {
+        return Ok(());
+    }
+    for post_id in &ids {
+        // best-effort demo dir cleanup for projects/games before cascade
+        if let Some((kind, pid)) = sqlx::query_as::<_, (String, i64)>(
+            "SELECT 'project', projects.id FROM projects WHERE post_id = ? UNION ALL SELECT 'game', games.id FROM games WHERE post_id = ?",
+        )
+        .bind(post_id)
+        .bind(post_id)
+        .fetch_optional(pool)
+        .await?
+        {
+            let dir = if kind == "project" {
+                demos_dir.join(pid.to_string())
+            } else {
+                demos_dir.join(format!("game-{}", pid))
+            };
+            let _ = tokio::fs::remove_dir_all(&dir).await;
+            // R2 cleanup for games (jsdos/v86) is best-effort; hard purge via FK cascade leaves R2 orphans that sync can GC
+        }
+        sqlx::query("DELETE FROM posts WHERE id = ?")
+            .bind(post_id)
+            .execute(pool)
+            .await?;
+    }
+    println!("Purged {} trashed post(s)", ids.len());
     Ok(())
 }
 

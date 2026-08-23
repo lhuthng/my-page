@@ -753,36 +753,139 @@ pub async fn new_project(
     ))
 }
 
-pub async fn delete_project_draft(
-    State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<Claims>,
-    AxumPath(project_id): AxumPath<i64>,
-) -> Result<StatusCode, ProjectError> {
+#[derive(Deserialize)]
+pub struct DeleteProjectQuery {
+    pub reason: Option<String>,
+    pub detail: Option<String>,
+    pub force: Option<bool>,
+}
+
+fn is_admin_or_mod(role: &str) -> bool {
+    role == "admin" || role == "moderator"
+}
+
+async fn require_can_delete_project(
+    state: &AppState,
+    project_id: i64,
+    claims: &Claims,
+) -> Result<i64, ProjectError> {
     let user_id = claims
         .user_id
         .parse::<i64>()
         .map_err(|_| ProjectError::InternalError("Cannot parse id".to_string()))?;
-    require_project_owner(&state, project_id, user_id).await?;
-    let mut tx = state.project_service.pool.begin().await?;
-    let post_id: Option<i64> = sqlx::query_scalar("SELECT post_id FROM projects WHERE id=?")
-        .bind(project_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-    let post_id = post_id.ok_or(ProjectError::ProjectNotFound)?;
-    let status: String = sqlx::query_scalar("SELECT status FROM posts WHERE id=?")
-        .bind(post_id)
-        .fetch_one(&mut *tx)
-        .await?;
-    if status != "draft" {
+    let owner: Option<i64> = sqlx::query_scalar(
+        "SELECT posts.user_id FROM projects JOIN posts ON posts.id = projects.post_id WHERE projects.id = ?",
+    )
+    .bind(project_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?;
+    let owner = owner.ok_or(ProjectError::ProjectNotFound)?;
+    if owner == user_id || is_admin_or_mod(&claims.role) {
+        // need post_id for soft-delete; fetch it
+        let post_id: Option<i64> = sqlx::query_scalar("SELECT post_id FROM projects WHERE id=?")
+            .bind(project_id)
+            .fetch_optional(&state.project_service.pool)
+            .await?;
+        post_id.ok_or(ProjectError::ProjectNotFound)
+    } else {
+        Err(ProjectError::Forbidden)
+    }
+}
+
+pub async fn delete_project_draft(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(project_id): AxumPath<i64>,
+    Query(query): Query<DeleteProjectQuery>,
+) -> Result<StatusCode, ProjectError> {
+    let post_id = require_can_delete_project(&state, project_id, &claims).await?;
+    // kind guard: ensure this post is actually a project (content_kind check done via projects join, but also verify posts.content_kind)
+    let row = sqlx::query_as::<_, (String, Option<String>, String)>(
+        "SELECT content_kind, deleted_at, status FROM posts WHERE id = ?",
+    )
+    .bind(post_id)
+    .fetch_optional(&state.project_service.pool)
+    .await?
+    .ok_or(ProjectError::ProjectNotFound)?;
+    if row.0 != "project" {
         return Err(ProjectError::InvalidDemo(
-            "Only draft projects can be automatically cleaned up.".to_string(),
+            "Use the typed delete endpoint for this content kind.".to_string(),
         ));
     }
-    sqlx::query("DELETE FROM posts WHERE id=?")
+    if row.1.is_some() {
+        return Err(ProjectError::Conflict(
+            "Project already in trash.".to_string(),
+        ));
+    }
+    let reason = query
+        .reason
+        .unwrap_or_else(|| "user_request".to_string());
+    let allowed = ["user_request", "dmca", "moderation", "replaced", "other"];
+    if !allowed.contains(&reason.as_str()) {
+        return Err(ProjectError::InvalidDemo("Invalid deletion reason.".to_string()));
+    }
+    // soft-delete: flag, keep row for 7-day rollback
+    sqlx::query(
+        "UPDATE posts SET deleted_at = CURRENT_TIMESTAMP, deletion_reason = ?, deletion_detail = ?, deleted_by = ?, scheduled_purge_at = datetime('now','+7 days'), prev_status = status WHERE id = ?",
+    )
+    .bind(&reason)
+    .bind(&query.detail)
+    .bind(
+        claims
+            .user_id
+            .parse::<i64>()
+            .unwrap_or(0),
+    )
+    .bind(post_id)
+    .execute(&state.project_service.pool)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn restore_project(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(project_id): AxumPath<i64>,
+) -> Result<StatusCode, ProjectError> {
+    let post_id = require_can_delete_project(&state, project_id, &claims).await?;
+    let deleted_at: Option<String> = sqlx::query_scalar("SELECT deleted_at FROM posts WHERE id = ?")
         .bind(post_id)
-        .execute(&mut *tx)
+        .fetch_optional(&state.project_service.pool)
+        .await?
+        .ok_or(ProjectError::ProjectNotFound)?;
+    if deleted_at.is_none() {
+        return Err(ProjectError::Conflict("Project is not in trash.".to_string()));
+    }
+    sqlx::query(
+        "UPDATE posts SET deleted_at = NULL, deletion_reason = NULL, deletion_detail = NULL, deleted_by = NULL, scheduled_purge_at = NULL, prev_status = NULL WHERE id = ?",
+    )
+    .bind(post_id)
+    .execute(&state.project_service.pool)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn purge_project_now(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    AxumPath(project_id): AxumPath<i64>,
+) -> Result<StatusCode, ProjectError> {
+    if claims.role != "admin" {
+        return Err(ProjectError::Forbidden);
+    }
+    let post_id: Option<i64> = sqlx::query_scalar("SELECT post_id FROM projects WHERE id=?")
+        .bind(project_id)
+        .fetch_optional(&state.project_service.pool)
+        .await?
+        .ok_or(ProjectError::ProjectNotFound)?;
+    // hard purge: delete post (cascades)
+    sqlx::query("DELETE FROM posts WHERE id = ?")
+        .bind(post_id)
+        .execute(&state.project_service.pool)
         .await?;
-    tx.commit().await?;
+    // best-effort disk cleanup
+    let dir = state.project_demo_config.dir.join(project_id.to_string());
+    let _ = tokio::fs::remove_dir_all(&dir).await;
     Ok(StatusCode::NO_CONTENT)
 }
 

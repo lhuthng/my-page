@@ -482,7 +482,7 @@ impl GameService for GameServiceImpl {
             LEFT JOIN media cover ON cover.id = posts.cover_media_id
             LEFT JOIN media avatar ON avatar.id = user_meta.avatar_image_id
             LEFT JOIN media video ON video.short_name = '.post.' || posts.id
-            WHERE posts.slug = ? AND posts.status = 'published'
+            WHERE posts.slug = ? AND posts.status = 'published' AND posts.deleted_at IS NULL
             "#,
         )
         .bind(&cmd.slug)
@@ -577,7 +577,7 @@ impl GameService for GameServiceImpl {
     ) -> Result<GameSnapshotPage, GameError> {
         let mut where_parts = Vec::<String>::new();
         if cmd.public_only {
-            where_parts.push("posts.status = 'published'".to_string());
+            where_parts.push("posts.status = 'published' AND deleted_at IS NULL".to_string());
         }
         if cmd.required_author_id.is_some() {
             where_parts.push("posts.user_id = ?".to_string());
@@ -687,7 +687,7 @@ impl GameService for GameServiceImpl {
             JOIN user_meta ON user_meta.user_id = posts.user_id
             JOIN post_stats ON post_stats.post_id = posts.id
             LEFT JOIN media ON media.id = posts.cover_media_id
-            WHERE posts.status = 'published' AND posts.is_featured = 1
+            WHERE posts.status = 'published' AND posts.deleted_at IS NULL AND posts.is_featured = 1
             ORDER BY posts.created_at DESC
             LIMIT ?
             "#,
@@ -727,7 +727,7 @@ impl GameService for GameServiceImpl {
             JOIN user_meta ON user_meta.user_id = posts.user_id
             JOIN post_stats ON post_stats.post_id = posts.id
             LEFT JOIN media ON media.id = posts.cover_media_id
-            WHERE posts.status = 'published'
+            WHERE posts.status = 'published' AND posts.deleted_at IS NULL
                 AND EXISTS (
                     SELECT 1
                     FROM post_tags

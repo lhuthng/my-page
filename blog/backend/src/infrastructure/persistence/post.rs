@@ -379,7 +379,7 @@ impl PostServiceImpl {
         placeholder.push("content_kind = 'post'".to_string());
 
         if is_public {
-            placeholder.push("status = 'published'".to_string());
+            placeholder.push("status = 'published' AND deleted_at IS NULL".to_string());
         }
 
         if let Some(feature) = featured {
@@ -565,7 +565,7 @@ impl PostService for PostServiceImpl {
                 END AS score
             FROM tags t
             LEFT JOIN post_tags pt ON pt.tag_id = t.id
-            LEFT JOIN posts p ON p.id = pt.post_id AND p.status = 'published'
+            LEFT JOIN posts p ON p.id = pt.post_id AND p.status = 'published' AND p.deleted_at IS NULL
             WHERE
                 ?1 IS NULL
                 OR LOWER(t.slug) LIKE '%' || LOWER(?1) || '%'
@@ -605,7 +605,7 @@ impl PostService for PostServiceImpl {
                 0 AS score
             FROM tags t
             LEFT JOIN post_tags pt ON pt.tag_id = t.id
-            LEFT JOIN posts p ON p.id = pt.post_id AND p.status = 'published'
+            LEFT JOIN posts p ON p.id = pt.post_id AND p.status = 'published' AND p.deleted_at IS NULL
             WHERE t.slug = ?1
             GROUP BY t.id, t.name, t.slug, t.description
             "#,
@@ -636,7 +636,7 @@ impl PostService for PostServiceImpl {
                 JOIN user_meta um ON um.user_id = p.user_id
                 JOIN post_stats ps ON ps.post_id = p.id
                 LEFT JOIN media m ON m.id = p.cover_media_id
-            WHERE p.status = 'published'
+            WHERE p.status = 'published' AND p.deleted_at IS NULL
                 AND p.content_kind = 'post'
                 AND EXISTS (
                     SELECT 1
@@ -827,7 +827,7 @@ impl PostService for PostServiceImpl {
             LEFT JOIN media m1 ON m1.id = posts.cover_media_id
             LEFT JOIN media m2 ON m2.id = user_meta.avatar_image_id
             LEFT JOIN media video ON video.short_name = '.post.' || posts.id
-            WHERE posts.slug = ? AND status = 'published' AND posts.content_kind = 'post'
+            WHERE posts.slug = ? AND status = 'published' AND posts.deleted_at IS NULL AND posts.content_kind = 'post'
             "#,
         )
         .bind(&cmd.slug)
@@ -1014,7 +1014,7 @@ impl PostService for PostServiceImpl {
                     ELSE published_at
                 END,
                 updated_at = CURRENT_TIMESTAMP,
-                status = 'published'
+                status = 'published' AND deleted_at IS NULL
             WHERE id = ?
             "#,
         )
@@ -1642,7 +1642,7 @@ impl PostService for PostServiceImpl {
             FROM related_posts rp
             JOIN posts p ON rp.related_post_id = p.id
             LEFT JOIN media m ON m.id = p.cover_media_id
-            WHERE rp.post_id = ? AND p.status = 'published'
+            WHERE rp.post_id = ? AND p.status = 'published' AND p.deleted_at IS NULL
             ORDER BY rp.display_order ASC
             "#,
         )
