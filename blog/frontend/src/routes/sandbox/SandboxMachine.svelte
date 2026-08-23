@@ -5,7 +5,7 @@
 	// Self-contained: the sandbox drives v86 directly rather than going through
 	// the project player, which carries saves, variants, launcher CDs and
 	// snapshots that a scratch machine has none of.
-	let { system, onready } = $props();
+	let { system, hdd: initialHdd = null, hddSize: initialHddSize = 0, onready } = $props();
 
 	let screen = $state();
 	let shell = $state();
@@ -27,6 +27,16 @@
 	let disc = null;
 	// Same for the floppy drive, so a reboot keeps whatever was in A:.
 	let floppy = null;
+	// Second hard disk (D: when present, CD moves to E:). Must be present at boot.
+	let hdd = initialHdd;
+	let hddSize = initialHddSize;
+	// Keep hdd in sync if parent changes it before boot
+	$effect(() => {
+		if (initialHdd) {
+			hdd = initialHdd;
+			hddSize = initialHddSize;
+		}
+	});
 	// Fractional movement carried between pointer-move events, so a slow drag
 	// still ticks the guest instead of being lost to integer truncation.
 	let mouseRemainderX = 0;
@@ -58,6 +68,8 @@
 
 	const start = async () => {
 		try {
+			console.log('[sandbox] start', { hasSystem: !!system, base_url: system?.base_url, hdd: hdd ? hdd.length : null, disc: disc ? disc.length : null });
+			if (!system?.base_url) throw new Error('System base_url missing: ' + JSON.stringify(system));
 			await loadRuntime();
 			const V86 = window.V86 ?? window.V86Starter;
 			if (!V86) throw new Error('Could not load the emulator.');
@@ -84,8 +96,18 @@
 			// v86 instantiates the CD drive with or without media, so Windows
 			// letters it at boot and a disc can go in whenever. On a reboot the
 			// disc that was in the drive goes back in at construction.
-			if (disc) options.cdrom = { buffer: disc };
-			if (floppy) options.fda = { buffer: floppy };
+			if (disc) {
+				const buf = disc instanceof Uint8Array ? disc.buffer.slice(disc.byteOffset, disc.byteOffset + disc.byteLength) : disc;
+				options.cdrom = { buffer: buf };
+			}
+			if (floppy) {
+				const buf = floppy instanceof Uint8Array ? floppy.buffer.slice(floppy.byteOffset, floppy.byteOffset + floppy.byteLength) : floppy;
+				options.fda = { buffer: buf };
+			}
+			if (hdd) {
+				const buf = hdd instanceof Uint8Array ? hdd.buffer.slice(hdd.byteOffset, hdd.byteOffset + hdd.byteLength) : hdd;
+				options.hdb = { buffer: buf };
+			}
 
 			emulator = new V86(options);
 			installWheelGuard(emulator, () => blockWheel);
@@ -104,7 +126,7 @@
 					lastAt = now;
 				}, 1000);
 			});
-			onready?.({ insertDisc, ejectDisc, insertFloppy, ejectFloppy, getFloppy });
+			onready?.({ insertDisc, ejectDisc, insertFloppy, ejectFloppy, getFloppy, getHdd, hasHdd: () => !!hdd });
 		} catch (cause) {
 			error = cause?.message ?? 'The machine could not start.';
 		}
@@ -129,8 +151,9 @@
 			emulator.eject_cdrom?.();
 			await new Promise((resolve) => setTimeout(resolve, 1000));
 		}
-		disc = buffer;
-		await emulator.set_cdrom?.({ buffer });
+		disc = buffer instanceof Uint8Array ? buffer.slice() : new Uint8Array(buffer);
+		const buf = disc.buffer.slice(disc.byteOffset, disc.byteOffset + disc.byteLength);
+		await emulator.set_cdrom?.({ buffer: buf });
 	};
 
 	const ejectDisc = async () => {
@@ -151,8 +174,9 @@
 			emulator.eject_fda?.();
 			await new Promise((resolve) => setTimeout(resolve, 1000));
 		}
-		floppy = buffer;
-		await emulator.set_fda?.({ buffer });
+		floppy = buffer instanceof Uint8Array ? buffer.slice() : new Uint8Array(buffer);
+		const buf = floppy.buffer.slice(floppy.byteOffset, floppy.byteOffset + floppy.byteLength);
+		await emulator.set_fda?.({ buffer: buf });
 	};
 
 	const ejectFloppy = async () => {
@@ -167,6 +191,34 @@
 		if (!emulator) return null;
 		const buffer = emulator.get_disk_fda?.();
 		return buffer instanceof Uint8Array || buffer instanceof ArrayBuffer ? buffer : null;
+	};
+
+	const getHdd = () => {
+		if (!emulator && hdd) return hdd instanceof Uint8Array ? hdd : new Uint8Array(hdd);
+		if (!emulator) return null;
+		// Try the documented floppy-style getters first (if v86 ever adds them)
+		let buffer = null;
+		try { buffer = emulator.get_disk_hdb?.(); } catch {}
+		if (buffer) {
+			if (buffer instanceof Uint8Array) return buffer;
+			if (buffer instanceof ArrayBuffer) return new Uint8Array(buffer);
+		}
+		// Fallback: reach into the IDE device directly (hdb = primary slave)
+		try {
+			const ide = emulator.v86?.cpu?.devices?.ide ?? emulator.cpu?.devices?.ide;
+			if (ide) {
+				const hdbDev = ide.primary?.slave ?? ide['primary']?.['slave'];
+				if (hdbDev?.buffer) {
+					const b = hdbDev.buffer;
+					if (b instanceof Uint8Array) return b;
+					if (b instanceof ArrayBuffer) return new Uint8Array(b);
+					if (ArrayBuffer.isView(b)) return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+				}
+			}
+		} catch {}
+		// Fallback to the original buffer we created (at least the blank image, even if live writes not captured)
+		if (hdd) return hdd instanceof Uint8Array ? hdd : new Uint8Array(hdd);
+		return null;
 	};
 
 	const reboot = async () => {
@@ -254,7 +306,7 @@
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
-			class="w-full h-130 screen"
+			class="w-full screen"
 			bind:this={screen}
 			role="application"
 			tabindex="0"
@@ -275,7 +327,18 @@
 	}
 
 	.screen {
-		@apply *:mx-auto;
+		@apply flex min-h-[400px] items-center justify-center bg-black p-2;
+	}
+
+	.screen :global(canvas) {
+		image-rendering: pixelated;
+		image-rendering: crisp-edges;
+		max-width: 100%;
+		max-height: min(520px, 70vh);
+		width: auto !important;
+		height: auto !important;
+		object-fit: contain;
+		display: block;
 	}
 
 	.v86-shell:fullscreen {
@@ -283,6 +346,11 @@
 	}
 
 	.v86-shell:fullscreen .screen {
-		@apply aspect-auto h-dvh max-h-dvh w-dvw;
+		@apply min-h-0 h-dvh max-h-dvh w-dvw p-0;
+	}
+
+	.v86-shell:fullscreen .screen :global(canvas) {
+		max-height: 100vh;
+		max-width: 100vw;
 	}
 </style>

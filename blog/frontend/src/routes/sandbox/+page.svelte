@@ -2,6 +2,7 @@
 	import SandboxMachine from './SandboxMachine.svelte';
 	import { readFloppyFiles, floppyFilesToZip } from '$lib/features/v86/floppy.js';
 	import { loadBlankFloppy } from '$lib/players/v86-saves.js';
+	import { createEmptyFatDisk, readHddFiles } from '$lib/features/v86/fat-disk.js';
 
 	let { data } = $props();
 
@@ -19,6 +20,13 @@
 	let floppyCritical = $state(false);
 	let floppyIn = $state(false);
 
+	let hddSizeMB = $state(100);
+	let hddBuffer = $state(null);
+	let hddBusy = $state(false);
+	let hddStatus = $state('');
+	let hddCritical = $state(false);
+	let hddAttached = $state(false);
+
 	const selected = $derived(data.systems.find((system) => system.id === versionId));
 
 	const formatBytes = (bytes) =>
@@ -26,6 +34,12 @@
 
 	const boot = () => {
 		if (!selected) return;
+		if (!selected.base_url) {
+			status = 'System base_url missing — try refreshing';
+			critical = true;
+			return;
+		}
+		console.log('[sandbox+page] boot', { selectedId: selected.id, base_url: selected.base_url, hdd: hddBuffer ? `${hddBuffer.length} bytes` : null, hddSizeMB });
 		machine = null;
 		mounted = null;
 		status = '';
@@ -33,7 +47,9 @@
 		floppyIn = false;
 		floppyStatus = '';
 		floppyCritical = false;
-		booted = { ...selected };
+		// hddBuffer survives across reboots; just mark whether it's attached this boot
+		hddAttached = !!hddBuffer;
+		booted = { ...selected, _hddKey: hddBuffer ? `${hddSizeMB}` : 'nohdd' };
 	};
 
 	const buildIso = () =>
@@ -64,18 +80,32 @@
 		percent = 0;
 		status = 'Getting your game ready…';
 		try {
-			const result = await buildIso();
+			const isIso = zip.name.toLowerCase().endsWith('.iso');
+			let image;
+			let files = 1;
+			let bytes = zip.size;
+			if (isIso) {
+				status = 'Reading ISO…';
+				image = new Uint8Array(await zip.arrayBuffer());
+				bytes = image.byteLength;
+			} else {
+				const result = await buildIso();
+				image = result.image;
+				files = result.files;
+				bytes = result.bytes;
+			}
 			// A swap ejects first and waits, so say so rather than sitting on the
 			// last build message.
 			status = mounted ? 'Changing the disc…' : 'Putting the disc in…';
-			await machine.insertDisc(result.image);
+			await machine.insertDisc(image);
 			mounted = {
 				name: zip.name,
-				files: result.files,
-				payload: result.bytes,
-				image: result.image.byteLength
+				files,
+				payload: bytes,
+				image: image.byteLength
 			};
-			status = `Ready — your game is in drive D:. Open My Computer to run it.`;
+			const drive = hddBuffer ? 'E:' : 'D:';
+			status = `Ready — your game is in drive ${drive}. Open My Computer to run it.`;
 			percent = 100;
 		} catch (error) {
 			critical = true;
@@ -138,6 +168,68 @@
 			floppyStatus = error?.message ?? 'Could not read the floppy.';
 		}
 		floppyBusy = false;
+	};
+
+	const createHdd = async () => {
+		if (hddBusy) return;
+		hddBusy = true;
+		hddCritical = false;
+		hddStatus = `Creating ${hddSizeMB} MB HDD…`;
+		try {
+			const size = hddSizeMB * 1024 * 1024;
+			const { flat } = createEmptyFatDisk(size);
+			hddBuffer = flat;
+			hddAttached = false;
+			hddStatus = `${hddSizeMB} MB HDD ready — hit "Start over" to reboot and attach as drive D: (CD → E:).`;
+		} catch (error) {
+			hddCritical = true;
+			hddStatus = error?.message ?? 'Could not create HDD.';
+		}
+		hddBusy = false;
+	};
+
+	const clearHdd = () => {
+		hddBuffer = null;
+		hddAttached = false;
+		hddStatus = 'HDD removed — reboot to detach.';
+	};
+
+	const downloadHdd = async () => {
+		if (!machine || hddBusy) return;
+		hddBusy = true;
+		hddCritical = false;
+		hddStatus = 'Reading the HDD…';
+		try {
+			const image = await machine.getHdd();
+			if (!image || image.length < 512) throw new Error('No HDD attached or it is empty.');
+			// Try to read files for zip, fallback to raw image
+			let files = [];
+			try { files = readHddFiles(image); } catch {}
+			if (files.length > 0) {
+				const zipBytes = floppyFilesToZip(files);
+				const blob = new Blob([zipBytes], { type: 'application/zip' });
+				const url = URL.createObjectURL(blob);
+				const link = document.createElement('a');
+				link.href = url;
+				link.download = `hdd-${new Date().toISOString().slice(0, 10)}.zip`;
+				link.click();
+				URL.revokeObjectURL(url);
+				hddStatus = `Downloaded ${files.length} file${files.length === 1 ? '' : 's'} from HDD as zip.`;
+			} else {
+				const blob = new Blob([image], { type: 'application/octet-stream' });
+				const url = URL.createObjectURL(blob);
+				const link = document.createElement('a');
+				link.href = url;
+				link.download = `hdd-${hddSizeMB}mb.img`;
+				link.click();
+				URL.revokeObjectURL(url);
+				hddStatus = `Downloaded raw HDD image (${formatBytes(image.length)}).`;
+			}
+		} catch (error) {
+			hddCritical = true;
+			hddStatus = error?.message ?? 'Could not read the HDD.';
+		}
+		hddBusy = false;
 	};
 </script>
 
@@ -217,13 +309,64 @@
 		</div>
 
 		<div class="rounded-xl bg-white p-4 drop-shadow-xl">
+			<h2 class="mb-2 font-semibold">Hard disk</h2>
+			<p class="mb-3 text-sm text-dark/60">Add a second hard disk. Requires a reboot — Windows will see it as drive D: (CD moves to E:).</p>
+			<div class="flex flex-wrap items-end gap-3">
+				<label class="text-sm">
+					<span class="mb-1 block font-medium">Size</span>
+					<select
+						bind:value={hddSizeMB}
+						class="rounded-lg border border-dark/15 px-3 py-2 text-sm"
+						disabled={hddBusy}
+					>
+						<option value={20}>20 MB</option>
+						<option value={50}>50 MB</option>
+						<option value={100}>100 MB</option>
+						<option value={200}>200 MB</option>
+						<option value={512}>512 MB</option>
+						<option value={1024}>1 GB</option>
+					</select>
+				</label>
+				<button
+					class="rounded-lg bg-dark px-4 py-2 text-sm text-white disabled:opacity-50"
+					disabled={hddBusy}
+					onclick={createHdd}
+				>
+					{hddBuffer ? 'Recreate HDD' : 'Create HDD'}
+				</button>
+				{#if hddBuffer}
+					<button
+						class="rounded-lg border border-dark/15 px-4 py-2 text-sm disabled:opacity-50"
+						disabled={hddBusy}
+						onclick={clearHdd}
+					>
+						Remove
+					</button>
+					<button
+						class="rounded-lg bg-dark px-4 py-2 text-sm text-white disabled:opacity-50"
+						disabled={!machine || hddBusy}
+						onclick={downloadHdd}
+					>
+						Download as .zip
+					</button>
+				{/if}
+			</div>
+			{#if hddBuffer}
+				<p class="mt-2 text-sm text-dark/60">HDD: {hddSizeMB} MB {hddAttached ? '· attached' : '· reboot to attach'}</p>
+			{/if}
+			{#if hddStatus}
+				<p class="mt-3 truncate text-sm {hddCritical ? 'text-red-700' : 'text-dark/70'}">{hddStatus}</p>
+			{/if}
+		</div>
+
+		<div class="rounded-xl bg-white p-4 drop-shadow-xl">
 			<h2 class="mb-2 font-semibold">CD drive</h2>
 			<div class="flex flex-wrap items-end gap-3">
 				<label class="grow text-sm sm:max-w-md">
-					<span class="mb-1 block font-medium">Your game (.zip)</span>
+					<span class="mb-1 block font-medium">Your game (.zip or .iso)</span>
 					<input
 						type="file"
-						accept=".zip"
+						accept=".zip,.iso"
 						disabled={busy}
 						onchange={(event) => (zip = event.currentTarget.files?.[0])}
 						class="w-full text-sm"
@@ -264,7 +407,7 @@
 		</div>
 
 		{#key booted}
-			<SandboxMachine system={booted} onready={(handle) => (machine = handle)} />
+			<SandboxMachine system={booted} hdd={hddBuffer} hddSize={hddBuffer ? hddSizeMB * 1024 * 1024 : 0} onready={(handle) => { machine = handle; hddAttached = !!hddBuffer; }} />
 		{/key}
 	{/if}
 </section>
