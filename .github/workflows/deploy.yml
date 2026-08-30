@@ -143,13 +143,17 @@ jobs:
             docker image prune -f
 
       # Migrations run automatically via sqlx::migrate!() when backend starts.
-      - name: Wait for backend startup
+      # --wait blocks until both containers report healthy (their healthchecks
+      # probe /health), so this step fails the deploy instead of a fixed sleep.
+      - name: Wait for backend and frontend to become healthy
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
-          script: sleep 15
+          script: |
+            cd ~/MyPage/blog
+            docker compose up -d --wait --wait-timeout 180
 
       - name: Show backend startup logs
         uses: appleboy/ssh-action@v1.2.0
@@ -172,8 +176,8 @@ jobs:
             cd ~/MyPage/blog
             echo "=== Container status ==="
             docker compose ps
-            docker compose ps backend | grep -Eq "(running|Up)" || \
-              (echo "ERROR: backend is not running - check migration logs above" && exit 1)
+            wget -q -O /dev/null http://127.0.0.1:3001/health || \
+              (echo "ERROR: backend is not answering /health - check migration logs above" && exit 1)
 
       - name: Show frontend startup logs
         uses: appleboy/ssh-action@v1.2.0
@@ -194,8 +198,8 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             cd ~/MyPage/blog
-            docker compose ps frontend | grep -Eq "(running|Up)" || \
-              (echo "ERROR: frontend is not running" && exit 1)
+            wget -q -O /dev/null http://127.0.0.1:5000/health || \
+              (echo "ERROR: frontend is not answering /health" && exit 1)
 
       - name: Deployment summary
         run: |

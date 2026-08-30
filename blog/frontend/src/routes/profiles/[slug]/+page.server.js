@@ -1,5 +1,6 @@
 import { fixClientRoute, route } from '$lib/server/proxy.js';
-import { codeHighlightPlugin, kaomojiPlugin } from '$lib/custom-rules/index.js';
+import { codeHighlightPlugin } from '$lib/custom-rules/plugins/code-highlight.js';
+import { kaomojiPlugin } from '$lib/custom-rules';
 import { error } from '@sveltejs/kit';
 import MarkdownIt from 'markdown-it';
 

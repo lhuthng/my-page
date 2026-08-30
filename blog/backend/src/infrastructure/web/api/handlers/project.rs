@@ -396,8 +396,21 @@ fn strip_common_root(paths: &[PathBuf]) -> Option<String> {
     first_root
 }
 
-fn extract_demo_zip(
+// A 100 MB archive can expand to 200 MB of sync file writes, so the blocking
+// pool runs the extraction instead of stalling a tokio worker for seconds.
+async fn extract_demo_zip(
     config: &ProjectDemoConfig,
+    project_id: i64,
+    zip_bytes: Bytes,
+) -> Result<(), ProjectError> {
+    let config = config.clone();
+    tokio::task::spawn_blocking(move || extract_demo_zip_blocking(config, project_id, zip_bytes))
+        .await
+        .map_err(|e| ProjectError::InternalError(e.to_string()))?
+}
+
+fn extract_demo_zip_blocking(
+    config: ProjectDemoConfig,
     project_id: i64,
     zip_bytes: Bytes,
 ) -> Result<(), ProjectError> {
@@ -741,7 +754,7 @@ pub async fn new_project(
     };
 
     if let Some(zip) = demo_zip {
-        if let Err(err) = extract_demo_zip(&state.project_demo_config, project_id, zip) {
+        if let Err(err) = extract_demo_zip(&state.project_demo_config, project_id, zip).await {
             return Err(err);
         }
     }
@@ -1072,7 +1085,7 @@ pub async fn update_project(
         .await?;
 
     if let Some(zip) = parsed.demo_zip {
-        extract_demo_zip(&state.project_demo_config, project_id, zip)?;
+        extract_demo_zip(&state.project_demo_config, project_id, zip).await?;
     }
 
     if data.og_image_seconds.is_some() {

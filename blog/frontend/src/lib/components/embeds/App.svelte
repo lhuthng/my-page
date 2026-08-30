@@ -1,15 +1,18 @@
 <script>
 	import HTMLApp from './HTMLApp.svelte';
-	import LottieStateSwitcher from './LottieStateSwitcher.svelte';
 
 	let { name, type, width, height, config, temp } = $props();
 
 	let GLBDemo = $state();
+	let LottieStateSwitcher = $state();
 	let JsDosApp = $state();
 	let V86App = $state();
 	$effect(() => {
 		if (type === 'glb-demo') {
 			import('./GLBDemo.svelte').then((m) => (GLBDemo = m.default));
+		}
+		if (type === 'lottie') {
+			import('./LottieStateSwitcher.svelte').then((m) => (LottieStateSwitcher = m.default));
 		}
 		if (type === 'jsdos') {
 			import('./JsDosApp.svelte').then((m) => (JsDosApp = m.default));
@@ -30,7 +33,9 @@
 	{@const states = (config ?? '')
 		.split('-')
 		.reduce((a, _, i, arr) => (i % 2 ? [...a, [arr[i - 1], +arr[i]]] : a), [])}
-	<LottieStateSwitcher {name} {states} {width} {height} src={temp} />
+	{#if LottieStateSwitcher}
+		<LottieStateSwitcher {name} {states} {width} {height} src={temp} />
+	{/if}
 {:else if type === 'jsdos'}
 	{#if JsDosApp}
 		<JsDosApp {name} {width} {height} />

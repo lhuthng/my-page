@@ -197,9 +197,15 @@ impl AuthService for AuthServiceImpl {
         .fetch_one(&self.pool)
         .await
         .map_err(|_| AuthError::InvalidCredentials)?;
-        let is_valid = match verify(&cmd.password, &user_row.password_hash) {
-            Ok(valid) => valid,
-            Err(e) => return Err(AuthError::InternalError(e.to_string())),
+        // bcrypt at DEFAULT_COST is ~250 ms of pure CPU; keep it off the
+        // async workers, like the session-token verify further down.
+        let is_valid = {
+            let password = cmd.password.clone();
+            let password_hash = user_row.password_hash.clone();
+            tokio::task::spawn_blocking(move || verify(&password, &password_hash))
+                .await
+                .map_err(|e| AuthError::InternalError(e.to_string()))?
+                .map_err(|e| AuthError::InternalError(e.to_string()))?
         };
 
         if !is_valid {
@@ -288,7 +294,11 @@ impl AuthService for AuthServiceImpl {
             None => {
                 let mut tx = self.pool.begin().await?;
 
-                let password_hash = hash(&reg_creds.password, DEFAULT_COST)?;
+                let reg_password = reg_creds.password.clone();
+                let password_hash =
+                    tokio::task::spawn_blocking(move || hash(&reg_password, DEFAULT_COST))
+                        .await
+                        .map_err(|e| AuthError::InternalError(e.to_string()))??;
 
                 let user = sqlx::query_as::<_, UserRow>(
                     r#"
@@ -587,7 +597,10 @@ impl AuthService for AuthServiceImpl {
             return Err(AuthError::InvalidToken);
         }
 
-        let password_hash = hash(&reset_creds.password, DEFAULT_COST)?;
+        let reset_password = reset_creds.password.clone();
+        let password_hash = tokio::task::spawn_blocking(move || hash(&reset_password, DEFAULT_COST))
+            .await
+            .map_err(|e| AuthError::InternalError(e.to_string()))??;
         let mut tx = self.pool.begin().await?;
 
         sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")

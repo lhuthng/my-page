@@ -8,6 +8,8 @@ use axum::{
 };
 use http::{HeaderValue, Method, header::CONTENT_TYPE};
 use tower_http::compression::CompressionLayer;
+use tower_http::compression::Predicate;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType};
 use tower_http::trace::TraceLayer;
 use tower_http::{
     cors::{AllowOrigin, CorsLayer},
@@ -37,6 +39,11 @@ async fn graphql_playground() -> impl axum::response::IntoResponse {
     axum::response::Html(async_graphql::http::playground_source(
         async_graphql::http::GraphQLPlaygroundConfig::new("/graphql"),
     ))
+}
+
+// Liveness probe for the Docker healthcheck: cheap, no DB, no state.
+async fn health() -> &'static str {
+    "ok"
 }
 
 // This MUST retuns Router<()> instead of Router<AppState>
@@ -644,6 +651,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/newsletter", newsletter_routes)
         .nest("/analytics", analytics_routes)
         .nest("/dashboard", dashboard_routes)
+        .route("/health", get(health))
         .merge(graphql_routes)
         // Routers merged with auth layers carry their own wrapped default
         // fallback, and the last one to be merged wins it. An unmatched path
@@ -653,7 +661,17 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // 404, never auth errors.
         .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
         .layer(TraceLayer::new_for_http())
-        .layer(CompressionLayer::new())
+        .layer(
+            CompressionLayer::new().compress_when(
+                DefaultPredicate::new()
+                    // Saves, ISO/disk chunks, and js-dos bundles are already
+                    // compressed and media files are binary; recompressing
+                    // them per download burns CPU for no size win.
+                    .and(NotForContentType::const_new("application/octet-stream"))
+                    .and(NotForContentType::const_new("video/"))
+                    .and(NotForContentType::const_new("audio/")),
+            ),
+        )
         .with_state(state)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
 }

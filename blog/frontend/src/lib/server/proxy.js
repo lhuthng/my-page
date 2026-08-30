@@ -33,6 +33,11 @@ export function fixClientRoute(path) {
 	return `/api/${path}`.replace('/./', '/');
 }
 
+// Bodies up to this size are buffered before forwarding; anything larger is
+// piped through as a stream so big uploads (v86 disk/ISO chunks) never sit
+// fully resident in the frontend process.
+const SMALL_BUFFERED_BODY_BYTES = 1024 * 1024;
+
 export async function proxyFallback({ request, params, search, extraHeaders }) {
 	const url = `${env.API_URL}/${params.path}${search ?? ''}`;
 	const headers = { ...Object.fromEntries(request.headers), ...extraHeaders };
@@ -42,9 +47,11 @@ export async function proxyFallback({ request, params, search, extraHeaders }) {
 		delete headers['content-length'];
 		delete headers['content-type'];
 	}
+	const contentLength = Number(request.headers.get('content-length'));
+	const streamBody = hasBody && !request.keepalive && contentLength > SMALL_BUFFERED_BODY_BYTES;
 	let body;
 	if (hasBody) {
-		body = await request.arrayBuffer();
+		body = streamBody ? request.body : await request.arrayBuffer();
 	}
 
 	const proxyRequest = new Request(url, {
@@ -55,7 +62,9 @@ export async function proxyFallback({ request, params, search, extraHeaders }) {
 		cache: request.cache,
 		credentials: request.credentials,
 		integrity: request.integrity,
-		keepalive: request.keepalive,
+		// Streaming bodies and keepalive are mutually exclusive in the fetch
+		// spec, so keepalive only survives on the buffered path.
+		keepalive: !streamBody && request.keepalive,
 		mode: request.mode,
 		redirect: request.redirect,
 		referrer: request.referrer,

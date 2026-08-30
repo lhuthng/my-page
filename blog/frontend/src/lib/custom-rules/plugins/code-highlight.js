@@ -1,5 +1,8 @@
 import hljs from 'highlight.js';
+import { highlightBlock } from './highlight-block.js';
 
+// Static import on purpose: this variant serves the server-side body renderer
+// and the editor preview, which both need synchronous highlighting.
 export function codeHighlightPlugin(md) {
 	md.options.highlight = function (code, lang) {
 		let highlighted;
@@ -16,9 +19,6 @@ export function codeHighlightPlugin(md) {
 			highlighted = md.utils.escapeHtml(code);
 		}
 
-		return `<pre class="hljs"><code>${highlighted
-			.split(/\n/)
-			.map((line) => `<span class="hljs-line">${line || ''}</span>`)
-			.join('\n')}</code></pre>`;
+		return highlightBlock(highlighted);
 	};
 }

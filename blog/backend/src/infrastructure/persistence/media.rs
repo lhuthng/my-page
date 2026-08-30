@@ -76,7 +76,12 @@ pub async fn hash_bytes(
     extension: String,
     split: bool,
 ) -> Result<HashData, MediaError> {
-    let hash = format!("{:x}", Sha256::digest(bytes));
+    // Uploads reach 100 MB, so hash on the blocking pool instead of pinning
+    // an async worker for the whole digest.
+    let owned_bytes = bytes.clone();
+    let hash = tokio::task::spawn_blocking(move || format!("{:x}", Sha256::digest(&owned_bytes)))
+        .await
+        .map_err(|e| MediaError::InternalError(e.to_string()))?;
     if hash.len() < 4 {
         return Err(MediaError::InternalError("Hash too short.".to_string()));
     }
