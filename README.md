@@ -56,7 +56,7 @@ Production traffic is intended to flow through Cloudflare DNS to an Oracle Cloud
 ```text
 Browser
   -> Cloudflare DNS
-     -> blog.huuthangle.site
+     -> huuthangle.site            (blog.huuthangle.site 301s here)
         -> Oracle Cloud VM
            -> nginx
               -> /media/*        -> backend container via 127.0.0.1:3001
@@ -384,7 +384,7 @@ The repo assumes several host-level pieces already exist:
 - nginx is installed and configured outside this repo.
 - nginx terminates TLS and proxies normal traffic to `127.0.0.1:5000`.
 - nginx proxies `/media/*` to `127.0.0.1:3001`.
-- DNS points `blog.huuthangle.site` at the VM.
+- DNS points `huuthangle.site` at the VM; `blog.huuthangle.site` 301-redirects to it.
 - The firewall only exposes the intended public ports.
 - `blog/backend/.env` and `blog/frontend/.env` exist on the VM with production values.
 - Persistent directories for data, media, and demos are preserved across deploys.
