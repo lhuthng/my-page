@@ -275,7 +275,7 @@
 				>
 					{entry.label}
 					{#if entryStatus?.stale}
-						<span class="ml-1 text-amber-500">• stale</span>
+						<span class="ml-1 text-accent-yellow-dark">• stale</span>
 					{:else if entryStatus}
 						<span class="ml-1 text-emerald-500">•</span>
 					{/if}
@@ -346,7 +346,7 @@
 			{#if current}
 				<span class="text-sm text-dark/60">
 					published {formatBytes(current.size_bytes)}
-					{#if current.stale}<span class="text-amber-700">· stale, recapture</span>{/if}
+					{#if current.stale}<span class="text-accent-yellow-dark">· stale, recapture</span>{/if}
 				</span>
 				<button
 					class="rounded-lg border border-red-200 px-3 py-1 text-sm text-red-700 disabled:opacity-50"

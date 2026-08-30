@@ -244,7 +244,7 @@
 <svelte:head><title>v86 Systems | Dashboard</title></svelte:head>
 
 <section class="space-y-4">
-	<div class="rounded-xl bg-white p-4 drop-shadow-xl">
+	<div class="rounded-xl bg-white p-4 drop-shadow-sm">
 		<h1 class="text-2xl font-semibold">v86 Systems</h1>
 		<p class="text-dark/70">
 			Base images are immutable. Replacing a system creates a new version; existing projects stay
@@ -257,7 +257,7 @@
 			Could not reach the server status endpoint. Upload progress may be unavailable.
 		</div>
 	{:else if activeUploads.length > 0}
-		<div class="rounded-xl bg-amber-50 p-3 text-sm text-amber-700">
+		<div class="rounded-xl bg-accent-yellow-light-2 p-3 text-sm text-dark/80">
 			{#each activeUploads as upload}
 				<div>
 					<span class="font-semibold">Upload in progress:</span>
@@ -268,7 +268,7 @@
 	{/if}
 
 	<form
-		class="grid grid-cols-1 gap-4 rounded-xl bg-white p-4 drop-shadow-xl lg:grid-cols-2"
+		class="grid grid-cols-1 gap-4 rounded-xl bg-white p-4 drop-shadow-sm lg:grid-cols-2"
 		onsubmit={(event) => {
 			event.preventDefault();
 			upload();
@@ -326,13 +326,13 @@
 	</form>
 
 	{#each systems as system}
-		<article class="rounded-xl bg-white p-4 drop-shadow-xl space-y-3">
+		<article class="rounded-xl bg-white p-4 drop-shadow-sm space-y-3">
 			<div class="flex flex-wrap items-center justify-between gap-3">
 				<div>
 					<h2 class="text-xl font-semibold">
 						{system.name}
 						{#if system.pending_build && system.versions.length === 0}
-							<span class="text-sm font-normal text-amber-600">(building…)</span>
+							<span class="text-sm font-normal text-accent-yellow-dark">(building…)</span>
 						{/if}
 					</h2>
 					<p class="text-sm">

@@ -240,7 +240,7 @@
 					<input
 						bind:value={searchInput}
 						placeholder="Search…"
-						class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none focus:border-dark/30 w-44 transition-colors"
+						class="border-2 border-dark/10 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-dark w-44 transition-colors"
 					/>
 					<button
 						type="submit"
@@ -254,7 +254,7 @@
 				<select
 					bind:value={statusFilter}
 					onchange={() => navigate({ page: 1 })}
-					class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none bg-white cursor-pointer"
+					class="border-2 border-dark/10 focus:border-dark rounded-lg px-3 py-1.5 text-sm outline-none bg-white cursor-pointer"
 				>
 					<option value="">All Status</option>
 					<option value="published">Published</option>
@@ -266,7 +266,7 @@
 				<select
 					bind:value={roleFilter}
 					onchange={() => navigate({ page: 1 })}
-					class="border border-background rounded-lg px-3 py-1.5 text-sm outline-none bg-white cursor-pointer"
+					class="border-2 border-dark/10 focus:border-dark rounded-lg px-3 py-1.5 text-sm outline-none bg-white cursor-pointer"
 				>
 					<option value="">All Roles</option>
 					<option value="admin">Admin</option>
@@ -299,47 +299,47 @@
 
 			<div class="overflow-x-auto">
 				<table class="w-full text-sm">
-					<thead class="bg-background/40">
+					<thead class="bg-dark text-white">
 						<tr>
 							{#if table === 'users'}
 								{#each ['#', 'Username', 'Display Name', 'Email', 'Role', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+									<th class="px-4 py-2.5 text-left font-semibold text-white/90 whitespace-nowrap">
 										{h}
 									</th>
 								{/each}
 							{:else if table === 'posts'}
 								{#each ['#', 'Title', 'Author', 'Status', 'Series', 'Views', 'Featured', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+									<th class="px-4 py-2.5 text-left font-semibold text-white/90 whitespace-nowrap">
 										{h}
 									</th>
 								{/each}
 							{:else if table === 'comments'}
 								{#each ['#', 'Content', 'Post', 'Author', 'Status', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+									<th class="px-4 py-2.5 text-left font-semibold text-white/90 whitespace-nowrap">
 										{h}
 									</th>
 								{/each}
 							{:else if table === 'media'}
 								{#each ['#', 'Short Name', 'File Name', 'Type', 'Size', 'Uses', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+									<th class="px-4 py-2.5 text-left font-semibold text-white/90 whitespace-nowrap">
 										{h}
 									</th>
 								{/each}
 							{:else if table === 'series'}
 								{#each ['#', 'Title', 'Slug', 'Posts', 'Created'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+									<th class="px-4 py-2.5 text-left font-semibold text-white/90 whitespace-nowrap">
 										{h}
 									</th>
 								{/each}
 							{:else if table === 'tags'}
 								{#each ['#', 'Name', 'Slug', 'Description', 'Posts', 'Actions'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+									<th class="px-4 py-2.5 text-left font-semibold text-white/90 whitespace-nowrap">
 										{h}
 									</th>
 								{/each}
 							{:else if table === 'categories'}
 								{#each ['#', 'Name', 'Slug', 'Description', 'Posts'] as h}
-									<th class="px-4 py-2.5 text-left font-semibold text-dark/50 whitespace-nowrap">
+									<th class="px-4 py-2.5 text-left font-semibold text-white/90 whitespace-nowrap">
 										{h}
 									</th>
 								{/each}
@@ -347,7 +347,7 @@
 						</tr>
 					</thead>
 					<tbody
-						class="divide-y divide-background/60 transition-opacity duration-150 {loading
+						class="divide-y-2 divide-dark/10 transition-opacity duration-150 {loading
 							? 'opacity-40'
 							: 'opacity-100'}"
 					>
@@ -466,7 +466,7 @@
 											{#if isAdmin && editingTagId === row.id}
 												<input
 													bind:value={editingTagName}
-													class="w-full min-w-40 rounded-lg border border-background px-3 py-2 text-sm text-dark/80 outline-none focus:border-dark/30"
+													class="w-full min-w-40 rounded-lg border-2 border-dark/10 px-3 py-2 text-sm text-dark/80 outline-none focus:border-dark/30"
 												/>
 											{:else}
 												<span class="font-medium">{row.name}</span>
@@ -476,7 +476,7 @@
 											{#if isAdmin && editingTagId === row.id}
 												<input
 													bind:value={editingTagSlug}
-													class="w-full min-w-44 rounded-lg border border-background px-3 py-2 font-mono text-xs text-dark/75 outline-none focus:border-dark/30"
+													class="w-full min-w-44 rounded-lg border-2 border-dark/10 px-3 py-2 font-mono text-xs text-dark/75 outline-none focus:border-dark/30"
 												/>
 											{:else}
 												<span class="font-mono text-xs text-dark/55">{row.slug}</span>
@@ -488,7 +488,7 @@
 													<textarea
 														bind:value={editingTagDescription}
 														rows="3"
-														class="w-full min-w-56 rounded-lg border border-background px-3 py-2 text-xs text-dark/75 outline-none focus:border-dark/30"
+														class="w-full min-w-56 rounded-lg border-2 border-dark/10 px-3 py-2 text-xs text-dark/75 outline-none focus:border-dark/30"
 														placeholder="Optional description"></textarea>
 													{#if tagError}
 														<p class="text-xs text-accent-red">{tagError}</p>
@@ -518,7 +518,7 @@
 														<button
 															onclick={cancelTagEdit}
 															disabled={savingTagId === row.id || deletingTagId === row.id}
-															class="rounded-lg border border-background px-3 py-1.5 text-sm text-dark/65 transition-colors hover:bg-background/60 disabled:opacity-50"
+															class="rounded-lg border-2 border-dark/10 px-3 py-1.5 text-sm text-dark/65 transition-colors hover:bg-background/60 disabled:opacity-50"
 														>
 															Cancel
 														</button>
@@ -527,7 +527,7 @@
 															disabled={row.postCount > 0 ||
 																savingTagId === row.id ||
 																deletingTagId === row.id}
-															class="rounded-lg border border-accent-red/20 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
+															class="rounded-lg border-2 border-accent-red/30 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
 														>
 															{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
 														</button>
@@ -536,14 +536,14 @@
 													<div class="flex items-center gap-2">
 														<button
 															onclick={() => startTagEdit(row)}
-															class="rounded-lg border border-background px-3 py-1.5 text-sm text-dark/70 transition-colors hover:bg-background/60"
+															class="rounded-lg border-2 border-dark/10 px-3 py-1.5 text-sm text-dark/70 transition-colors hover:bg-background/60"
 														>
 															Edit
 														</button>
 														<button
 															onclick={() => promptDeleteTag(row)}
 															disabled={row.postCount > 0 || deletingTagId === row.id}
-															class="rounded-lg border border-accent-red/20 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
+															class="rounded-lg border-2 border-accent-red/30 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
 															title={row.postCount > 0
 																? 'Only unused tags can be deleted.'
 																: 'Delete this unused tag'}
@@ -582,12 +582,12 @@
 
 			{#if totalPages > 1}
 				<div
-					class="px-4 py-3 border-t border-background/60 flex items-center justify-between gap-4"
+					class="px-4 py-3 border-t-2 border-dark/10 flex items-center justify-between gap-4"
 				>
 					<button
 						onclick={() => navigate({ page: currentPage - 1 })}
 						disabled={currentPage <= 1 || loading}
-						class="px-3 py-1.5 rounded-lg text-sm border border-background disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors"
+						class="px-3 py-1.5 rounded-lg text-sm border-2 border-dark/10 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors"
 					>
 						← Prev
 					</button>
@@ -595,7 +595,7 @@
 					<button
 						onclick={() => navigate({ page: currentPage + 1 })}
 						disabled={currentPage >= totalPages || loading}
-						class="px-3 py-1.5 rounded-lg text-sm border border-background disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors"
+						class="px-3 py-1.5 rounded-lg text-sm border-2 border-dark/10 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors"
 					>
 						Next →
 					</button>
@@ -628,7 +628,7 @@
 					<button
 						onclick={closeDeletePrompt}
 						disabled={deletingTagId === tagToDelete.id}
-						class="rounded-lg border border-background px-4 py-2 text-sm text-dark/70 transition-colors hover:bg-background/60 disabled:opacity-50"
+						class="rounded-lg border-2 border-dark/10 px-4 py-2 text-sm text-dark/70 transition-colors hover:bg-background/60 disabled:opacity-50"
 					>
 						Cancel
 					</button>
