@@ -108,6 +108,9 @@ jobs:
     needs: [build-push-backend, build-push-frontend]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
       - name: Log in to GHCR on VM
         uses: appleboy/ssh-action@v1.2.0
         env:
@@ -121,6 +124,19 @@ jobs:
           script: |
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
+      # The VM is not a git checkout - images come from GHCR and this compose
+      # file is the only repo-managed file the runtime reads. Ship it so
+      # compose changes (env, healthchecks, restart policy) reach the VM.
+      - name: Sync compose file to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: "blog/docker-compose.yml"
+          target: "~/MyPage/blog"
+          strip_components: 1
+
       - name: Pull new images
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -128,12 +144,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            cd ~/MyPage
-            # Pick up compose file changes; if the VM's clone has diverged,
-            # deploy anyway on the stale file and surface a warning.
-            GIT_TERMINAL_PROMPT=0 git pull --ff-only || \
-              echo "WARN: git pull failed on VM - compose file may be stale"
-            cd blog
+            cd ~/MyPage/blog
             docker compose pull
 
       - name: Restart containers
