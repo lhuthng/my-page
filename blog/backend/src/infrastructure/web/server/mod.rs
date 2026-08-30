@@ -66,6 +66,7 @@ pub struct MediaConfig {
     pub allowed_cover_types: Vec<MediaType>,
 }
 
+#[derive(Clone)]
 pub struct ProjectDemoConfig {
     pub dir: PathBuf,
     pub max_archive_size: u64,

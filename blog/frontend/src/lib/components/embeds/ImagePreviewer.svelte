@@ -4,7 +4,8 @@
 	import { fade } from 'svelte/transition';
 	import { getGsap } from '$lib/gsap.js';
 
-	const { gsap, Flip } = getGsap();
+	let gsap;
+	let Flip;
 
 	let { visible, origin, onClose } = $props();
 
@@ -90,6 +91,19 @@
 	}
 
 	onMount(() => {
+		// The previewer mounts on the first image click, so GSAP is usually
+		// still loading. Until it arrives the replica keeps the inline origin
+		// styles and the zoom/drag handlers stay disabled via `editable`.
+		let cancelled = false;
+		getGsap().then((api) => {
+			if (cancelled) return;
+			({ gsap, Flip } = api);
+			applyInitialLayout();
+		});
+		return () => (cancelled = true);
+	});
+
+	function applyInitialLayout() {
 		if (!root || !replica || !origin) return;
 
 		const { width, height } = root.getBoundingClientRect();
@@ -132,7 +146,7 @@
 			ease: 'power3.in',
 			onComplete: () => (editable = true)
 		});
-	});
+	}
 </script>
 
 <div

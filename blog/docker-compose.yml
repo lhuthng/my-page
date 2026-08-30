@@ -1,3 +1,9 @@
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
     image: ghcr.io/lhuthng/blog-backend:latest
@@ -7,6 +13,7 @@ services:
       - ./backend/media:/app/media
       - ./backend/project-demos:/app/project-demos
     container_name: rust-backend
+    restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -15,13 +22,23 @@ services:
       - "127.0.0.1:3001:3000"
     env_file:
       - ./backend/.env
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      # Migrations run before the server binds; don't mark unhealthy too early.
+      start_period: 60s
 
   frontend:
     image: ghcr.io/lhuthng/blog-frontend:latest
     build: ./frontend
     container_name: svelte-frontend
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - appnet
     ports:
@@ -32,6 +49,14 @@ services:
       - PORT=8080
       - API_URL=http://backend:3000
       - BODY_SIZE_LIMIT=100M
+    logging: *default-logging
+    healthcheck:
+      # oven/bun images ship no wget/curl, so probe with Bun itself.
+      test: ["CMD", "bun", "-e", "process.exit((await fetch('http://127.0.0.1:8080/health')).ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 networks:
   appnet:

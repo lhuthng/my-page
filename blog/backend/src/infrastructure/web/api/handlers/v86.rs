@@ -3443,7 +3443,15 @@ pub async fn put_game_save(
             "Please wait before saving again.".to_string(),
         ));
     }
-    let compressed = zstd_compress(&bytes)?;
+    // Level-19 zstd over up to 2 MB is seconds of CPU; run it with the hash
+    // on the blocking pool.
+    let (compressed, sha) = tokio::task::spawn_blocking(move || -> Result<_, ProjectError> {
+        let compressed = zstd_compress(&bytes)?;
+        let sha = hex::encode(Sha256::digest(&compressed));
+        Ok((compressed, sha))
+    })
+    .await
+    .map_err(|e| ProjectError::InternalError(e.to_string()))??;
     let storage_key = format!("v86/saves/{user_id}/{game_id}/save.zst");
     if let Some(r2) = &state.r2 {
         r2.put_object_bytes(&storage_key, compressed.clone())
@@ -3456,7 +3464,6 @@ pub async fn put_game_save(
         }
         tokio::fs::write(&path, &compressed).await?;
     }
-    let sha = hex::encode(Sha256::digest(&compressed));
     sqlx::query(
         r#"INSERT INTO game_v86_saves (game_id, user_id, storage_key, size_bytes, sha256)
            VALUES (?, ?, ?, ?, ?)

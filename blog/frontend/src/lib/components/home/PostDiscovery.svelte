@@ -3,7 +3,8 @@
 	import { getGsap } from '$lib/gsap.js';
 	import { onMount, tick, untrack } from 'svelte';
 
-	const { gsap, Flip } = getGsap();
+	let Flip;
+	getGsap().then((api) => (Flip = api.Flip));
 	import { fly } from 'svelte/transition';
 	import { flip } from 'svelte/animate';
 	import Smug from '../svgs/emotes/Smug.svelte';
@@ -57,7 +58,7 @@
 
 		tab.preindex = tab.index;
 
-		const state = Flip.getState(tab.container);
+		const state = Flip?.getState(tab.container);
 
 		if (tab.index !== 1) {
 			tab.discover.classList.toggle('hidden', true);
@@ -69,7 +70,7 @@
 			tab.fresh.classList.toggle('grid', false);
 		}
 
-		Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
+		if (state) Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
 	});
 
 	let order = $state();
@@ -107,7 +108,7 @@
 
 		if (res.ok) {
 			setTimeout(async () => {
-				const state = Flip.getState(tab.container);
+				const state = Flip?.getState(tab.container);
 				const payload = await res.json();
 
 				orderFresh.cache = (payload.featured_posts ?? []).map((post, index) => ({
@@ -119,7 +120,7 @@
 
 				await tick();
 
-				Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
+				if (state) Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
 			}, 500);
 		} else {
 			orderFresh.cache = [];
@@ -163,10 +164,10 @@
 					const value = e.target.value;
 
 					if (fresh[value].status !== 'fetched') {
-						const state = Flip.getState(tab.container);
+						const state = Flip?.getState(tab.container);
 						order = value;
 						await tick();
-						Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
+						if (state) Flip.from(state, { duration: 0.5, ease: 'power3.inOut' });
 					} else {
 						order = value;
 					}

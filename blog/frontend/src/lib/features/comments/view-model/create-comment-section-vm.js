@@ -1,6 +1,7 @@
 import { getGsap } from '$lib/gsap.js';
 import { authState } from '$lib/auth/user.svelte.js';
 import { resizeTextarea } from '$lib/dom/auto-resize';
+import { loadHighlightJs } from '$lib/custom-rules/plugins/code-highlight-lazy.js';
 import { createCommentApi } from '../data/comment-api.js';
 import {
 	createCommentFeatureState,
@@ -25,8 +26,6 @@ import { createThreadController } from '../controllers/thread-controller.js';
 import { createComposerController } from '../controllers/composer-controller.js';
 import CommentGifPopover from '$lib/components/post/popovers/CommentGifPopover.svelte';
 import CommentKaomojiPopover from '$lib/components/post/popovers/CommentKaomojiPopover.svelte';
-
-const { gsap } = getGsap();
 
 const mentionMinChars = 3;
 const mentionDebounceMs = 250;
@@ -230,6 +229,7 @@ export function createCommentSectionViewModel({
 	}
 
 	async function renderComments(items) {
+		await loadHighlightJs();
 		await hydrateMentionDictionary(items.map((comment) => comment.content));
 		return items.map((comment) => ({
 			...comment,
@@ -806,17 +806,27 @@ export function createCommentSectionViewModel({
 		const start = getStart();
 		if (!start) return () => {};
 
-		const onScrolled = gsap.to(start, {
-			scrollTrigger: {
-				trigger: start,
-				once: true,
-				start: 'bottom bottom',
-				onEnter: fetchComments
-			}
+		let cancelled = false;
+		let onScrolled;
+		let triggerInstance;
+
+		// GSAP arrives asynchronously, so the scroll trigger attaches a tick
+		// later; the cleanup must also cover the not-yet-created tween.
+		getGsap().then(({ gsap }) => {
+			if (cancelled) return;
+			onScrolled = gsap.to(start, {
+				scrollTrigger: {
+					trigger: start,
+					once: true,
+					start: 'bottom bottom',
+					onEnter: fetchComments
+				}
+			});
+			triggerInstance = onScrolled.scrollTrigger;
 		});
 
-		const triggerInstance = onScrolled.scrollTrigger;
 		return () => {
+			cancelled = true;
 			triggerInstance?.kill();
 			onScrolled?.kill();
 		};
