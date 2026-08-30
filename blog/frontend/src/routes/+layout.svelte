@@ -4,6 +4,7 @@
 	import Footer from '$lib/components/shell/Footer.svelte';
 	import Header from '$lib/components/shell/Header.svelte';
 	import NavigationSideBar from '$lib/components/shell/NavigationSideBar.svelte';
+	import DashboardSideBar from '$lib/components/dashboard/DashboardSideBar.svelte';
 	import { onMount } from 'svelte';
 	import '../app.css';
 	import { el } from '$lib/dom/elements.svelte.js';
@@ -85,7 +86,10 @@
 	<Header />
 	<main class="grow" bind:this={scrollTarget}>
 		<div class="relative flex gap-2 lg:gap-4 w-cap">
-			{#if !ignoreRoutes.includes(route)}
+			{#if route === 'dashboard'}
+				<!-- The +layout.server.js guard already limits /dashboard to mods+ -->
+				<DashboardSideBar />
+			{:else if !ignoreRoutes.includes(route)}
 				<NavigationSideBar {route} />
 			{/if}
 			<div class="w-full not-lg:overflow-x-hidden">

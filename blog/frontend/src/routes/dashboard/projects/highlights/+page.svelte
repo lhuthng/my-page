@@ -1,6 +1,7 @@
 <script>
 	import { gql, fixUrl } from '$lib/api/graphql';
 	import { api } from '$lib/api/client.js';
+	import SearchInput from '$lib/components/dashboard/SearchInput.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
@@ -8,6 +9,7 @@
 
 	let featuredProjects = $state(untrack(() => data).featuredProjects ?? []);
 	let loading = $state(!untrack(() => data).featuredProjects?.length);
+	let actionError = $state('');
 
 	onMount(async () => {
 		if (!data.featuredProjects?.length) {
@@ -96,7 +98,7 @@
 				featuredProjects = featuredProjects.filter((p) => p.id !== project.id);
 			}
 		} catch (e) {
-			alert(`Failed to update highlight status: ${e.message}`);
+			actionError = `Failed to update highlight status: ${e.message}`;
 		}
 	}
 </script>
@@ -106,8 +108,8 @@
 </svelte:head>
 
 <div class="flex flex-col gap-4 pb-8">
-	<div class="bg-white rounded-xl p-6 shadow-sm">
-		<h1 class="text-3xl font-bold text-dark">Highlight Projects</h1>
+	<div class="bg-white rounded-xl p-4">
+		<h1 class="text-2xl font-semibold text-dark">Highlight Projects</h1>
 		<p class="text-base text-dark/60 mt-1">
 			Select which projects are featured on the homepage. The featured section displays the 5 most
 			recent featured projects.
@@ -115,7 +117,7 @@
 	</div>
 
 	<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-		<div class="lg:col-span-7 bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4 h-fit">
+		<div class="lg:col-span-7 bg-white rounded-xl p-4 flex flex-col gap-4 h-fit">
 			<h2 class="text-2xl font-semibold text-dark flex items-center gap-2">
 				Currently Featured
 				<span class="text-base font-normal text-dark/40">({featuredProjects.length})</span>
@@ -135,7 +137,7 @@
 				<ul class="flex flex-col gap-3">
 					{#each featuredProjects as project (project.id)}
 						<li
-							class="flex items-center gap-4 p-3.5 border border-background/50 rounded-xl hover:bg-background/5 transition-colors"
+							class="flex items-center gap-4 p-3.5 border-2 border-dark/10 rounded-xl hover:bg-background/40 transition-colors"
 							in:fly={{ y: 20, duration: 300 }}
 							out:fade={{ duration: 150 }}
 						>
@@ -198,32 +200,19 @@
 			{/if}
 		</div>
 
-		<div class="lg:col-span-5 bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4">
+		<div class="lg:col-span-5 bg-white rounded-xl p-4 flex flex-col gap-4">
 			<h2 class="text-2xl font-semibold text-dark">Add to Highlight Projects</h2>
 
-			<div
-				class="relative flex items-center gap-2 bg-background/30 rounded-xl px-3 py-2.5 border border-background/60"
-			>
-				<span class="text-dark/40 text-lg">🔍</span>
-				<input
-					type="text"
-					placeholder="Search published projects..."
-					bind:value={search}
-					oninput={handleSearchInput}
-					class="flex-1 bg-transparent text-base placeholder:text-dark/30 outline-none text-dark"
-				/>
-				{#if search}
-					<button
-						onclick={() => {
-							search = '';
-							searchResults = [];
-						}}
-						class="text-dark/40 hover:text-dark text-sm cursor-pointer pr-1"
-					>
-						✕
-					</button>
-				{/if}
-			</div>
+			<SearchInput
+				placeholder="Search published projects..."
+				bind:value={search}
+				onsearch={handleSearchInput}
+				onclear={() => (searchResults = [])}
+			/>
+
+			{#if actionError}
+				<p class="text-accent-red text-sm">Error: {actionError}</p>
+			{/if}
 
 			<div class="flex-1 min-h-87.5">
 				{#if searchLoading}
@@ -249,7 +238,7 @@
 							{@const isDraft = project.status === 'draft'}
 
 							<li
-								class="flex items-center gap-3 p-3 border border-background/40 rounded-xl hover:bg-background/5 transition-colors"
+								class="flex items-center gap-3 p-3 border-2 border-dark/10 rounded-xl hover:bg-background/40 transition-colors"
 							>
 								{#if project.url}
 									{#if project.cover_media_type?.startsWith('video/')}

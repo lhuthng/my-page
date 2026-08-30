@@ -1,6 +1,7 @@
 <script>
 	import { gql } from '$lib/api/graphql';
 	import { authState } from '$lib/auth/user.svelte.js';
+	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
@@ -90,9 +91,12 @@
 	</div>
 
 	{#if series.length === 0}
-		<div class="bg-white rounded-xl p-8 text-center text-dark/40">
-			<p class="text-lg">No series yet.</p>
-			<p class="text-sm mt-1">Create a series from the post editor.</p>
+		<div class="bg-white rounded-xl p-4">
+			<EmptyState
+				message="No series yet."
+				hint="Create a series from the post editor."
+				mascot
+			/>
 		</div>
 	{:else}
 		<ul class="flex flex-col gap-3">

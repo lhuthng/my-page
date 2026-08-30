@@ -1,11 +1,12 @@
 <script>
 	import { page } from '$app/stores';
 
-	let { children } = $props();
-
+	// The dashboard's own navigation rail, rendered by the root layout in the
+	// same slot the public NavigationSideBar occupies on non-dashboard routes.
+	// Grouped so 13+ sections read at a glance; hidden below lg where the
+	// dashboard layout shows a scrollable pill row instead.
 	let currentPath = $derived($page.url.pathname);
 
-	// Mirrors the sidebar's groups; shown below lg where the rail is hidden.
 	const groups = [
 		{
 			label: 'Content',
@@ -39,11 +40,6 @@
 		$page.data.role === 'admin' ? [...groups, { label: 'Admin', items: adminItems }] : groups
 	);
 
-	let flatTabs = $derived([
-		{ label: 'Overview', path: '/dashboard', exact: true },
-		...navGroups.flatMap((g) => g.items)
-	]);
-
 	function isActive(tab) {
 		return (
 			currentPath === tab.path ||
@@ -52,32 +48,37 @@
 	}
 </script>
 
-<svelte:head>
-	<meta name="robots" content="noindex, nofollow" />
-</svelte:head>
-
-<div class="flex flex-col gap-2 lg:gap-4 pb-8">
-	<!-- Pill row (replaces the sidebar below lg) -->
-	<nav class="lg:hidden">
-		<ul
-			class="bg-white rounded-xl p-2 shadow-lg flex gap-1 overflow-x-auto custom-scrollbar whitespace-nowrap"
-		>
-			{#each flatTabs as tab (tab.path)}
+<nav class="hidden lg:block sticky self-start top-32 mb-4 w-46 min-w-46 drop-shadow-sm">
+	<ul class="bg-white p-2 rounded-xl space-y-1">
+		<li>
+			<a
+				href="/dashboard"
+				class="flex w-full px-2 py-1.5 rounded-lg font-medium text-dark transition-colors duration-50 no-underline! {currentPath ===
+				'/dashboard'
+					? 'bg-dark text-white hover:bg-dark/90'
+					: 'bg-background/40 hover:bg-background/60'}"
+			>
+				Overview
+			</a>
+		</li>
+		{#each navGroups as group (group.label)}
+			<li class="px-2 pt-3 pb-1 text-xs font-semibold text-dark/40 uppercase tracking-wide">
+				{group.label}
+			</li>
+			{#each group.items as tab (tab.path)}
 				{@const active = isActive(tab)}
 				<li>
 					<a
 						href={tab.path}
-						class="block px-3 py-1.5 rounded-lg text-base font-medium transition-colors no-underline! {active
-							? 'bg-dark text-white'
-							: 'text-dark hover:bg-background/60'}"
+						class="flex w-full px-2 py-1.5 rounded-lg text-dark transition-colors duration-50 no-underline! {active
+							? 'bg-dark text-white hover:bg-dark/90'
+							: 'bg-background/40 hover:bg-background/60'}"
 						aria-current={active ? 'page' : undefined}
 					>
 						{tab.label}
 					</a>
 				</li>
 			{/each}
-		</ul>
-	</nav>
-
-	{@render children?.()}
-</div>
+		{/each}
+	</ul>
+</nav>
