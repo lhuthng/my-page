@@ -21,13 +21,15 @@
 	});
 </script>
 
-<div class="flex flex-col gap-2">
+<div class="flex flex-col gap-2 text-dark">
 	{#if !details}
-		<span>Search and select any media to edit the file</span>
+		<p class="text-sm text-dark/50 text-center py-4">
+			Search and select any media to edit the file.
+		</p>
 	{:else if details?.status === 'waiting'}
-		<span>Waiting, I'm loading</span>
+		<p class="text-sm text-dark/50 text-center py-4 animate-pulse">Loading details…</p>
 	{:else if draft && truth}
-		<span class="text-center">Details</span>
+		<span class="text-center text-sm font-semibold text-dark/60 uppercase tracking-wide">Details</span>
 		<form
 			class="flex flex-col gap-2"
 			method="patch"
@@ -63,13 +65,13 @@
 				}
 			}}
 		>
-			<fieldset class="border-2 rounded-lg pt-1 pb-2 px-2">
+			<fieldset class="border-2 border-dark/20 rounded-lg pt-1 pb-2 px-2">
 				<legend class="font-semibold text-xs left-2 px-1" for="short-name">
 					Short name{draft.shortName !== truth.shortName ? `*` : ''}
 				</legend>
 				<div class="flex w-full">
 					<input
-						class="grow focus:outline-0"
+						class="grow rounded-lg border-2 border-dark/10 focus:border-dark px-2 py-1 bg-white"
 						type="text"
 						bind:value={draft.shortName}
 						name="short-name"
@@ -83,13 +85,13 @@
 					/>
 				</div>
 			</fieldset>
-			<fieldset class="border-2 rounded-lg pt-1 pb-2 px-2">
+			<fieldset class="border-2 border-dark/20 rounded-lg pt-1 pb-2 px-2">
 				<legend class="font-semibold text-xs left-2 px-1" for="description">
 					Description{draft.description !== truth.description ? `*` : ''}
 				</legend>
 				<div class="flex w-full">
 					<textarea
-						class="grow focus:outline-0 resize-none"
+						class="grow rounded-lg border-2 border-dark/10 focus:border-dark px-2 py-1 bg-white resize-none custom-scrollbar"
 						type="text"
 						rows="4"
 						bind:value={draft.description}
@@ -104,10 +106,13 @@
 				</div>
 			</fieldset>
 			<div class="flex w-full">
-				<label class="text-sm" for="file-type">
+				<label class="text-sm text-dark/50" for="file-type">
 					{draft.fileType}
 				</label>
-				<button class="ml-auto w-fit border-2 px-1 rounded-lg cursor-pointer" type="submit">
+				<button
+					class="ml-auto w-fit rounded-full border-2 border-dark/20 px-3 py-1 text-sm font-medium hover:bg-dark hover:text-white transition-colors cursor-pointer"
+					type="submit"
+				>
 					Apply
 				</button>
 			</div>

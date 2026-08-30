@@ -84,6 +84,15 @@
 					ondblclick={() => {}}
 				/>
 			{/each}
+		{:else}
+			<div
+				class="col-span-full flex flex-col items-center justify-center gap-2 py-12 text-dark/40 text-center px-4"
+			>
+				<p class="text-lg">Search media by keyword</p>
+				<p class="text-sm text-dark/30">
+					Type at least 2 characters, then select a tile to edit its details.
+				</p>
+			</div>
 		{/if}
 	</MediaDirectory>
 </div>

@@ -83,7 +83,9 @@
 			ondragover={preventDefault}
 			role="listitem"
 		>
-			<div class="flex full justify-center items-center border-2 border-dashed rounded-sm">
+			<div
+				class="flex full justify-center items-center border-2 border-dashed border-dark/20 bg-primary-20/50 rounded-xl text-dark/50"
+			>
 				<p>Drop a media here</p>
 			</div>
 		</div>
