@@ -1,6 +1,10 @@
 <script>
 	import App from '../embeds/App.svelte';
 	import { findHeaders, pluginExtend } from '$lib/custom-rules';
+	// KaTeX ships with this component on purpose: only rendered post/project/
+	// game bodies (here and in the editor preview via PostContent) ever
+	// contain math, so the rest of the site doesn't load its CSS.
+	import 'katex/dist/katex.min.css';
 
 	let { content, headers = $bindable() } = $props();
 

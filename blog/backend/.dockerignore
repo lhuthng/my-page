@@ -1,1 +1,12 @@
 target/
+data/
+media/
+project-demos/
+.minio-data/
+tests/
+.env
+.env.*
+!.env.example
+.DS_Store
+backup.sh
+sync_v86_to_r2.sh

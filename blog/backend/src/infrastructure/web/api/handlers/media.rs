@@ -5,11 +5,15 @@ use axum::{
     Extension, Json,
     body::{Body, Bytes},
     extract::{Multipart, Path, Query, State},
+    http::HeaderMap,
     response::IntoResponse,
 };
 use http::{Response, header};
 use serde::{Deserialize, Serialize};
-use tokio::fs;
+use tokio::{
+    fs,
+    io::{AsyncReadExt, AsyncSeekExt},
+};
 use tokio_util::io::ReaderStream;
 
 use crate::{
@@ -196,6 +200,7 @@ pub async fn get_link(
 pub async fn get_media(
     State(state): State<Arc<AppState>>,
     Path(short_name): Path<String>,
+    headers: HeaderMap,
 ) -> Result<impl IntoResponse, MediaError> {
     let thumbnail_fallback = post_thumbnail_fallback_short_name(&short_name);
     let mut used_fallback = false;
@@ -241,19 +246,93 @@ pub async fn get_media(
         }
     };
 
-    let body = Body::from_stream(ReaderStream::new(file));
+    let size = file
+        .metadata()
+        .await
+        .map_err(|e| MediaError::InternalError(e.to_string()))?
+        .len();
 
     // Use the plain SHA-256 as the ETag - stable content identifier
     // regardless of the storage layout.
     let etag = format!("\"{}\"", content_hash);
+
+    // Single byte-range support so <video>/<audio> can seek without
+    // re-downloading the whole file. A partial answer is only safe when
+    // If-Range (when present) still matches the ETag; media is
+    // content-addressed and immutable, so that is the normal case.
+    let range = headers
+        .get(header::RANGE)
+        .and_then(|value| value.to_str().ok());
+    let if_range_matches = headers
+        .get(header::IF_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value == etag)
+        .unwrap_or(true);
+
+    if if_range_matches
+        && let Some((start, end)) = range.and_then(|r| parse_byte_range(r, size))
+    {
+        let length = end - start + 1;
+        let mut file = file;
+        file.seek(std::io::SeekFrom::Start(start))
+            .await
+            .map_err(|e| MediaError::InternalError(e.to_string()))?;
+        let body = Body::from_stream(ReaderStream::new(file.take(length)));
+
+        return Response::builder()
+            .status(206)
+            .header(header::CONTENT_TYPE, file_type)
+            .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+            .header(header::ETAG, etag)
+            .header(header::ACCEPT_RANGES, "bytes")
+            .header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{size}"))
+            .header(header::CONTENT_LENGTH, length)
+            .body(body)
+            .map_err(|e| MediaError::InternalError(e.to_string()));
+    }
 
     Response::builder()
         .status(200)
         .header(header::CONTENT_TYPE, file_type)
         .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
         .header(header::ETAG, etag)
-        .body(body)
+        .header(header::ACCEPT_RANGES, "bytes")
+        .body(Body::from_stream(ReaderStream::new(file)))
         .map_err(|e| MediaError::InternalError(e.to_string()))
+}
+
+/// Parses a single-range `bytes=start-end` header into an inclusive
+/// (start, end) pair clamped to the file size. Multi-range, malformed, and
+/// unsatisfiable headers return None so the caller answers with the full
+/// 200 body, which the RFC permits in place of 416.
+fn parse_byte_range(range: &str, size: u64) -> Option<(u64, u64)> {
+    let rest = range.strip_prefix("bytes=")?;
+    if rest.contains(',') {
+        return None;
+    }
+    let (start_str, end_str) = rest.split_once('-')?;
+    if start_str.is_empty() {
+        // Suffix form: last N bytes.
+        let last = end_str.parse::<u64>().ok()?;
+        if last == 0 || size == 0 {
+            return None;
+        }
+        let start = size.saturating_sub(last);
+        return Some((start, size - 1));
+    }
+    let start = start_str.parse::<u64>().ok()?;
+    if start >= size {
+        return None;
+    }
+    let end = if end_str.is_empty() {
+        size - 1
+    } else {
+        end_str.parse::<u64>().ok()?.min(size - 1)
+    };
+    if end < start {
+        return None;
+    }
+    Some((start, end))
 }
 
 fn post_thumbnail_fallback_short_name(short_name: &str) -> Option<String> {
