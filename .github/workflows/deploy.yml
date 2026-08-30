@@ -128,7 +128,12 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            cd ~/MyPage/blog
+            cd ~/MyPage
+            # Pick up compose file changes; if the VM's clone has diverged,
+            # deploy anyway on the stale file and surface a warning.
+            GIT_TERMINAL_PROMPT=0 git pull --ff-only || \
+              echo "WARN: git pull failed on VM - compose file may be stale"
+            cd blog
             docker compose pull
 
       - name: Restart containers
