@@ -1,6 +1,6 @@
 # Blog Frontend
 
-SvelteKit frontend for the blog, using [`svelte-adapter-bun`](https://github.com/gornostay25/svelte-adapter-bun) for SSR. Bun is both the runtime and the package manager. Runs at [blog.huuthangle.site](https://blog.huuthangle.site).
+SvelteKit frontend for the blog, using [`svelte-adapter-bun`](https://github.com/gornostay25/svelte-adapter-bun) for SSR. Bun is both the runtime and the package manager. Runs at [huuthangle.site](https://huuthangle.site).
 
 ## Overview
 

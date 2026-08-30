@@ -1,4 +1,4 @@
-export const SITE_ORIGIN = 'https://blog.huuthangle.site';
+export const SITE_ORIGIN = 'https://huuthangle.site';
 export const SITE_HOSTNAME = new URL(SITE_ORIGIN).hostname;
 export const SITE_NAME = "Huu Thang's Blog";
 export const SITE_DESCRIPTION =
