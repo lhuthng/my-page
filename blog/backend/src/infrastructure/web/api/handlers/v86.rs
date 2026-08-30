@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::{Read, Write},
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
 };
 
@@ -11,7 +11,7 @@ use axum::{
     body::Bytes,
     extract::{Path as AxumPath, Query, State},
     http::{HeaderValue, StatusCode, header},
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -3054,28 +3054,85 @@ pub async fn get_snapshot_blob(
     .await?;
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
     if let Some(r2) = &state.r2 {
-        let bytes = r2
-            .get_object(&storage_key)
-            .await
-            .map_err(|_| ProjectError::ProjectNotFound)?;
-        return Ok(immutable_chunk_response(bytes, "application/octet-stream"));
+        return streamed_r2_object(
+            r2,
+            &storage_key,
+            "application/octet-stream",
+            IMMUTABLE_CACHE_CONTROL,
+        )
+        .await;
     }
-    let bytes = tokio::fs::read(state.project_demo_config.dir.join(&storage_key))
-        .await
-        .map_err(|_| ProjectError::ProjectNotFound)?;
-    Ok(immutable_chunk_response(bytes, "application/octet-stream"))
+    streamed_fs_file(
+        state.project_demo_config.dir.join(&storage_key),
+        "application/octet-stream",
+        IMMUTABLE_CACHE_CONTROL,
+    )
+    .await
 }
 
-fn immutable_chunk_response(bytes: Vec<u8>, content_type: &'static str) -> Response {
-    let mut response = bytes.into_response();
+const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
+
+fn streamed_response(
+    body: axum::body::Body,
+    size: u64,
+    content_type: &'static str,
+    cache_control: &'static str,
+) -> Response {
+    let mut response = Response::new(body);
     response
         .headers_mut()
         .insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
     response.headers_mut().insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=31536000, immutable"),
+        HeaderValue::from_static(cache_control),
     );
+    if let Ok(value) = HeaderValue::from_str(&size.to_string()) {
+        response
+            .headers_mut()
+            .insert(header::CONTENT_LENGTH, value);
+    }
     response
+}
+
+async fn streamed_fs_file(
+    path: PathBuf,
+    content_type: &'static str,
+    cache_control: &'static str,
+) -> Result<Response, ProjectError> {
+    let file = tokio::fs::File::open(path)
+        .await
+        .map_err(|_| ProjectError::ProjectNotFound)?;
+    let size = file
+        .metadata()
+        .await
+        .map_err(|_| ProjectError::ProjectNotFound)?
+        .len();
+    Ok(streamed_response(
+        axum::body::Body::from_stream(ReaderStream::new(file)),
+        size,
+        content_type,
+        cache_control,
+    ))
+}
+
+async fn streamed_r2_object(
+    r2: &R2Client,
+    key: &str,
+    content_type: &'static str,
+    cache_control: &'static str,
+) -> Result<Response, ProjectError> {
+    let size = r2
+        .object_size(key)
+        .await
+        .map_err(r2_error)?
+        .ok_or(ProjectError::ProjectNotFound)?;
+    let reader = r2.get_object_reader(key).await.map_err(r2_error)?;
+    Ok(streamed_response(
+        axum::body::Body::from_stream(ReaderStream::new(reader)),
+        size,
+        content_type,
+        cache_control,
+    ))
 }
 
 /// Serves the static Windows 9x in-guest launcher so the editor can build the
@@ -3094,19 +3151,7 @@ pub async fn get_game_launcher(
     } else {
         assets_dir.join("LAUNCHER.EXE")
     };
-    let bytes = tokio::fs::read(&launcher)
-        .await
-        .map_err(|_| ProjectError::ProjectNotFound)?;
-    let mut response = bytes.into_response();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/octet-stream"),
-    );
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=3600"),
-    );
-    Ok(response)
+    streamed_fs_file(launcher, "application/octet-stream", "public, max-age=3600").await
 }
 
 pub async fn get_system_chunk(
@@ -3128,16 +3173,12 @@ pub async fn get_system_chunk(
     if part == ".img" || part.contains('/') || !(part.ends_with(".img") || part.ends_with(".img.zst")) {
         return Err(ProjectError::ProjectNotFound);
     }
-    let bytes = tokio::fs::read(
-        state
-            .project_demo_config
-            .dir
-            .join(&storage_key)
-            .join(part),
+    streamed_fs_file(
+        state.project_demo_config.dir.join(&storage_key).join(part),
+        "application/octet-stream",
+        IMMUTABLE_CACHE_CONTROL,
     )
     .await
-    .map_err(|_| ProjectError::ProjectNotFound)?;
-    Ok(immutable_chunk_response(bytes, "application/octet-stream"))
 }
 
 pub async fn get_game_chunk(
@@ -3170,17 +3211,17 @@ pub async fn get_game_chunk(
     if part == ".iso" || part.contains('/') || !(part.ends_with(".iso") || part.ends_with(".iso.zst")) {
         return Err(ProjectError::ProjectNotFound);
     }
-    let bytes = tokio::fs::read(
+    streamed_fs_file(
         state
             .project_demo_config
             .dir
             .join(storage_key)
             .join("parts")
             .join(part),
+        "application/octet-stream",
+        IMMUTABLE_CACHE_CONTROL,
     )
     .await
-    .map_err(|_| ProjectError::ProjectNotFound)?;
-    Ok(immutable_chunk_response(bytes, "application/octet-stream"))
 }
 
 pub async fn get_game_disk_chunk(
@@ -3205,22 +3246,20 @@ pub async fn get_game_disk_chunk(
     }
     if let Some(r2) = &state.r2 {
         let key = format!("{storage_key}/{part}");
-        let bytes = r2
-            .get_object(&key)
-            .await
-            .map_err(|_| ProjectError::ProjectNotFound)?;
-        return Ok(immutable_chunk_response(bytes, "application/octet-stream"));
+        return streamed_r2_object(
+            r2,
+            &key,
+            "application/octet-stream",
+            IMMUTABLE_CACHE_CONTROL,
+        )
+        .await;
     }
-    let bytes = tokio::fs::read(
-        state
-            .project_demo_config
-            .dir
-            .join(storage_key)
-            .join(part),
+    streamed_fs_file(
+        state.project_demo_config.dir.join(storage_key).join(part),
+        "application/octet-stream",
+        IMMUTABLE_CACHE_CONTROL,
     )
     .await
-    .map_err(|_| ProjectError::ProjectNotFound)?;
-    Ok(immutable_chunk_response(bytes, "application/octet-stream"))
 }
 
 pub async fn get_game_iso(
@@ -3394,34 +3433,19 @@ pub async fn get_game_save(
     .bind(user_id)
     .fetch_optional(&state.project_service.pool)
     .await?;
-    let (storage_key, size) = match row {
+    let (storage_key, _size) = match row {
         Some(row) => (row.get::<String, _>("storage_key"), row.get::<i64, _>("size_bytes")),
         None => return Err(ProjectError::SaveNotFound),
     };
-    let compressed = match &state.r2 {
-        Some(r2) => r2.get_object(&storage_key).await.map_err(r2_error)?,
-        None => {
-            tokio::fs::read(
-                state
-                    .project_demo_config
-                    .dir
-                    .join(&storage_key),
-            )
-            .await
-            .map_err(|_| ProjectError::SaveNotFound)?
-        }
-    };
-    let mut response = Response::new(axum::body::Body::from(compressed));
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/octet-stream"),
-    );
-    response.headers_mut().insert(
-        header::CONTENT_LENGTH,
-        HeaderValue::from_str(&size.to_string())
-            .map_err(|error| ProjectError::InternalError(error.to_string()))?,
-    );
-    Ok(response)
+    if let Some(r2) = &state.r2 {
+        return streamed_r2_object(r2, &storage_key, "application/octet-stream", "no-store").await;
+    }
+    streamed_fs_file(
+        state.project_demo_config.dir.join(storage_key),
+        "application/octet-stream",
+        "no-store",
+    )
+    .await
 }
 
 pub async fn put_game_save(

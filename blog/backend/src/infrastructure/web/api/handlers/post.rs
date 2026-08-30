@@ -7,6 +7,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -681,14 +682,17 @@ pub struct ShortNameExtraction {
     pub start: usize,
 }
 
-fn extract_media_short_names(content: &str) -> Vec<ShortNameExtraction> {
-    let syntaxes = [
+// These run on every post/project/game create, update, and publish.
+static MEDIA_NAME_REGEXES: Lazy<[Regex; 2]> = Lazy::new(|| {
+    [
         Regex::new(r"@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]").unwrap(),
         Regex::new(r":::app\s+lottie\s+([^\s]+)").unwrap(),
-    ];
+    ]
+});
 
+fn extract_media_short_names(content: &str) -> Vec<ShortNameExtraction> {
     let mut extraction = Vec::<ShortNameExtraction>::new();
-    for reg in syntaxes {
+    for reg in MEDIA_NAME_REGEXES.iter() {
         for cap in reg.captures_iter(content) {
             if let Some(matched) = cap.get(1) {
                 extraction.push(ShortNameExtraction {

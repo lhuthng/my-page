@@ -49,6 +49,9 @@ services:
       - PORT=8080
       - API_URL=http://backend:3000
       - BODY_SIZE_LIMIT=100M
+      # Lets the browser fetch /media/* straight from nginx -> backend,
+      # skipping the SvelteKit proxy hop (see frontend/README.md).
+      - BACKEND_ORIGIN=https://blog.huuthangle.site
     logging: *default-logging
     healthcheck:
       # oven/bun images ship no wget/curl, so probe with Bun itself.

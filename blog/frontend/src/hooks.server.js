@@ -14,7 +14,10 @@ const NOINDEX_PATHS = [
 	'/verify-email'
 ];
 const userCache = new Map();
-const USER_CACHE_TTL_MS = 30_000;
+// Access tokens live 24h (ACCESS_JWT_EXP_HOURS), so a refreshed token and its
+// profile stay valid far beyond this TTL. Cold-cache users otherwise pay two
+// sequential backend round-trips (refresh + users/me) on every cache miss.
+const USER_CACHE_TTL_MS = 30 * 60 * 1000;
 
 function pruneUserCache() {
 	const now = Date.now();

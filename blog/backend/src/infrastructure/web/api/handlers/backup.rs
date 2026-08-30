@@ -1,14 +1,17 @@
 use std::io::{Read, Seek, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use axum::{
-    body::Body,
+    body::{Body, Bytes},
     extract::State,
     http::header,
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
+use futures::StreamExt;
+use tokio_util::io::ReaderStream;
+use uuid::Uuid;
 use zip::ZipWriter;
 use zip::write::FileOptions;
 
@@ -47,12 +50,48 @@ fn add_dir_recursive<W: Write + Seek>(
             add_dir_recursive(zip, base, &path, zip_prefix)?;
         } else if entry.file_type()?.is_file() {
             let mut file = std::fs::File::open(&path)?;
-            let mut content = Vec::new();
-            file.read_to_end(&mut content)?;
             zip.start_file(zip_name, FileOptions::default())?;
-            zip.write_all(&content)?;
+            // Media files reach 100 MB; pipe them straight into the entry
+            // instead of buffering each one in a Vec.
+            std::io::copy(&mut file, &mut *zip)?;
         }
     }
+    Ok(())
+}
+
+fn build_backup_zip(
+    out_path: &PathBuf,
+    db_path: &PathBuf,
+    media_dir: &PathBuf,
+    demos_dir: &PathBuf,
+    prefix: &str,
+) -> Result<(), BackupError> {
+    let file = std::fs::File::create(out_path)?;
+    let mut zip = ZipWriter::new(file);
+
+    // Add database
+    if db_path.exists() {
+        let relative = db_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("blog.db");
+        let mut file = std::fs::File::open(db_path)?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)?;
+        zip.start_file(
+            format!("{}/database/{}", prefix, relative),
+            FileOptions::default(),
+        )?;
+        zip.write_all(&content)?;
+    }
+
+    // Add media
+    add_dir_to_zip(&mut zip, media_dir, &format!("{}/media", prefix))?;
+
+    // Add project demos
+    add_dir_to_zip(&mut zip, demos_dir, &format!("{}/project-demos", prefix))?;
+
+    zip.finish()?;
     Ok(())
 }
 
@@ -63,45 +102,33 @@ pub async fn download_backup(
     let filename = format!("blog-backup-{}.zip", timestamp);
     let prefix = format!("blog-backup-{}", timestamp);
 
-    let cursor = std::io::Cursor::new(Vec::new());
-    let mut zip = ZipWriter::new(cursor);
+    let db_path = match &state.config.database_source {
+        DatabaseSource::Sqlite { path } => path.clone(),
+    };
+    let media_dir = state.media_config.dir.clone();
+    let demos_dir = state.project_demo_config.dir.clone();
 
-    // Add database
-    match &state.config.database_source {
-        DatabaseSource::Sqlite { path } => {
-            if path.exists() {
-                let relative = path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("blog.db");
-                let mut file = std::fs::File::open(path)?;
-                let mut content = Vec::new();
-                file.read_to_end(&mut content)?;
-                zip.start_file(
-                    format!("{}/database/{}", prefix, relative),
-                    FileOptions::default(),
-                )?;
-                zip.write_all(&content)?;
-            }
-        }
-    }
+    // Media + demos can add up to hundreds of MB, so the archive is written
+    // to a temp file on the blocking pool and streamed back instead of being
+    // assembled in RAM on an async worker.
+    let temp_path = std::env::temp_dir().join(format!("blog-backup-{}-{}.zip", timestamp, Uuid::new_v4()));
+    let build_path = temp_path.clone();
+    tokio::task::spawn_blocking(move || {
+        build_backup_zip(&build_path, &db_path, &media_dir, &demos_dir, &prefix)
+    })
+    .await
+    .map_err(|e| BackupError::InternalError(e.to_string()))??;
 
-    // Add media
-    add_dir_to_zip(
-        &mut zip,
-        &state.media_config.dir,
-        &format!("{}/media", prefix),
-    )?;
+    let file = tokio::fs::File::open(&temp_path).await?;
 
-    // Add project demos
-    add_dir_to_zip(
-        &mut zip,
-        &state.project_demo_config.dir,
-        &format!("{}/project-demos", prefix),
-    )?;
-
-    let cursor = zip.finish()?;
-    let bytes = cursor.into_inner();
+    // Chain a final step onto the body stream so the temp archive is removed
+    // whether the download completes or the client disconnects mid-stream.
+    let cleanup_path = temp_path.clone();
+    let cleanup = futures::stream::once(async move {
+        let _ = tokio::fs::remove_file(&cleanup_path).await;
+        Ok::<Bytes, std::io::Error>(Bytes::new())
+    });
+    let stream = ReaderStream::with_capacity(file, 64 * 1024).chain(cleanup);
 
     Ok(Response::builder()
         .header(header::CONTENT_TYPE, "application/zip")
@@ -109,6 +136,6 @@ pub async fn download_backup(
             header::CONTENT_DISPOSITION,
             format!("attachment; filename=\"{}\"", filename),
         )
-        .body(Body::from(bytes))
+        .body(Body::from_stream(stream))
         .unwrap())
 }

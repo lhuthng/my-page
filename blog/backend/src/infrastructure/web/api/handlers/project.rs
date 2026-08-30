@@ -14,6 +14,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -315,14 +316,18 @@ async fn upload_inline_media(
     Ok(())
 }
 
-fn replace_media_short_names(content: &mut String, usage: &mut HashMap<String, i64>) {
-    let syntaxes = [
+// Runs on every project create and update.
+static MEDIA_NAME_REGEXES: Lazy<[Regex; 2]> = Lazy::new(|| {
+    [
         Regex::new(r"@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]").unwrap(),
         Regex::new(r":::app\s+lottie\s+([^\s]+)").unwrap(),
-    ];
+    ]
+});
+
+fn replace_media_short_names(content: &mut String, usage: &mut HashMap<String, i64>) {
     let mut extraction = Vec::<ShortNameExtraction>::new();
 
-    for reg in syntaxes {
+    for reg in MEDIA_NAME_REGEXES.iter() {
         for cap in reg.captures_iter(content) {
             if let Some(matched) = cap.get(1) {
                 extraction.push(ShortNameExtraction {
