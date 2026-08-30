@@ -161,8 +161,11 @@ pub async fn search(
 ) -> Result<impl IntoResponse, MediaError> {
     let cmd = SearchMediaCommand {
         term: query.term,
-        size: query.size.unwrap_or(0),
-        skip: query.skip.unwrap_or(0),
+        // A missing size used to become LIMIT 0, i.e. always-empty results;
+        // clamp instead so the default page applies and callers cannot ask
+        // for the whole table.
+        size: crate::helper::string::clamp_page_size(query.size.map(i64::from), 24, 100) as u32,
+        skip: crate::helper::string::clamp_offset(query.skip.map(i64::from)) as u32,
     };
     match state.media_service.search(cmd).await {
         Ok(link_results) => Ok(Json(SearchResponse {
