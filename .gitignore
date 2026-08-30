@@ -8,3 +8,4 @@ blog/backend/.env
 blog/frontend/.env
 socket-server/.env
 scripts/emergency/deploy.env
+.zcode/
