@@ -19,11 +19,11 @@
 	});
 </script>
 
-<div class="flex flex-col gap-2">
+<div class="flex flex-col gap-2 text-dark">
 	{#if !media}
-		<span>?</span>
+		<p class="text-sm text-dark/50 text-center py-4">Select an uploaded media to edit it.</p>
 	{:else}
-		<span class="text-center">Details</span>
+		<span class="text-center text-sm font-semibold text-dark/60 uppercase tracking-wide">Details</span>
 		<form
 			class="flex flex-col gap-2"
 			method="post"
@@ -53,24 +53,24 @@
 				}
 			}}
 		>
-			<label class="ml-auto mr-4 text-sm" for="file-type">
+			<label class="ml-auto mr-4 text-sm text-dark/50" for="file-type">
 				{draft.type}
 			</label>
-			<fieldset class="border-2 rounded-lg pt-1 pb-2 px-2">
+			<fieldset class="border-2 border-dark/20 rounded-lg pt-1 pb-2 px-2">
 				<legend class="font-semibold text-xs left-2 px-1" for="short-name">Short name</legend>
 				<input
 					disabled={media?.ok}
-					class="w-full focus:outline-0"
+					class="w-full rounded-lg border-2 border-dark/10 focus:border-dark px-2 py-1 bg-white"
 					type="text"
 					bind:value={draft.shortName}
 					name="short-name"
 				/>
 			</fieldset>
-			<fieldset class="border-2 rounded-lg pt-1 pb-2 px-2">
+			<fieldset class="border-2 border-dark/20 rounded-lg pt-1 pb-2 px-2">
 				<legend class="font-semibold text-xs left-2 px-1" for="description">Description</legend>
 				<textarea
 					disabled={media?.ok}
-					class="w-full focus:outline-0 resize-none"
+					class="w-full rounded-lg border-2 border-dark/10 focus:border-dark px-2 py-1 bg-white resize-none custom-scrollbar"
 					type="text"
 					rows="4"
 					bind:value={draft.description}
@@ -78,7 +78,7 @@
 			</fieldset>
 			<button
 				disabled={media?.ok}
-				class="ml-auto w-fit border-2 px-1 rounded-lg cursor-pointer"
+				class="ml-auto w-fit rounded-full border-2 border-dark/20 px-3 py-1 text-sm font-medium hover:bg-dark hover:text-white transition-colors disabled:opacity-40 cursor-pointer"
 				type="submit"
 			>
 				Submit
