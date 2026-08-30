@@ -2,6 +2,10 @@
 	import { onMount, untrack } from 'svelte';
 	import { gql, fixUrl } from '$lib/api/graphql';
 	import { authState } from '$lib/auth/user.svelte.js';
+	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
+	import SearchInput from '$lib/components/dashboard/SearchInput.svelte';
+	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
+	import LoadingCards from '$lib/components/dashboard/LoadingCards.svelte';
 	import Heart from '$lib/components/svgs/Heart.svelte';
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';
@@ -117,43 +121,23 @@
 	</div>
 
 	<!-- User list card -->
-	<div class="flex flex-col gap-4">
-		<div class="flex flex-wrap items-center justify-between gap-2">
-			<h1 class="text-2xl font-semibold">
-				Users
-				<span class="text-dark/40 text-lg font-normal">({userData.total})</span>
-			</h1>
-		</div>
+	<div class="bg-white rounded-xl p-4 flex flex-col gap-4">
+		<PageHeader title="Users" count={userData.total} />
 
 		<!-- Search + filter -->
 		<div class="flex flex-wrap gap-2">
-			<div
-				class="flex items-center gap-2 bg-background/40 rounded-xl px-3 py-2 border border-background flex-1 min-w-48"
-			>
-				<input
-					type="text"
-					placeholder="Search by name or username…"
-					bind:value={search}
-					oninput={onSearchInput}
-					class="flex-1 bg-transparent text-base placeholder:text-dark/30 outline-none"
-				/>
-				{#if search}
-					<button
-						onclick={() => {
-							search = '';
-							fetchUsers(true);
-						}}
-						class="text-dark/40 hover:text-dark text-base cursor-pointer"
-					>
-						✕
-					</button>
-				{/if}
-			</div>
+			<SearchInput
+				placeholder="Search by name or username…"
+				bind:value={search}
+				onsearch={onSearchInput}
+				onclear={() => fetchUsers(true)}
+				class="flex-1 min-w-48"
+			/>
 			{#if isAdmin}
 				<select
 					bind:value={roleFilter}
 					onchange={() => fetchUsers(true)}
-					class="text-base bg-background/40 border border-background rounded-xl px-3 py-2 text-dark outline-none cursor-pointer"
+					class="text-base bg-background/40 border-2 border-dark/10 focus:border-dark rounded-xl px-3 py-2 text-dark outline-none cursor-pointer"
 				>
 					<option value="">All Roles</option>
 					<option value="admin">Admins</option>
@@ -165,15 +149,14 @@
 
 		<!-- Content -->
 		{#if loading}
-			<div class="flex justify-center items-center py-12 text-dark/40">Loading…</div>
+			<LoadingCards count={5} tall />
 		{:else if error}
 			<p class="text-accent-red text-base">Error: {error}</p>
 		{:else if userData.users.length === 0}
-			<div class="flex flex-col items-center gap-2 py-12 text-dark/40">
-				<p class="text-lg">
-					{search || roleFilter ? 'No users match your search' : 'No users found'}
-				</p>
-			</div>
+			<EmptyState
+				message={search || roleFilter ? 'No users match your search' : 'No users found'}
+				hint={search || roleFilter ? 'Try a different name or role filter.' : ''}
+			/>
 		{:else}
 			<ul class="flex flex-col divide-y divide-background">
 				{#each userData.users as u, i (u.username)}

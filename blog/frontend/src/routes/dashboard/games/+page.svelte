@@ -1,6 +1,9 @@
 <script>
 	import { api } from '$lib/api/client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
+	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
+	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
+	import LoadingCards from '$lib/components/dashboard/LoadingCards.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
@@ -49,31 +52,27 @@
 	<title>Games - Dashboard | Huu Thang's Blog</title>
 </svelte:head>
 
-<section class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8">
-	<div class="flex flex-col gap-4">
-		<!-- Header -->
-		<div class="flex flex-wrap items-center justify-between gap-3">
-			<h1 class="text-2xl font-semibold">
-				Games
-				<span class="text-dark/40 text-lg font-normal">({games.length})</span>
-			</h1>
-			<div class="w-fit duo-btn" data-duo-color="green">
-				<a href="/dashboard/games/new">New Game</a>
-			</div>
-		</div>
+<section class="flex flex-col gap-4 pb-8">
+	<div class="bg-white rounded-xl p-4 flex flex-col gap-4">
+		<PageHeader title="Games" count={games.length}>
+			{#snippet actions()}
+				<div class="w-fit duo-btn" data-duo-color="green">
+					<a href="/dashboard/games/new">New Game</a>
+				</div>
+			{/snippet}
+		</PageHeader>
 
 		<!-- Content -->
 		{#if loading}
-			<div class="flex justify-center items-center py-12 text-dark/40">Loading…</div>
+			<LoadingCards grid count={3} />
 		{:else if error}
 			<p class="text-accent-red text-sm">Error: {error}</p>
 		{:else if games.length === 0}
-			<div class="flex flex-col items-center gap-3 py-12 text-dark/40">
-				<p class="text-lg">No games yet</p>
+			<EmptyState message="No games yet" mascot>
 				<div class="w-fit duo-btn" data-duo-color="green">
 					<a href="/dashboard/games/new">Create your first game</a>
 				</div>
-			</div>
+			</EmptyState>
 		{:else}
 			<ul class="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(25rem,1fr))] gap-4">
 				{#each games as game, i (game.id)}

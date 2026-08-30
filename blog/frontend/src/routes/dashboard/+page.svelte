@@ -68,15 +68,24 @@
 
 <section class="flex flex-col gap-4 pb-8">
 	{#if loading}
-		<div class="flex justify-center items-center py-16 text-dark/40 text-lg">
-			Loading dashboard data…
+		<div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+			{#each { length: 4 } as _, i (i)}
+				<div
+					class="bg-white rounded-xl p-4 h-20 animate-pulse"
+					style:animation-delay={`${i * 100}ms`}
+				></div>
+			{/each}
+		</div>
+		<div class="grid xl:grid-cols-3 gap-4">
+			<div class="xl:col-span-2 bg-white rounded-xl p-4 h-64 animate-pulse"></div>
+			<div class="bg-white rounded-xl p-4 h-64 animate-pulse"></div>
 		</div>
 	{:else if overview}
 		<!-- ── Stat cards ─────────────────────────────── -->
 		<div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
-			{#each [['Published Posts', overview.totalPublished, 'text-accent-green'], ['Drafts', overview.totalDrafts, 'text-accent-yellow'], ['Registered Users', overview.totalUsers, 'text-accent-blue'], ['Comments', overview.totalComments, 'text-primary']] as [label, value, color]}
-				<div class="bg-white rounded-xl p-4">
-					<p class="text-3xl font-bold {color}">{value}</p>
+			{#each [['Published Posts', overview.totalPublished, 'border-accent-green'], ['Drafts', overview.totalDrafts, 'border-accent-yellow'], ['Registered Users', overview.totalUsers, 'border-accent-blue'], ['Comments', overview.totalComments, 'border-primary']] as [label, value, accent]}
+				<div class="bg-white rounded-xl p-4 border-l-4 {accent}">
+					<p class="text-3xl font-bold text-dark">{value}</p>
 					<p class="text-base text-dark/60 mt-1">{label}</p>
 				</div>
 			{/each}

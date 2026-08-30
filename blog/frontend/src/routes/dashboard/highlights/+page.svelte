@@ -1,6 +1,9 @@
 <script>
 	import { gql, fixUrl } from '$lib/api/graphql';
 	import { api } from '$lib/api/client.js';
+	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
+	import SearchInput from '$lib/components/dashboard/SearchInput.svelte';
+	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { fly, fade } from 'svelte/transition';
 
@@ -9,6 +12,7 @@
 	// Active state for currently featured posts
 	let featuredPosts = $state(untrack(() => data).featuredPosts ?? []);
 	let loading = $state(!untrack(() => data).featuredPosts?.length);
+	let actionError = $state('');
 
 	onMount(async () => {
 		if (!data.featuredPosts?.length) {
@@ -100,7 +104,7 @@
 				featuredPosts = featuredPosts.filter((p) => p.id !== post.id);
 			}
 		} catch (e) {
-			alert(`Failed to update highlight status: ${e.message}`);
+			actionError = `Failed to update highlight status: ${e.message}`;
 		}
 	}
 </script>
@@ -111,8 +115,8 @@
 
 <div class="flex flex-col gap-4 pb-8">
 	<!-- Header Card -->
-	<div class="bg-white rounded-xl p-6 shadow-sm">
-		<h1 class="text-3xl font-bold text-dark">Highlight Posts</h1>
+	<div class="bg-white rounded-xl p-4">
+		<h1 class="text-2xl font-semibold text-dark">Highlight Posts</h1>
 		<p class="text-base text-dark/60 mt-1">
 			Select which posts are featured in the "Discover" tab on the homepage. The discover section on
 			the homepage displays the 5 most recent featured posts.
@@ -121,7 +125,7 @@
 
 	<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
 		<!-- Currently Featured Column (Left) -->
-		<div class="lg:col-span-7 bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4 h-fit">
+		<div class="lg:col-span-7 bg-white rounded-xl p-4 flex flex-col gap-4 h-fit">
 			<h2 class="text-2xl font-semibold text-dark flex items-center gap-2">
 				Currently Featured
 				<span class="text-base font-normal text-dark/40">({featuredPosts.length})</span>
@@ -141,7 +145,7 @@
 				<ul class="flex flex-col gap-3">
 					{#each featuredPosts as post (post.id)}
 						<li
-							class="flex items-center gap-4 p-3.5 border border-background/50 rounded-xl hover:bg-background/5 transition-colors"
+							class="flex items-center gap-4 p-3.5 border-2 border-dark/10 rounded-xl hover:bg-background/40 transition-colors"
 							in:fly={{ y: 20, duration: 300 }}
 							out:fade={{ duration: 150 }}
 						>
@@ -201,60 +205,38 @@
 		</div>
 
 		<!-- Add to Highlights Column (Right) -->
-		<div class="lg:col-span-5 bg-white rounded-xl p-6 shadow-sm flex flex-col gap-4">
+		<div class="lg:col-span-5 bg-white rounded-xl p-4 flex flex-col gap-4">
 			<h2 class="text-2xl font-semibold text-dark">Add to Highlight Posts</h2>
 
 			<!-- Search input field -->
-			<div
-				class="relative flex items-center gap-2 bg-background/30 rounded-xl px-3 py-2.5 border border-background/60"
-			>
-				<span class="text-dark/40 text-lg">🔍</span>
-				<input
-					type="text"
-					placeholder="Search published posts..."
-					bind:value={search}
-					oninput={handleSearchInput}
-					class="flex-1 bg-transparent text-base placeholder:text-dark/30 outline-none text-dark"
-				/>
-				{#if search}
-					<button
-						onclick={() => {
-							search = '';
-							searchResults = [];
-						}}
-						class="text-dark/40 hover:text-dark text-sm cursor-pointer pr-1"
-					>
-						✕
-					</button>
-				{/if}
-			</div>
+			<SearchInput placeholder="Search published posts..." bind:value={search} onsearch={handleSearchInput} onclear={() => (searchResults = [])} />
 
-			<!-- Search results area -->
-			<div class="flex-1 min-h-87.5">
-				{#if searchLoading}
-					<div class="flex justify-center items-center py-16 text-dark/40" in:fade>
-						Searching...
-					</div>
-				{:else if searchError}
-					<p class="text-accent-red text-sm py-4" in:fade>Error: {searchError}</p>
-				{:else if search.trim() && searchResults.length === 0}
-					<div class="flex flex-col items-center justify-center py-16 text-dark/40" in:fade>
-						<p class="text-lg font-medium">No posts match your search</p>
-					</div>
-				{:else if !search.trim()}
-					<div class="flex flex-col items-center justify-center py-16 text-dark/30 h-full" in:fade>
-						<p class="text-center text-sm px-6">
-							Type in the search box to find posts and highlight/recommend them on the homepage.
-						</p>
-					</div>
-				{:else}
+			{#if actionError}
+				<p class="text-accent-red text-sm">Error: {actionError}</p>
+			{/if}
+			{#if searchLoading}
+				<div class="flex justify-center items-center py-16 text-dark/40" in:fade>
+					Searching...
+				</div>
+			{:else if searchError}
+				<p class="text-accent-red text-sm py-4" in:fade>Error: {searchError}</p>
+			{:else if search.trim() && searchResults.length === 0}
+				<div class="flex flex-col items-center justify-center py-16 text-dark/40" in:fade>
+					<p class="text-lg font-medium">No posts match your search</p>
+				</div>
+			{:else if !search.trim()}
+				<EmptyState
+					message="Find posts to highlight"
+					hint="Type in the search box to find posts and highlight/recommend them on the homepage."
+				/>
+			{:else}
 					<ul class="flex flex-col gap-3" in:fade>
 						{#each searchResults as post (post.id)}
 							{@const isFeatured = featuredIds.has(post.id)}
 							{@const isDraft = post.status === 'draft'}
 
 							<li
-								class="flex items-center gap-3 p-3 border border-background/40 rounded-xl hover:bg-background/5 transition-colors"
+								class="flex items-center gap-3 p-3 border-2 border-dark/10 rounded-xl hover:bg-background/40 transition-colors"
 							>
 								{#if post.url}
 									{#if post.cover_media_type?.startsWith('video/')}
@@ -324,7 +306,6 @@
 						{/each}
 					</ul>
 				{/if}
-			</div>
 		</div>
 	</div>
 </div>
