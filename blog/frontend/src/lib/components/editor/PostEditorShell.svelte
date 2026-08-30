@@ -115,7 +115,7 @@
 		<div class="flex flex-col grow min-w-0 gap-4">
 			<div
 				bind:this={paneEl}
-				class="relative flex flex-col xl:grid gap-0 rounded-xl overflow-hidden border border-dark/10 bg-white shadow-sm xl:h-[68vh]"
+				class="relative flex flex-col xl:grid gap-0 rounded-xl overflow-hidden border-2 border-dark/10 bg-white xl:h-[68vh]"
 				style={`grid-template-columns: ${splitRatio}fr auto ${1 - splitRatio}fr`}
 			>
 				<div class="min-w-0 h-96 xl:h-full overflow-hidden bg-white p-4">
@@ -152,14 +152,14 @@
 
 			{#if missingKeys.length > 0}
 				<p
-					class="rounded-lg border border-accent-red/30 bg-accent-red-light-4 px-3 py-2 text-sm text-accent-red"
+					class="rounded-lg border-2 border-accent-red/30 bg-accent-red-light-4 px-3 py-2 text-sm text-accent-red"
 				>
 					Missing media referenced in the body: {missingKeys.join(', ')}. Drop it in the panel below
 					or remove the reference.
 				</p>
 			{/if}
 
-			<div class="rounded-xl border border-dark/10 bg-white p-4 shadow-sm">
+			<div class="rounded-xl border-2 border-dark/10 bg-white p-4">
 				<h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-dark/50">
 					Media library
 				</h3>
@@ -171,7 +171,7 @@
 		</div>
 
 		<aside class="w-full xl:w-80 shrink-0 flex flex-col gap-4">
-			<section class="rounded-xl border border-dark/10 bg-white p-4 shadow-sm">
+			<section class="rounded-xl border-2 border-dark/10 bg-white p-4">
 				<h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-dark/50">Cover</h3>
 				<button
 					type="button"
@@ -233,7 +233,7 @@
 				{/if}
 			</section>
 
-			<section class="rounded-xl border border-dark/10 bg-white p-4 shadow-sm">
+			<section class="rounded-xl border-2 border-dark/10 bg-white p-4">
 				<h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-dark/50">Details</h3>
 				<div class="flex flex-col gap-3">
 					<div class="flex flex-col gap-1">
@@ -262,7 +262,7 @@
 			</section>
 
 			<section
-				class="rounded-xl border border-dark/10 bg-white p-4 shadow-sm max-h-112 space-y-4 overflow-y-auto custom-scrollbar"
+				class="rounded-xl border-2 border-dark/10 bg-white p-4 max-h-112 space-y-4 overflow-y-auto custom-scrollbar"
 			>
 				<h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-dark/50">More</h3>
 				{@render extraFields?.()}
