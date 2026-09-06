@@ -577,13 +577,28 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 )
                 .route("/tags/{tag_id}", patch(handlers::dashboard::update_tag))
                 .route("/tags/{tag_id}", delete(handlers::dashboard::delete_tag))
-                .route("/backup", get(handlers::backup::download_backup))
+                .route(
+                    "/sync-keys",
+                    get(handlers::sync::list_sync_keys).post(handlers::sync::create_sync_key),
+                )
+                .route("/sync-keys/{key_id}", delete(handlers::sync::revoke_sync_key))
                 .layer(middleware::from_fn(middlewares::auth::admin_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::user_guard,
                 )),
         );
+
+    let sync_routes = Router::new()
+        .route("/manifest", get(handlers::sync::get_manifest))
+        .route("/database", get(handlers::sync::get_database))
+        .route("/media/{hash}", get(handlers::sync::get_media_by_hash))
+        .route("/demo/{kind}/{id}/{*path}", get(handlers::sync::get_demo_file))
+        .route("/artifact/{*key}", get(handlers::sync::get_artifact))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            middlewares::auth::sync_key_guard,
+        ));
 
     let analytics_routes = Router::new().route("/visit", post(handlers::dashboard::track_visit));
 
@@ -637,6 +652,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/projects", project_routes)
         .nest("/games", game_routes)
         .nest("/v86", v86_routes)
+        .nest("/sync", sync_routes)
         .route(
             &format!("{project_demos_path}/v86/{{*path}}"),
             get(|| async { axum::http::StatusCode::NOT_FOUND }),

@@ -1,5 +1,4 @@
 pub mod auth;
-pub mod backup;
 pub mod common;
 pub mod game;
 pub mod dashboard;
@@ -9,5 +8,6 @@ pub mod newsletter;
 pub mod post;
 pub mod project;
 pub mod series;
+pub mod sync;
 pub mod user;
 pub mod v86;

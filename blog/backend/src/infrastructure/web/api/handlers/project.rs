@@ -1299,7 +1299,7 @@ pub async fn get_project_by_slug(
         game.v86_runtime = runtime_descriptor(
             &state.project_service.pool,
             &game.slug,
-            state.config.r2_public_url.as_deref(),
+            state.artifact_base_url(),
         )
         .await?;
     }
@@ -1331,7 +1331,7 @@ pub async fn get_project_details(
         game.v86_runtime = runtime_descriptor(
             &state.project_service.pool,
             &game.slug,
-            state.config.r2_public_url.as_deref(),
+            state.artifact_base_url(),
         )
         .await?;
     }

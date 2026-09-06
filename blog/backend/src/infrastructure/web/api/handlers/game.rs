@@ -1730,7 +1730,7 @@ pub async fn get_game_by_slug(
         response.v86_runtime = runtime_descriptor(
             &state.game_service.pool,
             &response.slug,
-            state.config.r2_public_url.as_deref(),
+            state.artifact_base_url(),
         )
         .await?;
         let game = sqlx::query(

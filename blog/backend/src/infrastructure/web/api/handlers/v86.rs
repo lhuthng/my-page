@@ -23,7 +23,7 @@ use uuid::Uuid;
 use crate::{
     domain::{entities::secret::Claims, errors::project::ProjectError},
     infrastructure::{
-        storage::r2::R2Client,
+        storage::ObjectStore,
         web::{
             api::handlers::game::require_game_owner,
             server::AppState,
@@ -352,19 +352,11 @@ fn ensure_upload_not_expired(expires_at: &str) -> Result<(), ProjectError> {
     Ok(())
 }
 
-fn require_r2(state: &AppState) -> Result<R2Client, ProjectError> {
-    state.r2.clone().ok_or_else(|| {
-        ProjectError::InternalError(
-            "R2 storage is not configured; cannot process v86 uploads.".to_string(),
-        )
-    })
-}
-
-fn r2_error(error: crate::infrastructure::storage::r2::R2Error) -> ProjectError {
+fn storage_error(error: crate::infrastructure::storage::StorageError) -> ProjectError {
     ProjectError::InternalError(error.to_string())
 }
 
-fn transient_r2_key(kind: &str, upload_id: &str, extension: &str) -> String {
+fn transient_storage_key(kind: &str, upload_id: &str, extension: &str) -> String {
     format!("v86/tmp/{kind}/{upload_id}.{extension}")
 }
 
@@ -376,7 +368,7 @@ fn disk_part_name(storage_key: &str, part_index: u64, chunk_size: u64) -> String
     format!("{storage_key}/{offset}-{}.img.zst", offset + chunk_size)
 }
 
-fn parse_r2_part_etags(etags: Option<&str>) -> Vec<(i32, String)> {
+fn parse_part_etags(etags: Option<&str>) -> Vec<(i32, String)> {
     match etags {
         Some(text) if !text.is_empty() => serde_json::from_str::<Vec<String>>(text)
             .unwrap_or_default()
@@ -388,7 +380,7 @@ fn parse_r2_part_etags(etags: Option<&str>) -> Vec<(i32, String)> {
     }
 }
 
-fn append_r2_part_etag(existing: Option<&str>, etag: &str) -> String {
+fn append_part_etag(existing: Option<&str>, etag: &str) -> String {
     let mut etags: Vec<String> = match existing {
         Some(text) if !text.is_empty() => serde_json::from_str(text).unwrap_or_default(),
         _ => Vec::new(),
@@ -860,13 +852,13 @@ pub async fn list_public_systems(
     )
     .fetch_all(&state.project_service.pool)
     .await?;
-    let r2_public_url = state.config.r2_public_url.as_deref();
+    let public_base_url = state.artifact_base_url();
     Ok(Json(
         rows.into_iter()
             .map(|row| {
                 let storage_key: String = row.get("storage_key");
-                let base_url = match r2_public_url {
-                    Some(r2) => format!("{}/{storage_key}/.img.zst", r2.trim_end_matches('/')),
+                let base_url = match public_base_url {
+                    Some(base) => format!("{}/{storage_key}/.img.zst", base.trim_end_matches('/')),
                     None => format!("{storage_key}/.img.zst"),
                 };
                 PublicSystemVersion {
@@ -1056,18 +1048,18 @@ async fn append_upload_chunk(
         ));
     }
 
-    let r2 = require_r2(state)?;
-    let r2_upload_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
-        ProjectError::InternalError("Upload session is missing its R2 multipart id.".to_string())
+    let storage = &state.storage;
+    let multipart_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
+        ProjectError::InternalError("Upload session is missing its multipart id.".to_string())
     })?;
-    let etag = r2
-        .upload_part(&temp_key, &r2_upload_id, (chunk_index as i32) + 1, bytes.to_vec())
+    let etag = storage
+        .upload_part(&temp_key, &multipart_id, (chunk_index as i32) + 1, bytes.to_vec())
         .await
-        .map_err(r2_error)?;
+        .map_err(storage_error)?;
 
     let new_received = received + bytes.len() as i64;
     let new_next = next + 1;
-    let new_etags = append_r2_part_etag(row.get::<Option<String>, _>("r2_part_etags").as_deref(), &etag);
+    let new_etags = append_part_etag(row.get::<Option<String>, _>("r2_part_etags").as_deref(), &etag);
     let update = format!(
         "UPDATE {table} SET received_size_bytes = ?, next_chunk_index = ?, r2_part_etags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active' AND next_chunk_index = ?"
     );
@@ -1080,12 +1072,12 @@ async fn append_upload_chunk(
         .execute(&state.project_service.pool)
         .await?;
     if changed.rows_affected() != 1 {
-        let _ = r2.abort_multipart(&temp_key, &r2_upload_id).await;
+        let _ = storage.abort_multipart(&temp_key, &multipart_id).await;
         let failed = format!(
             "UPDATE {table} SET status = 'failed', error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
         );
         sqlx::query(&failed)
-            .bind("R2 chunk relay conflict")
+            .bind("Chunk relay conflict")
             .bind(upload_id)
             .execute(&state.project_service.pool)
             .await
@@ -1141,10 +1133,11 @@ pub async fn upload_system_part(
     let end = (offset + chunk_size).min(row.get::<i64, _>("expected_size_bytes") as u64);
     let part_name = format!("{storage_key}/{offset}-{end}.img.zst");
 
-    let r2 = require_r2(&state)?;
-    r2.put_object_bytes(&part_name, bytes.to_vec())
+    let storage = &state.storage;
+    storage
+        .put_object_bytes(&part_name, bytes.to_vec())
         .await
-        .map_err(r2_error)?;
+        .map_err(storage_error)?;
 
     // Record the part atomically. INSERT is concurrency-safe, unlike the old
     // read-modify-write of a received_parts JSON column.
@@ -1195,10 +1188,8 @@ pub async fn abort_system_upload(
     .await?;
     let reuse: i64 = row.get("reuse");
     if reuse == 0 {
-        if let Some(r2) = &state.r2 {
-            if let Some(key) = row.get::<Option<String>, _>("staged_storage_key") {
-                let _ = r2.delete_prefix(&key).await;
-            }
+        if let Some(key) = row.get::<Option<String>, _>("staged_storage_key") {
+            let _ = state.storage.delete_prefix(&key).await;
         }
     }
     Ok(StatusCode::NO_CONTENT)
@@ -1553,12 +1544,7 @@ pub async fn delete_system_version(
     .fetch_one(&state.project_service.pool)
     .await?;
     if remaining == 0 {
-        if let Some(r2) = &state.r2 {
-            let _ = r2.delete_prefix(&storage_key).await;
-        }
-        tokio::fs::remove_dir_all(state.project_demo_config.dir.join(&storage_key))
-            .await
-            .ok();
+        let _ = state.storage.delete_prefix(&storage_key).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1601,30 +1587,15 @@ pub async fn delete_system(
     if changed.rows_affected() != 1 {
         return Err(ProjectError::ProjectNotFound);
     }
-    if let Some(r2) = &state.r2 {
-        for key in &keys {
-            let remaining: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?",
-            )
-            .bind(key)
-            .fetch_one(&state.project_service.pool)
-            .await?;
-            if remaining == 0 {
-                let _ = r2.delete_prefix(key).await;
-            }
-        }
-    }
     for key in &keys {
-        let still_used: i64 = sqlx::query_scalar(
+        let remaining: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?",
         )
         .bind(key)
         .fetch_one(&state.project_service.pool)
         .await?;
-        if still_used == 0 {
-            tokio::fs::remove_dir_all(state.project_demo_config.dir.join(key))
-                .await
-                .ok();
+        if remaining == 0 {
+            let _ = state.storage.delete_prefix(key).await;
         }
     }
     Ok(StatusCode::NO_CONTENT)
@@ -1873,10 +1844,11 @@ pub async fn upload_game_disk_part(
         ));
     }
     let part = disk_part_name(&key, part_index, state.project_demo_config.v86_download_chunk_size);
-    let r2 = require_r2(&state)?;
-    r2.put_object_bytes(&part, bytes.to_vec())
+    state
+        .storage
+        .put_object_bytes(&part, bytes.to_vec())
         .await
-        .map_err(r2_error)?;
+        .map_err(storage_error)?;
     // Record the part atomically so parallel PUTs cannot drop indices (a plain
     // INSERT, unlike the old read-modify-write of the received_disk_parts JSON
     // column which raced under parallel uploads). Re-uploading a part is a no-op.
@@ -1931,10 +1903,11 @@ pub async fn upload_game_variant_iso(
         ));
     }
     let key: String = row.get("iso_storage_key");
-    let r2 = require_r2(&state)?;
-    r2.put_object_bytes(&format!("{key}/full.iso"), bytes.to_vec())
+    state
+        .storage
+        .put_object_bytes(&format!("{key}/full.iso"), bytes.to_vec())
         .await
-        .map_err(r2_error)?;
+        .map_err(storage_error)?;
     sqlx::query(
         "UPDATE project_v86_staged_variants SET received = 1 WHERE upload_id = ? AND variant_index = ?",
     )
@@ -1978,7 +1951,7 @@ async fn fetch_stored_game_artifact(
 /// shared/reused objects: the parts live under the disk sha prefix only when
 /// the client actually uploaded them, and reused variant CDs are skipped.
 async fn delete_uploaded_game_artifacts(
-    r2: &R2Client,
+    storage: &ObjectStore,
     pool: &sqlx::SqlitePool,
     upload_id: &str,
     disk_storage_key: Option<&str>,
@@ -1986,7 +1959,7 @@ async fn delete_uploaded_game_artifacts(
 ) {
     if !disk_reuse {
         if let Some(key) = disk_storage_key {
-            let _ = r2.delete_prefix(key).await;
+            let _ = storage.delete_prefix(key).await;
         }
     }
     let uploaded_isos: Vec<String> = sqlx::query_scalar(
@@ -1997,7 +1970,7 @@ async fn delete_uploaded_game_artifacts(
     .await
     .unwrap_or_default();
     for key in uploaded_isos {
-        let _ = r2.delete_object(&format!("{key}/full.iso")).await;
+        let _ = storage.delete_object(&format!("{key}/full.iso")).await;
     }
 }
 
@@ -2221,16 +2194,14 @@ pub async fn abort_game_upload(
     // are left untouched.
     let disk_key: Option<String> = row.get("staged_disk_storage_key");
     let disk_reuse: i64 = row.get("disk_reuse");
-    if let Some(r2) = &state.r2 {
-        delete_uploaded_game_artifacts(
-            r2,
-            &state.project_service.pool,
-            &upload_id,
-            disk_key.as_deref(),
-            disk_reuse != 0,
-        )
-        .await;
-    }
+    delete_uploaded_game_artifacts(
+        &state.storage,
+        &state.project_service.pool,
+        &upload_id,
+        disk_key.as_deref(),
+        disk_reuse != 0,
+    )
+    .await;
     chunk_progress_map().lock().unwrap().remove(&upload_id);
     Ok(StatusCode::NO_CONTENT)
 }
@@ -2275,15 +2246,15 @@ pub enum RuntimeLookup<'a> {
 pub async fn runtime_descriptor(
     pool: &sqlx::SqlitePool,
     slug: &str,
-    r2_public_url: Option<&str>,
+    public_base_url: Option<&str>,
 ) -> Result<Option<V86RuntimeDescriptor>, ProjectError> {
-    runtime_descriptor_for(pool, RuntimeLookup::PublishedSlug(slug), r2_public_url, true).await
+    runtime_descriptor_for(pool, RuntimeLookup::PublishedSlug(slug), public_base_url, true).await
 }
 
 pub async fn runtime_descriptor_for(
     pool: &sqlx::SqlitePool,
     lookup: RuntimeLookup<'_>,
-    r2_public_url: Option<&str>,
+    public_base_url: Option<&str>,
     include_snapshot: bool,
 ) -> Result<Option<V86RuntimeDescriptor>, ProjectError> {
     let filter = match lookup {
@@ -2331,16 +2302,16 @@ pub async fn runtime_descriptor_for(
     .bind(game_id)
     .fetch_all(pool)
     .await?;
-    let iso_url_for = |sha: &str| match r2_public_url {
-        Some(r2) => {
-            let base = r2.trim_end_matches('/');
+    let iso_url_for = |sha: &str| match public_base_url {
+        Some(base) => {
+            let base = base.trim_end_matches('/');
             format!("{base}/v86/games/{sha}/full.iso")
         }
         None => format!("games/s/{slug}/v86/{sha}/full.iso"),
     };
-    let snapshot_url_for = |sha: &str| match r2_public_url {
-        Some(r2) => {
-            let base = r2.trim_end_matches('/');
+    let snapshot_url_for = |sha: &str| match public_base_url {
+        Some(base) => {
+            let base = base.trim_end_matches('/');
             format!("{base}/v86/snapshots/{sha}/state.zst")
         }
         None => format!("v86/snapshots/{sha}/state.zst"),
@@ -2404,9 +2375,9 @@ pub async fn runtime_descriptor_for(
     // legacy iso_* columns and by the top of the variants list.
     let default_variant = variant_rows.first().map(&describe_variant);
 
-    let (base_url, game_url, iso_url) = match r2_public_url {
-        Some(r2) => {
-            let base = r2.trim_end_matches('/');
+    let (base_url, game_url, iso_url) = match public_base_url {
+        Some(base) => {
+            let base = base.trim_end_matches('/');
             (
                 format!("{base}/{base_storage_key}/.img.zst"),
                 format!("{base}/v86/games/{game_sha}/.img.zst"),
@@ -2534,7 +2505,7 @@ pub async fn get_game_capture_runtime(
     runtime_descriptor_for(
         &state.project_service.pool,
         RuntimeLookup::GameId(game_id),
-        state.config.r2_public_url.as_deref(),
+        state.artifact_base_url(),
         false,
     )
     .await?
@@ -2690,18 +2661,13 @@ pub async fn start_snapshot_upload(
     }
 
     let upload_id = Uuid::new_v4().to_string();
-    let r2 = require_r2(&state)?;
-    let transient_key = transient_r2_key("snapshots", &upload_id, "zst");
-    let multipart = r2
+    let transient_key = transient_storage_key("snapshots", &upload_id, "zst");
+    let multipart = state
+        .storage
         .create_multipart(&transient_key)
         .await
-        .map_err(r2_error)?;
-    let r2_upload_id = multipart
-        .upload_id()
-        .ok_or_else(|| {
-            ProjectError::InternalError("R2 did not return a multipart upload id.".to_string())
-        })?
-        .to_string();
+        .map_err(storage_error)?;
+    let multipart_id = multipart.upload_id;
     let expires_at =
         Utc::now() + Duration::hours(state.project_demo_config.upload_session_ttl_hours as i64);
     sqlx::query(
@@ -2728,14 +2694,15 @@ pub async fn start_snapshot_upload(
     .bind(request.size_bytes as i64)
     .bind(state.project_demo_config.v86_upload_chunk_size as i64)
     .bind(&transient_key)
-    .bind(&r2_upload_id)
+    .bind(&multipart_id)
     .bind(expires_at.to_rfc3339())
     .execute(&state.project_service.pool)
     .await
     .map_err(|error| {
-        let r2 = r2.clone();
+        let storage = state.storage.clone();
+        let multipart_id = multipart_id.clone();
         tokio::spawn(async move {
-            let _ = r2.abort_multipart(&transient_key, &r2_upload_id).await;
+            let _ = storage.abort_multipart(&transient_key, &multipart_id).await;
         });
         error
     })?;
@@ -2812,20 +2779,21 @@ pub async fn complete_snapshot_upload(
     let game_id: i64 = row.get("game_id");
     require_game_owner(&state, game_id, uploader_id).await?;
 
-    let r2 = require_r2(&state)?;
+    let storage = &state.storage;
     let temp_key: String = row.get("temp_storage_key");
-    let r2_upload_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
-        ProjectError::InternalError("Upload session is missing its R2 multipart id.".to_string())
+    let multipart_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
+        ProjectError::InternalError("Upload session is missing its multipart id.".to_string())
     })?;
-    let etags = parse_r2_part_etags(row.get::<Option<String>, _>("r2_part_etags").as_deref());
-    r2.complete_multipart(&temp_key, &r2_upload_id, etags)
+    let etags = parse_part_etags(row.get::<Option<String>, _>("r2_part_etags").as_deref());
+    storage
+        .complete_multipart(&temp_key, &multipart_id, etags)
         .await
-        .map_err(r2_error)?;
+        .map_err(storage_error)?;
 
     // Verify what actually landed rather than trusting the client: the blob
     // must be a zstd frame (v86 sniffs this magic to decide whether to
     // decompress) and must hash to the digest the key is derived from.
-    let bytes = r2.get_object(&temp_key).await.map_err(r2_error)?;
+    let bytes = storage.get_object(&temp_key).await.map_err(storage_error)?;
     let declared_sha: String = row.get("sha256");
     let actual_sha = hex::encode(Sha256::digest(&bytes));
     let invalid = if bytes.len() < 4 || bytes[..4] != ZSTD_MAGIC {
@@ -2836,7 +2804,7 @@ pub async fn complete_snapshot_upload(
         None
     };
     if let Some(message) = invalid {
-        let _ = r2.delete_object(&temp_key).await;
+        let _ = storage.delete_object(&temp_key).await;
         fail_snapshot_session(&state, &upload_id, message).await;
         return Err(ProjectError::InvalidDemo(message.to_string()));
     }
@@ -2855,7 +2823,7 @@ pub async fn complete_snapshot_upload(
     if game.get::<i64, _>("system_version_id") != row.get::<i64, _>("system_version_id")
         || current_disk_sha.as_deref() != Some(game_disk_sha.as_str())
     {
-        let _ = r2.delete_object(&temp_key).await;
+        let _ = storage.delete_object(&temp_key).await;
         let message = "The game's disks changed while this snapshot was uploading.";
         fail_snapshot_session(&state, &upload_id, message).await;
         return Err(ProjectError::Conflict(message.to_string()));
@@ -2873,7 +2841,7 @@ pub async fn complete_snapshot_upload(
         .fetch_optional(&state.project_service.pool)
         .await?;
         if current_iso_sha.is_none() || current_iso_sha != iso_sha {
-            let _ = r2.delete_object(&temp_key).await;
+            let _ = storage.delete_object(&temp_key).await;
             let message = "That variant's disc changed while this snapshot was uploading.";
             fail_snapshot_session(&state, &upload_id, message).await;
             return Err(ProjectError::Conflict(message.to_string()));
@@ -2881,10 +2849,11 @@ pub async fn complete_snapshot_upload(
     }
 
     let storage_key = snapshot_storage_key(&declared_sha);
-    r2.put_object_bytes(&storage_key, bytes)
+    storage
+        .put_object_bytes(&storage_key, bytes)
         .await
-        .map_err(r2_error)?;
-    let _ = r2.delete_object(&temp_key).await;
+        .map_err(storage_error)?;
+    let _ = storage.delete_object(&temp_key).await;
 
     let previous_key: Option<String> = sqlx::query_scalar(
         "SELECT storage_key FROM game_v86_snapshots WHERE game_id = ? AND variant_index = ?",
@@ -2955,7 +2924,7 @@ pub async fn complete_snapshot_upload(
             .await
             .unwrap_or(1);
             if still_referenced == 0 {
-                let _ = r2.delete_object(&previous).await;
+                let _ = storage.delete_object(&previous).await;
             }
         }
     }
@@ -2977,12 +2946,13 @@ pub async fn abort_snapshot_upload(
     .await?
     .ok_or(ProjectError::ProjectNotFound)?;
     if row.get::<String, _>("status") == "active" {
-        if let (Some(r2), Some(r2_upload_id)) = (
-            state.r2.clone(),
-            row.get::<Option<String>, _>("r2_upload_id"),
-        ) {
-            let _ = r2
-                .abort_multipart(&row.get::<String, _>("temp_storage_key"), &r2_upload_id)
+        if let Some(multipart_id) = row.get::<Option<String>, _>("r2_upload_id") {
+            let _ = state
+                .storage
+                .abort_multipart(
+                    &row.get::<String, _>("temp_storage_key"),
+                    &multipart_id,
+                )
                 .await;
         }
     }
@@ -3015,7 +2985,7 @@ pub async fn delete_game_snapshot(
         .execute(&state.project_service.pool)
         .await?;
     // Blobs are content-addressed, so another variant may share this object.
-    if let (Some(r2), Some(key)) = (state.r2.clone(), storage_key) {
+    if let Some(key) = storage_key {
         let still_referenced: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM game_v86_snapshots WHERE storage_key = ?")
                 .bind(&key)
@@ -3023,7 +2993,7 @@ pub async fn delete_game_snapshot(
                 .await
                 .unwrap_or(1);
         if still_referenced == 0 {
-            let _ = r2.delete_object(&key).await;
+            let _ = state.storage.delete_object(&key).await;
         }
     }
     Ok(StatusCode::NO_CONTENT)
@@ -3053,21 +3023,25 @@ pub async fn get_snapshot_blob(
     .fetch_optional(&state.project_service.pool)
     .await?;
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
-    if let Some(r2) = &state.r2 {
-        return streamed_r2_object(
-            r2,
-            &storage_key,
-            "application/octet-stream",
-            IMMUTABLE_CACHE_CONTROL,
-        )
-        .await;
+    match &state.storage {
+        ObjectStore::R2(_) => {
+            streamed_object(
+                &state.storage,
+                &storage_key,
+                "application/octet-stream",
+                IMMUTABLE_CACHE_CONTROL,
+            )
+            .await
+        }
+        ObjectStore::Fs(_) => {
+            streamed_fs_file(
+                state.project_demo_config.dir.join(&storage_key),
+                "application/octet-stream",
+                IMMUTABLE_CACHE_CONTROL,
+            )
+            .await
+        }
     }
-    streamed_fs_file(
-        state.project_demo_config.dir.join(&storage_key),
-        "application/octet-stream",
-        IMMUTABLE_CACHE_CONTROL,
-    )
-    .await
 }
 
 const IMMUTABLE_CACHE_CONTROL: &str = "public, max-age=31536000, immutable";
@@ -3115,18 +3089,20 @@ async fn streamed_fs_file(
     ))
 }
 
-async fn streamed_r2_object(
-    r2: &R2Client,
+/// Streams an object from the store by key. Keys mirror the R2 layout, so the
+/// same key resolves in either backend.
+async fn streamed_object(
+    storage: &ObjectStore,
     key: &str,
     content_type: &'static str,
     cache_control: &'static str,
 ) -> Result<Response, ProjectError> {
-    let size = r2
+    let size = storage
         .object_size(key)
         .await
-        .map_err(r2_error)?
+        .map_err(storage_error)?
         .ok_or(ProjectError::ProjectNotFound)?;
-    let reader = r2.get_object_reader(key).await.map_err(r2_error)?;
+    let reader = storage.get_object_reader(key).await.map_err(storage_error)?;
     Ok(streamed_response(
         axum::body::Body::from_stream(ReaderStream::new(reader)),
         size,
@@ -3244,22 +3220,26 @@ pub async fn get_game_disk_chunk(
     {
         return Err(ProjectError::ProjectNotFound);
     }
-    if let Some(r2) = &state.r2 {
-        let key = format!("{storage_key}/{part}");
-        return streamed_r2_object(
-            r2,
-            &key,
-            "application/octet-stream",
-            IMMUTABLE_CACHE_CONTROL,
-        )
-        .await;
+    match &state.storage {
+        ObjectStore::R2(_) => {
+            let key = format!("{storage_key}/{part}");
+            streamed_object(
+                &state.storage,
+                &key,
+                "application/octet-stream",
+                IMMUTABLE_CACHE_CONTROL,
+            )
+            .await
+        }
+        ObjectStore::Fs(_) => {
+            streamed_fs_file(
+                state.project_demo_config.dir.join(storage_key).join(part),
+                "application/octet-stream",
+                IMMUTABLE_CACHE_CONTROL,
+            )
+            .await
+        }
     }
-    streamed_fs_file(
-        state.project_demo_config.dir.join(storage_key).join(part),
-        "application/octet-stream",
-        IMMUTABLE_CACHE_CONTROL,
-    )
-    .await
 }
 
 pub async fn get_game_iso(
@@ -3300,66 +3280,77 @@ pub async fn get_game_iso(
         ));
     }
 
-    if let Some(r2) = &state.r2 {
-        let key = format!("v86/games/{sha256}/full.iso");
-        let size = r2
-            .object_size(&key)
-            .await
-            .map_err(r2_error)?
-            .ok_or(ProjectError::ProjectNotFound)?;
-        let reader = r2.get_object_reader(&key).await.map_err(r2_error)?;
-        let mut response = Response::new(axum::body::Body::from_stream(ReaderStream::new(reader)));
-        response.headers_mut().insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/octet-stream"),
-        );
-        response.headers_mut().insert(
-            header::CACHE_CONTROL,
-            HeaderValue::from_static("public, max-age=31536000, immutable"),
-        );
-        response.headers_mut().insert(
-            header::CONTENT_LENGTH,
-            HeaderValue::from_str(&size.to_string())
-                .map_err(|error| ProjectError::InternalError(error.to_string()))?,
-        );
-        response.headers_mut().insert(
-            header::ETAG,
-            HeaderValue::from_str(&format!("\"{sha256}\""))
-                .map_err(|error| ProjectError::InternalError(error.to_string()))?,
-        );
-        return Ok(response);
+    match &state.storage {
+        ObjectStore::R2(_) => {
+            let key = format!("v86/games/{sha256}/full.iso");
+            let size = state
+                .storage
+                .object_size(&key)
+                .await
+                .map_err(storage_error)?
+                .ok_or(ProjectError::ProjectNotFound)?;
+            let reader = state
+                .storage
+                .get_object_reader(&key)
+                .await
+                .map_err(storage_error)?;
+            let mut response = Response::new(axum::body::Body::from_stream(ReaderStream::new(reader)));
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/octet-stream"),
+            );
+            response.headers_mut().insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=31536000, immutable"),
+            );
+            response.headers_mut().insert(
+                header::CONTENT_LENGTH,
+                HeaderValue::from_str(&size.to_string())
+                    .map_err(|error| ProjectError::InternalError(error.to_string()))?,
+            );
+            response.headers_mut().insert(
+                header::ETAG,
+                HeaderValue::from_str(&format!("\"{sha256}\""))
+                    .map_err(|error| ProjectError::InternalError(error.to_string()))?,
+            );
+            return Ok(response);
+        }
+        ObjectStore::Fs(_) => {
+            // New uploads land at {iso_storage_key}/full.iso; installs that
+            // predate the upload pipeline kept the built CD as game.iso.
+            let base = state.project_demo_config.dir.join(storage_key);
+            let path = if base.join("full.iso").is_file() {
+                base.join("full.iso")
+            } else {
+                base.join("game.iso")
+            };
+            let file = tokio::fs::File::open(path)
+                .await
+                .map_err(|_| ProjectError::ProjectNotFound)?;
+            let size = file.metadata().await?.len();
+            let mut response =
+                Response::new(axum::body::Body::from_stream(ReaderStream::new(file)));
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/octet-stream"),
+            );
+            response.headers_mut().insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=31536000, immutable"),
+            );
+            response.headers_mut().insert(
+                header::CONTENT_LENGTH,
+                HeaderValue::from_str(&size.to_string())
+                    .map_err(|error| ProjectError::InternalError(error.to_string()))?,
+            );
+            response.headers_mut().insert(
+                header::ETAG,
+                HeaderValue::from_str(&format!("\"{sha256}\""))
+                    .map_err(|error| ProjectError::InternalError(error.to_string()))?,
+            );
+            return Ok(response);
+        }
     }
-
-    let file = tokio::fs::File::open(
-        state
-            .project_demo_config
-            .dir
-            .join(storage_key)
-            .join("game.iso"),
-    )
-    .await
-    .map_err(|_| ProjectError::ProjectNotFound)?;
-    let size = file.metadata().await?.len();
-    let mut response = Response::new(axum::body::Body::from_stream(ReaderStream::new(file)));
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_static("application/octet-stream"),
-    );
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("public, max-age=31536000, immutable"),
-    );
-    response.headers_mut().insert(
-        header::CONTENT_LENGTH,
-        HeaderValue::from_str(&size.to_string())
-            .map_err(|error| ProjectError::InternalError(error.to_string()))?,
-    );
-    response.headers_mut().insert(
-        header::ETAG,
-        HeaderValue::from_str(&format!("\"{sha256}\""))
-            .map_err(|error| ProjectError::InternalError(error.to_string()))?,
-    );
-    Ok(response)
 }
 
 fn zstd_compress(data: &[u8]) -> Result<Vec<u8>, ProjectError> {
@@ -3437,15 +3428,25 @@ pub async fn get_game_save(
         Some(row) => (row.get::<String, _>("storage_key"), row.get::<i64, _>("size_bytes")),
         None => return Err(ProjectError::SaveNotFound),
     };
-    if let Some(r2) = &state.r2 {
-        return streamed_r2_object(r2, &storage_key, "application/octet-stream", "no-store").await;
+    match &state.storage {
+        ObjectStore::R2(_) => {
+            streamed_object(
+                &state.storage,
+                &storage_key,
+                "application/octet-stream",
+                "no-store",
+            )
+            .await
+        }
+        ObjectStore::Fs(_) => {
+            streamed_fs_file(
+                state.project_demo_config.dir.join(storage_key),
+                "application/octet-stream",
+                "no-store",
+            )
+            .await
+        }
     }
-    streamed_fs_file(
-        state.project_demo_config.dir.join(storage_key),
-        "application/octet-stream",
-        "no-store",
-    )
-    .await
 }
 
 pub async fn put_game_save(
@@ -3477,17 +3478,12 @@ pub async fn put_game_save(
     .await
     .map_err(|e| ProjectError::InternalError(e.to_string()))??;
     let storage_key = format!("v86/saves/{user_id}/{game_id}/save.zst");
-    if let Some(r2) = &state.r2 {
-        r2.put_object_bytes(&storage_key, compressed.clone())
-            .await
-            .map_err(r2_error)?;
-    } else {
-        let path = state.project_demo_config.dir.join(&storage_key);
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-        tokio::fs::write(&path, &compressed).await?;
-    }
+    let size_bytes = compressed.len();
+    state
+        .storage
+        .put_object_bytes(&storage_key, compressed)
+        .await
+        .map_err(storage_error)?;
     sqlx::query(
         r#"INSERT INTO game_v86_saves (game_id, user_id, storage_key, size_bytes, sha256)
            VALUES (?, ?, ?, ?, ?)
@@ -3500,7 +3496,7 @@ pub async fn put_game_save(
     .bind(game_id)
     .bind(user_id)
     .bind(&storage_key)
-    .bind(compressed.len() as i64)
+    .bind(size_bytes as i64)
     .bind(&sha)
     .execute(&state.project_service.pool)
     .await?;
@@ -3523,10 +3519,7 @@ pub async fn delete_game_save(
     .await?;
     if let Some(row) = row {
         let storage_key: String = row.get("storage_key");
-        if let Some(r2) = &state.r2 {
-            let _ = r2.delete_object(&storage_key).await;
-        }
-        let _ = tokio::fs::remove_file(state.project_demo_config.dir.join(&storage_key)).await;
+        let _ = state.storage.delete_object(&storage_key).await;
         sqlx::query("DELETE FROM game_v86_saves WHERE game_id = ? AND user_id = ?")
             .bind(game_id)
             .bind(user_id)

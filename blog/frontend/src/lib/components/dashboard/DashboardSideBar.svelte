@@ -33,7 +33,7 @@
 		{ label: 'Highlight Projects', path: '/dashboard/projects/highlights' },
 		{ label: 'v86 Systems', path: '/dashboard/v86-systems' },
 		{ label: 'Database', path: '/dashboard/database' },
-		{ label: 'Backup', path: '/dashboard/backup' }
+		{ label: 'Backup & Sync', path: '/dashboard/backup' }
 	];
 
 	let navGroups = $derived(
