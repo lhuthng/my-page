@@ -8,7 +8,7 @@ use jsonwebtoken::Algorithm;
 
 use crate::{
     domain::entities::{auth::AuthConfig, media::MediaType},
-    infrastructure::{persistence, web::api},
+    infrastructure::{persistence, storage::ObjectStore, web::api},
 };
 
 pub struct AppConfig {
@@ -86,7 +86,7 @@ pub struct AppState {
     pub config: AppConfig,
     pub media_config: MediaConfig,
     pub project_demo_config: ProjectDemoConfig,
-    pub r2: Option<crate::infrastructure::storage::r2::R2Client>,
+    pub storage: ObjectStore,
     pub analytics_service: persistence::analytics::AnalyticsServiceImpl,
     pub auth_service: persistence::auth::AuthServiceImpl,
     pub user_service: persistence::user::UserServiceImpl,
@@ -98,6 +98,17 @@ pub struct AppState {
     pub dashboard_service: persistence::dashboard::DashboardServiceImpl,
     pub newsletter_service: persistence::newsletter::NewsletterServiceImpl,
     pub graphql_schema: crate::infrastructure::web::graphql::BlogSchema,
+}
+
+impl AppState {
+    /// Public base URL for v86 artifact links: the R2 public domain in R2
+    /// mode, None in filesystem mode (relative URLs served by this backend).
+    pub fn artifact_base_url(&self) -> Option<&str> {
+        match self.storage {
+            ObjectStore::R2(_) => self.config.r2_public_url.as_deref(),
+            ObjectStore::Fs(_) => None,
+        }
+    }
 }
 
 pub struct HTTPServer<'a> {
@@ -362,18 +373,19 @@ impl<'a> HTTPServer<'a> {
         drop(migration_pool);
         backfill_reading_times(&pool).await?;
         let project_demo_config = ProjectDemoConfig::from_env();
-        let r2 = crate::infrastructure::storage::r2::R2Client::from_env();
-        cleanup_orphaned_uploads(&pool, &r2, &project_demo_config.dir).await?;
-        purge_expired_trash(&pool, &r2, &project_demo_config.dir).await?;
+        let storage = ObjectStore::from_env(&project_demo_config.dir)
+            .map_err(|message| Error::new(ErrorKind::InvalidData, message))?;
+        cleanup_orphaned_uploads(&pool, &storage, &project_demo_config.dir).await?;
+        purge_expired_trash(&pool, &storage, &project_demo_config.dir).await?;
         // spawn periodic purge every hour
         let purge_pool = pool.clone();
-        let purge_r2 = r2.clone();
+        let purge_storage = storage.clone();
         let purge_dir = project_demo_config.dir.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
             loop {
                 interval.tick().await;
-                let _ = purge_expired_trash(&purge_pool, &purge_r2, &purge_dir).await;
+                let _ = purge_expired_trash(&purge_pool, &purge_storage, &purge_dir).await;
             }
         });
         let graphql_schema = crate::infrastructure::web::graphql::build_schema(pool.clone());
@@ -381,7 +393,7 @@ impl<'a> HTTPServer<'a> {
             config: AppConfig::from_env(),
             media_config: MediaConfig::from_env(),
             project_demo_config,
-            r2,
+            storage,
             analytics_service: persistence::analytics::AnalyticsServiceImpl::new(pool.clone()),
             auth_service: persistence::auth::AuthServiceImpl::new(pool.clone()),
             user_service: persistence::user::UserServiceImpl::new(pool.clone()),
@@ -416,12 +428,12 @@ impl<'a> Default for HTTPServer<'a> {
 
 async fn cleanup_orphaned_uploads(
     pool: &sqlx::SqlitePool,
-    r2: &Option<crate::infrastructure::storage::r2::R2Client>,
+    storage: &ObjectStore,
     demos_dir: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     async fn clean_game_session(
         pool: &sqlx::SqlitePool,
-        r2: &Option<crate::infrastructure::storage::r2::R2Client>,
+        storage: &ObjectStore,
         demos_dir: &std::path::Path,
         session_id: &str,
     ) {
@@ -438,23 +450,21 @@ async fn cleanup_orphaned_uploads(
             // Game sessions upload straight to content-addressed keys; only the
             // objects this session uploaded (never shared/reused ones) are
             // removed, matching the abort path.
-            if let Some(client) = r2 {
-                let disk_reuse: i64 = row.get("disk_reuse");
-                if disk_reuse == 0 {
-                    if let Some(key) = row.get::<Option<String>, _>("staged_disk_storage_key") {
-                        let _ = client.delete_prefix(&key).await;
-                    }
+            let disk_reuse: i64 = row.get("disk_reuse");
+            if disk_reuse == 0 {
+                if let Some(key) = row.get::<Option<String>, _>("staged_disk_storage_key") {
+                    let _ = storage.delete_prefix(&key).await;
                 }
-                let uploaded_isos: Vec<String> = sqlx::query_scalar(
-                    "SELECT iso_storage_key FROM project_v86_staged_variants WHERE upload_id = ? AND reuse = 0",
-                )
-                .bind(session_id)
-                .fetch_all(pool)
-                .await
-                .unwrap_or_default();
-                for key in uploaded_isos {
-                    let _ = client.delete_object(&format!("{key}/full.iso")).await;
-                }
+            }
+            let uploaded_isos: Vec<String> = sqlx::query_scalar(
+                "SELECT iso_storage_key FROM project_v86_staged_variants WHERE upload_id = ? AND reuse = 0",
+            )
+            .bind(session_id)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+            for key in uploaded_isos {
+                let _ = storage.delete_object(&format!("{key}/full.iso")).await;
             }
             let _ = tokio::fs::remove_dir_all(demos_dir.join("v86/tmp/build").join(session_id))
                 .await;
@@ -463,7 +473,7 @@ async fn cleanup_orphaned_uploads(
 
     async fn clean_system_session(
         pool: &sqlx::SqlitePool,
-        r2: &Option<crate::infrastructure::storage::r2::R2Client>,
+        storage: &ObjectStore,
         session_id: &str,
     ) {
         use sqlx::Row;
@@ -478,22 +488,20 @@ async fn cleanup_orphaned_uploads(
         if let Some(row) = row {
             let reuse: i64 = row.get("reuse");
             if reuse == 0 {
-                if let Some(client) = r2 {
-                    if let Some(key) = row.get::<Option<String>, _>("staged_storage_key") {
-                        // Only delete if no other active session still owns this key.
-                        let other_owners: i64 = sqlx::query_scalar(
-                            "SELECT COUNT(*) FROM v86_system_upload_sessions
-                             WHERE id != ? AND staged_storage_key = ?
-                             AND status IN ('active', 'building')",
-                        )
-                        .bind(session_id)
-                        .bind(&key)
-                        .fetch_one(pool)
-                        .await
-                        .unwrap_or(0);
-                        if other_owners == 0 {
-                            let _ = client.delete_prefix(&key).await;
-                        }
+                if let Some(key) = row.get::<Option<String>, _>("staged_storage_key") {
+                    // Only delete if no other active session still owns this key.
+                    let other_owners: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM v86_system_upload_sessions
+                         WHERE id != ? AND staged_storage_key = ?
+                         AND status IN ('active', 'building')",
+                    )
+                    .bind(session_id)
+                    .bind(&key)
+                    .fetch_one(pool)
+                    .await
+                    .unwrap_or(0);
+                    if other_owners == 0 {
+                        let _ = storage.delete_prefix(&key).await;
                     }
                 }
             }
@@ -541,9 +549,7 @@ async fn cleanup_orphaned_uploads(
                 .fetch_one(pool)
                 .await?;
                 if remaining == 0 {
-                    if let Some(client) = r2 {
-                        let _ = client.delete_prefix(&key).await;
-                    }
+                    let _ = storage.delete_prefix(&key).await;
                 }
             }
         }
@@ -569,7 +575,7 @@ async fn cleanup_orphaned_uploads(
         .bind(session_id)
         .execute(pool)
         .await?;
-        clean_system_session(pool, r2, session_id).await;
+        clean_system_session(pool, storage, session_id).await;
     }
 
     let stale_games: Vec<String> = sqlx::query_scalar(
@@ -586,7 +592,7 @@ async fn cleanup_orphaned_uploads(
         .bind(session_id)
         .execute(pool)
         .await?;
-        clean_game_session(pool, r2, demos_dir, session_id).await;
+        clean_game_session(pool, storage, demos_dir, session_id).await;
     }
 
     // Finished sessions (consumed/aborted/ready/expired) are never removed
@@ -618,7 +624,7 @@ async fn cleanup_orphaned_uploads(
 
 async fn purge_expired_trash(
     pool: &sqlx::SqlitePool,
-    _r2: &Option<crate::infrastructure::storage::r2::R2Client>,
+    storage: &ObjectStore,
     demos_dir: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let ids: Vec<i64> = sqlx::query_scalar(
@@ -645,7 +651,9 @@ async fn purge_expired_trash(
                 demos_dir.join(format!("game-{}", pid))
             };
             let _ = tokio::fs::remove_dir_all(&dir).await;
-            // R2 cleanup for games (jsdos/v86) is best-effort; hard purge via FK cascade leaves R2 orphans that sync can GC
+            if kind == "game" {
+                cleanup_game_artifacts(pool, storage, pid).await;
+            }
         }
         sqlx::query("DELETE FROM posts WHERE id = ?")
             .bind(post_id)
@@ -654,6 +662,80 @@ async fn purge_expired_trash(
     }
     println!("Purged {} trashed post(s)", ids.len());
     Ok(())
+}
+
+/// Best-effort removal of a game's object-store artifacts (js-dos bundle,
+/// v86 disk/ISO prefixes, snapshots). Runs before the FK cascade deletes the
+/// rows, so keys still referenced by other games are detected and kept —
+/// v86 keys are content-addressed and can be shared.
+async fn cleanup_game_artifacts(pool: &sqlx::SqlitePool, storage: &ObjectStore, game_id: i64) {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        r#"SELECT zip_storage_key FROM game_v86_games WHERE game_id = ?
+           UNION ALL SELECT iso_storage_key FROM game_v86_games WHERE game_id = ?
+           UNION ALL SELECT COALESCE(disk_storage_key, '') FROM game_v86_games WHERE game_id = ?
+           UNION ALL SELECT iso_storage_key FROM game_v86_variants WHERE game_id = ?"#,
+    )
+    .bind(game_id)
+    .bind(game_id)
+    .bind(game_id)
+    .bind(game_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    let keys: Vec<String> = rows
+        .into_iter()
+        .map(|(key,)| key)
+        .filter(|key| !key.is_empty())
+        .collect();
+
+    for key in keys {
+        // A prefix shared with another game (same disk or ISO digest) must stay.
+        let still_used: i64 = sqlx::query_scalar(
+            r#"SELECT (SELECT COUNT(*) FROM game_v86_games WHERE (disk_storage_key = ?1 OR iso_storage_key = ?1) AND game_id != ?2)
+                    + (SELECT COUNT(*) FROM game_v86_variants WHERE iso_storage_key = ?1 AND game_id != ?2)"#,
+        )
+        .bind(&key)
+        .bind(game_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(1);
+        if still_used == 0 {
+            let _ = storage.delete_prefix(&key).await;
+        }
+    }
+
+    let snapshot_keys: Vec<(String,)> = sqlx::query_as(
+        "SELECT storage_key FROM game_v86_snapshots WHERE game_id = ?",
+    )
+    .bind(game_id)
+    .fetch_all(pool)
+    .await
+    .unwrap_or_default();
+    for (key,) in snapshot_keys {
+        let still_used: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM game_v86_snapshots WHERE storage_key = ? AND game_id != ?",
+        )
+        .bind(&key)
+        .bind(game_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(1);
+        if still_used == 0 {
+            let _ = storage.delete_object(&key).await;
+        }
+    }
+
+    // A js-dos bundle belongs to exactly one game (game_id is its primary key).
+    let jsdos_key: Option<String> = sqlx::query_scalar(
+        "SELECT storage_key FROM game_jsdos_bundles WHERE game_id = ?",
+    )
+    .bind(game_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or(None);
+    if let Some(key) = jsdos_key {
+        let _ = storage.delete_object(&key).await;
+    }
 }
 
 async fn backfill_reading_times(

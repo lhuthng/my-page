@@ -161,7 +161,7 @@ REST is the primary API surface. GraphQL is available at `/graphql` for protecte
 - User dashboard with search, role filters, role counts, and admin role management.
 - Database dashboard for inspecting users, posts, projects, media, comments, tags, series, sessions, notifications, and analytics data.
 - Tag editing and deletion from the admin database tools.
-- Backup download for the SQLite database, uploaded media, and project demos.
+- Sync-key backup: admins issue a short-lived key from the dashboard that authorizes a dev machine to pull the full environment (database, media, demos, game artifacts) with the `sync-pull` tool, rewriting stored paths for the target's storage layout.
 - Optional contact form delivery through SMTP or Brevo.
 
 ## Requirements
@@ -309,6 +309,9 @@ Common backend variables live in `blog/backend/.env`.
 | `PROJECT_V86_UPLOAD_CHUNK_BYTES` | v86 upload chunk size; defaults to 8 MiB. |
 | `PROJECT_V86_DOWNLOAD_CHUNK_BYTES` | Immutable v86 disk-part size; defaults to 256 KiB. |
 | `PROJECT_V86_XORRISO_BIN` | Path to `xorriso`, used to build immutable game ISOs. |
+| `STORAGE_BACKEND` | Object store for v86 game artifacts: `auto` (R2 when configured, else fs), `r2`, or `fs`. In `fs` mode artifacts live under `PROJECT_DEMOS_PATH`; see `blog/backend/readme.md`. |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2 credentials, required only when `STORAGE_BACKEND` resolves to `r2`. |
+| `R2_PUBLIC_URL` | Public R2 domain used to build absolute v86 artifact URLs in `r2` mode; ignored in `fs` mode. |
 | `APP_BASE_URL` | Public app URL used by auth email flows. |
 | `ALLOWED_ORIGIN` or `ALLOWED_ORIGINS` | CORS allow list for restricted browser calls. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Optional SMTP email transport. |

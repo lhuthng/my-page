@@ -8,25 +8,17 @@ use aws_sdk_s3::{
 };
 use tokio::io::AsyncWriteExt;
 
-/// R2 storage backed by the S3 API. Everything the browser or the build step
-/// writes lives in Cloudflare R2; the VM only keeps transient local files
-/// while compressing/building.
+use super::StorageError;
+
+/// Cloudflare R2 storage backed by the S3 API — the `R2` variant of
+/// [`ObjectStore`](super::ObjectStore). When selected, all v86 artifacts live
+/// in the bucket and the VM only keeps transient local files while
+/// compressing/building.
 #[derive(Clone)]
 pub struct R2Client {
     client: Client,
     pub bucket: String,
 }
-
-#[derive(Debug)]
-pub struct R2Error(pub String);
-
-impl std::fmt::Display for R2Error {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "R2: {}", self.0)
-    }
-}
-
-impl std::error::Error for R2Error {}
 
 impl R2Client {
     /// Builds the client from R2_* environment variables. Returns None when no
@@ -63,14 +55,14 @@ impl R2Client {
     pub async fn create_multipart(
         &self,
         key: &str,
-    ) -> Result<CreateMultipartUploadOutput, R2Error> {
+    ) -> Result<CreateMultipartUploadOutput, StorageError> {
         self.client
             .create_multipart_upload()
             .bucket(&self.bucket)
             .key(key)
             .send()
             .await
-            .map_err(|e| R2Error(format!("create_multipart_upload {key}: {e}")))
+            .map_err(|e| StorageError(format!("create_multipart_upload {key}: {e}")))
     }
 
     pub async fn upload_part(
@@ -79,7 +71,7 @@ impl R2Client {
         upload_id: &str,
         part_number: i32,
         bytes: Vec<u8>,
-    ) -> Result<String, R2Error> {
+    ) -> Result<String, StorageError> {
         self.client
             .upload_part()
             .bucket(&self.bucket)
@@ -89,12 +81,12 @@ impl R2Client {
             .body(ByteStream::from(bytes))
             .send()
             .await
-            .map_err(|e| R2Error(format!("upload_part {key}#{part_number}: {e}")))
+            .map_err(|e| StorageError(format!("upload_part {key}#{part_number}: {e}")))
             .and_then(|output| {
                 output
                     .e_tag()
                     .map(str::to_string)
-                    .ok_or_else(|| R2Error(format!("upload_part {key}#{part_number} missing etag")))
+                    .ok_or_else(|| StorageError(format!("upload_part {key}#{part_number} missing etag")))
             })
     }
 
@@ -103,7 +95,7 @@ impl R2Client {
         key: &str,
         upload_id: &str,
         parts: Vec<(i32, String)>,
-    ) -> Result<(), R2Error> {
+    ) -> Result<(), StorageError> {
         let completed = CompletedMultipartUpload::builder()
             .set_parts(Some(
                 parts
@@ -125,11 +117,11 @@ impl R2Client {
             .multipart_upload(completed)
             .send()
             .await
-            .map_err(|e| R2Error(format!("complete_multipart_upload {key}: {e}")))?;
+            .map_err(|e| StorageError(format!("complete_multipart_upload {key}: {e}")))?;
         Ok(())
     }
 
-    pub async fn abort_multipart(&self, key: &str, upload_id: &str) -> Result<(), R2Error> {
+    pub async fn abort_multipart(&self, key: &str, upload_id: &str) -> Result<(), StorageError> {
         self.client
             .abort_multipart_upload()
             .bucket(&self.bucket)
@@ -137,27 +129,27 @@ impl R2Client {
             .upload_id(upload_id)
             .send()
             .await
-            .map_err(|e| R2Error(format!("abort_multipart_upload {key}: {e}")))?;
+            .map_err(|e| StorageError(format!("abort_multipart_upload {key}: {e}")))?;
         Ok(())
     }
 
     /// Streams a local file (produced by a transient build) up to R2.
-    pub async fn put_object_from_file(&self, key: &str, path: &Path) -> Result<(), R2Error> {
+    pub async fn put_object_from_file(&self, key: &str, path: &Path) -> Result<(), StorageError> {
         self.client
             .put_object()
             .bucket(&self.bucket)
             .key(key)
             .body(ByteStream::from_path(path).await.map_err(|e| {
-                R2Error(format!("put_object_from_file {key}: could not open {}: {e}", path.display()))
+                StorageError(format!("put_object_from_file {key}: could not open {}: {e}", path.display()))
             })?)
             .send()
             .await
-            .map_err(|e| R2Error(format!("put_object_from_file {key}: {e}")))?;
+            .map_err(|e| StorageError(format!("put_object_from_file {key}: {e}")))?;
         Ok(())
     }
 
     /// Uploads an in-memory blob (used for the small per-user floppy saves).
-    pub async fn put_object_bytes(&self, key: &str, bytes: Vec<u8>) -> Result<(), R2Error> {
+    pub async fn put_object_bytes(&self, key: &str, bytes: Vec<u8>) -> Result<(), StorageError> {
         self.client
             .put_object()
             .bucket(&self.bucket)
@@ -165,7 +157,7 @@ impl R2Client {
             .body(ByteStream::from(bytes))
             .send()
             .await
-            .map_err(|e| R2Error(format!("put_object_bytes {key}: {e}")))?;
+            .map_err(|e| StorageError(format!("put_object_bytes {key}: {e}")))?;
         Ok(())
     }
 
@@ -175,7 +167,7 @@ impl R2Client {
         key: &str,
         start: u64,
         end: u64,
-    ) -> Result<Vec<u8>, R2Error> {
+    ) -> Result<Vec<u8>, StorageError> {
         let output = self
             .client
             .get_object()
@@ -184,17 +176,17 @@ impl R2Client {
             .range(format!("bytes={start}-{end}"))
             .send()
             .await
-            .map_err(|e| R2Error(format!("get_object_range {key}: {e}")))?;
+            .map_err(|e| StorageError(format!("get_object_range {key}: {e}")))?;
         let bytes = output
             .body
             .collect()
             .await
-            .map_err(|e| R2Error(format!("get_object_range {key}: read body: {e}")))?;
+            .map_err(|e| StorageError(format!("get_object_range {key}: read body: {e}")))?;
         Ok(bytes.into_bytes().to_vec())
     }
 
     /// Reads an entire object into memory (used by the serving fallback).
-    pub async fn get_object(&self, key: &str) -> Result<Vec<u8>, R2Error> {
+    pub async fn get_object(&self, key: &str) -> Result<Vec<u8>, StorageError> {
         let output = self
             .client
             .get_object()
@@ -202,12 +194,12 @@ impl R2Client {
             .key(key)
             .send()
             .await
-            .map_err(|e| R2Error(format!("get_object {key}: {e}")))?;
+            .map_err(|e| StorageError(format!("get_object {key}: {e}")))?;
         let bytes = output
             .body
             .collect()
             .await
-            .map_err(|e| R2Error(format!("get_object {key}: read body: {e}")))?;
+            .map_err(|e| StorageError(format!("get_object {key}: read body: {e}")))?;
         Ok(bytes.into_bytes().to_vec())
     }
 
@@ -215,7 +207,7 @@ impl R2Client {
     pub async fn get_object_reader(
         &self,
         key: &str,
-    ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Unpin>, R2Error> {
+    ) -> Result<Box<dyn tokio::io::AsyncRead + Send + Unpin>, StorageError> {
         let output = self
             .client
             .get_object()
@@ -223,12 +215,12 @@ impl R2Client {
             .key(key)
             .send()
             .await
-            .map_err(|e| R2Error(format!("get_object {key}: {e}")))?;
+            .map_err(|e| StorageError(format!("get_object {key}: {e}")))?;
         Ok(Box::new(output.body.into_async_read()))
     }
 
     /// Returns the size of an object, or None when it does not exist.
-    pub async fn object_size(&self, key: &str) -> Result<Option<u64>, R2Error> {
+    pub async fn object_size(&self, key: &str) -> Result<Option<u64>, StorageError> {
         match self
             .client
             .head_object()
@@ -245,12 +237,12 @@ impl R2Client {
             {
                 Ok(None)
             }
-            Err(error) => Err(R2Error(format!("head_object {key}: {error}"))),
+            Err(error) => Err(StorageError(format!("head_object {key}: {error}"))),
         }
     }
 
     /// Downloads an entire object to a transient local file for the build step.
-    pub async fn download_to_file(&self, key: &str, path: &Path) -> Result<(), R2Error> {
+    pub async fn download_to_file(&self, key: &str, path: &Path) -> Result<(), StorageError> {
         let output = match self
             .client
             .get_object()
@@ -269,35 +261,37 @@ impl R2Client {
                     .as_service_error()
                     .map(|service| format!("service error (HTTP {status}): {service}"))
                     .unwrap_or_else(|| format!("{error} (HTTP {status})"));
-                return Err(R2Error(format!("download_to_file {key}: {detail}")));
+                return Err(StorageError(format!("download_to_file {key}: {detail}")));
             }
         };
         let mut stream = output.body.into_async_read();
         let mut file = tokio::fs::File::create(path)
             .await
-            .map_err(|e| R2Error(format!("download_to_file {key}: create {}: {e}", path.display())))?;
+            .map_err(|e| StorageError(format!("download_to_file {key}: create {}: {e}", path.display())))?;
         tokio::io::copy(&mut stream, &mut file)
             .await
-            .map_err(|e| R2Error(format!("download_to_file {key}: copy: {e}")))?;
+            .map_err(|e| StorageError(format!("download_to_file {key}: copy: {e}")))?;
         file.flush()
             .await
-            .map_err(|e| R2Error(format!("download_to_file {key}: flush: {e}")))?;
+            .map_err(|e| StorageError(format!("download_to_file {key}: flush: {e}")))?;
         Ok(())
     }
 
-    pub async fn delete_object(&self, key: &str) -> Result<(), R2Error> {
+    pub async fn delete_object(&self, key: &str) -> Result<(), StorageError> {
         self.client
             .delete_object()
             .bucket(&self.bucket)
             .key(key)
             .send()
             .await
-            .map_err(|e| R2Error(format!("delete_object {key}: {e}")))?;
+            .map_err(|e| StorageError(format!("delete_object {key}: {e}")))?;
         Ok(())
     }
 
-    /// Deletes every object under a prefix (used for version/system cleanup).
-    pub async fn delete_prefix(&self, prefix: &str) -> Result<(), R2Error> {
+    /// Lists every object under a prefix as `(key, size)` pairs, paginating
+    /// through the bucket. The prefix must not have a trailing slash.
+    pub async fn list_prefix(&self, prefix: &str) -> Result<Vec<(String, u64)>, StorageError> {
+        let mut objects = Vec::new();
         let mut token: Option<String> = None;
         loop {
             let mut request = self
@@ -311,16 +305,10 @@ impl R2Client {
             let output = request
                 .send()
                 .await
-                .map_err(|e| R2Error(format!("list_objects_v2 {prefix}: {e}")))?;
+                .map_err(|e| StorageError(format!("list_objects_v2 {prefix}: {e}")))?;
             for object in output.contents().iter() {
                 if let Some(key) = object.key() {
-                    self.client
-                        .delete_object()
-                        .bucket(&self.bucket)
-                        .key(key)
-                        .send()
-                        .await
-                        .map_err(|e| R2Error(format!("delete_object {key}: {e}")))?;
+                    objects.push((key.to_string(), object.size().unwrap_or(0).max(0) as u64));
                 }
             }
             match output.next_continuation_token() {
@@ -329,6 +317,14 @@ impl R2Client {
                 }
                 _ => break,
             }
+        }
+        Ok(objects)
+    }
+
+    /// Deletes every object under a prefix (used for version/system cleanup).
+    pub async fn delete_prefix(&self, prefix: &str) -> Result<(), StorageError> {
+        for (key, _) in self.list_prefix(prefix).await? {
+            self.delete_object(&key).await?;
         }
         Ok(())
     }

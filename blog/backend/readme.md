@@ -26,6 +26,8 @@ Copy `example.env` to `.env` and fill in values.
 | `ACCESS_JWT_EXP_HOURS` | Access token lifetime (hours) | `24` |
 | `REFRESH_JWT_EXP_HOURS` | Refresh token lifetime (hours) | `360` |
 | `MEDIA_PATH` | Directory for uploaded files | `./media` |
+| `PROJECT_DEMOS_PATH` | Directory for demo builds and v86 artifacts | `./project-demos` |
+| `STORAGE_BACKEND` | Object store for v86 game artifacts: `auto`, `r2`, or `fs` | `auto` |
 | `ALLOWED_ORIGIN` | Origin allowed to call `/mail/contact-form` | `https://portfolio.huuthangle.site` |
 | `SMTP_HOST` | SMTP server hostname | - |
 | `SMTP_PORT` | SMTP server port | - |
@@ -35,6 +37,49 @@ Copy `example.env` to `.env` and fill in values.
 | `SMTP_TO` | Recipient address for contact form | - |
 
 Email (via `lettre`) is optional - the server starts fine without SMTP configured.
+
+---
+
+## Object Storage (v86 game artifacts)
+
+v86 artifacts (system IMG chunks, game disks, ISOs, snapshots, saves) go through
+the `ObjectStore` abstraction in `src/infrastructure/storage/`. Media, HTML5/WebGL
+demo ZIPs, and js-dos bundles always live on local disk regardless of this setting.
+
+| `STORAGE_BACKEND` | Behavior |
+|---|---|
+| `auto` (default) | Cloudflare R2 when the `R2_*` variables are set, otherwise the local filesystem |
+| `r2` | Require R2; startup fails if the `R2_*` variables are incomplete |
+| `fs` | Local filesystem under `PROJECT_DEMOS_PATH` — no R2 credentials needed |
+
+- In `fs` mode artifacts land at `{PROJECT_DEMOS_PATH}/{storage_key}` (e.g.
+  `project-demos/v86/snapshots/{sha256}/state.zst`), the same key layout the R2
+  mirror uses, so both backends stay interchangeable.
+- In `fs` mode the backend serves artifacts itself at relative URLs
+  (`/v86/snapshots/...`, `/games/s/{slug}/v86/...`); `R2_PUBLIC_URL` is ignored.
+
+### Switching production from R2 to fs
+
+1. Deploy the new backend image (it still runs in `auto` = R2 mode).
+2. Run the backfill on the VM — content-addressed keys make it idempotent:
+   `cd ~/MyPage/blog/backend && ./sync_r2_to_fs.sh`
+3. Set `STORAGE_BACKEND=fs` in `backend/.env`, then `docker compose up -d backend`.
+4. Verify a v86 game boots and a chunk URL resolves:
+   `curl -sI https://huuthangle.site/v86/assets/systems/<sha256>/<part> | head -1`
+5. Reclaim R2 storage (deliberately manual):
+   `aws s3 rm --recursive s3://$R2_BUCKET/v86/`
+
+### nginx (only needed for fs mode)
+
+nginx must route these prefixes straight to the backend on `127.0.0.1:3001`
+(`/project-demos/` and `/games/s/` are typically already routed — HTML5 demos
+and js-dos bundles use them; `/v86/` is the one to check when coming from R2):
+
+```nginx
+location /v86/             { proxy_pass http://127.0.0.1:3001; include /etc/nginx/proxy_params; }
+location /games/s/         { proxy_pass http://127.0.0.1:3001; include /etc/nginx/proxy_params; }
+location /project-demos/   { proxy_pass http://127.0.0.1:3001; include /etc/nginx/proxy_params; }
+```
 
 ---
 
@@ -147,9 +192,54 @@ sqlx migrate run --database-url sqlite://data/blog.db
 
 ---
 
-## Backup
+## Sync keys (prod → dev backup)
 
-`backup.sh` compresses `data/` (database) and `media/` (uploaded files) into dated tarballs, then pushes them to a configured rclone remote (`r2-backup:blog-backup/daily-backups`).
+The dashboard's **Backup & Sync** page (admin only) replaces a full-ZIP
+download: an admin issues a **sync key** — a short-lived secret (`bsk_…`),
+shown once, stored only as a SHA-256 hash, revocable at any time. A dev
+machine then pulls the whole environment with the `sync-pull` tool:
+
+```bash
+cd blog/backend
+cargo run --bin sync-pull -- --url https://huuthangle.site --key @sync.key
+```
+
+What the pull does on the dev machine:
+
+1. Fetches a manifest (database size, every media file, demo file trees, all
+   js-dos/v86 artifact keys with sizes).
+2. Streams a consistent SQLite snapshot (`VACUUM INTO`, includes WAL content),
+   saves the previous local database aside as `*.pre-sync-*`, and swaps the
+   imported one in.
+3. **Fixes the database** for the local storage layout: `media.url` is
+   regenerated from `hash` + `file_type` + `uploader_id` under the dev
+   `MEDIA_PATH`, and html5/webgl `demo_url`s are regenerated under the dev
+   `PROJECT_DEMOS_PATH`. https embed URLs and jsdos/v86 storage keys are
+   backend-agnostic and untouched.
+4. Downloads media, demo files, and game artifacts. The source streams bytes
+   through its `ObjectStore`, so this works whether the source keeps artifacts
+   in **R2 or on fs** — the dev machine needs no R2 credentials; artifacts
+   land under `{PROJECT_DEMOS_PATH}/{storage_key}` (the same layout as
+   `sync_r2_to_fs.sh`). Files already present with the right size are skipped,
+   so an interrupted sync can simply be re-run; `--prune` additionally removes
+   local files that no longer exist on the source.
+
+Options: `--skip media|demos|artifacts`, `--dry-run`, `--yes` (skips the
+interactive prompt; the overwrite warning is printed on every run), and
+`--db/--media-dir/--demos-dir` overrides. The tool works
+against the public site URL (through the frontend `/api` proxy) or directly
+against a backend URL.
+
+**Security:** a sync key grants full read access to the database (including
+password hashes) and every file. Keep the TTL short (default 24 h), use labels,
+and revoke after use. **Direction policy:** the `/sync` API is pull-only by
+design — the `sync_keys.mode` column only allows `'pull'`. A dev → prod push
+would need a new mode plus an explicit confirmation flow and is deliberately
+not implemented.
+
+## Backup (VM cron)
+
+`backup.sh` compresses `data/` (database), `media/` (uploaded files), and `project-demos/` (demo builds and v86 artifacts) into dated tarballs, then pushes them to a configured rclone remote (`r2-backup:blog-backup/daily-backups`).
 
 **Setup:**
 

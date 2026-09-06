@@ -10,6 +10,7 @@ mkdir -p $BACKUP_DIR
 
 tar -czf $BACKUP_DIR/data_$TIMESTAMP.tar.gz "./data"
 tar -czf $BACKUP_DIR/media_$TIMESTAMP.tar.gz "./media"
+tar -czf $BACKUP_DIR/project-demos_$TIMESTAMP.tar.gz "./project-demos"
 
 rclone copy $BACKUP_DIR $R2_REMOTE:$BUCKET_NAME/daily-backups
 
