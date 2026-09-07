@@ -120,6 +120,40 @@ fn read_env_file(path: &Path) -> Result<(Option<String>, Option<String>, Option<
     Ok((database_url, media_path, demos_path))
 }
 
+/// Rewrites KEY=VALUE lines for the given pairs in place, preserving comments,
+/// ordering and all other keys; appends missing keys under a local section.
+fn update_env_file(path: &Path, updates: &[(&str, String)]) -> Result<(), String> {
+    let content = std::fs::read_to_string(path).unwrap_or_default();
+    let mut pending: Vec<(String, String)> = updates
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect();
+    let mut out = String::with_capacity(content.len() + 128);
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if let Some((key, _)) = trimmed.split_once('=') {
+            let key = key.trim();
+            if let Some(pos) = pending.iter().position(|(k, _)| k == key) {
+                let (_, value) = pending.swap_remove(pos);
+                out.push_str(&format!("{key}={value}\n"));
+                continue;
+            }
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    if !out.ends_with('\n') && !out.is_empty() {
+        out.push('\n');
+    }
+    if !pending.is_empty() {
+        out.push_str("\n# ── local sync-pull values ──\n");
+        for (key, value) in &pending {
+            out.push_str(&format!("{key}={value}\n"));
+        }
+    }
+    std::fs::write(path, out).map_err(|e| format!("write {}: {e}", path.display()))
+}
+
 fn resolve_key(key: &str) -> Result<String, String> {
     if let Some(path) = key.strip_prefix('@') {
         let content =
@@ -152,26 +186,37 @@ fn format_bytes(size: u64) -> String {
     }
 }
 
-/// Downloads `url` into `target` (temp file + rename). Returns Ok(false) when
-/// the file already exists with the expected size, Ok(true) when it was
-/// (or would be) downloaded.
+/// Outcome of one file fetch.
+enum Fetched {
+    /// Newly downloaded (or would be, in dry-run).
+    Downloaded,
+    /// Already present with the expected size.
+    Current,
+    /// Source answered 404 and missing files are allowed.
+    Missing,
+}
+
+/// Downloads `url` into `target` (temp file + rename). `Missing` = the source
+/// has no such file: the manifest is built from the database, so it can list
+/// media rows whose file no longer exists on the source disk.
 async fn download_to_file(
     client: &reqwest::Client,
     url: &str,
     key: &str,
     target: &Path,
     expected_size: Option<u64>,
+    allow_missing: bool,
     dry_run: bool,
-) -> Result<bool, String> {
+) -> Result<Fetched, String> {
     if let Some(size) = expected_size
         && target.is_file()
         && let Ok(meta) = tokio::fs::metadata(target).await
         && meta.len() == size
     {
-        return Ok(false);
+        return Ok(Fetched::Current);
     }
     if dry_run {
-        return Ok(true);
+        return Ok(Fetched::Downloaded);
     }
     if let Some(parent) = target.parent() {
         tokio::fs::create_dir_all(parent)
@@ -186,6 +231,9 @@ async fn download_to_file(
         .map_err(|e| format!("GET {url}: {e}"))?;
     if !response.status().is_success() {
         let status = response.status();
+        if allow_missing && status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(Fetched::Missing);
+        }
         let body = response.text().await.unwrap_or_default();
         return Err(format!("GET {url}: {status} {}", body.trim()));
     }
@@ -213,7 +261,7 @@ async fn download_to_file(
     tokio::fs::rename(&temp, target)
         .await
         .map_err(|e| format!("finalize {}: {e}", target.display()))?;
-    Ok(true)
+    Ok(Fetched::Downloaded)
 }
 
 fn collect_local_files(dir: &Path) -> Vec<(PathBuf, u64)> {
@@ -437,6 +485,7 @@ async fn run() -> Result<(), String> {
 
     let mut downloaded = 0usize;
     let mut skipped = 0usize;
+    let mut missing = 0usize;
     let mut transferred: u64 = 0;
 
     // ── Database ─────────────────────────────────────────────────────────
@@ -451,7 +500,7 @@ async fn run() -> Result<(), String> {
                 .and_then(|e| e.to_str())
                 .unwrap_or_default()
         ));
-        download_to_file(&client, &api("database"), &key, &snapshot, None, false)
+        download_to_file(&client, &api("database"), &key, &snapshot, None, false, false)
             .await
             .map_err(|e| format!("database download: {e}"))?;
 
@@ -530,15 +579,20 @@ async fn run() -> Result<(), String> {
                     &key,
                     &target,
                     Some(entry.size.max(0) as u64),
+                    true,
                     false,
                 )
                 .await
                 {
-                    Ok(true) => {
+                    Ok(Fetched::Downloaded) => {
                         downloaded += 1;
                         transferred += entry.size.max(0) as u64;
                     }
-                    Ok(false) => skipped += 1,
+                    Ok(Fetched::Current) => skipped += 1,
+                    Ok(Fetched::Missing) => {
+                        missing += 1;
+                        println!("  missing on source: {}", entry.path);
+                    }
                     Err(e) => return Err(e),
                 }
                 let done = downloaded + skipped;
@@ -575,14 +629,18 @@ async fn run() -> Result<(), String> {
                     local.insert(file.path.clone());
                     let target = base.join(&file.path);
                     let section = format!("demo/{kind}/{}/{}", dir.id, file.path);
-                    match download_to_file(&client, &api(&section), &key, &target, Some(file.size), false)
+                    match download_to_file(&client, &api(&section), &key, &target, Some(file.size), true, false)
                         .await
                     {
-                        Ok(true) => {
+                        Ok(Fetched::Downloaded) => {
                             downloaded += 1;
                             transferred += file.size;
                         }
-                        Ok(false) => skipped += 1,
+                        Ok(Fetched::Current) => skipped += 1,
+                        Ok(Fetched::Missing) => {
+                            missing += 1;
+                            println!("  missing on source: {section}");
+                        }
                         Err(e) => return Err(e),
                     }
                 }
@@ -625,15 +683,20 @@ async fn run() -> Result<(), String> {
                     &key,
                     &target,
                     Some(entry.size),
+                    true,
                     false,
                 )
                 .await
                 {
-                    Ok(true) => {
+                    Ok(Fetched::Downloaded) => {
                         downloaded += 1;
                         transferred += entry.size;
                     }
-                    Ok(false) => skipped += 1,
+                    Ok(Fetched::Current) => skipped += 1,
+                    Ok(Fetched::Missing) => {
+                        missing += 1;
+                        println!("  missing on source: {}", entry.key);
+                    }
                     Err(e) => return Err(e),
                 }
             }
@@ -676,16 +739,109 @@ async fn run() -> Result<(), String> {
         }
     }
 
+    // ── Local .env ───────────────────────────────────────────────────────
+    // Write the layout this pull actually used back into the .env (paths as
+    // local values, storage on fs since artifacts land on disk), so the local
+    // backend serves what was just synced. Secrets and other keys are kept.
+    if args.dry_run {
+        println!("[dry-run] would update .env with the resolved paths");
+    } else {
+        let env_target = env_file.clone().unwrap_or_else(|| PathBuf::from(".env"));
+        if !env_target.is_file() {
+            let example = env_target
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join("example.env");
+            if example.is_file() {
+                std::fs::copy(&example, &env_target).map_err(|e| {
+                    format!("seed {} from {}: {e}", env_target.display(), example.display())
+                })?;
+                println!("seeded {} from {}", env_target.display(), example.display());
+            }
+        }
+        update_env_file(
+            &env_target,
+            &[
+                ("DATABASE_URL", format!("sqlite:{}", db_path.display())),
+                ("MEDIA_PATH", media_dir.to_string_lossy().into_owned()),
+                ("PROJECT_DEMOS_PATH", demos_dir.to_string_lossy().into_owned()),
+                ("STORAGE_BACKEND", "fs".to_string()),
+            ],
+        )?;
+        println!(
+            "updated {} (DATABASE_URL, MEDIA_PATH, PROJECT_DEMOS_PATH, STORAGE_BACKEND=fs)",
+            env_target.display()
+        );
+        let env_now = std::fs::read_to_string(&env_target).unwrap_or_default();
+        if env_now.contains("REPLACE_WITH_YOUR_JWT_SECRET") {
+            println!(
+                "  note: set a real JWT_SECRET in {} before running the backend",
+                env_target.display()
+            );
+        }
+    }
+
     println!();
     println!(
-        "Done in {:.1}s — {} file(s) downloaded ({}), {} already up to date.",
+        "Done in {:.1}s — {} file(s) downloaded ({}), {} already up to date, {} missing on source.",
         started.elapsed().as_secs_f32(),
         downloaded,
         format_bytes(transferred),
-        skipped
+        skipped,
+        missing
     );
     if !args.dry_run {
         println!("Restart the local backend so it picks up the new database.");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_env_preserves_and_overrides() {
+        let dir = std::env::temp_dir().join(format!("sync-pull-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(".env");
+        std::fs::write(
+            &path,
+            "# comment\nJWT_SECRET=abc\nDATABASE_URL=sqlite:old/blog.db\nMEDIA_PATH=./media\n",
+        )
+        .unwrap();
+
+        update_env_file(
+            &path,
+            &[
+                ("DATABASE_URL", "sqlite:data/blog.db".into()),
+                ("MEDIA_PATH", "media".into()),
+                ("STORAGE_BACKEND", "fs".into()),
+            ],
+        )
+        .unwrap();
+
+        let out = std::fs::read_to_string(&path).unwrap();
+        assert!(out.contains("# comment"));
+        assert!(out.contains("JWT_SECRET=abc"));
+        assert!(out.contains("DATABASE_URL=sqlite:data/blog.db"));
+        assert!(out.contains("MEDIA_PATH=media"));
+        assert!(out.contains("STORAGE_BACKEND=fs"));
+        assert!(!out.contains("old/blog.db"));
+
+        // commented-out lines must not be touched
+        std::fs::write(&path, "# DATABASE_URL=postgresql://x\n").unwrap();
+        update_env_file(&path, &[("DATABASE_URL", "sqlite:d.db".into())]).unwrap();
+        let out = std::fs::read_to_string(&path).unwrap();
+        assert!(out.contains("# DATABASE_URL=postgresql://x"));
+        assert!(out.contains("DATABASE_URL=sqlite:d.db"));
+
+        // fresh file: keys land even though nothing existed
+        std::fs::remove_file(&path).unwrap();
+        update_env_file(&path, &[("MEDIA_PATH", "m".into())]).unwrap();
+        let out = std::fs::read_to_string(&path).unwrap();
+        assert!(out.ends_with("MEDIA_PATH=m\n"));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
