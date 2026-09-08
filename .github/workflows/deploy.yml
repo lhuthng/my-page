@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/**"
       - "blog/**"
+      - "ops/**"
   workflow_dispatch:
 
 concurrency:
@@ -30,6 +31,7 @@ jobs:
           filters: |
             blog:
               - 'blog/**'
+              - 'ops/**'
 
   # ── Build backend image on GitHub's servers and push to GHCR ─────────────
   build-push-backend:
@@ -136,6 +138,44 @@ jobs:
           source: "blog/docker-compose.yml"
           target: "~/MyPage/blog"
           strip_components: 1
+
+      # nginx sites are repo-managed (ops/nginx/). Ship them, swap into
+      # sites-enabled, and reload only when the content actually changed so
+      # unrelated deploys don't touch nginx. Certs stay owned by certbot.
+      - name: Sync nginx sites to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: "ops/nginx/*"
+          target: "/tmp/nginx-deploy"
+          strip_components: 2
+
+      - name: Activate nginx sites if changed
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            changed=0
+            for f in blog.conf root.conf api.conf; do
+              src="/tmp/nginx-deploy/$f"
+              dst="/etc/nginx/sites-available/$f"
+              if ! sudo cmp -s "$src" "$dst"; then
+                sudo cp "$src" "$dst"
+                sudo ln -sf "/etc/nginx/sites-available/$f" "/etc/nginx/sites-enabled/$f"
+                changed=1
+              fi
+            done
+            rm -rf /tmp/nginx-deploy
+            if [ "$changed" = "1" ]; then
+              sudo nginx -t && sudo systemctl reload nginx
+              echo "nginx conf updated and reloaded"
+            else
+              echo "nginx conf unchanged"
+            fi
 
       - name: Pull new images
         uses: appleboy/ssh-action@v1.2.0
