@@ -1,5 +1,6 @@
 <script>
 	import { auth } from '$lib/auth/user.svelte.js';
+	import { normalizeMediaPath } from '$lib/utils/media-path.js';
 	import PBody from '../shell/PBody.svelte';
 
 	let {
@@ -11,7 +12,7 @@
 
 	const maxFileSize = 5 * 1024 * 1024;
 	const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-	const clientUrl = (url) => (url ? `/api/${url}`.replace('/./', '/') : undefined);
+	const clientUrl = (url) => (url ? `/api/${normalizeMediaPath(url)}` : undefined);
 
 	let toggled = $state(false);
 	let editor = $state({
