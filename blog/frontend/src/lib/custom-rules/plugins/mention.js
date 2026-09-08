@@ -1,3 +1,5 @@
+import { normalizeMediaPath } from '../../utils/media-path.js';
+
 export function mentionProfilePlugin(md, options = {}) {
 	const mentionDictionary = options.mentionDictionary || {};
 
@@ -5,7 +7,7 @@ export function mentionProfilePlugin(md, options = {}) {
 		if (!url) return '/anonymous.gif';
 		if (url.startsWith('http://') || url.startsWith('https://')) return url;
 		if (url.startsWith('/api/') || url.startsWith('/')) return url;
-		return `/api/${String(url).replace(/^\.?\//, '')}`;
+		return `/api/${normalizeMediaPath(String(url))}`;
 	};
 
 	md.inline.ruler.before('emphasis', 'mention_profile', (state, silent) => {

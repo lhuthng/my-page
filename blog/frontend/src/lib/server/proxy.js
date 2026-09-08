@@ -1,5 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { error } from '@sveltejs/kit';
+import { normalizeMediaPath } from '$lib/utils/media-path.js';
 
 export function route(path) {
 	return `${env.API_URL}/${path}`;
@@ -28,9 +29,9 @@ export function fixClientRoute(path) {
 	if (path.includes('://')) return path;
 	const backendOrigin = env.BACKEND_ORIGIN;
 	if (backendOrigin) {
-		return `${backendOrigin.replace(/\/$/, '')}/${path}`;
+		return `${backendOrigin.replace(/\/$/, '')}/${normalizeMediaPath(path)}`;
 	}
-	return `/api/${path}`.replace('/./', '/');
+	return `/api/${normalizeMediaPath(path)}`;
 }
 
 // Bodies up to this size are buffered before forwarding; anything larger is
