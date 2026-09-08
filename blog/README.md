@@ -62,7 +62,7 @@ Frontend is available at `http://localhost:5000`.
 | Variable | Description |
 |---|---|
 | `API_URL` | Backend URL for server-side calls - Docker internal: `http://backend:3000` |
-| `BACKEND_ORIGIN` | Public backend origin for browser media URLs (e.g. `https://blog.huuthangle.site`) |
+| `BACKEND_ORIGIN` | Public backend origin for browser media URLs (e.g. `https://api.huuthangle.site`) |
 | `PORT` | Port the SvelteKit server listens on (`8080`) |
 
 ## Sub-projects
