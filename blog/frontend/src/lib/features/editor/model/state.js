@@ -180,6 +180,13 @@ export function refreshBaseline(baseline, entry, serverResponse = {}) {
 					demoWidth: entry.demoWidth,
 					demoHeight: entry.demoHeight,
 					demoUrl: entry.demoUrl,
+					...(entry.v86SystemVersionId !== undefined
+						? {
+								v86SystemVersionId: entry.v86SystemVersionId,
+								v86Manifest: entry.v86Manifest,
+								v86ArtifactRevision: entry.v86ArtifactRevision
+							}
+						: {}),
 					...(entry.instruction !== undefined
 						? {
 								instruction: entry.instruction,

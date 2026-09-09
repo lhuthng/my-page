@@ -138,12 +138,18 @@
 					<option value="">Select a system</option>
 					{#each v86Systems as system}
 						{#each system.versions as version}
-							<option value={version.id}>
+							<option value={String(version.id)}>
 								{system.name} v{version.version_number}{system.is_default ? ' (default)' : ''}
 							</option>
 						{/each}
 					{/each}
 				</select>
+				{#if mode === 'edit'}
+					<p class="text-sm leading-relaxed text-dark/50">
+						Switching systems applies on save — no re-upload needed. Existing boot snapshots reset;
+						capture a new one on the new system.
+					</p>
+				{/if}
 			</div>
 			<div class="flex flex-col gap-4">
 				<label class="text-sm font-medium text-dark/60" for="v86-manifest">Manifest</label>
@@ -292,7 +298,9 @@
 {#if mode === 'edit' && isOwner}
 	<section class="rounded-xl border border-accent-red/30 bg-accent-red-light-4 p-4">
 		<h3 class="font-semibold text-accent-red">Danger zone</h3>
-		<p class="mt-1 text-sm text-dark/60">Delete this game. Projects delegating to it will show “Game unavailable” for 7 days.</p>
+		<p class="mt-1 text-sm text-dark/60">
+			Delete this game. Projects delegating to it will show “Game unavailable” for 7 days.
+		</p>
 		<div class="mt-3 flex flex-wrap gap-2">
 			<select bind:value={deleteReason} class="rounded-lg border border-dark/20 px-3 py-1 text-sm">
 				<option value="user_request">User request</option>
@@ -301,8 +309,20 @@
 				<option value="replaced">Replaced</option>
 				<option value="other">Other</option>
 			</select>
-			<input bind:value={deleteDetail} placeholder="Detail (optional)" class="rounded-lg border border-dark/20 px-3 py-1 text-sm" />
-			<button onclick={() => { forceNeeded = false; showDelete = true; }} class="rounded-full bg-accent-red px-4 py-2 text-sm font-medium text-white">Delete game</button>
+			<input
+				bind:value={deleteDetail}
+				placeholder="Detail (optional)"
+				class="rounded-lg border border-dark/20 px-3 py-1 text-sm"
+			/>
+			<button
+				onclick={() => {
+					forceNeeded = false;
+					showDelete = true;
+				}}
+				class="rounded-full bg-accent-red px-4 py-2 text-sm font-medium text-white"
+			>
+				Delete game
+			</button>
 		</div>
 	</section>
 	<ConfirmDialog
@@ -325,6 +345,9 @@
 		bind:typedValue={deleteTyped}
 		busy={deleteBusy}
 		onconfirm={() => handleDelete(true)}
-		oncancel={() => { showDelete = false; forceNeeded = false; }}
+		oncancel={() => {
+			showDelete = false;
+			forceNeeded = false;
+		}}
 	/>
 {/if}

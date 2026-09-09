@@ -668,7 +668,7 @@ export function createEditorViewModel({
 			demoUrl: entry.demoUrl,
 			zip: ui.demoZip,
 			mode: 'edit',
-			previousDemoType: data?.demoType,
+			previousDemoType: baseline.demoType,
 			v86SystemVersionId: entry.v86SystemVersionId,
 			v86Manifest: entry.v86Manifest,
 			kindLabel: 'games'
@@ -678,15 +678,22 @@ export function createEditorViewModel({
 			return;
 		}
 
-		const v86Changed =
+		// A package change (new zip, manifest edit, or launcher-type flip) needs
+		// a full rebuild + upload; the upload session carries the system id with
+		// it. Changing only the system re-points the existing package on the
+		// server instead — no re-upload.
+		const v86ArtifactChanged =
 			entry.demoType === 'v86' &&
 			(ui.demoZip ||
-				entry.v86SystemVersionId !== data?.v86SystemVersionId?.toString() ||
-				entry.v86Manifest !== (data?.v86Manifest ?? '') ||
-				(data?.demoType ?? 'html5') !== 'v86');
+				entry.v86Manifest !== (baseline.v86Manifest ?? '') ||
+				(baseline.demoType ?? 'html5') !== 'v86');
+		const v86SystemChanged =
+			entry.demoType === 'v86' &&
+			!v86ArtifactChanged &&
+			entry.v86SystemVersionId !== (baseline.v86SystemVersionId ?? '');
 
 		let v86UploadId;
-		if (v86Changed) {
+		if (v86ArtifactChanged) {
 			try {
 				v86UploadId = await prepareV86ForSubmit(data?.demoType === 'v86' ? data.id : undefined);
 			} catch (error) {
@@ -709,12 +716,19 @@ export function createEditorViewModel({
 			kind: 'game'
 		});
 
-		if (isPatchEmpty(patch) && offlineKeys.length === 0 && !ui.demoZip && !v86UploadId) {
+		if (
+			isPatchEmpty(patch) &&
+			offlineKeys.length === 0 &&
+			!ui.demoZip &&
+			!v86UploadId &&
+			!v86SystemChanged
+		) {
 			notify('Nothing to save.');
 			return;
 		}
 
 		if (v86UploadId) patch.v86_upload_id = v86UploadId;
+		if (v86SystemChanged) patch.v86_system_version_id = Number(entry.v86SystemVersionId);
 		patch.number_of_files = offlineKeys.length;
 		patch.expected_updated_at = baseline.updatedAt;
 
