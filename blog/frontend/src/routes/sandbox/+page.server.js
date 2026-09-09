@@ -17,9 +17,14 @@ export async function load({ fetch, setHeaders }) {
 			id: system.id,
 			system_name: system.system_name,
 			version_number: system.version_number,
+			platform_key: system.platform_key,
 			base_url: fixClientRoute(system.base_url),
 			base_size_bytes: system.size_bytes,
-			chunk_size_bytes: system.chunk_size_bytes
+			chunk_size_bytes: system.chunk_size_bytes,
+			memory_size_mb: system.memory_size_mb,
+			vga_memory_size_mb: system.vga_memory_size_mb,
+			screen_width: system.specs?.screen_width ?? null,
+			screen_height: system.specs?.screen_height ?? null
 		}))
 	};
 }

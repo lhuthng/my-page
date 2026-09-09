@@ -68,7 +68,12 @@
 
 	const start = async () => {
 		try {
-			console.log('[sandbox] start', { hasSystem: !!system, base_url: system?.base_url, hdd: hdd ? hdd.length : null, disc: disc ? disc.length : null });
+			console.log('[sandbox] start', {
+				hasSystem: !!system,
+				base_url: system?.base_url,
+				hdd: hdd ? hdd.length : null,
+				disc: disc ? disc.length : null
+			});
 			if (!system?.base_url) throw new Error('System base_url missing: ' + JSON.stringify(system));
 			await loadRuntime();
 			const V86 = window.V86 ?? window.V86Starter;
@@ -78,8 +83,11 @@
 				screen: { container: screen, use_graphical_text: false },
 				screen_container: screen,
 				autostart: true,
-				memory_size: 64 * 1024 * 1024,
-				vga_memory_size: 8 * 1024 * 1024,
+				memory_size: (system.memory_size_mb ?? 64) * 1024 * 1024,
+				vga_memory_size:
+					(system.vga_memory_size_mb ?? (system.platform_key === 'windowsxp' ? 16 : 8)) *
+					1024 *
+					1024,
 				boot_order: 786,
 				bios: { url: '/v86/bios/seabios.bin' },
 				vga_bios: { url: '/v86/bios/vgabios.bin' },
@@ -97,15 +105,24 @@
 			// letters it at boot and a disc can go in whenever. On a reboot the
 			// disc that was in the drive goes back in at construction.
 			if (disc) {
-				const buf = disc instanceof Uint8Array ? disc.buffer.slice(disc.byteOffset, disc.byteOffset + disc.byteLength) : disc;
+				const buf =
+					disc instanceof Uint8Array
+						? disc.buffer.slice(disc.byteOffset, disc.byteOffset + disc.byteLength)
+						: disc;
 				options.cdrom = { buffer: buf };
 			}
 			if (floppy) {
-				const buf = floppy instanceof Uint8Array ? floppy.buffer.slice(floppy.byteOffset, floppy.byteOffset + floppy.byteLength) : floppy;
+				const buf =
+					floppy instanceof Uint8Array
+						? floppy.buffer.slice(floppy.byteOffset, floppy.byteOffset + floppy.byteLength)
+						: floppy;
 				options.fda = { buffer: buf };
 			}
 			if (hdd) {
-				const buf = hdd instanceof Uint8Array ? hdd.buffer.slice(hdd.byteOffset, hdd.byteOffset + hdd.byteLength) : hdd;
+				const buf =
+					hdd instanceof Uint8Array
+						? hdd.buffer.slice(hdd.byteOffset, hdd.byteOffset + hdd.byteLength)
+						: hdd;
 				options.hdb = { buffer: buf };
 			}
 
@@ -126,7 +143,15 @@
 					lastAt = now;
 				}, 1000);
 			});
-			onready?.({ insertDisc, ejectDisc, insertFloppy, ejectFloppy, getFloppy, getHdd, hasHdd: () => !!hdd });
+			onready?.({
+				insertDisc,
+				ejectDisc,
+				insertFloppy,
+				ejectFloppy,
+				getFloppy,
+				getHdd,
+				hasHdd: () => !!hdd
+			});
 		} catch (cause) {
 			error = cause?.message ?? 'The machine could not start.';
 		}
@@ -198,7 +223,9 @@
 		if (!emulator) return null;
 		// Try the documented floppy-style getters first (if v86 ever adds them)
 		let buffer = null;
-		try { buffer = emulator.get_disk_hdb?.(); } catch {}
+		try {
+			buffer = emulator.get_disk_hdb?.();
+		} catch {}
 		if (buffer) {
 			if (buffer instanceof Uint8Array) return buffer;
 			if (buffer instanceof ArrayBuffer) return new Uint8Array(buffer);
@@ -308,6 +335,9 @@
 		<div
 			class="w-full screen"
 			bind:this={screen}
+			style={system?.screen_width && system?.screen_height
+				? `aspect-ratio: ${system.screen_width}/${system.screen_height};`
+				: ''}
 			role="application"
 			tabindex="0"
 			onclick={() => emulator && captureMouse()}
@@ -334,7 +364,7 @@
 		image-rendering: pixelated;
 		image-rendering: crisp-edges;
 		max-width: 100%;
-		max-height: min(520px, 70vh);
+		max-height: min(720px, 78vh);
 		width: auto !important;
 		height: auto !important;
 		object-fit: contain;
@@ -346,7 +376,7 @@
 	}
 
 	.v86-shell:fullscreen .screen {
-		@apply min-h-0 h-dvh max-h-dvh w-dvw p-0;
+		@apply h-dvh max-h-dvh min-h-0 w-dvw p-0;
 	}
 
 	.v86-shell:fullscreen .screen :global(canvas) {
