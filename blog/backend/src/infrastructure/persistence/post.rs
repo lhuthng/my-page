@@ -1014,8 +1014,8 @@ impl PostService for PostServiceImpl {
                     ELSE published_at
                 END,
                 updated_at = CURRENT_TIMESTAMP,
-                status = 'published' AND deleted_at IS NULL
-            WHERE id = ?
+                status = 'published'
+            WHERE id = ? AND deleted_at IS NULL
             "#,
         )
         .bind(draft)
