@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
 	import Portal from '$lib/components/shell/Portal.svelte';
 	import Popover from '$lib/components/ui/Popover.svelte';
 	import Slider from '$lib/components/ui/Slider.svelte';
@@ -8,6 +9,12 @@
 	import Sound from '$lib/components/svgs/Sound.svelte';
 	import Zoom from '$lib/components/svgs/Zoom.svelte';
 	import { V86Player } from '$lib/players/V86Player.svelte.js';
+	import {
+		deleteDiskChunks,
+		fetchDiskChunks,
+		formatBytes,
+		measureDiskChunks
+	} from '$lib/players/v86-cache.js';
 	import { win } from '$lib/dom/windows.svelte.js';
 
 	let {
@@ -24,6 +31,116 @@
 	let mouseOpen = $state(false);
 	let clearOpen = $state(false);
 	let pendingVariant = $state(null);
+
+	// Offline storage info per disk. The service worker intercepts and caches
+	// the emulator's chunk fetches — including cross-origin ones (CDN-backed
+	// deployments) — keyed by full URL, so the page can always count what is
+	// already stored.
+	let disks = $state([]);
+	let busy = $state('');
+	let abort = null;
+
+	const cacheable = $derived(
+		Boolean(
+			browser && runtime?.base_url && runtime?.game_url && (runtime?.chunk_size_bytes ?? 0) > 0
+		)
+	);
+
+	function diskSpecs() {
+		const chunkSize = runtime.chunk_size_bytes;
+		return [
+			{
+				key: 'system',
+				label: 'System',
+				url: runtime.base_url,
+				size: runtime.base_size_bytes,
+				chunkSize
+			},
+			{
+				key: 'game',
+				label: 'Game',
+				url: runtime.game_url,
+				size: runtime.game_size_bytes,
+				chunkSize
+			}
+		];
+	}
+
+	async function refreshDisks() {
+		if (!cacheable) return;
+		disks = await Promise.all(
+			diskSpecs().map(async (spec) => ({
+				...spec,
+				chunkBytes: Math.round(spec.size / Math.max(1, Math.ceil(spec.size / spec.chunkSize))),
+				...(await measureDiskChunks(spec))
+			}))
+		);
+	}
+
+	function tick(index, landed) {
+		// Tick the row live; the final refresh reconciles with the cache in
+		// case any chunk failed.
+		const current = disks[index];
+		if (!current) return;
+		const count = Math.min(current.count + landed, current.total);
+		disks[index] = {
+			...current,
+			count,
+			bytes: Math.round((current.size * count) / current.total)
+		};
+	}
+
+	async function fetchDisks(keys, busyState) {
+		if (busy) {
+			abort?.abort();
+			return;
+		}
+		busy = busyState;
+		abort = new AbortController();
+		try {
+			await Promise.all(
+				disks.map((disk, index) =>
+					keys.includes(disk.key)
+						? fetchDiskChunks(disk, abort.signal, (landed) => tick(index, landed))
+						: null
+				)
+			);
+		} finally {
+			busy = '';
+			await refreshDisks();
+		}
+	}
+
+	const fetchDisk = (key) => fetchDisks([key], key);
+	// One in-flight pre-fetch at a time; `busy` holds the running disk's key.
+	const isFetching = (disk) => busy === disk.key;
+
+	async function deleteAll() {
+		if (busy) return;
+		busy = 'delete';
+		try {
+			await Promise.all(diskSpecs().map(deleteDiskChunks));
+		} finally {
+			busy = '';
+			await refreshDisks();
+		}
+	}
+
+	// Boot chunks stream through the worker and land in the cache; refresh the
+	// counts once a download finishes (and once on mount for prior visits).
+	let prevProgress = null;
+	$effect(() => {
+		const progress = player.downloadProgress;
+		if (prevProgress != null && progress == null) refreshDisks();
+		prevProgress = progress;
+	});
+	// During play the game reads disk chunks sporadically; each read lands in
+	// the cache. Poll lightly so the stored-size rows track it live.
+	$effect(() => {
+		if (!cacheable || !player.running) return;
+		const timer = setInterval(refreshDisks, 4000);
+		return () => clearInterval(timer);
+	});
 
 	let phase = $derived.by(() => {
 		if (player.error) return 'error';
@@ -49,7 +166,11 @@
 			}
 		}
 		player.mount();
-		return () => player.unmount();
+		refreshDisks();
+		return () => {
+			abort?.abort();
+			player.unmount();
+		};
 	});
 
 	function toggleSound() {
@@ -358,6 +479,36 @@
 		</div>
 	{/if}
 
+	{#if cacheable && disks.length > 0}
+		<div class="storage-info">
+			{#each disks as disk (disk.key)}
+				<p class="storage-row">
+					<span class="font-semibold text-dark/60">{disk.label}</span>
+					<span class="tabular-nums text-dark/70">
+						{formatBytes(disk.bytes)}
+						<span class="text-dark/40">/ {formatBytes(disk.size)}</span>
+					</span>
+					<span class="duo-btn w-32" data-duo-color={isFetching(disk) ? 'dark' : 'green'}>
+						<button
+							type="button"
+							disabled={Boolean(busy) || disk.count >= disk.total}
+							onclick={() => fetchDisk(disk.key)}
+						>
+							{isFetching(disk) ? 'Stop' : 'Pre-fetch'}
+						</button>
+					</span>
+				</p>
+			{/each}
+			<div class="flex items-center justify-end gap-2">
+				<div class="duo-btn" data-duo-color="red">
+					<button type="button" disabled={Boolean(busy)} onclick={deleteAll}>
+						{busy === 'delete' ? 'Deleting…' : 'Delete'}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	{#if player.saveMessage}
 		<p class="rounded-lg border border-dark/15 bg-dark/5 px-3 py-2 text-dark/80">
 			{player.saveMessage}
@@ -450,6 +601,14 @@
 
 	.mips-pill {
 		@apply rounded-full bg-dark/5 px-2 py-0.5 font-mono text-xs font-normal text-dark/50;
+	}
+
+	.storage-info {
+		@apply flex flex-col gap-2 rounded-lg border border-dark/15 bg-dark/5 px-3 py-2 text-base;
+	}
+
+	.storage-row {
+		@apply m-0 grid grid-cols-[4.5rem_1fr_auto] items-center gap-3;
 	}
 
 	.v86-keys {

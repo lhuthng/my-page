@@ -7,8 +7,15 @@ const isV86ImmutableAsset = (pathname) => {
 	// indefinitely. Caching matters most here: unlike the disks, a state cannot
 	// be range-loaded, so an uncached visit re-downloads the whole blob.
 	if (pathname.includes('/v86/snapshots/')) return pathname.endsWith('/state.zst');
-	if (!pathname.includes('/projects/s/') || !pathname.includes('/v86/')) return false;
-	return pathname.endsWith('/full.iso');
+	// CDN-backed game artifacts: {cdn}/v86/games/{sha}/full.iso and
+	// {cdn}/v86/games/{sha}/{offset}-{end}.img.zst. The matcher only sees the
+	// pathname, which is fine — the shas make the URLs immutable either way.
+	if (pathname.includes('/v86/games/')) return true;
+	// Games and legacy projects share the launcher-ISO shape; the game disk's
+	// own chunks (games/s/.../v86/disk/{sha}/{offset}-{end}.img.zst) are
+	// content-addressed by the disk sha, so they cache forever too.
+	if (!pathname.includes('/projects/s/') && !pathname.includes('/games/s/')) return false;
+	return pathname.endsWith('/full.iso') || pathname.includes('/v86/disk/');
 };
 
 self.addEventListener('install', () => self.skipWaiting());
