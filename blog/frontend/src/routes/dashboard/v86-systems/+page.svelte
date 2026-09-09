@@ -8,7 +8,24 @@
 	let systems = $state(data.systems);
 	let name = $state('');
 	let replacingSystemId = $state('');
+	let platformKey = $state('windows9x');
+	let memorySizeMb = $state(64);
+	let vramSizeMb = $state(8);
+	let resolution = $state('640x480');
 	let image = $state();
+
+	// Platform-driven suggestions: XP wants 512 MB / 16 MB VRAM / 800x600.
+	const suggestSpecs = () => {
+		if (platformKey === 'windowsxp') {
+			memorySizeMb = 512;
+			vramSizeMb = 16;
+			resolution = '800x600';
+		} else {
+			memorySizeMb = 64;
+			vramSizeMb = 8;
+			resolution = '640x480';
+		}
+	};
 	let busy = $state(false);
 	let status = $state('');
 	let critical = $state(false);
@@ -86,7 +103,13 @@
 					system_id: existing?.id ?? null,
 					expected_current_version: existing?.current_version ?? 0,
 					name: name.trim(),
-					platform_key: 'windows9x',
+					platform_key: platformKey,
+					memory_size_mb: memorySizeMb,
+					specs: {
+						vga_memory_size_mb: vramSizeMb,
+						screen_width: Number(resolution.split('x')[0]),
+						screen_height: Number(resolution.split('x')[1])
+					},
 					file_name: image.name,
 					size_bytes: image.size,
 					sha256
@@ -171,6 +194,29 @@
 			await request(`/api/v86/systems/upload/${uploadId}/complete`, {
 				method: 'POST'
 			});
+
+			// Specs ride along after completion: the system row exists now
+			// (create) or was already known (replace).
+			const specsPayload = {
+				specs: {
+					vga_memory_size_mb: vramSizeMb,
+					screen_width: Number(resolution.split('x')[0]),
+					screen_height: Number(resolution.split('x')[1])
+				}
+			};
+			await refreshSystems();
+			const target = existing ?? systems.find((s) => s.name === name.trim());
+			if (target) {
+				await request(`/api/v86/systems/${target.id}`, {
+					method: 'PATCH',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						...specsPayload,
+						expected_current_version: target.current_version
+					})
+				});
+				target.specs = specsPayload.specs;
+			}
 		} catch (error) {
 			if (interval) clearInterval(interval);
 			if (uploadId) {
@@ -196,6 +242,8 @@
 				})
 			});
 			if (patch.name !== undefined) system.name = patch.name;
+			if (patch.memory_size_mb !== undefined) system.memory_size_mb = patch.memory_size_mb;
+			if (patch.specs !== undefined) system.specs = patch.specs;
 			if (patch.is_active !== undefined) system.is_active = patch.is_active;
 			if (patch.is_default === true) {
 				systems.forEach((s) => {
@@ -296,18 +344,54 @@
 		</label>
 		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
 			Platform strategy
-			<input
-				class="w-full rounded-lg border-2 border-dark/25 bg-slate-100 px-3 py-2 font-normal"
-				value="Windows 9x"
-				readonly
-			/>
+			<select
+				class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark"
+				bind:value={platformKey}
+				onchange={suggestSpecs}
+			>
+				<option value="windows9x">Windows 9x</option>
+				<option value="windowsxp">Windows XP</option>
+			</select>
 		</label>
 		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
-			Raw IMG (maximum 2 GiB)
+			Guest memory
+			<select
+				class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark"
+				bind:value={memorySizeMb}
+			>
+				{#each [64, 128, 256, 512, 1024] as mb}
+					<option value={mb}>{mb} MB{mb >= 256 ? ' (XP-class)' : ''}</option>
+				{/each}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
+			Video memory
+			<select
+				class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark"
+				bind:value={vramSizeMb}
+			>
+				{#each [8, 16, 32] as mb}
+					<option value={mb}>{mb} MB{mb === 16 ? ' (XP needs this for 800x600+)' : ''}</option>
+				{/each}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
+			Suggested resolution
+			<select
+				class="w-full rounded-lg border-2 border-dark/25 bg-white px-3 py-2 font-normal outline-none focus:border-dark"
+				bind:value={resolution}
+			>
+				{#each ['640x480', '800x600', '1024x768'] as res}
+					<option value={res}>{res}</option>
+				{/each}
+			</select>
+		</label>
+		<label class="flex flex-col gap-1 text-sm font-semibold text-dark">
+			Raw IMG (maximum 2 GiB, .img / .raw)
 			<input
 				class="w-full rounded-lg border-2 border-dashed border-dark/30 bg-white px-3 py-2 font-normal"
 				type="file"
-				accept=".img,application/octet-stream"
+				accept=".img,.raw,application/octet-stream"
 				required
 				onchange={(event) => (image = event.currentTarget.files?.[0])}
 			/>
@@ -336,11 +420,29 @@
 						{/if}
 					</h2>
 					<p class="text-sm">
-						{system.platform_key} · current v{system.current_version} · {system.project_count}
-						project(s), {system.published_project_count} published
+						{system.platform_key} · {system.memory_size_mb} MB · {system.specs
+							?.vga_memory_size_mb ?? 8} MB VRAM{system.specs?.screen_width
+							? ` · ${system.specs.screen_width}x${system.specs.screen_height}`
+							: ''} · current v{system.current_version} · {system.project_count} project(s),
+						{system.published_project_count} published
 					</p>
 				</div>
 				<div class="flex flex-wrap gap-2">
+					<button
+						class="rounded-lg border-2 border-dark/30 px-3 py-1.5 text-sm font-semibold transition hover:bg-dark hover:text-white"
+						onclick={() => {
+							const next = prompt(
+								"Guest memory in MB (32-1024). Raising it stales this system's snapshots.",
+								String(system.memory_size_mb)
+							);
+							const mb = Number(next);
+							if (Number.isInteger(mb) && mb !== system.memory_size_mb) {
+								updateSystem(system, { memory_size_mb: mb });
+							}
+						}}
+					>
+						{system.memory_size_mb} MB
+					</button>
 					<button
 						class="rounded-lg border-2 border-dark/30 px-3 py-1.5 text-sm font-semibold transition hover:bg-dark hover:text-white"
 						onclick={() => {

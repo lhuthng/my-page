@@ -39,7 +39,12 @@
 			critical = true;
 			return;
 		}
-		console.log('[sandbox+page] boot', { selectedId: selected.id, base_url: selected.base_url, hdd: hddBuffer ? `${hddBuffer.length} bytes` : null, hddSizeMB });
+		console.log('[sandbox+page] boot', {
+			selectedId: selected.id,
+			base_url: selected.base_url,
+			hdd: hddBuffer ? `${hddBuffer.length} bytes` : null,
+			hddSizeMB
+		});
 		machine = null;
 		mounted = null;
 		status = '';
@@ -204,7 +209,9 @@
 			if (!image || image.length < 512) throw new Error('No HDD attached or it is empty.');
 			// Try to read files for zip, fallback to raw image
 			let files = [];
-			try { files = readHddFiles(image); } catch {}
+			try {
+				files = readHddFiles(image);
+			} catch {}
 			if (files.length > 0) {
 				const zipBytes = floppyFilesToZip(files);
 				const blob = new Blob([zipBytes], { type: 'application/zip' });
@@ -310,7 +317,10 @@
 
 		<div class="rounded-xl bg-white p-4 drop-shadow-xl">
 			<h2 class="mb-2 font-semibold">Hard disk</h2>
-			<p class="mb-3 text-sm text-dark/60">Add a second hard disk. Requires a reboot — Windows will see it as drive D: (CD moves to E:).</p>
+			<p class="mb-3 text-sm text-dark/60">
+				Add a second hard disk. Requires a reboot — Windows will see it as drive D: (CD moves to
+				E:).
+			</p>
 			<div class="flex flex-wrap items-end gap-3">
 				<label class="text-sm">
 					<span class="mb-1 block font-medium">Size</span>
@@ -352,10 +362,14 @@
 				{/if}
 			</div>
 			{#if hddBuffer}
-				<p class="mt-2 text-sm text-dark/60">HDD: {hddSizeMB} MB {hddAttached ? '· attached' : '· reboot to attach'}</p>
+				<p class="mt-2 text-sm text-dark/60">
+					HDD: {hddSizeMB} MB {hddAttached ? '· attached' : '· reboot to attach'}
+				</p>
 			{/if}
 			{#if hddStatus}
-				<p class="mt-3 truncate text-sm {hddCritical ? 'text-red-700' : 'text-dark/70'}">{hddStatus}</p>
+				<p class="mt-3 truncate text-sm {hddCritical ? 'text-red-700' : 'text-dark/70'}">
+					{hddStatus}
+				</p>
 			{/if}
 		</div>
 
@@ -407,7 +421,15 @@
 		</div>
 
 		{#key booted}
-			<SandboxMachine system={booted} hdd={hddBuffer} hddSize={hddBuffer ? hddSizeMB * 1024 * 1024 : 0} onready={(handle) => { machine = handle; hddAttached = !!hddBuffer; }} />
+			<SandboxMachine
+				system={booted}
+				hdd={hddBuffer}
+				hddSize={hddBuffer ? hddSizeMB * 1024 * 1024 : 0}
+				onready={(handle) => {
+					machine = handle;
+					hddAttached = !!hddBuffer;
+				}}
+			/>
 		{/key}
 	{/if}
 </section>

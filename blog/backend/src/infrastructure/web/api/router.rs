@@ -611,7 +611,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         mail_routes = mail_routes.route("/preview", get(handlers::mail::preview_email_templates));
     }
 
-    let mail_routes = Router::new().merge(mail_routes.layer(cors.clone()));
+    let mail_routes = Router::new().merge(mail_routes);
 
     let newsletter_routes = Router::new().merge(
         Router::new()
@@ -620,8 +620,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             .route(
                 "/unsubscribe",
                 get(handlers::newsletter::unsubscribe).post(handlers::newsletter::unsubscribe_by_email),
-            )
-            .layer(cors),
+            ),
     );
 
     let graphql_routes = Router::new()
@@ -677,6 +676,13 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         // 404, never auth errors.
         .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
         .layer(TraceLayer::new_for_http())
+        // CORS for every browser-reachable route, not just mail: with
+        // BACKEND_ORIGIN set, browsers fetch media and (in fs mode) v86
+        // artifacts cross-origin via XHR, which needs ACAO headers here.
+        // Authed client calls stay on the same-origin SvelteKit proxy, so
+        // credentials are never involved and the default (no
+        // allow_credentials) is correct.
+        .layer(cors)
         .layer(
             CompressionLayer::new().compress_when(
                 DefaultPredicate::new()

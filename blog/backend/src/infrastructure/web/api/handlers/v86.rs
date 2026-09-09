@@ -46,6 +46,44 @@ const V86_SAVE_RATE_LIMIT_MS: u64 = 30_000;
 const V86_MEMORY_SIZE: u64 = 64 * 1024 * 1024;
 const V86_VGA_MEMORY_SIZE: u64 = 8 * 1024 * 1024;
 
+/// XP's VESA driver rejects 8 MB of VRAM ("cannot find enough video memory");
+/// 16 MB is what it wants for 800x600+. Guest memory itself is per-system
+/// (`v86_systems.memory_size_mb`), so only this stays platform-derived.
+fn v86_vga_memory_size_for(platform_key: &str) -> u64 {
+    match platform_key {
+        "windowsxp" => 16 * 1024 * 1024,
+        _ => V86_VGA_MEMORY_SIZE,
+    }
+}
+
+/// Optional per-system machine specs (`v86_systems.specs`, JSON). Every key
+/// is optional; anything missing falls back to the platform defaults. VRAM
+/// participates in the snapshot topology, resolution does not (it only sizes
+/// the screen container — the guest picks its own video mode).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct V86SystemSpecs {
+    pub vga_memory_size_mb: Option<i64>,
+    pub screen_width: Option<i64>,
+    pub screen_height: Option<i64>,
+}
+
+fn parse_system_specs(specs: Option<&str>) -> V86SystemSpecs {
+    specs
+        .and_then(|json| serde_json::from_str(json).ok())
+        .unwrap_or_default()
+}
+
+/// The single source of truth for the machine shape a system boots with.
+/// The descriptor, the sandbox payload, and every snapshot-freshness check
+/// resolve through this so they can never disagree with a capture.
+fn resolve_system_machine(platform_key: &str, specs: &V86SystemSpecs) -> (u64, u64) {
+    let vga = match specs.vga_memory_size_mb {
+        Some(mb) => mb.max(1) as u64 * 1024 * 1024,
+        None => v86_vga_memory_size_for(platform_key),
+    };
+    (vga, V86_VGA_MEMORY_SIZE)
+}
+
 /// v86's `save_state()` container format version (`libv86.js` throws
 /// "Version mismatch" on anything else). Bumping the vendored v86 build
 /// invalidates every stored snapshot, which degrades to a normal cold boot.
@@ -93,6 +131,8 @@ pub struct V86SystemResponse {
     pub id: i64,
     pub name: String,
     pub platform_key: String,
+    pub memory_size_mb: i64,
+    pub specs: V86SystemSpecs,
     pub is_active: bool,
     pub is_default: bool,
     pub current_version: i64,
@@ -111,6 +151,9 @@ pub struct StartSystemUploadRequest {
     pub file_name: String,
     pub size_bytes: u64,
     pub sha256: String,
+    /// Guest RAM in MB (per-system). Defaults to the legacy 64 MB.
+    #[serde(default)]
+    pub memory_size_mb: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -239,12 +282,28 @@ pub struct SnapshotStatusResponse {
     pub created_at: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct UpdateSystemRequest {
     pub name: Option<String>,
     pub is_active: Option<bool>,
     pub is_default: Option<bool>,
     pub expected_current_version: Option<i64>,
+    /// Guest RAM in MB. Changing it marks the system's snapshots stale.
+    pub memory_size_mb: Option<i64>,
+    /// Machine specs (VRAM, suggested screen size). VRAM changes mark
+    /// snapshots stale; resolution is cosmetic.
+    pub specs: Option<V86SystemSpecs>,
+}
+
+/// Guest RAM bounds. Windows 9x is fine at 64; XP wants 256-512. Anything
+/// outside this range is a typo or an attempt to starve/oom the emulator.
+pub fn validate_memory_size_mb(memory_size_mb: i64) -> Result<(), ProjectError> {
+    if !(32..=1024).contains(&memory_size_mb) {
+        return Err(ProjectError::InvalidDemo(
+            "Memory size must be between 32 and 1024 MB.".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -329,16 +388,6 @@ fn validate_manifest(manifest: &str) -> Result<String, ProjectError> {
         ));
     }
     Ok(hex::encode(Sha256::digest(manifest.as_bytes())))
-}
-
-fn validate_file_name(name: &str, extension: &str) -> Result<(), ProjectError> {
-    let lower = name.to_ascii_lowercase();
-    if !lower.ends_with(extension) || name.contains('/') || name.contains('\\') {
-        return Err(ProjectError::InvalidDemo(format!(
-            "Expected a {extension} file."
-        )));
-    }
-    Ok(())
 }
 
 fn ensure_upload_not_expired(expires_at: &str) -> Result<(), ProjectError> {
@@ -760,7 +809,7 @@ pub async fn list_systems(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<V86SystemResponse>>, ProjectError> {
     let rows = sqlx::query(
-        r#"SELECT s.id, s.name, s.platform_key, s.is_active, s.is_default,
+        r#"SELECT s.id, s.name, s.platform_key, s.memory_size_mb, s.specs, s.is_active, s.is_default,
                   s.current_version,
                   COUNT(g.game_id) AS project_count,
                   SUM(CASE WHEN posts.status = 'published' THEN 1 ELSE 0 END) AS published_count
@@ -805,6 +854,8 @@ pub async fn list_systems(
             id: system_id,
             name: row.get("name"),
             platform_key: row.get("platform_key"),
+            memory_size_mb: row.try_get("memory_size_mb").unwrap_or(64),
+            specs: parse_system_specs(row.try_get::<Option<String>, _>("specs").ok().flatten().as_deref()),
             is_active: row.get::<i64, _>("is_active") != 0,
             is_default: row.get::<i64, _>("is_default") != 0,
             current_version: row.get("current_version"),
@@ -823,6 +874,12 @@ pub struct PublicSystemVersion {
     pub version_number: i64,
     pub system_name: String,
     pub platform_key: String,
+    /// Guest RAM in MB; the sandbox boots the machine with this much.
+    pub memory_size_mb: i64,
+    /// Optional machine specs (VRAM, suggested screen size) for the sandbox.
+    pub specs: V86SystemSpecs,
+    /// VRAM the sandbox should boot with, resolved from specs/platform.
+    pub vga_memory_size_mb: i64,
     pub sha256: String,
     pub storage_key: String,
     /// The disk image URL the sandbox boots from, resolved exactly like the
@@ -842,7 +899,7 @@ pub async fn list_public_systems(
 ) -> Result<Json<Vec<PublicSystemVersion>>, ProjectError> {
     let rows = sqlx::query(
         r#"SELECT v.id, v.version_number, v.sha256, v.storage_key, v.size_bytes, v.chunk_size_bytes,
-                  s.name AS system_name, s.platform_key
+                  s.name AS system_name, s.platform_key, s.memory_size_mb, s.specs
            FROM v86_system_versions v
            JOIN v86_systems s ON s.id = v.system_id
            WHERE s.is_active = 1
@@ -861,11 +918,21 @@ pub async fn list_public_systems(
                     Some(base) => format!("{}/{storage_key}/.img.zst", base.trim_end_matches('/')),
                     None => format!("{storage_key}/.img.zst"),
                 };
+                let mut vga_memory_size_mb = 8;
                 PublicSystemVersion {
                     id: row.get("id"),
                     version_number: row.get("version_number"),
                     system_name: row.get("system_name"),
                     platform_key: row.get("platform_key"),
+                    memory_size_mb: row.try_get("memory_size_mb").unwrap_or(64),
+                    specs: {
+                        let specs = parse_system_specs(
+                            row.try_get::<Option<String>, _>("specs").ok().flatten().as_deref(),
+                        );
+                        vga_memory_size_mb = (resolve_system_machine(&row.get::<String, _>("platform_key"), &specs).0 / 1048576) as i64;
+                        specs
+                    },
+                    vga_memory_size_mb,
                     sha256: row.get("sha256"),
                     storage_key,
                     base_url,
@@ -900,12 +967,23 @@ pub async fn start_system_upload(
     Json(request): Json<StartSystemUploadRequest>,
 ) -> Result<Json<StartSystemUploadResponse>, ProjectError> {
     let uploader_id = user_id(&claims)?;
-    if request.platform_key != "windows9x" {
+    // windows9x covers 95/98/ME; windowsxp boots too (needs memory_size_mb
+    // >= 256 to be usable). The player config does not branch on the key.
+    if !matches!(request.platform_key.as_str(), "windows9x" | "windowsxp") {
         return Err(ProjectError::InvalidDemo(
-            "Only the windows9x v86 platform is currently supported.".to_string(),
+            "Only the windows9x and windowsxp v86 platforms are currently supported.".to_string(),
         ));
     }
-    validate_file_name(&request.file_name, ".img")?;
+    if let Some(memory_size_mb) = request.memory_size_mb {
+        validate_memory_size_mb(memory_size_mb)?;
+    }
+    // .raw and .img are both flat disk dumps — identical to the emulator;
+    // container formats (VHD/VDI/...) are not supported.
+    if !matches!(request.file_name.to_ascii_lowercase().rsplit('.').next(), Some("img" | "raw")) {
+        return Err(ProjectError::InvalidDemo(
+            "Expected an .img or .raw disk image.".to_string(),
+        ));
+    }
     let name = request.name.trim();
     if name.is_empty() || name.len() > 100 {
         return Err(ProjectError::InvalidDemo(
@@ -951,8 +1029,8 @@ pub async fn start_system_upload(
             r#"INSERT INTO v86_system_upload_sessions
                (id, uploader_id, system_id, name, platform_key, expected_current_version,
                 original_file_name, expected_size_bytes, staged_storage_key, staged_sha256,
-                staged_chunk_count, reuse, status, expires_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?)"#,
+                staged_chunk_count, memory_size_mb, reuse, status, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?)"#,
         )
         .bind(&upload_id)
         .bind(uploader_id)
@@ -965,6 +1043,7 @@ pub async fn start_system_upload(
         .bind(&existing_key)
         .bind(&request.sha256)
         .bind(chunk_count as i64)
+        .bind(request.memory_size_mb)
         .bind(expires_at.to_rfc3339())
         .execute(&state.project_service.pool)
         .await?;
@@ -984,8 +1063,8 @@ pub async fn start_system_upload(
         r#"INSERT INTO v86_system_upload_sessions
            (id, uploader_id, system_id, name, platform_key, expected_current_version,
             original_file_name, expected_size_bytes, staged_storage_key, staged_sha256,
-            staged_chunk_count, reuse, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"#,
+            staged_chunk_count, memory_size_mb, reuse, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"#,
     )
     .bind(&upload_id)
     .bind(uploader_id)
@@ -998,6 +1077,7 @@ pub async fn start_system_upload(
     .bind(&storage_key)
     .bind(&request.sha256)
     .bind(chunk_count as i64)
+    .bind(request.memory_size_mb)
     .bind(expires_at.to_rfc3339())
     .execute(&state.project_service.pool)
     .await?;
@@ -1204,7 +1284,7 @@ pub async fn complete_system_upload(
     let row = sqlx::query(
         r#"SELECT system_id, name, platform_key, expected_current_version, original_file_name,
                   expected_size_bytes, staged_storage_key, staged_sha256, staged_chunk_count,
-                  reuse, status, expires_at
+                  memory_size_mb, reuse, status, expires_at
            FROM v86_system_upload_sessions WHERE id = ? AND uploader_id = ?"#,
     )
     .bind(&upload_id)
@@ -1278,11 +1358,14 @@ pub async fn complete_system_upload(
             }
             (sid, expected_version + 1)
         } else {
-            let result = sqlx::query("INSERT INTO v86_systems (name, platform_key) VALUES (?, ?)")
-                .bind(&name)
-                .bind(&platform_key)
-                .execute(&mut *tx)
-                .await?;
+            let result = sqlx::query(
+                "INSERT INTO v86_systems (name, platform_key, memory_size_mb) VALUES (?, ?, COALESCE(?, 64))",
+            )
+            .bind(&name)
+            .bind(&platform_key)
+            .bind(row.try_get::<Option<i64>, _>("memory_size_mb").unwrap_or(None))
+            .execute(&mut *tx)
+            .await?;
             let new_id = result.last_insert_rowid();
             sqlx::query("UPDATE v86_systems SET current_version = 1 WHERE id = ?")
                 .bind(new_id)
@@ -1418,6 +1501,32 @@ pub async fn update_system(
         sqlx::query(
             "UPDATE v86_systems SET is_default = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
+        .bind(system_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(memory_size_mb) = request.memory_size_mb {
+        validate_memory_size_mb(memory_size_mb)?;
+        sqlx::query(
+            "UPDATE v86_systems SET memory_size_mb = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(memory_size_mb)
+        .bind(system_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+    if let Some(specs) = request.specs {
+        if let Some(mb) = specs.vga_memory_size_mb {
+            if !(1..=32).contains(&mb) {
+                return Err(ProjectError::InvalidDemo(
+                    "VRAM must be between 1 and 32 MB.".to_string(),
+                ));
+            }
+        }
+        sqlx::query(
+            "UPDATE v86_systems SET specs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(serde_json::to_string(&specs).ok())
         .bind(system_id)
         .execute(&mut *tx)
         .await?;
@@ -2262,7 +2371,7 @@ pub async fn runtime_descriptor_for(
         RuntimeLookup::GameId(_) => "g.game_id = ?",
     };
     let sql = format!(
-        r#"SELECT s.name AS system_name, s.platform_key, v.id AS system_version_id,
+        r#"SELECT s.name AS system_name, s.platform_key, s.memory_size_mb, s.specs, v.id AS system_version_id,
                   v.storage_key AS base_storage_key,
                   v.size_bytes AS base_size, v.sha256 AS base_sha,
                   g.game_id, g.disk_size_bytes, g.disk_sha256,
@@ -2293,6 +2402,15 @@ pub async fn runtime_descriptor_for(
     let iso_sha: String = row.get("iso_sha256");
     let game_id: i64 = row.get("game_id");
     let save_supported = has_save_paths(&row.get::<String, _>("manifest_text"));
+    // Per-system RAM (falls back to the legacy 64 MB when the column is missing
+    // on a not-yet-migrated database).
+    let memory_size: u64 = row
+        .try_get::<i64, _>("memory_size_mb")
+        .ok()
+        .map(|mb| mb.max(1) as u64 * 1024 * 1024)
+        .unwrap_or(V86_MEMORY_SIZE);
+    let system_specs = parse_system_specs(row.try_get::<Option<String>, _>("specs").ok().flatten().as_deref());
+    let (vga_memory_size, _) = resolve_system_machine(row.get("platform_key"), &system_specs);
 
     // Per-variant autorun CDs. Always at least one row (backfilled on migrate).
     let variant_rows = sqlx::query(
@@ -2338,8 +2456,8 @@ pub async fn runtime_descriptor_for(
         .bind(&game_sha)
         .bind(V86_STATE_VERSION)
         .bind(V86_TOPOLOGY_VERSION)
-        .bind(V86_MEMORY_SIZE as i64)
-        .bind(V86_VGA_MEMORY_SIZE as i64)
+        .bind(memory_size as i64)
+        .bind(vga_memory_size as i64)
         .fetch_all(pool)
         .await?
         .into_iter()
@@ -2410,8 +2528,8 @@ pub async fn runtime_descriptor_for(
             .bind(&game_sha)
             .bind(V86_STATE_VERSION)
             .bind(V86_TOPOLOGY_VERSION)
-            .bind(V86_MEMORY_SIZE as i64)
-            .bind(V86_VGA_MEMORY_SIZE as i64)
+            .bind(memory_size as i64)
+            .bind(vga_memory_size as i64)
             .fetch_optional(pool)
             .await?
         }
@@ -2436,8 +2554,8 @@ pub async fn runtime_descriptor_for(
         artifact_revision: row.get("artifact_revision"),
         manifest_sha256: row.get("manifest_sha256"),
         slug: slug.to_string(),
-        memory_size: V86_MEMORY_SIZE,
-        vga_memory_size: V86_VGA_MEMORY_SIZE,
+        memory_size,
+        vga_memory_size,
         display_width: row
             .get::<Option<String>, _>("demo_width")
             .unwrap_or_else(|| "100%".to_string()),
@@ -2519,41 +2637,48 @@ pub async fn get_game_snapshot(
     AxumPath(game_id): AxumPath<i64>,
 ) -> Result<Json<Vec<SnapshotStatusResponse>>, ProjectError> {
     require_game_owner(&state, game_id, user_id(&claims)?).await?;
-    // A variant row is only fresh if its disc still matches too, so the join
-    // to game_v86_variants is deliberately left (a deleted variant leaves
-    // its snapshot present but stale rather than hiding it).
+    // One row per snapshot; freshness against the system's resolved machine
+    // shape is computed in Rust (specs JSON can't be compared in plain SQL).
     let rows = sqlx::query(
         r#"SELECT s.variant_index, s.size_bytes, s.raw_size_bytes, s.created_at,
+                  s.state_version, s.topology_version, s.memory_size, s.vga_memory_size,
                   (s.system_version_id = g.system_version_id
                    AND s.game_disk_sha256 = g.disk_sha256
-                   AND s.state_version = ?
-                   AND s.topology_version = ?
-                   AND s.memory_size = ?
-                   AND s.vga_memory_size = ?
-                   AND (s.variant_index = 0 OR s.iso_sha256 = v.iso_sha256)) AS fresh
+                   AND (s.variant_index = 0 OR s.iso_sha256 = v.iso_sha256)) AS disks_fresh,
+                  sys.platform_key, sys.memory_size_mb, sys.specs
            FROM game_v86_snapshots s
            JOIN game_v86_games g ON g.game_id = s.game_id
+           JOIN v86_system_versions gv ON gv.id = g.system_version_id
+           JOIN v86_systems sys ON sys.id = gv.system_id
            LEFT JOIN game_v86_variants v
              ON v.game_id = s.game_id AND v.variant_index = s.variant_index
            WHERE s.game_id = ?
            ORDER BY s.variant_index"#,
     )
-    .bind(V86_STATE_VERSION)
-    .bind(V86_TOPOLOGY_VERSION)
-    .bind(V86_MEMORY_SIZE as i64)
-    .bind(V86_VGA_MEMORY_SIZE as i64)
     .bind(game_id)
     .fetch_all(&state.project_service.pool)
     .await?;
     Ok(Json(
         rows.iter()
-            .map(|row| SnapshotStatusResponse {
-                variant_index: row.get("variant_index"),
-                exists: true,
-                stale: row.get::<Option<i64>, _>("fresh").unwrap_or(0) == 0,
-                size_bytes: Some(row.get::<i64, _>("size_bytes") as u64),
-                raw_size_bytes: Some(row.get::<i64, _>("raw_size_bytes") as u64),
-                created_at: Some(row.get("created_at")),
+            .map(|row| {
+                let specs = parse_system_specs(
+                    row.try_get::<Option<String>, _>("specs").ok().flatten().as_deref(),
+                );
+                let (expected_vga, _) = resolve_system_machine(&row.get::<String, _>("platform_key"), &specs);
+                let fresh = row.get::<i64, _>("disks_fresh") != 0
+                    && row.get::<i64, _>("state_version") == V86_STATE_VERSION
+                    && row.get::<i64, _>("topology_version") == V86_TOPOLOGY_VERSION
+                    && row.get::<i64, _>("memory_size")
+                        == row.get::<i64, _>("memory_size_mb").max(1) * 1048576
+                    && row.get::<i64, _>("vga_memory_size") == expected_vga as i64;
+                SnapshotStatusResponse {
+                    variant_index: row.get("variant_index"),
+                    exists: true,
+                    stale: !fresh,
+                    size_bytes: Some(row.get::<i64, _>("size_bytes") as u64),
+                    raw_size_bytes: Some(row.get::<i64, _>("raw_size_bytes") as u64),
+                    created_at: Some(row.get("created_at")),
+                }
             })
             .collect(),
     ))
@@ -2583,23 +2708,14 @@ pub async fn start_snapshot_upload(
             request.state_version
         )));
     }
-    if request.memory_size != V86_MEMORY_SIZE || request.vga_memory_size != V86_VGA_MEMORY_SIZE {
-        return Err(ProjectError::InvalidDemo(
-            "The snapshot was captured with a different memory size than the player uses."
-                .to_string(),
-        ));
-    }
-    if request.topology_version != V86_TOPOLOGY_VERSION {
-        return Err(ProjectError::InvalidDemo(
-            "This snapshot was captured on a different machine layout. Reload the studio and recapture."
-                .to_string(),
-        ));
-    }
-
     // The snapshot embeds dirty blocks from these exact disks; if the game
     // has been re-uploaded since capture started, the state is already void.
     let game = sqlx::query(
-        "SELECT system_version_id, disk_sha256 FROM game_v86_games WHERE game_id = ?",
+        r#"SELECT g.system_version_id, g.disk_sha256, sys.memory_size_mb, sys.platform_key, sys.specs
+           FROM game_v86_games g
+           JOIN v86_system_versions v ON v.id = g.system_version_id
+           JOIN v86_systems sys ON sys.id = v.system_id
+           WHERE g.game_id = ?"#,
     )
     .bind(request.game_id)
     .fetch_optional(&state.project_service.pool)
@@ -2611,6 +2727,27 @@ pub async fn start_snapshot_upload(
     {
         return Err(ProjectError::Conflict(
             "The game's disks changed while this snapshot was being captured. Recapture it."
+                .to_string(),
+        ));
+    }
+    // Memory is per-system; the capturing player reports what it booted with.
+    let system_memory_bytes = game
+        .try_get::<i64, _>("memory_size_mb")
+        .ok()
+        .map(|mb| mb.max(1) as u64 * 1024 * 1024)
+        .unwrap_or(V86_MEMORY_SIZE);
+    let system_specs = parse_system_specs(game.try_get::<Option<String>, _>("specs").ok().flatten().as_deref());
+    let (expected_vga, _) =
+        resolve_system_machine(&game.get::<String, _>("platform_key"), &system_specs);
+    if request.memory_size != system_memory_bytes || request.vga_memory_size != expected_vga {
+        return Err(ProjectError::InvalidDemo(
+            "The snapshot was captured with a different memory size than the player uses."
+                .to_string(),
+        ));
+    }
+    if request.topology_version != V86_TOPOLOGY_VERSION {
+        return Err(ProjectError::InvalidDemo(
+            "This snapshot was captured on a different machine layout. Reload the studio and recapture."
                 .to_string(),
         ));
     }
