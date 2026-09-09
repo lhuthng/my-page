@@ -1883,7 +1883,7 @@ pub async fn start_game_upload(
     .bind(disk.as_ref().map(|d| d.chunk_count as i64))
     .bind(disk_reuse)
     .bind(Option::<String>::None)
-    .bind(&first.sha256)
+    .bind(&format!("v86/games/{}", first.sha256))
     .bind(&first.sha256)
     .bind(first.size_bytes as i64)
     .bind(expires_at.to_rfc3339())
