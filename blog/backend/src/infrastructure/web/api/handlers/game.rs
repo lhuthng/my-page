@@ -121,6 +121,7 @@ struct GamePatchData {
     related_games: Option<Vec<GameLink>>,
     og_image_seconds: Option<i64>,
     v86_upload_id: Option<String>,
+    v86_system_version_id: Option<i64>,
     expected_updated_at: Option<String>,
 }
 
@@ -1449,6 +1450,12 @@ pub async fn update_game(
         })
         .await?;
 
+    if data.v86_upload_id.is_some() && data.v86_system_version_id.is_some() {
+        return Err(GameError::InvalidDemo(
+            "Send either a v86 package upload or a system switch, not both.".to_string(),
+        ));
+    }
+
     if let Some(upload_id) = data.v86_upload_id.as_deref() {
         if !keeps_v86_game {
             return Err(GameError::InvalidDemo(
@@ -1465,6 +1472,16 @@ pub async fn update_game(
         )
         .await?;
         tx.commit().await?;
+    }
+
+    // A system switch re-points the existing package: disk and launcher ISOs
+    // are content-addressed and OS-agnostic within a platform, so nothing is
+    // re-uploaded. When the launcher type moves away from v86, the artifact
+    // row is deleted below and the field is moot.
+    if let Some(system_version_id) = data.v86_system_version_id {
+        if keeps_v86_game {
+            repoint_game_system(&state.game_service.pool, game_id, system_version_id).await?;
+        }
     }
 
     if !keeps_jsdos_bundle {
@@ -1513,6 +1530,81 @@ pub async fn update_game(
 #[derive(Serialize)]
 pub struct UpdateGameResponse {
     pub updated_at: String,
+}
+
+/// Re-point a game's v86 artifact at another system version. Only the base
+/// OS image changes; the game disk and launcher ISOs stay content-addressed
+/// as-is, so this is a plain row update. Bumping `artifact_revision` mirrors
+/// `attach_ready_game_tx` and makes any in-flight package build or snapshot
+/// capture fail its revision/system checks instead of half-landing.
+async fn repoint_game_system(
+    pool: &sqlx::SqlitePool,
+    game_id: i64,
+    system_version_id: i64,
+) -> Result<(), GameError> {
+    let current: Option<(i64, String)> = sqlx::query_as(
+        "SELECT g.system_version_id, s.platform_key
+         FROM game_v86_games g
+         JOIN v86_system_versions v ON v.id = g.system_version_id
+         JOIN v86_systems s ON s.id = v.system_id
+         WHERE g.game_id = ?",
+    )
+    .bind(game_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((current_version_id, current_platform)) = current else {
+        return Err(GameError::InvalidDemo(
+            "A completed v86 game artifact is required before switching systems.".to_string(),
+        ));
+    };
+
+    if current_version_id == system_version_id {
+        return Ok(());
+    }
+
+    let target: Option<(String, bool)> = sqlx::query_as(
+        "SELECT s.platform_key, s.is_active
+         FROM v86_system_versions v
+         JOIN v86_systems s ON s.id = v.system_id
+         WHERE v.id = ?",
+    )
+    .bind(system_version_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((target_platform, target_active)) = target else {
+        return Err(GameError::InvalidDemo(
+            "The selected v86 system version does not exist.".to_string(),
+        ));
+    };
+    if !target_active {
+        return Err(GameError::InvalidDemo(
+            "The selected v86 system is not active.".to_string(),
+        ));
+    }
+    if target_platform != current_platform {
+        return Err(GameError::InvalidDemo(
+            "A v86 game can only be switched between systems of the same platform.".to_string(),
+        ));
+    }
+
+    let mut tx = pool.begin().await?;
+    let updated = sqlx::query(
+        "UPDATE game_v86_games
+         SET system_version_id = ?, artifact_revision = artifact_revision + 1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE game_id = ?",
+    )
+    .bind(system_version_id)
+    .bind(game_id)
+    .execute(&mut *tx)
+    .await?;
+    if updated.rows_affected() != 1 {
+        return Err(GameError::InvalidDemo(
+            "The v86 artifact changed while switching systems.".to_string(),
+        ));
+    }
+    tx.commit().await?;
+    Ok(())
 }
 
 #[axum::debug_handler]
@@ -2021,4 +2113,140 @@ pub async fn change_cover(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod repoint_game_system_tests {
+    use super::*;
+    use sqlx::sqlite::{
+        SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous,
+    };
+
+    /// Migrated temp pool. FK checks stay off (as in the app's own migration
+    /// run) so the fixture can seed only the three tables under test without
+    /// users/posts parents.
+    async fn test_pool(label: &str) -> sqlx::SqlitePool {
+        let db = std::env::temp_dir().join(format!("{label}-{}.db", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&db);
+        let opts = format!("sqlite://{}", db.display())
+            .parse::<SqliteConnectOptions>()
+            .unwrap()
+            .create_if_missing(true)
+            .foreign_keys(false)
+            .journal_mode(SqliteJournalMode::Wal)
+            .synchronous(SqliteSynchronous::Normal);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await
+            .unwrap();
+        sqlx::migrate::Migrator::new(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations"),
+        )
+        .await
+        .unwrap()
+        .run(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    /// Systems 1-3 active (windows9x, windows9x, windowsxp), system 4 inactive
+    /// (windows9x); versions 11-14 point at them in the same order. Game 1
+    /// carries an artifact on version 11.
+    async fn seed(pool: &sqlx::SqlitePool) {
+        for (id, name, platform, active) in [
+            (1, "Windows 95", "windows9x", 1),
+            (2, "Windows 98", "windows9x", 1),
+            (3, "Windows XP", "windowsxp", 1),
+            (4, "Windows ME", "windows9x", 0),
+        ] {
+            sqlx::query(
+                "INSERT INTO v86_systems (id, name, platform_key, is_active, current_version)
+                 VALUES (?, ?, ?, ?, 1)",
+            )
+            .bind(id)
+            .bind(name)
+            .bind(platform)
+            .bind(active)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        for (id, system_id, key) in
+            [(11, 1, "img-11"), (12, 2, "img-12"), (13, 3, "img-13"), (14, 4, "img-14")]
+        {
+            sqlx::query(
+                "INSERT INTO v86_system_versions
+                     (id, system_id, version_number, original_file_name, storage_key,
+                      size_bytes, sha256, chunk_size_bytes, chunk_count)
+                 VALUES (?, ?, 1, 'disk.img', ?, 100, 'sha', 262144, 1)",
+            )
+            .bind(id)
+            .bind(system_id)
+            .bind(key)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        sqlx::query(
+            "INSERT INTO game_v86_games
+                 (game_id, system_version_id, manifest_text, manifest_sha256,
+                  original_file_name, zip_storage_key, zip_size_bytes, zip_sha256,
+                  iso_storage_key, iso_size_bytes, iso_sha256,
+                  chunk_size_bytes, chunk_count, artifact_revision)
+             VALUES (1, 11, 'exe=a.exe', 'hash', 'game.zip', 'zip-1', 100, 'ziphash',
+                     'iso-1', 100, 'isohash', 262144, 1, 1)",
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn artifact_row(pool: &sqlx::SqlitePool) -> (i64, i64) {
+        sqlx::query_as::<_, (i64, i64)>(
+            "SELECT system_version_id, artifact_revision FROM game_v86_games WHERE game_id = 1",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn repoints_within_the_same_platform_and_bumps_the_revision() {
+        let pool = test_pool("game-repoint-happy").await;
+        seed(&pool).await;
+
+        repoint_game_system(&pool, 1, 12).await.unwrap();
+
+        assert_eq!(artifact_row(&pool).await, (12, 2));
+    }
+
+    #[tokio::test]
+    async fn same_version_is_a_noop() {
+        let pool = test_pool("game-repoint-noop").await;
+        seed(&pool).await;
+
+        repoint_game_system(&pool, 1, 11).await.unwrap();
+
+        assert_eq!(artifact_row(&pool).await, (11, 1));
+    }
+
+    #[tokio::test]
+    async fn rejects_cross_platform_inactive_unknown_and_missing_artifact() {
+        let pool = test_pool("game-repoint-rejects").await;
+        seed(&pool).await;
+
+        let err = repoint_game_system(&pool, 1, 13).await.unwrap_err(); // windowsxp
+        assert!(matches!(err, GameError::InvalidDemo(_)), "{err:?}");
+        let err = repoint_game_system(&pool, 1, 14).await.unwrap_err(); // inactive
+        assert!(matches!(err, GameError::InvalidDemo(_)), "{err:?}");
+        let err = repoint_game_system(&pool, 1, 99).await.unwrap_err(); // no version
+        assert!(matches!(err, GameError::InvalidDemo(_)), "{err:?}");
+        let err = repoint_game_system(&pool, 2, 12).await.unwrap_err(); // no artifact
+        assert!(matches!(err, GameError::InvalidDemo(_)), "{err:?}");
+
+        // Nothing above may have mutated the artifact.
+        assert_eq!(artifact_row(&pool).await, (11, 1));
+    }
 }
