@@ -5,6 +5,7 @@ import { useDebounce } from '$lib/utils/debounce';
 import { createEntryState, loadEntryState, refreshBaseline } from '../model/state.js';
 import { buildPatch, isPatchEmpty } from '../model/diff.js';
 import { applyDemoTypeTransition, validateDemoFields } from '../model/demo.js';
+import { validateBasics, validatePatchFields } from '../model/validate.js';
 import { collectMediaKeys } from '../media/references.js';
 import { createMediaDictionary } from '../media/dictionary.svelte.js';
 import {
@@ -310,6 +311,11 @@ export function createEditorViewModel({
 	// ---- create / save / publish (post) ---------------------------------------
 	async function submitPost() {
 		if (ui.save.status === 'saving') return;
+		const basicsError = validateBasics(entry);
+		if (basicsError) {
+			notify(basicsError, { critical: true, autoClearMs: 0 });
+			return;
+		}
 		const { offlineKeys, missing } = collectOfflineKeys([entry.bodies.draft]);
 		if (missing.length > 0) {
 			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
@@ -369,6 +375,12 @@ export function createEditorViewModel({
 		const patch = buildPatch({ baseline, current: entry, hasNewMedia: offlineKeys.length > 0 });
 		if (isPatchEmpty(patch) && offlineKeys.length === 0) {
 			notify('Nothing to save.');
+			return;
+		}
+
+		const basicsError = validatePatchFields(patch);
+		if (basicsError) {
+			notify(basicsError, { critical: true, autoClearMs: 0 });
 			return;
 		}
 
@@ -440,6 +452,11 @@ export function createEditorViewModel({
 
 	async function submitProject() {
 		if (ui.save.status === 'saving') return;
+		const basicsError = validateBasics(entry);
+		if (basicsError) {
+			notify(basicsError, { critical: true, autoClearMs: 0 });
+			return;
+		}
 		const demoValidation = validateDemoFields({
 			demoType: entry.demoType,
 			demoUrl: entry.demoUrl,
@@ -532,6 +549,12 @@ export function createEditorViewModel({
 			kind: 'project'
 		});
 
+		const basicsError = validatePatchFields(patch);
+		if (basicsError) {
+			notify(basicsError, { critical: true, autoClearMs: 0 });
+			return;
+		}
+
 		// Checked before adding the bookkeeping fields below — `number_of_files`
 		// and `expected_updated_at` are always present, so testing emptiness
 		// after adding them would never be true and this early-return would be
@@ -579,6 +602,11 @@ export function createEditorViewModel({
 	// ---- create / save (game) -----------------------------------------------
 	async function submitGame() {
 		if (ui.save.status === 'saving') return;
+		const basicsError = validateBasics(entry);
+		if (basicsError) {
+			notify(basicsError, { critical: true, autoClearMs: 0 });
+			return;
+		}
 		const demoValidation = validateDemoFields({
 			demoType: entry.demoType,
 			demoUrl: entry.demoUrl,
@@ -692,16 +720,6 @@ export function createEditorViewModel({
 			!v86ArtifactChanged &&
 			entry.v86SystemVersionId !== (baseline.v86SystemVersionId ?? '');
 
-		let v86UploadId;
-		if (v86ArtifactChanged) {
-			try {
-				v86UploadId = await prepareV86ForSubmit(data?.demoType === 'v86' ? data.id : undefined);
-			} catch (error) {
-				notify(error?.message ?? 'v86 package build failed.', { critical: true, autoClearMs: 0 });
-				return;
-			}
-		}
-
 		const bothBodies = [entry.bodies.content, entry.bodies.draft];
 		const { offlineKeys, missing } = collectOfflineKeys(bothBodies);
 		if (missing.length > 0) {
@@ -720,11 +738,30 @@ export function createEditorViewModel({
 			isPatchEmpty(patch) &&
 			offlineKeys.length === 0 &&
 			!ui.demoZip &&
-			!v86UploadId &&
+			!v86ArtifactChanged &&
 			!v86SystemChanged
 		) {
 			notify('Nothing to save.');
 			return;
+		}
+
+		// Cheap field checks come before any heavy upload: a v86 package build
+		// takes minutes, and the server would only reject an empty title after
+		// all of it had crossed the wire.
+		const basicsError = validatePatchFields(patch);
+		if (basicsError) {
+			notify(basicsError, { critical: true, autoClearMs: 0 });
+			return;
+		}
+
+		let v86UploadId;
+		if (v86ArtifactChanged) {
+			try {
+				v86UploadId = await prepareV86ForSubmit(data?.demoType === 'v86' ? data.id : undefined);
+			} catch (error) {
+				notify(error?.message ?? 'v86 package build failed.', { critical: true, autoClearMs: 0 });
+				return;
+			}
 		}
 
 		if (v86UploadId) patch.v86_upload_id = v86UploadId;
