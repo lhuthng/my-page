@@ -1,3 +1,25 @@
+<script>
+	import { onMount } from 'svelte';
+	import { clearV86Cache, formatBytes, measureV86Cache } from '$lib/players/v86-cache.js';
+
+	let stored = $state(null);
+	let clearing = $state(false);
+
+	onMount(async () => {
+		stored = await measureV86Cache();
+	});
+
+	async function clearStored() {
+		clearing = true;
+		try {
+			await clearV86Cache();
+			stored = { bytes: 0, count: 0 };
+		} finally {
+			clearing = false;
+		}
+	}
+</script>
+
 <section>
 	<h1>Privacy Policy</h1>
 
@@ -22,6 +44,27 @@
 		from. This uses Cloudflare's country header and stores only aggregated country counts, not raw
 		IP addresses.
 	</p>
+
+	<h3>Stored game data</h3>
+	<p>
+		Retro games here run on an emulator in your browser. To make games start faster on repeat
+		visits, pieces of the emulated disk images are cached in your browser's storage and stay on your
+		device until you clear them. They never leave your browser except when fetching them from this
+		site.
+	</p>
+	{#if stored}
+		{#if stored.count > 0}
+			<p>
+				Currently kept: <b>{formatBytes(stored.bytes)}</b>
+				across {stored.count} files.
+				<button type="button" class="clear-btn" disabled={clearing} onclick={clearStored}>
+					Clear stored game data
+				</button>
+			</p>
+		{:else}
+			<p>Nothing is currently kept.</p>
+		{/if}
+	{/if}
 
 	<h3>Data Security</h3>
 	<ul>
@@ -58,5 +101,8 @@
 	}
 	code {
 		@apply rounded-sm bg-dark/20 px-1 text-base;
+	}
+	.clear-btn {
+		@apply ml-1 rounded-md border border-dark/20 px-2 py-0.5 text-sm text-dark/70 transition-colors hover:border-accent-red hover:text-accent-red disabled:opacity-50;
 	}
 </style>
