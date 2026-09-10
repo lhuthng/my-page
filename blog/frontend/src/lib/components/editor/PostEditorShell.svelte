@@ -168,6 +168,11 @@
 					media={vm.media}
 				/>
 			</div>
+
+			<section class="rounded-xl border-2 border-dark/10 bg-white p-4 space-y-4">
+				<h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-dark/50">More</h3>
+				{@render extraFields?.()}
+			</section>
 		</div>
 
 		<aside class="w-full xl:w-80 shrink-0 flex flex-col gap-4">
@@ -259,13 +264,6 @@
 							bind:value={entry.excerpt}></textarea>
 					</div>
 				</div>
-			</section>
-
-			<section
-				class="rounded-xl border-2 border-dark/10 bg-white p-4 max-h-112 space-y-4 overflow-y-auto custom-scrollbar"
-			>
-				<h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-dark/50">More</h3>
-				{@render extraFields?.()}
 			</section>
 		</aside>
 	</div>
