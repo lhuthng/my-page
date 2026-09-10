@@ -6,6 +6,7 @@
 	import { GAME_DEMO_TYPES } from '$lib/features/editor/model/demo.js';
 	import PostEditorShell from '../editor/PostEditorShell.svelte';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
+	import ManifestEditor from './ManifestEditor.svelte';
 	import { api } from '$lib/api/client.js';
 
 	let { mode = 'create', data, isOwner = true, v86Systems = [], games = [] } = $props();
@@ -144,39 +145,13 @@
 						{/each}
 					{/each}
 				</select>
-				{#if mode === 'edit'}
-					<p class="text-sm leading-relaxed text-dark/50">
-						Switching systems applies on save — no re-upload needed. Existing boot snapshots reset;
-						capture a new one on the new system.
-					</p>
-				{/if}
 			</div>
 			<div class="flex flex-col gap-4">
-				<label class="text-sm font-medium text-dark/60" for="v86-manifest">Manifest</label>
-				<textarea
-					id="v86-manifest"
-					rows="6"
-					class="w-full rounded-xl px-3 py-2 font-mono text-sm text-dark outline-none border-2 border-dark transition-colors resize-none custom-scrollbar focus:bg-primary focus:text-white"
-					bind:value={vm.entry.v86Manifest}
-					readonly={!isOwner}></textarea>
-				<p class="text-sm leading-relaxed text-dark/50">
-					v86 manifest keys: exe (required), plus optional args, delay_ms, save_paths,
-					revert_mouse_y (1 inverts the mouse's Y axis) and mouse_speed (a speed multiplier, e.g.
-					2.0). Paths are relative to the game drive root.
-				</p>
-				<p class="text-sm leading-relaxed text-dark/50">
-					Variants: name / name1, name2, name3… define launch variants (names must be contiguous).
-					Each variant's exe2/args2 falls back to the root exe/args when omitted.
-				</p>
+				<ManifestEditor bind:value={vm.entry.v86Manifest} disabled={!isOwner} />
 			</div>
 			{#if mode === 'edit' && data.id}
 				<div class="flex flex-col gap-1 border-t border-dark/10 pt-3">
 					<span class="text-sm font-medium text-dark/70">Boot snapshot</span>
-					<p class="text-sm leading-relaxed text-dark/50">
-						Capture an already-booted machine so visitors skip the Windows boot sequence. Only
-						available once the game disk is attached, and it must be recaptured whenever the base or
-						game disk changes.
-					</p>
 					<a
 						class="text-sm font-medium text-accent-blue-dark hover:underline"
 						href="/dashboard/games/id/{data.id}/snapshot"
