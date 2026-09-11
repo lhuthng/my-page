@@ -68,9 +68,8 @@ pub fn validate_optional_long_text(
 /// had to be rendered on every request.
 pub const MAX_BODY_CHARS: usize = 400_000;
 
-/// Validate a post/project body (`content` or `draft`). Unlike `validate_text`
-/// an empty body is allowed — a new draft legitimately starts blank — but the
-/// length is capped.
+/// Validate a post/project/game body. Unlike `validate_text` an empty body is
+/// allowed — a new entry legitimately starts blank — but the length is capped.
 pub fn validate_body(raw: &str, name: &str) -> Result<String, String> {
     if raw.chars().count() > MAX_BODY_CHARS {
         return Err(format!(

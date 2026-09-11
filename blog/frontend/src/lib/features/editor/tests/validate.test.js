@@ -1,34 +1,61 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateBasics, validatePatchFields } from '../model/validate.js';
+import { validateBasicsFields, validatePatchFieldsMap } from '../model/validate.js';
 
-test('validateBasics rejects empty, blank, and oversized fields in order', () => {
-	assert.equal(validateBasics({ title: 'T', slug: 'ok', excerpt: 'E' }), null);
-	assert.match(validateBasics({ title: '', slug: 'ok', excerpt: 'E' }), /Title/);
-	assert.match(validateBasics({ title: '   ', slug: 'ok', excerpt: 'E' }), /Title/);
-	assert.match(validateBasics({ title: 'T', slug: '', excerpt: 'E' }), /Slug/);
-	assert.match(validateBasics({ title: 'T', slug: 'ok', excerpt: '' }), /Excerpt/);
-	assert.match(validateBasics({ title: 'x'.repeat(201), slug: 'ok', excerpt: 'E' }), /Title/);
-	assert.match(validateBasics({ title: 'T', slug: 'ok', excerpt: 'x'.repeat(401) }), /Excerpt/);
+test('validateBasicsFields keys errors by the field that caused them', () => {
+	assert.deepEqual(validateBasicsFields({ title: 'T', slug: 'ok', excerpt: 'E' }), {});
+	assert.deepEqual(Object.keys(validateBasicsFields({ title: '', slug: 'ok', excerpt: 'E' })), ['title']);
+	assert.deepEqual(Object.keys(validateBasicsFields({ title: '   ', slug: 'ok', excerpt: 'E' })), [
+		'title'
+	]);
+	assert.deepEqual(Object.keys(validateBasicsFields({ title: 'T', slug: '', excerpt: 'E' })), ['slug']);
+	assert.deepEqual(Object.keys(validateBasicsFields({ title: 'T', slug: 'ok', excerpt: '' })), [
+		'excerpt'
+	]);
+	assert.deepEqual(
+		Object.keys(validateBasicsFields({ title: 'x'.repeat(201), slug: 'ok', excerpt: 'E' })),
+		['title']
+	);
+	assert.deepEqual(
+		Object.keys(validateBasicsFields({ title: 'T', slug: 'ok', excerpt: 'x'.repeat(401) })),
+		['excerpt']
+	);
 });
 
-test('validateBasics slug rules mirror the backend allowlist', () => {
+test('every bad field is reported at once, not just the first', () => {
+	// The whole point of the field-keyed shape. A validator that returns one
+	// message at a time makes the user submit three times to learn three
+	// things, and gives the editor nothing to render under each input.
+	assert.deepEqual(Object.keys(validateBasicsFields({ title: '', slug: '', excerpt: '' })), [
+		'title',
+		'slug',
+		'excerpt'
+	]);
+});
+
+test('slug rules mirror the backend allowlist', () => {
 	for (const bad of ['a', '-', 'A B', 'über', 'a/b', 'ok slug'])
-		assert.match(String(validateBasics({ title: 'T', slug: bad, excerpt: 'E' })), /Slug/);
+		assert.ok(validateBasicsFields({ title: 'T', slug: bad, excerpt: 'E' }).slug, bad);
 	for (const good of ['ok', 'hello-world_1', 'abc123'])
-		assert.equal(validateBasics({ title: 'T', slug: good, excerpt: 'E' }), null);
+		assert.deepEqual(validateBasicsFields({ title: 'T', slug: good, excerpt: 'E' }), {});
 });
 
-test('validatePatchFields only validates what the patch touches', () => {
-	assert.equal(validatePatchFields({}), null);
-	assert.equal(validatePatchFields({ title: 'New title' }), null);
-	assert.match(validatePatchFields({ title: '   ' }), /Title/);
-	assert.match(validatePatchFields({ slug: 'A B' }), /Slug/);
-	assert.match(validatePatchFields({ excerpt: '  ' }), /Excerpt/);
-	// full fields absent from the patch never fail it
-	assert.equal(validatePatchFields({ title: 'New' }), null);
+test('validatePatchFieldsMap only validates what the patch touches', () => {
+	assert.deepEqual(validatePatchFieldsMap({}), {});
+	assert.deepEqual(validatePatchFieldsMap({ title: 'New title' }), {});
+	assert.ok(validatePatchFieldsMap({ title: '   ' }).title);
+	assert.ok(validatePatchFieldsMap({ slug: 'A B' }).slug);
+	assert.ok(validatePatchFieldsMap({ excerpt: '  ' }).excerpt);
+});
+
+test('a patch that omits a field cannot fail on it', () => {
+	// The edit flow sends only what changed, so an untouched (and possibly
+	// empty) excerpt must not block a title-only save.
+	const errors = validatePatchFieldsMap({ title: 'New' });
+	assert.equal('excerpt' in errors, false);
+	assert.equal('slug' in errors, false);
 });
 
 test('trim boundaries pass', () => {
-	assert.equal(validateBasics({ title: '  Hi  ', slug: ' ok ', excerpt: ' Yo ' }), null);
+	assert.deepEqual(validateBasicsFields({ title: '  Hi  ', slug: ' ok ', excerpt: ' Yo ' }), {});
 });

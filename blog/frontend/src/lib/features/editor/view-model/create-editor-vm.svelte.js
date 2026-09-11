@@ -5,7 +5,8 @@ import { useDebounce } from '$lib/utils/debounce';
 import { createEntryState, loadEntryState, refreshBaseline } from '../model/state.js';
 import { buildPatch, isPatchEmpty } from '../model/diff.js';
 import { applyDemoTypeTransition, validateDemoFields } from '../model/demo.js';
-import { validateBasics, validatePatchFields } from '../model/validate.js';
+import { validateBasicsFields, validatePatchFieldsMap } from '../model/validate.js';
+import { createFeedback } from './feedback.svelte.js';
 import { collectMediaKeys } from '../media/references.js';
 import { createMediaDictionary } from '../media/dictionary.svelte.js';
 import {
@@ -32,8 +33,6 @@ import {
 // comment: "temporary usage only").
 const IGNORED_MEDIA_EXTENSIONS = ['.glb'];
 
-const NOTICE_MS = 2200;
-
 function isIgnoredMediaKey(key) {
 	return IGNORED_MEDIA_EXTENSIONS.some((ext) => key.endsWith(ext));
 }
@@ -43,7 +42,7 @@ function isIgnoredMediaKey(key) {
  *
  * Replaces the pattern where `PostEditor.svelte`/`ProjectEditor.svelte` held
  * `editingData`/`editor` directly, wired seven function-valued `$state` slots
- * for children to fill in, ran an effect cycle to keep the draft/published
+ * for children to fill in, ran an effect cycle to keep the draft and published
  * bodies in sync across a component boundary, and diffed against a `data`
  * prop that was never refreshed after a save.
  *
@@ -80,12 +79,10 @@ export function createEditorViewModel({
 	let renderedText = $state('');
 
 	let ui = $state({
-		view: mode === 'edit' ? 'published' : 'draft',
-		toggled: false,
-		slugStatus: {},
-		notice: '',
-		noticeCritical: false,
-		progress: '',
+		// Validation failures belong on the field that caused them, not in a
+		// toolbar banner: a red line at the top of the page cannot say *which*
+		// input is wrong. Cleared per-field as soon as that field is edited.
+		fieldErrors: {},
 		save: { status: 'idle', error: '' }, // idle | saving | saved | error | conflict
 		isPublishing: false,
 		createCoverFile: undefined,
@@ -99,11 +96,16 @@ export function createEditorViewModel({
 			: {})
 	});
 
-	const media = createMediaDictionary({ fetchImpl });
-	const upload = createUploadController({ authHeader: auth, fetchImpl, onProgress: setProgress });
+	// One channel for every message. See feedback.svelte.js for the three
+	// classes and the exit invariant that replaced `ui.notice`.
+	const feedback = createFeedback();
 
-	const forDraft = $derived(mode === 'create' || (mode === 'edit' && ui.view === 'draft'));
-	const activeBodyKey = $derived(forDraft ? 'draft' : 'content');
+	const media = createMediaDictionary({ fetchImpl });
+	const upload = createUploadController({
+		authHeader: auth,
+		fetchImpl,
+		onProgress: (message) => feedback.live('progress', message)
+	});
 
 	const pendingPatch = $derived(
 		baseline ? buildPatch({ baseline, current: entry, hasNewMedia: false, kind }) : {}
@@ -116,47 +118,84 @@ export function createEditorViewModel({
 				entry.slug !== '' ||
 				entry.excerpt !== '' ||
 				entry.tags !== '' ||
-				entry.bodies.draft !== '')
+				entry.body !== '')
 	);
 	const isDirty = $derived(mode === 'edit' ? !isPatchEmpty(pendingPatch) : hasCreateContent);
 
-	// ---- notices -----------------------------------------------------------
-	// A single timer that clears itself, rather than an `$effect` that reads
-	// and writes `ui.notice` in the same run — that pattern raced with upload
-	// progress messages sharing the same field (see `upload`'s `onProgress`).
-	let noticeTimer;
-	function notify(message, { critical = false, autoClearMs = NOTICE_MS } = {}) {
-		ui.notice = message;
-		ui.noticeCritical = critical;
-		clearTimeout(noticeTimer);
-		if (autoClearMs > 0) {
-			noticeTimer = setTimeout(() => {
-				ui.notice = '';
-				ui.noticeCritical = false;
-			}, autoClearMs);
+	// ---- validation errors --------------------------------------------------
+	// The exit for a validation error is resolution: it has no timer and no
+	// dismiss control, and it clears the moment the offending field is edited.
+	// That is what stops a stale complaint outliving the problem, which the old
+	// single toolbar notice could not do.
+	const FIELD_INPUT_IDS = {
+		title: 'editor-title',
+		slug: 'editor-slug',
+		excerpt: 'editor-excerpt'
+	};
+
+	/** @returns {boolean} true when something was wrong and has been reported. */
+	function reportFieldErrors(errors) {
+		const fields = Object.keys(errors);
+		if (fields.length === 0) {
+			ui.fieldErrors = {};
+			return false;
 		}
+		ui.fieldErrors = errors;
+		// Put the caret where the problem is, so "Title must not be empty" does
+		// not leave the user hunting for the title box.
+		if (browser) document.getElementById(FIELD_INPUT_IDS[fields[0]])?.focus();
+		return true;
 	}
 
-	function setProgress(message) {
-		ui.progress = message;
+	function clearFieldError(field) {
+		if (ui.fieldErrors[field]) delete ui.fieldErrors[field];
+	}
+
+	/**
+	 * A blocked save is a sticky problem: it stops the intent and needs a
+	 * decision, so it gets a banner with an exit rather than a notice that
+	 * vanishes before it is read. Auto-clears when the media resolves.
+	 */
+	function reportMissingMedia(missing) {
+		feedback.banner(
+			'missing-media',
+			`Not uploaded yet: ${missing.join(', ')}. Add it in the media library below, or remove the reference from the body.`,
+			{ tone: 'warning' }
+		);
+	}
+
+	/** A failed write is sticky, and offers the retry inline instead of a re-click. */
+	function reportSaveFailure(message, retry) {
+		feedback.banner('save-failed', message, {
+			tone: 'error',
+			actions: [{ label: 'Retry', run: retry }]
+		});
 	}
 
 	// ---- slug availability --------------------------------------------------
+	// A live slot, not a message: it describes something the editor already
+	// knows, and it disappears when the slug changes or the lookup resolves.
 	const slugDebounce = useDebounce(async (slug) => {
-		if (slug.length < 5) return;
-		if (slug in ui.slugStatus) return;
-
-		if (mode === 'edit' && slug === data?.slug) {
-			ui.slugStatus[slug] = 'ready';
+		if (slug.length < 5) {
+			feedback.live('slug', null);
 			return;
 		}
 
-		ui.slugStatus[slug] = 'pending';
+		if (mode === 'edit' && slug === data?.slug) {
+			feedback.live('slug', 'ready');
+			return;
+		}
+
+		feedback.live('slug', 'pending');
 		try {
 			const available = await checkSlugAvailable(kind, slug, fetchImpl);
-			ui.slugStatus[slug] = available ? 'ready' : 'used';
+			// A late response for a slug the user has already moved on from must
+			// not land on the new one — otherwise "taken" can appear against a
+			// slug nobody checked.
+			if (entry.slug !== slug) return;
+			feedback.live('slug', available ? 'ready' : 'used');
 		} catch {
-			delete ui.slugStatus[slug];
+			feedback.live('slug', null);
 		}
 	}, 300);
 
@@ -192,8 +231,13 @@ export function createEditorViewModel({
 	let localDraft = $state(browser ? loadLocalDraft(kind, localDraftKeyId) : null);
 	// A stored draft is only worth surfacing if its body actually differs from
 	// what's currently loaded — otherwise every visit would show the bar.
+	// The body field was called `draft` before the two body columns were
+	// collapsed, so drafts written by an older build still restore correctly.
+	const storedBody = (stored) => stored?.body ?? stored?.draft;
 	const localDraftAvailable = $derived(
-		!!localDraft && localDraft.draft !== undefined && localDraft.draft !== entry.bodies.draft
+		!!localDraft &&
+			storedBody(localDraft) !== undefined &&
+			storedBody(localDraft) !== entry.body
 	);
 
 	const autosaveDebounce = useDebounce(() => {
@@ -203,7 +247,7 @@ export function createEditorViewModel({
 			slug: entry.slug,
 			tags: entry.tags,
 			excerpt: entry.excerpt,
-			draft: entry.bodies.draft
+			body: entry.body
 		});
 	}, 800);
 
@@ -213,7 +257,7 @@ export function createEditorViewModel({
 		void entry.title;
 		void entry.tags;
 		void entry.excerpt;
-		autosaveDebounce.update(entry.bodies.draft);
+		autosaveDebounce.update(entry.body);
 	});
 
 	function recoverLocalDraft() {
@@ -222,7 +266,8 @@ export function createEditorViewModel({
 		if (localDraft.slug !== undefined) entry.slug = localDraft.slug;
 		if (localDraft.tags !== undefined) entry.tags = localDraft.tags;
 		if (localDraft.excerpt !== undefined) entry.excerpt = localDraft.excerpt;
-		if (localDraft.draft !== undefined) entry.bodies.draft = localDraft.draft;
+		const body = storedBody(localDraft);
+		if (body !== undefined) entry.body = body;
 		localDraft = null;
 	}
 
@@ -231,11 +276,40 @@ export function createEditorViewModel({
 		localDraft = null;
 	}
 
-	// ---- version toggle -------------------------------------------------------
-	function toggleVersion() {
-		ui.view = ui.view === 'published' ? 'draft' : 'published';
-		if (ui.view === 'draft') ui.toggled = true;
-	}
+	// ---- state-derived banners ----------------------------------------------
+	// These two are conditions rather than posted messages, so they are mirrored
+	// into the banner store instead of being pushed from a call site. Each still
+	// carries a `×`: dismissing it removes the banner without touching the
+	// condition, so it comes back only if the condition genuinely recurs — and
+	// every one of them also offers a primary action, so `×` is never the only
+	// way out.
+	$effect(() => {
+		if (ui.save.status === 'conflict') {
+			feedback.banner('save-conflict', `Someone else saved this ${kind} while you were editing.`, {
+				tone: 'warning',
+				actions: [
+					{ label: 'Reload their version', run: acceptRemoteVersion },
+					{ label: 'Overwrite with mine', run: overwriteRemoteVersion }
+				]
+			});
+			return;
+		}
+		feedback.dismiss('save-conflict');
+	});
+
+	$effect(() => {
+		if (localDraftAvailable) {
+			feedback.banner('local-draft', "A locally-saved draft is newer than what's shown here.", {
+				tone: 'info',
+				actions: [{ label: 'Restore it', run: recoverLocalDraft }],
+				// `×` is the discard: the one banner where dismissing *is* the
+				// decision, rather than just hiding the prompt.
+				onDismiss: discardLocalDraft
+			});
+			return;
+		}
+		feedback.dismiss('local-draft');
+	});
 
 	// ---- cover ------------------------------------------------------------
 	function setCreateCover(file) {
@@ -311,14 +385,13 @@ export function createEditorViewModel({
 	// ---- create / save / publish (post) ---------------------------------------
 	async function submitPost() {
 		if (ui.save.status === 'saving') return;
-		const basicsError = validateBasics(entry);
-		if (basicsError) {
-			notify(basicsError, { critical: true, autoClearMs: 0 });
+		const fieldErrors = validateBasicsFields(entry);
+		if (reportFieldErrors(fieldErrors)) {
 			return;
 		}
-		const { offlineKeys, missing } = collectOfflineKeys([entry.bodies.draft]);
+		const { offlineKeys, missing } = collectOfflineKeys([entry.body]);
 		if (missing.length > 0) {
-			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
+			reportMissingMedia(missing);
 			return;
 		}
 
@@ -333,7 +406,7 @@ export function createEditorViewModel({
 						slug: entry.slug,
 						excerpt: entry.excerpt,
 						tags,
-						content: entry.bodies.draft,
+						content: entry.body,
 						categories: [],
 						number_of_files: offlineKeys.length
 					})
@@ -348,7 +421,7 @@ export function createEditorViewModel({
 			ui.save.status = 'saving';
 			const { id } = await createEntry('post', formData, auth(), fetchImpl);
 			ui.save.status = 'saved';
-			notify('OK!');
+			feedback.toast('Draft created');
 			if (entry.pendingSeriesId) {
 				await fetchImpl(`/api/series/id/${entry.pendingSeriesId}?post_id=${id}`, {
 					method: 'PATCH',
@@ -359,30 +432,26 @@ export function createEditorViewModel({
 			openCreatedDraftPrompt(ui, id);
 		} catch (error) {
 			ui.save.status = 'error';
-			notify(error.message ?? 'Save failed.', { critical: true, autoClearMs: 0 });
+			reportSaveFailure(error.message ?? 'Save failed.', submitPost);
 		}
 	}
 
 	async function savePost() {
 		if (ui.save.status === 'saving') return;
-		const bothBodies = [entry.bodies.content, entry.bodies.draft];
-		const { offlineKeys, missing } = collectOfflineKeys(bothBodies);
+		const bodies = [entry.body];
+		const { offlineKeys, missing } = collectOfflineKeys(bodies);
 		if (missing.length > 0) {
-			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
+			reportMissingMedia(missing);
 			return;
 		}
 
 		const patch = buildPatch({ baseline, current: entry, hasNewMedia: offlineKeys.length > 0 });
 		if (isPatchEmpty(patch) && offlineKeys.length === 0) {
-			notify('Nothing to save.');
+			feedback.toast('Nothing to save.', { tone: 'neutral' });
 			return;
 		}
 
-		const basicsError = validatePatchFields(patch);
-		if (basicsError) {
-			notify(basicsError, { critical: true, autoClearMs: 0 });
-			return;
-		}
+		if (reportFieldErrors(validatePatchFieldsMap(patch))) return;
 
 		const formData = new FormData();
 		formData.append(
@@ -405,18 +474,19 @@ export function createEditorViewModel({
 			const response = await patchEntry('post', entry.id, formData, auth(), fetchImpl);
 			baseline = refreshBaseline(baseline, entry, { updatedAt: response.updated_at });
 			ui.save.status = 'saved';
-			notify('OK!');
+			feedback.toast('Saved');
 			media.clearNew(offlineKeys);
 			discardLocalDraft();
 		} catch (error) {
 			if (error.conflict) {
+				// The conflict banner is raised by the effect watching
+				// `ui.save.status`, so there is nothing to report here.
 				ui.save.status = 'conflict';
 				ui.save.error = error.currentUpdatedAt;
-				notify('Someone else saved this in the meantime.', { critical: true, autoClearMs: 0 });
 				return;
 			}
 			ui.save.status = 'error';
-			notify(error.message ?? 'Save failed.', { critical: true, autoClearMs: 0 });
+			reportSaveFailure(error.message ?? 'Save failed.', savePost);
 		}
 	}
 
@@ -425,9 +495,9 @@ export function createEditorViewModel({
 		ui.isPublishing = true;
 		try {
 			await publishEntry(kind, entry.id, auth(), fetchImpl);
-			notify('Published!');
+			feedback.toast('Published');
 		} catch (error) {
-			notify(error.message ?? 'Publish failed.', { critical: true, autoClearMs: 0 });
+			reportSaveFailure(error.message ?? 'Publish failed.', publish);
 		} finally {
 			ui.isPublishing = false;
 		}
@@ -452,9 +522,8 @@ export function createEditorViewModel({
 
 	async function submitProject() {
 		if (ui.save.status === 'saving') return;
-		const basicsError = validateBasics(entry);
-		if (basicsError) {
-			notify(basicsError, { critical: true, autoClearMs: 0 });
+		const fieldErrors = validateBasicsFields(entry);
+		if (reportFieldErrors(fieldErrors)) {
 			return;
 		}
 		const demoValidation = validateDemoFields({
@@ -465,13 +534,13 @@ export function createEditorViewModel({
 			delegateGameId: entry.delegateGameId
 		});
 		if (!demoValidation.valid) {
-			notify(demoValidation.error, { critical: true, autoClearMs: 0 });
+			reportFieldErrors({ demo: demoValidation.error });
 			return;
 		}
 
-		const { offlineKeys, missing } = collectOfflineKeys([entry.bodies.draft]);
+		const { offlineKeys, missing } = collectOfflineKeys([entry.body]);
 		if (missing.length > 0) {
-			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
+			reportMissingMedia(missing);
 			return;
 		}
 
@@ -480,7 +549,7 @@ export function createEditorViewModel({
 			slug: entry.slug,
 			excerpt: entry.excerpt,
 			tags: splitTags(entry.tags),
-			content: entry.bodies.draft,
+			content: entry.body,
 			links: normalizedLinks(),
 			number_of_files: offlineKeys.length,
 			demo_type: entry.demoType,
@@ -511,12 +580,12 @@ export function createEditorViewModel({
 			ui.save.status = 'saving';
 			const { id } = await createEntry('project', formData, auth(), fetchImpl);
 			ui.save.status = 'saved';
-			notify('OK!');
+			feedback.toast('Draft created');
 			discardLocalDraft();
 			openCreatedDraftPrompt(ui, id);
 		} catch (error) {
 			ui.save.status = 'error';
-			notify(error.message ?? 'Save failed.', { critical: true, autoClearMs: 0 });
+			reportSaveFailure(error.message ?? 'Save failed.', submitProject);
 		}
 	}
 
@@ -531,14 +600,14 @@ export function createEditorViewModel({
 			delegateGameId: entry.delegateGameId
 		});
 		if (!demoValidation.valid) {
-			notify(demoValidation.error, { critical: true, autoClearMs: 0 });
+			reportFieldErrors({ demo: demoValidation.error });
 			return;
 		}
 
-		const bothBodies = [entry.bodies.content, entry.bodies.draft];
-		const { offlineKeys, missing } = collectOfflineKeys(bothBodies);
+		const bodies = [entry.body];
+		const { offlineKeys, missing } = collectOfflineKeys(bodies);
 		if (missing.length > 0) {
-			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
+			reportMissingMedia(missing);
 			return;
 		}
 
@@ -549,9 +618,8 @@ export function createEditorViewModel({
 			kind: 'project'
 		});
 
-		const basicsError = validatePatchFields(patch);
-		if (basicsError) {
-			notify(basicsError, { critical: true, autoClearMs: 0 });
+		const fieldErrors = validatePatchFieldsMap(patch);
+		if (reportFieldErrors(fieldErrors)) {
 			return;
 		}
 
@@ -560,7 +628,7 @@ export function createEditorViewModel({
 		// after adding them would never be true and this early-return would be
 		// dead code.
 		if (isPatchEmpty(patch) && offlineKeys.length === 0 && !ui.demoZip) {
-			notify('Nothing to save.');
+			feedback.toast('Nothing to save.', { tone: 'neutral' });
 			return;
 		}
 
@@ -582,7 +650,7 @@ export function createEditorViewModel({
 			const response = await patchEntry('project', entry.id, formData, auth(), fetchImpl);
 			baseline = refreshBaseline(baseline, entry, { updatedAt: response.updated_at });
 			ui.save.status = 'saved';
-			notify('OK!');
+			feedback.toast('Saved');
 			media.clearNew(offlineKeys);
 			ui.demoZip = undefined;
 			ui.demoZipName = '';
@@ -591,20 +659,18 @@ export function createEditorViewModel({
 			if (error.conflict) {
 				ui.save.status = 'conflict';
 				ui.save.error = error.currentUpdatedAt;
-				notify('Someone else saved this in the meantime.', { critical: true, autoClearMs: 0 });
 				return;
 			}
 			ui.save.status = 'error';
-			notify(error.message ?? 'Save failed.', { critical: true, autoClearMs: 0 });
+			reportSaveFailure(error.message ?? 'Save failed.', saveProject);
 		}
 	}
 
 	// ---- create / save (game) -----------------------------------------------
 	async function submitGame() {
 		if (ui.save.status === 'saving') return;
-		const basicsError = validateBasics(entry);
-		if (basicsError) {
-			notify(basicsError, { critical: true, autoClearMs: 0 });
+		const fieldErrors = validateBasicsFields(entry);
+		if (reportFieldErrors(fieldErrors)) {
 			return;
 		}
 		const demoValidation = validateDemoFields({
@@ -617,13 +683,13 @@ export function createEditorViewModel({
 			kindLabel: 'games'
 		});
 		if (!demoValidation.valid) {
-			notify(demoValidation.error, { critical: true, autoClearMs: 0 });
+			reportFieldErrors({ demo: demoValidation.error });
 			return;
 		}
 
-		const { offlineKeys, missing } = collectOfflineKeys([entry.bodies.draft]);
+		const { offlineKeys, missing } = collectOfflineKeys([entry.body]);
 		if (missing.length > 0) {
-			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
+			reportMissingMedia(missing);
 			return;
 		}
 
@@ -632,7 +698,7 @@ export function createEditorViewModel({
 			try {
 				v86UploadId = await prepareV86ForSubmit(undefined);
 			} catch (error) {
-				notify(error?.message ?? 'v86 package build failed.', { critical: true, autoClearMs: 0 });
+				reportSaveFailure(error?.message ?? 'v86 package build failed.', submitGame);
 				return;
 			}
 		}
@@ -642,7 +708,7 @@ export function createEditorViewModel({
 			slug: entry.slug,
 			excerpt: entry.excerpt,
 			tags: splitTags(entry.tags),
-			content: entry.bodies.draft,
+			content: entry.body,
 			number_of_files: offlineKeys.length,
 			launcher_type: entry.demoType,
 			demo_width: entry.demoWidth,
@@ -671,21 +737,21 @@ export function createEditorViewModel({
 			ui.save.status = 'saving';
 			const { id } = await createEntry('game', formData, auth(), fetchImpl);
 			ui.save.status = 'saved';
-			notify('OK!');
+			feedback.toast('Draft created');
 			try {
 				if (entry.demoType === 'jsdos' && ui.demoZip) {
 					await upload.uploadJsDosBundle('game', id, ui.demoZip);
 				}
 			} catch (error) {
 				await deleteEntryDraft('game', id, auth(), fetchImpl);
-				notify(error?.message ?? 'Game upload failed.', { critical: true, autoClearMs: 0 });
+				reportSaveFailure(error?.message ?? 'Game upload failed.', submitGame);
 				return;
 			}
 			discardLocalDraft();
 			openCreatedDraftPrompt(ui, id);
 		} catch (error) {
 			ui.save.status = 'error';
-			notify(error.message ?? 'Save failed.', { critical: true, autoClearMs: 0 });
+			reportSaveFailure(error.message ?? 'Save failed.', submitGame);
 		}
 	}
 
@@ -702,7 +768,7 @@ export function createEditorViewModel({
 			kindLabel: 'games'
 		});
 		if (!demoValidation.valid) {
-			notify(demoValidation.error, { critical: true, autoClearMs: 0 });
+			reportFieldErrors({ demo: demoValidation.error });
 			return;
 		}
 
@@ -720,10 +786,10 @@ export function createEditorViewModel({
 			!v86ArtifactChanged &&
 			entry.v86SystemVersionId !== (baseline.v86SystemVersionId ?? '');
 
-		const bothBodies = [entry.bodies.content, entry.bodies.draft];
-		const { offlineKeys, missing } = collectOfflineKeys(bothBodies);
+		const bodies = [entry.body];
+		const { offlineKeys, missing } = collectOfflineKeys(bodies);
 		if (missing.length > 0) {
-			notify(`[${missing}] is/are missing`, { critical: true, autoClearMs: 0 });
+			reportMissingMedia(missing);
 			return;
 		}
 
@@ -741,16 +807,15 @@ export function createEditorViewModel({
 			!v86ArtifactChanged &&
 			!v86SystemChanged
 		) {
-			notify('Nothing to save.');
+			feedback.toast('Nothing to save.', { tone: 'neutral' });
 			return;
 		}
 
 		// Cheap field checks come before any heavy upload: a v86 package build
 		// takes minutes, and the server would only reject an empty title after
 		// all of it had crossed the wire.
-		const basicsError = validatePatchFields(patch);
-		if (basicsError) {
-			notify(basicsError, { critical: true, autoClearMs: 0 });
+		const fieldErrors = validatePatchFieldsMap(patch);
+		if (reportFieldErrors(fieldErrors)) {
 			return;
 		}
 
@@ -759,7 +824,7 @@ export function createEditorViewModel({
 			try {
 				v86UploadId = await prepareV86ForSubmit(data?.demoType === 'v86' ? data.id : undefined);
 			} catch (error) {
-				notify(error?.message ?? 'v86 package build failed.', { critical: true, autoClearMs: 0 });
+				reportSaveFailure(error?.message ?? 'v86 package build failed.', saveGame);
 				return;
 			}
 		}
@@ -781,14 +846,14 @@ export function createEditorViewModel({
 			const response = await patchEntry('game', entry.id, formData, auth(), fetchImpl);
 			baseline = refreshBaseline(baseline, entry, { updatedAt: response.updated_at });
 			ui.save.status = 'saved';
-			notify('OK!');
+			feedback.toast('Saved');
 			media.clearNew(offlineKeys);
 			try {
 				if (entry.demoType === 'jsdos' && ui.demoZip) {
 					await upload.uploadJsDosBundle(kind, entry.id, ui.demoZip);
 				}
 			} catch (error) {
-				notify(error?.message ?? 'Game upload failed.', { critical: true, autoClearMs: 0 });
+				reportSaveFailure(error?.message ?? 'Game upload failed.', saveGame);
 				return;
 			}
 			ui.demoZip = undefined;
@@ -798,11 +863,10 @@ export function createEditorViewModel({
 			if (error.conflict) {
 				ui.save.status = 'conflict';
 				ui.save.error = error.currentUpdatedAt;
-				notify('Someone else saved this in the meantime.', { critical: true, autoClearMs: 0 });
 				return;
 			}
 			ui.save.status = 'error';
-			notify(error.message ?? 'Save failed.', { critical: true, autoClearMs: 0 });
+			reportSaveFailure(error.message ?? 'Save failed.', saveGame);
 		}
 	}
 
@@ -848,7 +912,7 @@ export function createEditorViewModel({
 	}
 
 	function destroy() {
-		clearTimeout(noticeTimer);
+		feedback.destroy();
 		slugDebounce.destroy();
 		autosaveDebounce.destroy();
 		media.destroy();
@@ -875,12 +939,6 @@ export function createEditorViewModel({
 		set renderedText(value) {
 			renderedText = value;
 		},
-		get forDraft() {
-			return forDraft;
-		},
-		get activeBodyKey() {
-			return activeBodyKey;
-		},
 		get isDirty() {
 			return isDirty;
 		},
@@ -889,13 +947,12 @@ export function createEditorViewModel({
 		},
 		recoverLocalDraft,
 		discardLocalDraft,
-		toggleVersion,
 		setCreateCover,
 		onCoverUploaded,
 		setDemoType,
 		setDemoZip,
-		notify,
-		setProgress,
+		feedback,
+		clearFieldError,
 		submit: kind === 'post' ? submitPost : kind === 'game' ? submitGame : submitProject,
 		save: kind === 'post' ? savePost : kind === 'game' ? saveGame : saveProject,
 		publish,

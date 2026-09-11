@@ -16,7 +16,7 @@ export function createEntryState(kind, initialSeries = []) {
 		slug: '',
 		excerpt: '',
 		tags: '',
-		bodies: { draft: '', content: '' },
+		body: '',
 		coverUrl: '',
 		videoShortName: '',
 		ogImageSeconds: 0,
@@ -88,7 +88,6 @@ export function createEntryState(kind, initialSeries = []) {
  */
 export function loadEntryState(data, kind) {
 	const tags = data.tags ?? [];
-	const bodies = { draft: data.draft, content: data.content };
 	const common = {
 		id: data.id,
 		title: data.title,
@@ -138,7 +137,7 @@ export function loadEntryState(data, kind) {
 		...common,
 		...extra,
 		tags,
-		bodies: { ...bodies },
+		body: data.content,
 		updatedAt: data.updatedAt ?? data.updated_at ?? null
 	};
 
@@ -146,7 +145,7 @@ export function loadEntryState(data, kind) {
 		...common,
 		...extra,
 		tags: tags.join(' '),
-		bodies: { ...bodies },
+		body: data.content,
 		date: nowToDate(),
 		...(kind === 'post' ? { pendingSeriesId: null } : {})
 	};
@@ -172,7 +171,7 @@ export function refreshBaseline(baseline, entry, serverResponse = {}) {
 			.trim()
 			.split(/\s+/)
 			.filter((t) => t !== ''),
-		bodies: { ...entry.bodies },
+		body: entry.body,
 		ogImageSeconds: entry.ogImageSeconds,
 		...(entry.demoType !== undefined
 			? {

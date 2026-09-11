@@ -56,7 +56,6 @@ pub struct Game {
     pub tags: Vec<String>,
     pub excerpt: String,
     pub content: String,
-    pub draft: String,
     pub published_at: Option<String>,
     pub updated_at: Option<String>,
     pub medium_urls: Vec<String>,

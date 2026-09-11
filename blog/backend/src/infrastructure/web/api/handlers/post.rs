@@ -189,7 +189,6 @@ pub struct GetPostDetailsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub series_cover_url: Option<String>,
     pub content: String,
-    pub draft: String,
     pub is_featured: i64,
     pub medium_urls: Vec<String>,
     pub medium_short_names: Vec<String>,
@@ -232,7 +231,6 @@ pub async fn get_post_details(
         series_slug,
         series_cover_url,
         content,
-        draft,
         is_featured,
         cover_url,
         cover_media_type,
@@ -260,7 +258,6 @@ pub async fn get_post_details(
         series_slug,
         series_cover_url,
         content,
-        draft,
         is_featured,
         cover_url,
         cover_media_type,
@@ -465,17 +462,6 @@ pub async fn update_post(
         return Err(PostError::Media(media_err));
     }
 
-    if post_data
-        .content
-        .as_ref()
-        .xor(post_data.draft.as_ref())
-        .is_some()
-    {
-        return Err(PostError::UploadFailed(
-            "Content and Draft must both present or both absent.".to_string(),
-        ));
-    }
-
     let mut cmd = UpdatePostCommand {
         user_id: uploader_id,
         // Admins may edit anyone's post; everyone else is limited to their own.
@@ -490,23 +476,17 @@ pub async fn update_post(
         slug: post_data.slug,
         excerpt: post_data.excerpt,
         content: post_data.content.clone(),
-        draft: post_data.draft.clone(),
         tags: post_data.tags,
         media_usage: None,
     };
 
-    if let Some(content) = post_data.content
-        && let Some(draft) = post_data.draft
-    {
+    if let Some(content) = post_data.content {
         let mut content = content;
-        let mut draft = draft;
         let mut media_usage = HashMap::<String, i64>::new();
 
         replace_media_short_names(&mut content, &mut media_usage);
-        replace_media_short_names(&mut draft, &mut media_usage);
 
         cmd.content = Some(content);
-        cmd.draft = Some(draft);
         cmd.media_usage = Some(media_usage);
     }
 
@@ -524,11 +504,6 @@ pub async fn update_post(
     }
 
     Ok(Json(UpdatePostResponse { updated_at }))
-}
-
-#[derive(Deserialize)]
-pub struct GetPostQuery {
-    pub with_draft: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -551,8 +526,6 @@ pub struct PostResponse {
     pub author_slug: String,
     pub excerpt: String,
     pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub draft: Option<String>,
     pub medium_urls: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub published_at: Option<String>,
@@ -577,23 +550,13 @@ pub struct PostResponse {
 
 pub async fn get_post_by_slug(
     State(state): State<Arc<AppState>>,
-    Extension(opt_claims): Extension<Option<Claims>>,
+    Extension(_opt_claims): Extension<Option<Claims>>,
     Path(post_slug): Path<String>,
-    Query(query): Query<GetPostQuery>,
 ) -> Result<impl IntoResponse, PostError> {
-    let mut cmd = GetPostCommand {
-        slug: post_slug,
-        as_id: None,
-    };
-    if let Some(claims) = opt_claims
-        && let Some(with_draft) = query.with_draft
-        && with_draft
-    {
-        let id = claims.user_id.parse::<i64>().unwrap();
-        cmd.as_id = Some(id);
-    }
-
-    let post = state.post_service.get_post(cmd).await?;
+    let post = state
+        .post_service
+        .get_post(GetPostCommand { slug: post_slug })
+        .await?;
     let related = state
         .post_service
         .get_related_posts(GetRelatedPostsCommand { post_id: post.id })
@@ -618,9 +581,6 @@ pub async fn get_post_by_slug(
         tags: post.tags,
         excerpt: post.excerpt,
         content: post.content,
-        draft: query
-            .with_draft
-            .and_then(|with_draft| with_draft.then_some(post.draft)),
         medium_urls: post.medium_urls,
         published_at: normalize_optional_utc_timestamp(post.published_at),
         updated_at: normalize_optional_utc_timestamp(post.updated_at),
@@ -733,7 +693,6 @@ pub struct PostPatchData {
     slug: Option<String>,
     excerpt: Option<String>,
     content: Option<String>,
-    draft: Option<String>,
     tags: Option<Vec<String>>,
     number_of_files: usize,
     og_image_seconds: Option<i64>,

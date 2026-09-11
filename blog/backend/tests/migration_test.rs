@@ -56,7 +56,7 @@ async fn relax_media_hash_migration_applies_with_data_and_fk_off() {
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO posts (id,user_id,title,slug,content,draft,cover_media_id) VALUES (1,1,'t','slug-two','c','d',1)",
+        "INSERT INTO posts (id,user_id,title,slug,content,cover_media_id) VALUES (1,1,'t','slug-two','c',1)",
     )
     .execute(&seed)
     .await

@@ -108,7 +108,6 @@ struct GamePatchData {
     slug: Option<String>,
     excerpt: Option<String>,
     content: Option<String>,
-    draft: Option<String>,
     tags: Option<Vec<String>>,
     number_of_files: usize,
     launcher_type: Option<String>,
@@ -1388,19 +1387,10 @@ pub async fn update_game(
     )
     .await?;
 
-    if data.content.as_ref().xor(data.draft.as_ref()).is_some() {
-        return Err(GameError::UploadFailed(
-            "Content and Draft must both present or both absent.".to_string(),
-        ));
-    }
-
     let mut media_usage = None;
-    if let Some(content) = data.content.as_mut()
-        && let Some(draft) = data.draft.as_mut()
-    {
+    if let Some(content) = data.content.as_mut() {
         let mut usage = HashMap::<String, i64>::new();
         replace_media_short_names(content, &mut usage);
-        replace_media_short_names(draft, &mut usage);
         media_usage = Some(usage);
     }
 
@@ -1415,7 +1405,6 @@ pub async fn update_game(
             slug: data.slug,
             excerpt: data.excerpt,
             content: data.content,
-            draft: data.draft,
             tags: data.tags,
             media_usage,
         })
@@ -1672,8 +1661,6 @@ pub struct GameResponse {
     pub author_avatar_url: Option<String>,
     pub excerpt: String,
     pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub draft: Option<String>,
     pub medium_urls: Vec<String>,
     pub medium_short_names: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1722,7 +1709,7 @@ pub struct GameResponse {
     pub is_owner: bool,
 }
 
-fn game_response(game: Game, include_draft: bool) -> GameResponse {
+fn game_response(game: Game) -> GameResponse {
     let mut demo_url = game.demo.demo_url.clone().unwrap_or_default();
     let raw_demo_url = if demo_url.contains("://") {
         Some(demo_url.clone())
@@ -1760,7 +1747,6 @@ fn game_response(game: Game, include_draft: bool) -> GameResponse {
         author_avatar_url: game.author_avatar_url,
         excerpt: game.excerpt,
         content: game.content,
-        draft: include_draft.then_some(game.draft),
         medium_urls: game.medium_urls,
         medium_short_names: game.medium_short_names,
         cover_url: game.cover_url,
@@ -1791,33 +1777,30 @@ fn game_response(game: Game, include_draft: bool) -> GameResponse {
     }
 }
 
-#[derive(Deserialize)]
-pub struct GetGameQuery {
-    pub with_draft: Option<bool>,
-}
-
 pub async fn get_game_by_slug(
     State(state): State<Arc<AppState>>,
     Extension(opt_claims): Extension<Option<Claims>>,
     AxumPath(slug): AxumPath<String>,
-    Query(query): Query<GetGameQuery>,
 ) -> Result<impl IntoResponse, GameError> {
-    let mut as_id = None;
-    let include_draft = query.with_draft.unwrap_or(false);
-    if include_draft && let Some(claims) = opt_claims {
-        as_id = Some(
+    // The viewer is identified so the response can report `is_owner`. This used
+    // to sit behind a `with_draft` flag that also returned the unpublished
+    // body; with a single body there is nothing left to gate, so the viewer is
+    // simply whoever the token says.
+    let as_id = match opt_claims {
+        Some(claims) => Some(
             claims
                 .user_id
                 .parse::<i64>()
                 .map_err(|_| GameError::InternalError("Cannot parse id".to_string()))?,
-        );
-    }
+        ),
+        None => None,
+    };
 
     let game = state
         .game_service
         .get_game_by_slug(GetGameBySlugCommand { slug, as_id })
         .await?;
-    let mut response = game_response(game, include_draft);
+    let mut response = game_response(game);
     if response.launcher_type == "v86" {
         response.v86_runtime = runtime_descriptor(
             &state.game_service.pool,
@@ -1859,7 +1842,7 @@ pub async fn get_game_details(
             required_author_id: if is_admin { None } else { Some(user_id) },
         })
         .await?;
-    let mut response = game_response(game, true);
+    let mut response = game_response(game);
     if response.launcher_type == "v86" {
         let game = sqlx::query(
             "SELECT system_version_id, manifest_text, artifact_revision FROM game_v86_games WHERE game_id = ?",

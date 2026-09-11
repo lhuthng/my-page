@@ -32,14 +32,12 @@ pub struct UpdatePostCommand {
     pub slug: Option<String>,
     pub excerpt: Option<String>,
     pub content: Option<String>,
-    pub draft: Option<String>,
     pub tags: Option<Vec<String>>,
     pub media_usage: Option<HashMap<String, i64>>,
 }
 
 pub struct GetPostCommand {
     pub slug: String,
-    pub as_id: Option<i64>,
 }
 
 pub struct PublishCommand {

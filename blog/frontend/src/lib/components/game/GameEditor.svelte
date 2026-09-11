@@ -33,8 +33,12 @@
 			if (String(e.message).includes('delegated by') && !force) {
 				forceNeeded = true;
 			} else {
-				vm.ui.notice = e.message;
-				vm.ui.noticeCritical = true;
+				// Sticky, not a notice: the dialog closes on failure and the
+				// user needs a way to try again.
+				vm.feedback.banner('delete-failed', e.message ?? 'Delete failed.', {
+					tone: 'error',
+					actions: [{ label: 'Retry', run: handleDelete }]
+				});
 				showDelete = false;
 			}
 		} finally {
@@ -84,7 +88,10 @@
 			id="demo-type"
 			class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 border-dark transition-colors focus:bg-primary focus:text-white disabled:opacity-60"
 			value={vm.entry.demoType}
-			onchange={(e) => vm.setDemoType(e.currentTarget.value)}
+			onchange={(e) => {
+				vm.clearFieldError('demo');
+				vm.setDemoType(e.currentTarget.value);
+			}}
 			disabled={!isOwner}
 		>
 			{#each GAME_DEMO_TYPES as type}
@@ -94,6 +101,13 @@
 			{/each}
 		</select>
 	</div>
+	<!--
+		Demo-field validation lives here rather than in a toolbar banner: the
+		message names a field in this section, so it belongs next to it.
+	-->
+	{#if vm.ui.fieldErrors.demo}
+		<p class="text-sm font-medium text-accent-red">{vm.ui.fieldErrors.demo}</p>
+	{/if}
 	<div class="grid grid-cols-2 gap-2">
 		<div class="flex flex-col gap-1">
 			<label class="text-sm font-medium text-dark/60" for="demo-width">Demo width</label>

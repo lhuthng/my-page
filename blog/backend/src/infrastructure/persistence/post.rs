@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use futures::TryFutureExt;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use sqlx::{SqlitePool, prelude::FromRow};
@@ -249,7 +248,6 @@ pub struct PostContentRow {
     pub title: String,
     pub excerpt: String,
     pub content: String,
-    pub draft: String,
     pub published_at: Option<String>,
     pub updated_at: Option<String>,
     pub url: Option<String>,
@@ -307,7 +305,6 @@ pub struct PostDetailsRow {
     pub slug: String,
     pub excerpt: String,
     pub series_id: Option<i64>,
-    pub draft: String,
     pub content: String,
     pub user_id: i64,
     pub is_featured: i64,
@@ -472,7 +469,7 @@ impl PostService for PostServiceImpl {
             crate::helper::reading_time::estimate_reading_time_minutes(&content);
         let post_id: i64 = sqlx::query_scalar(
             r#"
-            INSERT INTO posts (user_id, title, slug, excerpt, draft, status, content_kind, reading_time_minutes)
+            INSERT INTO posts (user_id, title, slug, excerpt, content, status, content_kind, reading_time_minutes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
@@ -685,10 +682,6 @@ impl PostService for PostServiceImpl {
                 .content
                 .map(|v| validate_body(&v, "Content").map_err(PostError::Validation))
                 .transpose()?,
-            draft: cmd
-                .draft
-                .map(|v| validate_body(&v, "Draft").map_err(PostError::Validation))
-                .transpose()?,
             ..cmd
         };
 
@@ -722,8 +715,11 @@ impl PostService for PostServiceImpl {
 
         let mut set_fields: Vec<String> = vec![];
 
-        let reading_time_source = cmd.content.clone().or_else(|| cmd.draft.clone());
-        let reading_time_opt: Option<i64> = reading_time_source
+        // Reading time follows the body, and the body is now a single column —
+        // so it is recomputed on every save rather than at publish time.
+        let reading_time_opt: Option<i64> = cmd
+            .content
+            .clone()
             .map(|text| crate::helper::reading_time::estimate_reading_time_minutes(&text));
 
         set_opt!(
@@ -732,7 +728,6 @@ impl PostService for PostServiceImpl {
             ("slug", cmd.slug),
             ("excerpt", cmd.excerpt),
             ("content", cmd.content),
-            ("draft", cmd.draft),
             ("reading_time_minutes", reading_time_opt)
         );
 
@@ -760,7 +755,6 @@ impl PostService for PostServiceImpl {
             cmd.slug,
             cmd.excerpt,
             cmd.content,
-            cmd.draft,
             reading_time_opt
         );
 
@@ -783,24 +777,6 @@ impl PostService for PostServiceImpl {
         Ok(crate::helper::time::normalize_utc_timestamp(new_updated_at))
     }
     async fn get_post(&self, cmd: GetPostCommand) -> Result<Post, PostError> {
-        if let Some(id) = cmd.as_id {
-            let res = sqlx::query(
-                r#"
-                SELECT 1
-                FROM posts
-                WHERE user_id = ? AND slug = ?
-                "#,
-            )
-            .bind(id)
-            .bind(&cmd.slug)
-            .fetch_optional(&self.pool)
-            .await?;
-
-            if res.is_none() {
-                return Err(PostError::Forbidden);
-            }
-        }
-
         let PostContentRow {
             post_id,
             author_name,
@@ -809,7 +785,6 @@ impl PostService for PostServiceImpl {
             title,
             excerpt,
             content,
-            draft,
             published_at,
             updated_at,
             url,
@@ -820,7 +795,7 @@ impl PostService for PostServiceImpl {
             reading_time_minutes,
         } = sqlx::query_as::<_, PostContentRow>(
             r#"
-            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, draft, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, m1.file_type AS cover_media_type, 'media/i/' || video.short_name AS cover_video_url, video.file_type AS cover_video_type, posts.og_image_seconds, posts.reading_time_minutes, 'media/i/' || m2.short_name AS author_avatar_url
+            SELECT posts.id AS post_id, users.username AS author_slug, user_meta.display_name AS author_name, title, excerpt, content, published_at, posts.updated_at AS updated_at, 'media/i/' || m1.short_name AS url, m1.file_type AS cover_media_type, 'media/i/' || video.short_name AS cover_video_url, video.file_type AS cover_video_type, posts.og_image_seconds, posts.reading_time_minutes, 'media/i/' || m2.short_name AS author_avatar_url
             FROM posts
             JOIN users ON posts.user_id = users.id
             JOIN user_meta ON user_meta.user_id = users.id
@@ -970,7 +945,6 @@ impl PostService for PostServiceImpl {
             tags,
             excerpt,
             content,
-            draft,
             published_at,
             updated_at,
             medium_urls,
@@ -984,47 +958,34 @@ impl PostService for PostServiceImpl {
         })
     }
     async fn publish(&self, cmd: PublishCommand) -> Result<(), PostError> {
-        let mut tx = self.pool.begin().await?;
-
-        let (id, draft): (i64, String) = sqlx::query_as(
-            r#"
-            SELECT id, draft
-            FROM posts
-            WHERE id = ? AND user_id = ?
-            "#,
-        )
-        .bind(cmd.post_id)
-        .bind(cmd.user_id)
-        .fetch_optional(&mut *tx)
-        .map_err(|e| PostError::InternalError(e.to_string()))
-        .await?
-        .ok_or(PostError::PostNotFound)?;
-
-        let reading_time_minutes =
-            crate::helper::reading_time::estimate_reading_time_minutes(&draft);
-
-        sqlx::query(
+        // Publishing is now a pure visibility flip. The body is a single column
+        // that the last save already wrote, so there is nothing to copy across
+        // and no reading time to recompute — only the state changes.
+        // `published_at` is stamped the first time and preserved afterwards.
+        let result = sqlx::query(
             r#"
             UPDATE posts
             SET
-                content = ?,
-                reading_time_minutes = ?,
                 published_at = CASE
                     WHEN status = 'draft' THEN CURRENT_TIMESTAMP
                     ELSE published_at
                 END,
                 updated_at = CURRENT_TIMESTAMP,
                 status = 'published'
-            WHERE id = ? AND deleted_at IS NULL
+            WHERE id = ? AND user_id = ? AND deleted_at IS NULL
             "#,
         )
-        .bind(draft)
-        .bind(reading_time_minutes)
-        .bind(id)
-        .execute(&mut *tx)
-        .await?;
+        .bind(cmd.post_id)
+        .bind(cmd.user_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| PostError::InternalError(e.to_string()))?;
 
-        tx.commit().await?;
+        // Zero rows means either the id is unknown or it belongs to someone
+        // else — the same outcome the old ownership SELECT produced.
+        if result.rows_affected() == 0 {
+            return Err(PostError::PostNotFound);
+        }
 
         Ok(())
     }
@@ -1071,7 +1032,6 @@ impl PostService for PostServiceImpl {
                 excerpt,
                 series_post.series_id AS series_id,
                 content,
-                draft,
                 is_featured,
                 user_id,
                 cover.url AS cover_url,
@@ -1186,7 +1146,6 @@ impl PostService for PostServiceImpl {
             series_slug,
             series_cover_url,
             content: post_row.content,
-            draft: post_row.draft,
             is_featured: post_row.is_featured,
             medium_urls,
             medium_short_names,

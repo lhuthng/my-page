@@ -7,7 +7,7 @@ test('createEntryState seeds a blank post', () => {
 	const entry = createEntryState('post', [{ id: 1, title: 'Series A' }]);
 	assert.equal(entry.id, '');
 	assert.equal(entry.tags, '');
-	assert.deepEqual(entry.bodies, { draft: '', content: '' });
+	assert.equal(entry.body, '');
 	assert.deepEqual(entry.series, [{ id: 1, title: 'Series A' }]);
 	assert.equal(entry.pendingSeriesId, null);
 });
@@ -27,7 +27,6 @@ function loadedPost(overrides = {}) {
 		excerpt: 'An excerpt',
 		tags: ['rust', 'sqlite'],
 		content: 'published body',
-		draft: 'draft body',
 		coverUrl: '/cover.png',
 		cover_media_type: 'image/png',
 		series: [],
@@ -43,7 +42,7 @@ test('loadEntryState maps a post into an editable entry and a diffable baseline'
 
 	// entry: editable shape.
 	assert.equal(entry.tags, 'rust sqlite');
-	assert.deepEqual(entry.bodies, { draft: 'draft body', content: 'published body' });
+	assert.equal(entry.body, 'published body');
 	assert.equal(entry.pendingSeriesId, null);
 
 	// baseline: diffable shape (tags stay an array; carries the lock token).
@@ -123,7 +122,7 @@ test('refreshBaseline keeps the previous lock token when the server did not send
 	const { baseline } = loadEntryState(loadedPost(), 'post');
 	const next = refreshBaseline(
 		baseline,
-		{ ...baseline, tags: 'rust sqlite', bodies: baseline.bodies, ogImageSeconds: 0 },
+		{ ...baseline, tags: 'rust sqlite', body: baseline.body, ogImageSeconds: 0 },
 		{}
 	);
 	assert.equal(next.updatedAt, baseline.updatedAt);

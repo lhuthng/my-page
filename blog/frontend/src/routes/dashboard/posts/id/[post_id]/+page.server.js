@@ -36,7 +36,6 @@ export async function load(event) {
 	data.slug_cover_url = fixClientRoute(data.slug_cover_url);
 
 	data.content = decodeShortNames(data.content, data.medium_short_names);
-	data.draft = decodeShortNames(data.draft, data.medium_short_names);
 
 	seriesRes = await seriesRes;
 	if (seriesRes.ok) {
