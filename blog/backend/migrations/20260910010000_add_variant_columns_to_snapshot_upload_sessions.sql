@@ -1,7 +1,28 @@
 -- The games split (20260820010000) recreated the snapshot upload-session
--- table from the pre-variant schema and dropped variant_index + iso_sha256,
--- which 20260812120000 had already added to the project-era table. The
--- capture code inserts both, so every snapshot capture 500s. Restore them.
+-- table from the pre-variant schema and dropped variant_index, which
+-- 20260812120000 had already added to the project-era table. The capture code
+-- inserts it, so every snapshot capture 500s. Restore it.
+--
+-- iso_sha256 is deliberately NOT restored here. create_games.sql already
+-- declares that column on this table (it is the only migration that creates
+-- it), so the original second statement —
+--
+--   ALTER TABLE game_v86_snapshot_upload_sessions
+--       ADD COLUMN iso_sha256 TEXT NOT NULL DEFAULT '';
+--
+-- fails with "duplicate column name: iso_sha256" on every database in the
+-- pre-migration state and aborts the whole chain at this version, which left
+-- fresh databases and local dev unable to migrate at all.
+--
+-- NOTE: this file was edited after 20260910010000 had already been applied to
+-- production, so the checksum recorded in that database's _sqlx_migrations no
+-- longer matches. It MUST be refreshed before the next deploy, or sqlx will
+-- refuse to start the backend with a VersionMismatch error:
+--
+--   UPDATE _sqlx_migrations SET checksum = X'<sha384 of this file>'
+--   WHERE version = 20260910010000;
+--
+-- Verify with:
+--   shasum -a 384 20260910010000_add_variant_columns_to_snapshot_upload_sessions.sql
 ALTER TABLE game_v86_snapshot_upload_sessions
     ADD COLUMN variant_index INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE game_v86_snapshot_upload_sessions ADD COLUMN iso_sha256 TEXT NOT NULL DEFAULT '';
