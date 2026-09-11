@@ -14,7 +14,7 @@ function baselineState(overrides = {}) {
 		slug: 'title',
 		excerpt: 'Excerpt',
 		tags: ['a', 'b'],
-		bodies: { draft: 'draft body', content: 'published body' },
+		body: 'published body',
 		ogImageSeconds: 0,
 		...overrides
 	};
@@ -26,7 +26,7 @@ function postState(overrides = {}) {
 		slug: 'title',
 		excerpt: 'Excerpt',
 		tags: 'a b',
-		bodies: { draft: 'draft body', content: 'published body' },
+		body: 'published body',
 		ogImageSeconds: 0,
 		...overrides
 	};
@@ -72,25 +72,21 @@ test('tags are compared order-independently but sent as the new order', () => {
 	assert.deepEqual(buildPatch({ baseline, current: changed }), { tags: ['a', 'b', 'c'] });
 });
 
-test('draft and content are sent together when the draft text changed', () => {
+test('the body is sent when it changed', () => {
 	const baseline = baselineState();
-	const current = postState({ bodies: { draft: 'edited', content: 'published body' } });
-	assert.deepEqual(buildPatch({ baseline, current }), {
-		draft: 'edited',
-		content: 'published body'
-	});
+	const current = postState({ body: 'edited' });
+	assert.deepEqual(buildPatch({ baseline, current }), { content: 'edited' });
 });
 
-test('draft and content are sent when only newly-uploaded media forces it', () => {
+test('the body is sent when only newly-uploaded media forces it', () => {
 	const baseline = baselineState();
 	const current = postState();
 	const patch = buildPatch({ baseline, current, hasNewMedia: true });
-	assert.deepEqual(patch, { draft: 'draft body', content: 'published body' });
+	assert.deepEqual(patch, { content: 'published body' });
 });
 
-test('an unchanged draft with no new media sends neither field', () => {
+test('an unchanged body with no new media sends nothing', () => {
 	const patch = buildPatch({ baseline: baselineState(), current: postState() });
-	assert.equal('draft' in patch, false);
 	assert.equal('content' in patch, false);
 });
 

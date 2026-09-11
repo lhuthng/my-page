@@ -20,7 +20,6 @@
 		videoShortName: data.video_short_name,
 		ogImageSeconds: data.og_image_seconds,
 		content: data.content,
-		draft: data.draft,
 		tags: data.tags,
 		excerpt: data.excerpt,
 		mediumShortNames: data.medium_short_names,

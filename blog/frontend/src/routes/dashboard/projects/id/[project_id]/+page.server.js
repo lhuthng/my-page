@@ -21,7 +21,6 @@ export async function load(event) {
 	const data = await res.json();
 	data.medium_urls = data.medium_urls.map((url) => fixClientRoute(url));
 	data.content = decodeShortNames(data.content, data.medium_short_names);
-	data.draft = decodeShortNames(data.draft, data.medium_short_names);
 	data.cover_url = fixClientRoute(data.cover_url);
 
 	const gamesResponse = await event.fetch(route('games/all?limit=100&offset=0'), { headers });

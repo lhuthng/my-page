@@ -23,8 +23,13 @@
 			await api.delete(`projects/id/${vm.entry.id}?reason=${deleteReason}`);
 			await goto('/dashboard/trash');
 		} catch (e) {
-			vm.ui.notice = e.message;
-			vm.ui.noticeCritical = true;
+			// Sticky, not a notice: the delete failed, the dialog closes, and
+			// the user needs to decide whether to try again. `Retry` and `×`
+			// are the two ways out.
+			vm.feedback.banner('delete-failed', e.message ?? 'Delete failed.', {
+				tone: 'error',
+				actions: [{ label: 'Retry', run: handleDelete }]
+			});
 		} finally {
 			deleteBusy = false;
 			showDelete = false;
@@ -55,7 +60,10 @@
 			id="demo-type"
 			class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 border-dark transition-colors focus:bg-primary focus:text-white disabled:opacity-60"
 			value={vm.entry.demoType}
-			onchange={(e) => vm.setDemoType(e.currentTarget.value)}
+			onchange={(e) => {
+				vm.clearFieldError('demo');
+				vm.setDemoType(e.currentTarget.value);
+			}}
 			disabled={!isOwner}
 		>
 			{#each DEMO_TYPES as type}
@@ -65,6 +73,13 @@
 			{/each}
 		</select>
 	</div>
+	<!--
+		Demo-field validation lives here rather than in a toolbar banner: the
+		message names a field in this section, so it belongs next to it.
+	-->
+	{#if vm.ui.fieldErrors.demo}
+		<p class="text-sm font-medium text-accent-red">{vm.ui.fieldErrors.demo}</p>
+	{/if}
 	{#if demoType === 'game'}
 		<div class="flex flex-col gap-3 rounded-xl border border-background bg-background/20 p-3">
 			<div class="flex flex-col gap-1">

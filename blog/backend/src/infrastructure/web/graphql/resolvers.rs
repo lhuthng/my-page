@@ -952,7 +952,7 @@ impl QueryRoot {
 
         let row = sqlx::query_as::<_, PostDetailRow>(
             r#"
-            SELECT p.id, p.title, p.slug, p.excerpt, p.content, p.draft, p.status,
+            SELECT p.id, p.title, p.slug, p.excerpt, p.content, p.status,
                    p.is_featured, p.view_count, p.published_at, p.created_at, p.updated_at,
                    u.username AS author_slug, um.display_name AS author_name,
                    'media/i/' || m.short_name AS cover_url, m.file_type AS cover_media_type,
@@ -996,7 +996,6 @@ impl QueryRoot {
             slug: row.slug,
             excerpt: row.excerpt,
             content: row.content,
-            draft: row.draft,
             status: row.status,
             is_featured: row.is_featured != 0,
             author_name: row.author_name,

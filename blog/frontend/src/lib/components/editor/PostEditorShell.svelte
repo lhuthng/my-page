@@ -5,6 +5,7 @@
 	import ContentDebounceEditor from '../post/ContentDebounceEditor.svelte';
 	import MediaDictionaryController from '../post/MediaDictionaryController.svelte';
 	import EditorToolbar from './EditorToolbar.svelte';
+	import EditorFeedback from './EditorFeedback.svelte';
 	import EditorCoverUploader from './EditorCoverUploader.svelte';
 	import CreateCoverField from './CreateCoverField.svelte';
 	import CreateDraftPublishPrompt from './CreateDraftPublishPrompt.svelte';
@@ -27,6 +28,10 @@
 	let coverUploaderOpen = $state(false);
 	let fullPreviewOpen = $state(false);
 	let coverDropFile = $state(null);
+	// Set by the content editor's debounce: the preview pane is behind the
+	// textarea. Makes the 500 ms lag legible instead of looking like dropped
+	// input.
+	let previewPending = $state(false);
 
 	// A resizable source/preview split, persisted across sessions. Dragging is
 	// plain pointer-event math — no dependency pulled in for something this
@@ -73,6 +78,15 @@
 			(key) => !key.endsWith('.glb') && !vm.media.isOffline(key) && !vm.media.isOnline(key)
 		)
 	);
+
+	// Live, not a message: a count of what the editor already knows, so it sits
+	// beside the media library heading and never flashes. A *blocked save* does
+	// raise a sticky banner (the vm's `reportMissingMedia`) because a silently
+	// refused save is worse than either; once the references resolve that banner
+	// has served its purpose, and its exit is resolution.
+	$effect(() => {
+		if (missingKeys.length === 0) vm.feedback.dismiss('missing-media');
+	});
 </script>
 
 <svelte:window onpointermove={onDrag} onpointerup={stopDrag} />
@@ -110,6 +124,7 @@
 
 <article class="flex flex-col gap-4 pb-10">
 	<EditorToolbar {vm} {titleLabel} />
+	<EditorFeedback {vm} />
 
 	<div class="flex not-xl:flex-col gap-4">
 		<div class="flex flex-col grow min-w-0 gap-4">
@@ -122,8 +137,9 @@
 					<ContentDebounceEditor
 						class="full p-1"
 						delay={500}
-						bind:value={entry.bodies[vm.activeBodyKey]}
-						disabled={!vm.forDraft}
+						bind:value={entry.body}
+						bind:pending={previewPending}
+						disabled={!isOwner}
 						mediaDictionary={vm.media.dictionary}
 						onRenderedUpdate={(html) => (vm.renderedText = html)}
 						{onKeysChanged}
@@ -139,7 +155,14 @@
 					<div
 						class="flex shrink-0 items-center justify-between gap-2 px-4 py-2 border-b border-dark/10"
 					>
-						<span class="text-sm font-semibold uppercase tracking-wide text-dark/50">Preview</span>
+						<span class="text-sm font-semibold uppercase tracking-wide text-dark/50">
+							Preview
+							{#if previewPending}
+								<span class="ml-1 font-normal normal-case tracking-normal text-dark/40">
+									· updating
+								</span>
+							{/if}
+						</span>
 						<div class="duo-btn" data-duo-color="blue">
 							<button onclick={() => (fullPreviewOpen = true)}>Full page</button>
 						</div>
@@ -150,19 +173,30 @@
 				</div>
 			</div>
 
-			{#if missingKeys.length > 0}
-				<p
-					class="rounded-lg border-2 border-accent-red/30 bg-accent-red-light-4 px-3 py-2 text-sm text-accent-red"
-				>
-					Missing media referenced in the body: {missingKeys.join(', ')}. Drop it in the panel below
-					or remove the reference.
-				</p>
-			{/if}
-
 			<div class="rounded-xl border-2 border-dark/10 bg-white p-4">
-				<h3 class="mb-3 text-sm font-semibold uppercase tracking-wide text-dark/50">
-					Media library
-				</h3>
+				<div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+					<h3 class="text-sm font-semibold uppercase tracking-wide text-dark/50">
+						Media library
+					</h3>
+					<!--
+						Live counter rather than the flashing red paragraph this
+						replaced: it only counts tokens the content editor has
+						*settled*, so it cannot flicker mid-word, and it never
+						pushes the layout around. Names are on the tooltip; a
+						blocked save spells them out in the banner.
+					-->
+					{#if bodyKeys.length > 0}
+						<span class="text-xs text-dark/50" title={missingKeys.join(', ')}>
+							{#if missingKeys.length > 0}
+								<span class="font-medium text-accent-red">
+									{missingKeys.length} missing
+								</span>
+							{:else}
+								{bodyKeys.length} of {bodyKeys.length} resolved
+							{/if}
+						</span>
+					{/if}
+				</div>
 				<MediaDictionaryController
 					class="flex max-h-60 gap-3 not-xl:h-44 overflow-hidden"
 					media={vm.media}
@@ -253,15 +287,20 @@
 							bind:value={entry.tags}></textarea>
 					</div>
 					<div class="flex flex-col gap-1">
-						<label class="text-sm font-medium text-dark/60" for="excerpt">Excerpt</label>
+						<label class="text-sm font-medium text-dark/60" for="editor-excerpt">Excerpt</label>
 						<textarea
-							id="excerpt"
-							class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 border-dark transition-colors resize-none custom-scrollbar focus:bg-primary focus:text-white"
+							id="editor-excerpt"
+							class="w-full rounded-xl px-3 py-2 text-dark outline-none border-2 transition-colors resize-none custom-scrollbar focus:bg-primary focus:text-white
+								{ui.fieldErrors.excerpt ? 'border-accent-red' : 'border-dark'}"
 							autocorrect="off"
 							autocomplete="off"
 							rows={excerptRows}
 							readonly={!isOwner}
+							oninput={() => vm.clearFieldError('excerpt')}
 							bind:value={entry.excerpt}></textarea>
+						{#if ui.fieldErrors.excerpt}
+							<p class="text-sm font-medium text-accent-red">{ui.fieldErrors.excerpt}</p>
+						{/if}
 					</div>
 				</div>
 			</section>

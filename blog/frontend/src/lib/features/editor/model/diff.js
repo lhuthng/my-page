@@ -150,9 +150,9 @@ function buildGamePatch({ baseline, current }) {
  * @param {object} args
  * @param {object} args.baseline last-confirmed server state
  * @param {object} args.current current editor state (same shape as baseline)
- * @param {boolean} [args.hasNewMedia] force content+draft even if the draft
- *   text itself is unchanged — newly uploaded inline media still needs its
- *   server-side usage rows, which the backend derives from the body text.
+ * @param {boolean} [args.hasNewMedia] force the body even if the text itself
+ *   is unchanged — newly uploaded inline media still needs its server-side
+ *   usage rows, which the backend derives from the body text.
  * @param {'post'|'project'|'game'} [args.kind]
  * @returns {Record<string, unknown>}
  */
@@ -166,10 +166,9 @@ export function buildPatch({ baseline, current, hasNewMedia = false, kind = 'pos
 	const tags = splitTags(current.tags);
 	if (!arraysEqualIgnoreOrder(tags, baseline.tags ?? [])) patch.tags = tags;
 
-	const contentChanged = current.bodies.draft !== baseline.bodies.draft;
-	if (contentChanged || hasNewMedia) {
-		patch.draft = current.bodies.draft;
-		patch.content = current.bodies.content;
+	const bodyChanged = current.body !== baseline.body;
+	if (bodyChanged || hasNewMedia) {
+		patch.content = current.body;
 	}
 
 	if ((current.ogImageSeconds ?? 0) !== (baseline.ogImageSeconds ?? 0)) {

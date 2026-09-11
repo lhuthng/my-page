@@ -62,7 +62,6 @@ struct ProjectContentRow {
     slug: String,
     excerpt: String,
     content: String,
-    draft: String,
     published_at: Option<String>,
     updated_at: Option<String>,
     cover_url: Option<String>,
@@ -340,7 +339,6 @@ impl ProjectServiceImpl {
             tags,
             excerpt: row.excerpt,
             content: row.content,
-            draft: row.draft,
             published_at: row.published_at,
             updated_at: row.updated_at,
             medium_urls,
@@ -568,25 +566,6 @@ impl ProjectService for ProjectServiceImpl {
         &self,
         cmd: GetProjectBySlugCommand,
     ) -> Result<Project, ProjectError> {
-        if let Some(id) = cmd.as_id {
-            let allowed: Option<i64> = sqlx::query_scalar(
-                r#"
-                SELECT posts.id
-                FROM projects
-                JOIN posts ON posts.id = projects.post_id
-                WHERE posts.user_id = ? AND posts.slug = ?
-                "#,
-            )
-            .bind(id)
-            .bind(&cmd.slug)
-            .fetch_optional(&self.pool)
-            .await?;
-
-            if allowed.is_none() {
-                return Err(ProjectError::Forbidden);
-            }
-        }
-
         let row = sqlx::query_as::<_, ProjectContentRow>(
             r#"
             SELECT
@@ -600,7 +579,6 @@ impl ProjectService for ProjectServiceImpl {
                 posts.slug,
                 posts.excerpt,
                 posts.content,
-                posts.draft,
                 posts.published_at,
                 posts.updated_at,
                 'media/i/' || cover.short_name AS cover_url,
@@ -652,7 +630,6 @@ impl ProjectService for ProjectServiceImpl {
                 posts.slug,
                 posts.excerpt,
                 posts.content,
-                posts.draft,
                 posts.published_at,
                 posts.updated_at,
                 media.url AS cover_url,

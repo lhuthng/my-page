@@ -245,7 +245,6 @@ pub struct GqlPostDetail {
     pub slug: String,
     pub excerpt: String,
     pub content: String,
-    pub draft: String,
     pub status: String,
     pub is_featured: bool,
     pub author_name: String,

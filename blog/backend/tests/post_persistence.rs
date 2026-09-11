@@ -75,7 +75,6 @@ fn update_cmd(user_id: i64, post_id: i64) -> UpdatePostCommand {
         slug: None,
         excerpt: None,
         content: None,
-        draft: None,
         tags: None,
         media_usage: None,
     }

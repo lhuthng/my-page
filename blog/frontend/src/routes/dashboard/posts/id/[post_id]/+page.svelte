@@ -15,7 +15,6 @@
 		ogImageSeconds: data.og_image_seconds,
 		seriesSlug: data.series_slug,
 		content: data.content,
-		draft: data.draft,
 		tags: data.tags,
 		excerpt: data.excerpt,
 		relatedPosts: data.related_posts,

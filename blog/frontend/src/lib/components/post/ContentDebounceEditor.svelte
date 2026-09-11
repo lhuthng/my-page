@@ -9,6 +9,7 @@
 		delay = 500,
 		mediaDictionary,
 		disabled = false,
+		pending = $bindable(false),
 		onRenderedUpdate = () => {},
 		onKeysChanged = () => {},
 		...rest
@@ -24,6 +25,15 @@
 		debouncedValue = next;
 		onKeysChanged(collectMediaKeys(next));
 	}, delay);
+
+	// "The preview is behind the textarea." Exposed so the pane can say so
+	// instead of silently catching up 500 ms later, which reads as dropped
+	// input. Derived rather than tracked by hand, so it cannot drift out of
+	// sync with the debounce it describes.
+	const isPending = $derived(debouncedValue !== value);
+	$effect(() => {
+		pending = isPending;
+	});
 
 	// One-directional: reads `value` (which only the textarea's own `bind:value`
 	// or the parent ever write) and schedules a local update. Nothing here

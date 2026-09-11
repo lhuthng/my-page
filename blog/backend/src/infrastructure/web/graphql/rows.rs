@@ -164,7 +164,6 @@ pub struct PostDetailRow {
     pub slug: String,
     pub excerpt: String,
     pub content: String,
-    pub draft: String,
     pub status: String,
     pub is_featured: i64,
     pub view_count: i64,

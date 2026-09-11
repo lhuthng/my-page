@@ -105,7 +105,6 @@ struct ProjectPatchData {
     slug: Option<String>,
     excerpt: Option<String>,
     content: Option<String>,
-    draft: Option<String>,
     tags: Option<Vec<String>>,
     links: Option<Vec<ProjectLink>>,
     number_of_files: usize,
@@ -1025,19 +1024,10 @@ pub async fn update_project(
     )
     .await?;
 
-    if data.content.as_ref().xor(data.draft.as_ref()).is_some() {
-        return Err(ProjectError::UploadFailed(
-            "Content and Draft must both present or both absent.".to_string(),
-        ));
-    }
-
     let mut media_usage = None;
-    if let Some(content) = data.content.as_mut()
-        && let Some(draft) = data.draft.as_mut()
-    {
+    if let Some(content) = data.content.as_mut() {
         let mut usage = HashMap::<String, i64>::new();
         replace_media_short_names(content, &mut usage);
-        replace_media_short_names(draft, &mut usage);
         media_usage = Some(usage);
     }
 
@@ -1053,7 +1043,6 @@ pub async fn update_project(
             slug: data.slug,
             excerpt: data.excerpt,
             content: data.content,
-            draft: data.draft,
             tags: data.tags,
             media_usage,
         })
@@ -1149,8 +1138,6 @@ pub struct ProjectResponse {
     pub author_avatar_url: Option<String>,
     pub excerpt: String,
     pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub draft: Option<String>,
     pub medium_urls: Vec<String>,
     pub medium_short_names: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1205,7 +1192,7 @@ pub struct DelegatedGameResponse {
     pub v86_runtime: Option<V86RuntimeDescriptor>,
 }
 
-fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
+fn project_response(project: Project) -> ProjectResponse {
     let demo_url = project.demo.demo_url.clone().unwrap_or_default();
     let raw_demo_url = if demo_url.contains("://") {
         Some(demo_url.clone())
@@ -1224,7 +1211,6 @@ fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
         author_avatar_url: project.author_avatar_url,
         excerpt: project.excerpt,
         content: project.content,
-        draft: include_draft.then_some(project.draft),
         medium_urls: project.medium_urls,
         medium_short_names: project.medium_short_names,
         cover_url: project.cover_url,
@@ -1266,33 +1252,30 @@ fn project_response(project: Project, include_draft: bool) -> ProjectResponse {
     }
 }
 
-#[derive(Deserialize)]
-pub struct GetProjectQuery {
-    pub with_draft: Option<bool>,
-}
-
 pub async fn get_project_by_slug(
     State(state): State<Arc<AppState>>,
     Extension(opt_claims): Extension<Option<Claims>>,
     AxumPath(slug): AxumPath<String>,
-    Query(query): Query<GetProjectQuery>,
 ) -> Result<impl IntoResponse, ProjectError> {
-    let mut as_id = None;
-    let include_draft = query.with_draft.unwrap_or(false);
-    if include_draft && let Some(claims) = opt_claims {
-        as_id = Some(
+    // The viewer is identified so the response can report `is_owner`. This used
+    // to sit behind a `with_draft` flag that also returned the unpublished
+    // body; with a single body there is nothing left to gate, so the viewer is
+    // simply whoever the token says.
+    let as_id = match opt_claims {
+        Some(claims) => Some(
             claims
                 .user_id
                 .parse::<i64>()
                 .map_err(|_| ProjectError::InternalError("Cannot parse id".to_string()))?,
-        );
-    }
+        ),
+        None => None,
+    };
 
     let project = state
         .project_service
         .get_project_by_slug(GetProjectBySlugCommand { slug, as_id })
         .await?;
-    let mut response = project_response(project, include_draft);
+    let mut response = project_response(project);
     if let Some(game) = response.delegated_game.as_mut()
         && game.launcher_type == "v86"
     {
@@ -1324,7 +1307,7 @@ pub async fn get_project_details(
             required_author_id: if is_admin { None } else { Some(user_id) },
         })
         .await?;
-    let mut response = project_response(project, true);
+    let mut response = project_response(project);
     if let Some(game) = response.delegated_game.as_mut()
         && game.launcher_type == "v86"
     {
