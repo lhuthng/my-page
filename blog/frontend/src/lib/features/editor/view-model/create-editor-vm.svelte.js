@@ -510,14 +510,35 @@ export function createEditorViewModel({
 			.filter((link) => link.label && link.url);
 	}
 
+	/**
+	 * Run an upload and clear the live progress slot afterwards, whatever
+	 * happens.
+	 *
+	 * Progress is a live slot, and a live slot has to be cleared by whoever set
+	 * it. The upload controller only ever *writes* progress — it has no idea
+	 * when the caller is done with the text — so the clearing lives here. That
+	 * missing half was the whole of the old "progress outlives the work" bug:
+	 * `setProgress` wrote and nothing ever reset it, so "Building launcher CD —
+	 * part 3 of 8" stayed on screen after the upload finished.
+	 */
+	async function withProgress(run) {
+		try {
+			return await run();
+		} finally {
+			feedback.live('progress', null);
+		}
+	}
+
 	async function prepareV86ForSubmit(sourceProjectId) {
-		return upload.prepareV86Artifact({
-			file: ui.demoZip,
-			sourceProjectId,
-			systemVersionId: entry.v86SystemVersionId,
-			expectedArtifactRevision: sourceProjectId ? entry.v86ArtifactRevision : 0,
-			manifest: entry.v86Manifest
-		});
+		return withProgress(() =>
+			upload.prepareV86Artifact({
+				file: ui.demoZip,
+				sourceProjectId,
+				systemVersionId: entry.v86SystemVersionId,
+				expectedArtifactRevision: sourceProjectId ? entry.v86ArtifactRevision : 0,
+				manifest: entry.v86Manifest
+			})
+		);
 	}
 
 	async function submitProject() {
