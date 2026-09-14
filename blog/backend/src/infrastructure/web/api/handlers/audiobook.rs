@@ -28,7 +28,7 @@ use crate::{
         errors::{audiobook::AudiobookError, media::MediaError},
     },
     infrastructure::web::{
-        api::handlers::common::extract_medium,
+        api::handlers::support::cover::extract_medium,
         server::AppState,
     },
 };

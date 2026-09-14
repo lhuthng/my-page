@@ -49,7 +49,7 @@ use crate::{
     },
     helper::{string::replace_range_unicode, time::normalize_optional_utc_timestamp},
     infrastructure::web::{
-        api::handlers::common::{
+        api::handlers::support::cover::{
             CreateCoverUpload, MediumData, apply_created_cover_upload, extract_medium,
             try_collect_create_cover_field,
         },

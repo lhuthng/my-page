@@ -29,7 +29,7 @@ use crate::{
     },
     helper::time::normalize_utc_timestamp,
     infrastructure::web::{
-        api::handlers::common::{MediumData, extract_medium},
+        api::handlers::support::cover::{MediumData, extract_medium},
         server::AppState,
     },
 };

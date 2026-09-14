@@ -20,7 +20,7 @@ use crate::{
         entities::{media::MediumDetails, secret::Claims},
         errors::{media::MediaError, series::SeriesError},
     },
-    infrastructure::web::{api::handlers::common::extract_medium, server::AppState},
+    infrastructure::web::{api::handlers::support::cover::extract_medium, server::AppState},
 };
 
 #[derive(Serialize, Deserialize)]

@@ -1,8 +1,7 @@
 pub mod audiobook;
 pub mod auth;
-pub mod common;
-pub mod game;
 pub mod dashboard;
+pub mod game;
 pub mod mail;
 pub mod media;
 pub mod newsletter;
