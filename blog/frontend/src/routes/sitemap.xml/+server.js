@@ -6,6 +6,7 @@ const STATIC_PATHS = [
 	{ path: '/posts', priority: 0.6, changefreq: 'daily' },
 	{ path: '/projects', priority: 0.6, changefreq: 'weekly' },
 	{ path: '/series', priority: 0.5, changefreq: 'monthly' },
+	{ path: '/audiobooks', priority: 0.6, changefreq: 'weekly' },
 	{ path: '/tags', priority: 0.5, changefreq: 'weekly' },
 	{ path: '/about', priority: 0.6, changefreq: 'monthly' }
 ];
@@ -29,10 +30,11 @@ async function fetchJson(fetch, path, fallback) {
 }
 
 export async function GET({ fetch }) {
-	const [postsData, projectsData, tagsData] = await Promise.all([
+	const [postsData, projectsData, tagsData, audiobooksData] = await Promise.all([
 		fetchJson(fetch, 'posts/latest?limit=50000&offset=0', { featured_posts: [] }),
 		fetchJson(fetch, 'projects/latest?limit=50000&offset=0', { projects: [] }),
-		fetchJson(fetch, 'tags?size=50000&offset=0', { tags: [] })
+		fetchJson(fetch, 'tags?size=50000&offset=0', { tags: [] }),
+		fetchJson(fetch, 'audiobooks/public/all?limit=100&offset=0', { audiobooks: [] })
 	]);
 
 	const entries = new Map();
@@ -87,6 +89,17 @@ export async function GET({ fetch }) {
 				path: `/tags/${encodeURIComponent(tag.slug)}`,
 				priority: 0.4,
 				changefreq: 'weekly'
+			});
+		}
+	}
+
+	for (const audiobook of audiobooksData.audiobooks ?? []) {
+		if (audiobook.slug) {
+			entries.set(`/audiobooks/${encodeURIComponent(audiobook.slug)}`, {
+				path: `/audiobooks/${encodeURIComponent(audiobook.slug)}`,
+				lastmod: audiobook.published_at,
+				priority: 0.7,
+				changefreq: 'monthly'
 			});
 		}
 	}

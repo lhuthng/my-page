@@ -549,8 +549,77 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
                 )),
         );
 
-    let dashboard_routes = Router::new()
-        .route("/overview", get(handlers::dashboard::get_overview))
+    // Audiobooks: authoring (moderator-protected) plus a public catalogue and
+    // player feed. Track audio is uploaded here but *served* by the media
+    // routes below, which stream it with HTTP Range support.
+    let audiobook_routes = Router::new()
+        // moderator-protected authoring
+        .merge(
+            Router::new()
+                .route("/all", get(handlers::audiobook::get_audiobooks))
+                .route("/tags", get(handlers::audiobook::list_tags))
+                .route("/new", post(handlers::audiobook::new_audiobook))
+                .route(
+                    "/id/{audiobook_id}",
+                    get(handlers::audiobook::get_audiobook_details),
+                )
+                .route(
+                    "/id/{audiobook_id}",
+                    patch(handlers::audiobook::update_audiobook),
+                )
+                .route(
+                    "/id/{audiobook_id}",
+                    delete(handlers::audiobook::delete_audiobook),
+                )
+                .route(
+                    "/id/{audiobook_id}/cover",
+                    patch(handlers::audiobook::change_cover),
+                )
+                .route(
+                    "/id/{audiobook_id}/status",
+                    post(handlers::audiobook::change_status),
+                )
+                .route(
+                    "/id/{audiobook_id}/tracks",
+                    post(handlers::audiobook::add_track),
+                )
+                // Declared before the `{track_id}` routes so the static segment
+                // is matched first for PUT.
+                .route(
+                    "/id/{audiobook_id}/tracks/order",
+                    put(handlers::audiobook::reorder_tracks),
+                )
+                .route(
+                    "/id/{audiobook_id}/tracks/{track_id}",
+                    patch(handlers::audiobook::update_track),
+                )
+                .route(
+                    "/id/{audiobook_id}/tracks/{track_id}",
+                    delete(handlers::audiobook::remove_track),
+                )
+                .layer(middleware::from_fn(middlewares::auth::mod_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                ))
+                // Audio tracks are large; match the general media ceiling.
+                .layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
+        )
+        // public
+        .merge(
+            Router::new()
+                .route("/check", get(handlers::audiobook::check_slug))
+                .route(
+                    "/public/all",
+                    get(handlers::audiobook::get_public_audiobooks),
+                )
+                .route(
+                    "/public/s/{slug}",
+                    get(handlers::audiobook::get_public_audiobook),
+                ),
+        );
+
+    let dashboard_routes = Router::new()        .route("/overview", get(handlers::dashboard::get_overview))
         .route("/posts", get(handlers::dashboard::get_posts))
         .route("/projects", get(handlers::dashboard::get_projects))
         .route("/trash", get(handlers::dashboard::get_trash))
@@ -662,6 +731,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         )
         .nest("/tags", tag_routes)
         .nest("/series", series_routes)
+        .nest("/audiobooks", audiobook_routes)
         .nest("/mail", mail_routes)
         .nest("/newsletter", newsletter_routes)
         .nest("/analytics", analytics_routes)

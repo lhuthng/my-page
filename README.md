@@ -151,6 +151,23 @@ REST is the primary API surface. GraphQL is available at `/graphql` for protecte
 - Dedicated validation rules for general media, avatars, and covers.
 - Supported formats include PNG, GIF, WebP, JPEG, MP4, WebM, MP3, OGG, GLB, and Lottie.
 
+### Audiobooks
+
+- Audiobook authoring dashboard: create titles, upload chapters, and manage the chapter order.
+- Book-level metadata for title, description, translator, and cover image.
+- Dedicated audiobook tag vocabulary, kept separate from the global post/project tags.
+- Chapter management with rename, move up/down, reorder, and delete, with numbering always kept contiguous.
+- Browser-probed chapter durations so the player can show a total running time.
+- Draft, published, and archived states; publishing requires at least one chapter.
+- Public audiobook catalogue with search and tag filtering.
+- Continuous, playlist-style player that auto-advances through chapters and stops cleanly at the end.
+- Transport controls: play, pause, skip forward/backward by a configurable interval, previous/next chapter, and scrubbing with a buffered-range indicator.
+- Playback speed (0.75x to 2x), volume and mute, and a sleep timer (timed or end-of-chapter).
+- Resume support: position, chapter, speed, and volume persist across visits, with a resume prompt instead of a forced jump.
+- Keyboard shortcuts for play/pause, seeking, volume, and chapter navigation, plus OS media controls through the Media Session API.
+- Audio is streamed with HTTP range requests rather than fully loaded, so seeking is instant and memory use stays flat.
+- Per-chapter failure handling: an unplayable file is reported and skipped instead of stalling the whole book.
+
 ### Auth, Admin, And Operations
 
 - Registration, login, logout, token refresh, email verification, resend verification, forgot password, and reset password.

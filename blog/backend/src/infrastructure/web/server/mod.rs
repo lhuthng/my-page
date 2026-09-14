@@ -64,6 +64,10 @@ pub struct MediaConfig {
     pub allowed_file_types: Vec<MediaType>,
     pub allowed_avatar_types: Vec<MediaType>,
     pub allowed_cover_types: Vec<MediaType>,
+    /// Accepted audio containers for audiobook tracks. Kept separate from
+    /// `allowed_file_types` so track uploads cannot smuggle in an image or a
+    /// video by mislabelling the content type.
+    pub allowed_audio_types: Vec<MediaType>,
 }
 
 #[derive(Clone)]
@@ -95,6 +99,7 @@ pub struct AppState {
     pub project_service: persistence::project::ProjectServiceImpl,
     pub game_service: persistence::game::GameServiceImpl,
     pub series_service: persistence::series::SeriesServiceImpl,
+    pub audiobook_service: persistence::audiobook::AudiobookServiceImpl,
     pub dashboard_service: persistence::dashboard::DashboardServiceImpl,
     pub newsletter_service: persistence::newsletter::NewsletterServiceImpl,
     pub graphql_schema: crate::infrastructure::web::graphql::BlogSchema,
@@ -156,11 +161,18 @@ impl MediaConfig {
             MediaType::VideoWebm,
         ];
 
+        let allowed_audio_types = vec![
+            MediaType::AudioMp3,
+            MediaType::AudioOgg,
+            MediaType::AudioWav,
+        ];
+
         Self {
             dir,
             allowed_file_types,
             allowed_avatar_types,
             allowed_cover_types,
+            allowed_audio_types,
         }
     }
 }
@@ -402,6 +414,7 @@ impl<'a> HTTPServer<'a> {
             project_service: persistence::project::ProjectServiceImpl::new(pool.clone()),
             game_service: persistence::game::GameServiceImpl::new(pool.clone()),
             series_service: persistence::series::SeriesServiceImpl::new(pool.clone()),
+            audiobook_service: persistence::audiobook::AudiobookServiceImpl::new(pool.clone()),
             dashboard_service: persistence::dashboard::DashboardServiceImpl::new(pool.clone()),
             newsletter_service: persistence::newsletter::NewsletterServiceImpl::new(pool.clone()),
             graphql_schema,

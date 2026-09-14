@@ -106,6 +106,46 @@ pub fn validate_http_url(raw: &str, name: &str) -> Result<String, String> {
     Ok(url.to_string())
 }
 
+/// Derive a URL-safe slug from arbitrary free text.
+///
+/// Unlike `validate_slug`, which rejects anything outside the allowlist, this
+/// normalizes: it lowercases, replaces every run of non-alphanumeric characters
+/// with a single hyphen, and trims leading/trailing hyphens. Used for
+/// user-facing labels that double as identifiers, such as audiobook tag names,
+/// where rejecting "Science Fiction" would be hostile.
+///
+/// Non-ASCII letters are dropped because the slug allowlist is ASCII-only;
+/// a name made entirely of such characters yields an empty slug, which callers
+/// must treat as invalid input.
+pub fn slugify(raw: &str) -> String {
+    let mut slug = String::with_capacity(raw.len());
+    let mut pending_separator = false;
+
+    for ch in raw.trim().chars() {
+        if ch.is_ascii_alphanumeric() {
+            if pending_separator && !slug.is_empty() {
+                slug.push('-');
+            }
+            pending_separator = false;
+            slug.push(ch.to_ascii_lowercase());
+        } else {
+            pending_separator = true;
+        }
+    }
+
+    slug
+}
+
+/// A short random hex token, used to make generated identifiers collision-proof
+/// (e.g. media `short_name`, which carries a UNIQUE constraint).
+pub fn random_suffix() -> String {
+    use rand::RngCore;
+
+    let mut bytes = [0u8; 4];
+    rand::rng().fill_bytes(&mut bytes);
+    hex::encode(bytes)
+}
+
 /// Clamp an optional page size into `1..=max`, defaulting to `default` when
 /// absent.
 pub fn clamp_page_size(value: Option<i64>, default: i64, max: i64) -> i64 {
@@ -181,5 +221,40 @@ mod tests {
         assert_eq!(clamp_offset(None), 0);
         assert_eq!(clamp_offset(Some(-3)), 0);
         assert_eq!(clamp_offset(Some(7)), 7);
+    }
+
+    #[test]
+    fn slugify_normalizes_free_text() {
+        assert_eq!(slugify("Science Fiction"), "science-fiction");
+        assert_eq!(slugify("  Audio   Drama  "), "audio-drama");
+        assert_eq!(slugify("Sci-Fi / Fantasy"), "sci-fi-fantasy");
+        assert_eq!(slugify("C++ & Rust"), "c-rust");
+        assert_eq!(slugify("Already-slug_1"), "already-slug-1");
+    }
+
+    #[test]
+    fn slugify_collapses_and_trims_separators() {
+        assert_eq!(slugify("---hello---"), "hello");
+        assert_eq!(slugify("a___b"), "a-b");
+        assert_eq!(slugify("!!!"), "");
+        assert_eq!(slugify(""), "");
+    }
+
+    #[test]
+    fn slugify_is_idempotent() {
+        for input in ["Science Fiction", "Sci-Fi / Fantasy", "Already-slug_1"] {
+            let once = slugify(input);
+            assert_eq!(slugify(&once), once);
+        }
+    }
+
+    #[test]
+    fn random_suffix_is_eight_hex_chars_and_varies() {
+        let first = random_suffix();
+        assert_eq!(first.len(), 8);
+        assert!(first.chars().all(|c| c.is_ascii_hexdigit()));
+        // Not a guarantee, but a constant value here would mean a broken RNG.
+        let second = random_suffix();
+        assert_ne!(first, second);
     }
 }

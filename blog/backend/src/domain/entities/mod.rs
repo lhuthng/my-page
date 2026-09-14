@@ -1,3 +1,4 @@
+pub mod audiobook;
 pub mod auth;
 pub mod dashboard;
 pub mod game;

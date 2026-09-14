@@ -138,6 +138,47 @@ location /project-demos/   { proxy_pass http://127.0.0.1:3001; include /etc/ngin
 | `DELETE` | `/series/id/:id` | Mod | Remove a post from a series |
 | `GET` | `/series/id/:id/posts` | Mod | List posts in a series |
 
+### Audiobooks - `/audiobooks`
+
+An audiobook is a titled, ordered playlist of audio tracks with book-level
+metadata (title, description, translator) and its own tag vocabulary.
+
+Tracks reference rows in `media`, so audio is served by `/media/i/:short_name`,
+which answers HTTP Range requests with `206 Partial Content` and streams the
+body from disk. The player therefore seeks and buffers incrementally and never
+holds a whole chapter in memory.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/audiobooks/public/all` | Public | List published audiobooks (`?term=`, `?tag=`, `?limit=`, `?offset=`) |
+| `GET` | `/audiobooks/public/s/:slug` | Public | Published audiobook with its ordered tracks |
+| `GET` | `/audiobooks/check?slug=` | Public | Slug availability (`available: true` means free) |
+| `GET` | `/audiobooks/all` | Mod | List audiobooks (`?term=`, `?limit=`, `?offset=`) |
+| `GET` | `/audiobooks/tags` | Mod | List the audiobook-only tag vocabulary with usage counts |
+| `POST` | `/audiobooks/new` | Mod | Create an audiobook (multipart: `title`, `slug`, `description`, `translator`, repeated `tags`, optional `file` cover) |
+| `GET` | `/audiobooks/id/:id` | Mod | Audiobook details with ordered tracks and tags |
+| `PATCH` | `/audiobooks/id/:id` | Mod | Update metadata; `translator: null` clears it, omitting a field leaves it unchanged |
+| `DELETE` | `/audiobooks/id/:id` | Mod | Delete the audiobook (tracks cascade; media is kept) |
+| `PATCH` | `/audiobooks/id/:id/cover` | Mod | Replace the cover image |
+| `POST` | `/audiobooks/id/:id/status` | Mod | Set status: `draft`, `published`, or `archived` |
+| `POST` | `/audiobooks/id/:id/tracks` | Mod | Upload a track (multipart: `file`, `title`, optional `number`, optional `duration_seconds`) |
+| `PATCH` | `/audiobooks/id/:id/tracks/:track_id` | Mod | Rename, re-duration, or move a track to another position |
+| `DELETE` | `/audiobooks/id/:id/tracks/:track_id` | Mod | Remove a track and close the numbering gap |
+| `PUT` | `/audiobooks/id/:id/tracks/order` | Mod | Reorder tracks; `order` must list every track id exactly once |
+
+Notes:
+
+- Track numbers are always contiguous starting at 1. Inserting, moving, or
+  removing a track re-sequences the rest inside the same transaction.
+- Publishing requires at least one track, so a public page can never be empty.
+- `duration_seconds` is probed in the browser and sent with the upload; the
+  server has no audio decoder, and the element reads the header anyway.
+- Deleting an audiobook cascades its tracks and tag links but keeps `media`
+  rows and files: media is content-addressed, may be shared, and is owned by
+  the media manager.
+- Audiobook tags live in `audiobook_tags`, separate from the global `tags`
+  table, so the two vocabularies never mix.
+
 ### Media - `/media`
 
 Static files are also served directly from `MEDIA_PATH` via `tower-http ServeDir` as a fallback.

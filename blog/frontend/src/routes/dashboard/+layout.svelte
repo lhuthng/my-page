@@ -14,6 +14,7 @@
 				{ label: 'Projects', path: '/dashboard/projects', exact: true },
 				{ label: 'Games', path: '/dashboard/games', exact: true },
 				{ label: 'Series', path: '/dashboard/series' },
+				{ label: 'Audiobooks', path: '/dashboard/audiobooks' },
 				{ label: 'Media', path: '/dashboard/media/manager' }
 			]
 		},

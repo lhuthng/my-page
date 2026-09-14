@@ -2,6 +2,7 @@
 	import { authState } from '$lib/auth/user.svelte.js';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import AboutButton from './buttons/AboutButton.svelte';
+	import AudiobookButton from './buttons/AudiobookButton.svelte';
 	import BlogButton from './buttons/BlogButton.svelte';
 	import DashboardButton from './buttons/DashboardButton.svelte';
 	import FacebookButton from './buttons/FacebookButton.svelte';
@@ -18,6 +19,7 @@
 		[BlogButton, 'Posts', '/posts', 'posts'],
 		[ProjectButton, 'Projects', '/projects', 'projects'],
 		[SeriesButton, 'Series', '/series', 'series'],
+		[AudiobookButton, 'Audiobooks', '/audiobooks', 'audiobooks'],
 		[AboutButton, 'About', '/about', 'about'],
 		[DashboardButton, 'Dashboard', '/dashboard', 'dashboard', true]
 	];
