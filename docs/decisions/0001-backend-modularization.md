@@ -49,6 +49,14 @@ ones:
   HTTP-layer policy and lives in `api/layers.rs` (§4.4's one-fact-one-home).
 - **sync**: no `snapshot.rs` — this module contains no snapshot code; the
   SQLite snapshot is streamed by the `/sync/database` handler.
+- **Open item — domain error enums still touch `axum`/`sqlx`**: the eleven
+  per-aggregate error enums implement `IntoResponse` and `From<sqlx::Error>`
+  directly in `domain/errors/`, so the acceptance criterion "domain compiles
+  with `sqlx` and `axum` removed" is **not yet met**. Moving those impls into
+  the web/persistence layers rewrites every error conversion path in the
+  crate and was deliberately deferred until it can be done with compiler
+  feedback. Relatedly, `handlers/dashboard.rs` response type references
+  `persistence::analytics::VisitorCountryStat` (a type leak, pre-existing).
 - **domain/ and application/**: the flat per-aggregate files are already the
   layout the §3.3 tree describes (one file per aggregate, all under budget);
   converting them to `post/mod.rs`-style directories would change no path and
