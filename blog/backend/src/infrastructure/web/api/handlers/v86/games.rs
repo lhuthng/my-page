@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
 use crate::infrastructure::web::{
-    api::handlers::game::require_game_owner,
+    api::support::ownership::require_owner,
     server::AppState,
 };
 
@@ -67,7 +67,7 @@ pub async fn start_game_upload(
     // manifest-only fast path (no new ZIP) and validates the revision.
     let stored = match request.source_project_id {
         Some(game_id) => {
-            require_game_owner(&state, game_id, uploader_id).await?;
+            require_owner(&state.game_service.pool, "games", game_id, uploader_id).await?;
             let artifact = fetch_stored_game_artifact(&state.project_service.pool, game_id)
                 .await
                 .map_err(ProjectError::InternalError)?

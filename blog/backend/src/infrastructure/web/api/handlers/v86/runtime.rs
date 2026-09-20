@@ -11,7 +11,7 @@ use sqlx::Row;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
 use crate::infrastructure::web::{
-    api::handlers::game::require_game_owner,
+    api::support::ownership::require_owner,
     server::AppState,
 };
 
@@ -285,7 +285,7 @@ pub async fn get_game_capture_runtime(
     Extension(claims): Extension<Claims>,
     AxumPath(game_id): AxumPath<i64>,
 ) -> Result<Json<V86RuntimeDescriptor>, ProjectError> {
-    require_game_owner(&state, game_id, user_id(&claims)?).await?;
+    require_owner(&state.game_service.pool, "games", game_id, user_id(&claims)?).await?;
     runtime_descriptor_for(
         &state.project_service.pool,
         RuntimeLookup::GameId(game_id),

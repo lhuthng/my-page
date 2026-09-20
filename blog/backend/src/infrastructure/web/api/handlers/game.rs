@@ -1,8 +1,7 @@
 use std::{
-    cmp::Reverse,
     collections::HashMap,
     fs,
-    io::{Cursor, Read, Seek, Write},
+    io::{Read, Seek},
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
@@ -14,8 +13,6 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use once_cell::sync::Lazy;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
@@ -26,7 +23,7 @@ use zip::ZipArchive;
 use crate::{
     application::{
         commands::{
-            media::{ChangePostCoverCommand, UploadMediaWithoutDescriptionCommand},
+            media::ChangePostCoverCommand,
             post::{
                 CheckSlugCommand, NewPostCommand, PublishCommand, UpdatePostCommand,
                 UpdatePostCoverCommand,
@@ -47,14 +44,20 @@ use crate::{
         },
         errors::{game::GameError, media::MediaError},
     },
-    helper::{string::replace_range_unicode, time::normalize_optional_utc_timestamp},
+    helper::time::normalize_optional_utc_timestamp,
     infrastructure::web::{
-        api::handlers::support::cover::{
-            CreateCoverUpload, MediumData, apply_created_cover_upload, extract_medium,
-            try_collect_create_cover_field,
-        },
         api::handlers::v86::{V86RuntimeDescriptor, attach_ready_game_tx, runtime_descriptor},
-        server::{AppState, ProjectDemoConfig},
+        api::handlers::support::cover::{
+            MediumData, apply_created_cover_upload, extract_medium,
+        },
+        api::support::{
+            demo_archive::extract_demo_zip,
+            links::validate_demo_url,
+            media_short_names::replace_media_short_names,
+            multipart::{parse_multipart, upload_inline_media},
+            ownership::{require_can_delete, require_owner},
+        },
+        server::AppState,
     },
 };
 
@@ -153,402 +156,6 @@ pub struct CompleteJsDosUploadResponse {
     pub bundle_url: String,
 }
 
-struct FileData {
-    file_name: String,
-    bytes: Bytes,
-    content_type: String,
-}
-
-#[derive(Debug)]
-struct ShortNameExtraction {
-    short_name: String,
-    start: usize,
-}
-
-struct ParsedMultipart<T> {
-    data: T,
-    files: HashMap<usize, FileData>,
-    short_names: HashMap<usize, String>,
-    demo_zip: Option<Bytes>,
-    create_cover: CreateCoverUpload,
-}
-
-async fn parse_game_multipart<T: for<'de> Deserialize<'de>>(
-    mut multipart: Multipart,
-    data_field: &str,
-) -> Result<ParsedMultipart<T>, GameError> {
-    let mut data: Option<T> = None;
-    let mut files = HashMap::<usize, FileData>::new();
-    let mut short_names = HashMap::<usize, String>::new();
-    let mut demo_zip: Option<Bytes> = None;
-    let mut create_cover = CreateCoverUpload::default();
-
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| GameError::InternalError(e.to_string()))?
-    {
-        let field_name = field
-            .name()
-            .ok_or(GameError::UploadFailed("Empty field found.".to_string()))?
-            .to_string();
-
-        if field_name == data_field {
-            let bytes = field
-                .bytes()
-                .await
-                .map_err(|e| GameError::UploadFailed(e.to_string()))?;
-            data = Some(
-                serde_json::from_slice::<T>(&bytes)
-                    .map_err(|e| GameError::UploadFailed(e.to_string()))?,
-            );
-        } else if field_name == "demo_zip" {
-            if demo_zip.is_some() {
-                return Err(GameError::UploadFailed(
-                    "Only one demo zip is allowed.".to_string(),
-                ));
-            }
-            demo_zip = Some(
-                field
-                    .bytes()
-                    .await
-                    .map_err(|e| GameError::UploadFailed(e.to_string()))?,
-            );
-        } else if let Some(index_str) = field_name.strip_prefix("file_") {
-            let index = index_str
-                .parse::<usize>()
-                .map_err(|_| GameError::UploadFailed("Invalid file index".to_string()))?;
-            if files.contains_key(&index) {
-                return Err(GameError::UploadFailed(format!(
-                    "Duplicate file index {index}"
-                )));
-            }
-            let file_name = field
-                .file_name()
-                .ok_or(GameError::UploadFailed(
-                    "Cannot read file name.".to_string(),
-                ))?
-                .to_string();
-            let content_type = field
-                .content_type()
-                .ok_or(GameError::UploadFailed(format!(
-                    "Cannot read content type of {}.",
-                    file_name
-                )))?
-                .to_string();
-            let bytes = field
-                .bytes()
-                .await
-                .map_err(|_| GameError::UploadFailed(format!("Cannot read {file_name}")))?;
-            files.insert(
-                index,
-                FileData {
-                    file_name,
-                    bytes,
-                    content_type,
-                },
-            );
-        } else if let Some(index_str) = field_name.strip_prefix("short_name_") {
-            let index = index_str
-                .parse::<usize>()
-                .map_err(|_| GameError::UploadFailed("Invalid short name index".to_string()))?;
-            short_names.insert(
-                index,
-                field.text().await.map_err(|_| {
-                    GameError::UploadFailed("Cannot read short name".to_string())
-                })?,
-            );
-        } else if try_collect_create_cover_field(&field_name, field, &mut create_cover).await? {
-        }
-    }
-
-    Ok(ParsedMultipart {
-        data: data.ok_or(GameError::UploadFailed(
-            "No game data is given.".to_string(),
-        ))?,
-        files,
-        short_names,
-        demo_zip,
-        create_cover,
-    })
-}
-
-async fn upload_inline_media(
-    state: &AppState,
-    uploader_id: i64,
-    number_of_files: usize,
-    files: &HashMap<usize, FileData>,
-    short_name_map: &HashMap<usize, String>,
-) -> Result<(), GameError> {
-    let mut short_names = Vec::<String>::new();
-    let mut file_names = Vec::<String>::new();
-    let mut content_types = Vec::<String>::new();
-    let mut bytes_list = Vec::<Bytes>::new();
-
-    for i in 1..=number_of_files {
-        let file = files
-            .get(&i)
-            .ok_or_else(|| GameError::UploadFailed(format!("Cannot locate file_{i}")))?;
-        let short_name = short_name_map
-            .get(&i)
-            .ok_or_else(|| GameError::UploadFailed(format!("Cannot locate short_name_{i}")))?;
-        short_names.push(short_name.clone());
-        file_names.push(file.file_name.clone());
-        content_types.push(file.content_type.clone());
-        bytes_list.push(file.bytes.clone());
-    }
-
-    if number_of_files > 0 {
-        state
-            .media_service
-            .bulk_upload(
-                UploadMediaWithoutDescriptionCommand {
-                    uploader_id,
-                    short_names,
-                    number_of_files,
-                    file_names,
-                    content_types,
-                    bytes_list,
-                },
-                &state.media_config,
-            )
-            .await?;
-    }
-
-    Ok(())
-}
-
-// Runs on every game create and update.
-static MEDIA_NAME_REGEXES: Lazy<[Regex; 2]> = Lazy::new(|| {
-    [
-        Regex::new(r"@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]").unwrap(),
-        Regex::new(r":::app\s+lottie\s+([^\s]+)").unwrap(),
-    ]
-});
-
-fn replace_media_short_names(content: &mut String, usage: &mut HashMap<String, i64>) {
-    let mut extraction = Vec::<ShortNameExtraction>::new();
-
-    for reg in MEDIA_NAME_REGEXES.iter() {
-        for cap in reg.captures_iter(content) {
-            if let Some(matched) = cap.get(1) {
-                extraction.push(ShortNameExtraction {
-                    short_name: matched.as_str().to_string(),
-                    start: matched.start(),
-                });
-            }
-        }
-    }
-    extraction.sort_by_key(|k| Reverse(k.start));
-
-    for data in extraction {
-        let len = usage.len();
-        let index = usage
-            .entry(data.short_name.clone())
-            .or_insert_with(|| len as i64)
-            .to_string();
-        replace_range_unicode(content, data.start, data.short_name.len(), index);
-    }
-}
-
-fn has_invalid_component(path: &Path) -> bool {
-    path.components().any(|component| {
-        matches!(
-            component,
-            Component::ParentDir | Component::RootDir | Component::Prefix(_)
-        )
-    })
-}
-
-fn normalized_zip_path(path: &Path) -> Option<PathBuf> {
-    if has_invalid_component(path) {
-        return None;
-    }
-    let mut out = PathBuf::new();
-    for component in path.components() {
-        if let Component::Normal(part) = component {
-            out.push(part);
-        }
-    }
-    if out.as_os_str().is_empty() {
-        None
-    } else {
-        Some(out)
-    }
-}
-
-fn strip_common_root(paths: &[PathBuf]) -> Option<String> {
-    let mut first_root: Option<String> = None;
-    for path in paths {
-        if path.file_name().is_some_and(|name| name == "index.html")
-            && path.parent() == Some(Path::new(""))
-        {
-            return None;
-        }
-
-        let mut components = path.components();
-        let first = match components.next() {
-            Some(Component::Normal(part)) => part.to_string_lossy().to_string(),
-            _ => return None,
-        };
-        if components.next().is_none() {
-            return None;
-        }
-        match &first_root {
-            Some(root) if root != &first => return None,
-            None => first_root = Some(first),
-            _ => {}
-        }
-    }
-    first_root
-}
-
-// A 100 MB archive can expand to 200 MB of sync file writes, so the blocking
-// pool runs the extraction instead of stalling a tokio worker for seconds.
-async fn extract_demo_zip(
-    config: &ProjectDemoConfig,
-    game_id: i64,
-    zip_bytes: Bytes,
-) -> Result<(), GameError> {
-    let config = config.clone();
-    tokio::task::spawn_blocking(move || extract_demo_zip_blocking(config, game_id, zip_bytes))
-        .await
-        .map_err(|e| GameError::InternalError(e.to_string()))?
-}
-
-fn extract_demo_zip_blocking(
-    config: ProjectDemoConfig,
-    game_id: i64,
-    zip_bytes: Bytes,
-) -> Result<(), GameError> {
-    if zip_bytes.len() as u64 > config.max_archive_size {
-        return Err(GameError::InvalidDemo(
-            "Demo archive is too large.".to_string(),
-        ));
-    }
-
-    let mut archive = ZipArchive::new(Cursor::new(zip_bytes))
-        .map_err(|e| GameError::InvalidDemo(e.to_string()))?;
-    if archive.is_empty() {
-        return Err(GameError::InvalidDemo(
-            "Demo archive is empty.".to_string(),
-        ));
-    }
-    if archive.len() > config.max_files {
-        return Err(GameError::InvalidDemo(
-            "Demo archive contains too many files.".to_string(),
-        ));
-    }
-
-    let mut paths = Vec::<PathBuf>::new();
-    for i in 0..archive.len() {
-        let file = archive
-            .by_index(i)
-            .map_err(|e| GameError::InvalidDemo(e.to_string()))?;
-        if file.is_dir() {
-            continue;
-        }
-        #[cfg(unix)]
-        if file
-            .unix_mode()
-            .is_some_and(|mode| mode & 0o170000 == 0o120000)
-        {
-            return Err(GameError::InvalidDemo(
-                "Demo archive cannot contain symlinks.".to_string(),
-            ));
-        }
-        let enclosed = file.enclosed_name().ok_or(GameError::InvalidDemo(
-            "Demo archive contains an unsafe path.".to_string(),
-        ))?;
-        let normalized = normalized_zip_path(&enclosed).ok_or(GameError::InvalidDemo(
-            "Demo archive contains an unsafe path.".to_string(),
-        ))?;
-        paths.push(normalized);
-    }
-
-    if paths.is_empty() {
-        return Err(GameError::InvalidDemo(
-            "Demo archive does not contain files.".to_string(),
-        ));
-    }
-
-    let common_root = strip_common_root(&paths);
-    let rel_paths = paths
-        .iter()
-        .map(|path| {
-            common_root
-                .as_ref()
-                .and_then(|root| path.strip_prefix(root).ok())
-                .map(PathBuf::from)
-                .unwrap_or_else(|| path.clone())
-        })
-        .collect::<Vec<_>>();
-
-    if !rel_paths.iter().any(|path| path == Path::new("index.html")) {
-        return Err(GameError::InvalidDemo(
-            "Demo archive must contain index.html.".to_string(),
-        ));
-    }
-
-    let root = &config.dir;
-    fs::create_dir_all(root)?;
-    let tmp_dir = root.join(format!(".tmp-game-{}-{}", game_id, Uuid::new_v4()));
-    fs::create_dir_all(&tmp_dir)?;
-
-    let mut extracted_size = 0_u64;
-    for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|e| GameError::InvalidDemo(e.to_string()))?;
-        if file.is_dir() {
-            continue;
-        }
-        let enclosed = file.enclosed_name().ok_or(GameError::InvalidDemo(
-            "Demo archive contains an unsafe path.".to_string(),
-        ))?;
-        let original = normalized_zip_path(&enclosed).ok_or(GameError::InvalidDemo(
-            "Demo archive contains an unsafe path.".to_string(),
-        ))?;
-        let rel = common_root
-            .as_ref()
-            .and_then(|root| original.strip_prefix(root).ok())
-            .map(PathBuf::from)
-            .unwrap_or(original);
-        if rel.as_os_str().is_empty() || has_invalid_component(&rel) {
-            fs::remove_dir_all(&tmp_dir).ok();
-            return Err(GameError::InvalidDemo(
-                "Demo archive contains an unsafe path.".to_string(),
-            ));
-        }
-
-        extracted_size = extracted_size.saturating_add(file.size());
-        if extracted_size > config.max_extracted_size {
-            fs::remove_dir_all(&tmp_dir).ok();
-            return Err(GameError::InvalidDemo(
-                "Demo archive expands too large.".to_string(),
-            ));
-        }
-
-        let out_path = tmp_dir.join(&rel);
-        if let Some(parent) = out_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
-            .map_err(|e| GameError::InvalidDemo(e.to_string()))?;
-        let mut out = fs::File::create(out_path)?;
-        out.write_all(&bytes)?;
-    }
-
-    let final_dir = root.join(format!("game-{}", game_id));
-    if final_dir.exists() {
-        fs::remove_dir_all(&final_dir)?;
-    }
-    fs::rename(&tmp_dir, &final_dir)?;
-
-    Ok(())
-}
-
 fn validate_jsdos_bundle(path: &Path, max_files: usize) -> Result<(u64, String), GameError> {
     let mut file = fs::File::open(path)?;
     let size = file.metadata()?.len();
@@ -616,24 +223,6 @@ fn jsdos_storage_key(game_id: i64, sha256: &str) -> String {
     format!("jsdos/{game_id}/{sha256}.jsdos")
 }
 
-pub async fn require_game_owner(
-    state: &AppState,
-    game_id: i64,
-    user_id: i64,
-) -> Result<(), crate::domain::errors::project::ProjectError> {
-    let owner: Option<i64> = sqlx::query_scalar(
-        "SELECT posts.user_id FROM games JOIN posts ON posts.id = games.post_id WHERE games.id = ?",
-    )
-    .bind(game_id)
-    .fetch_optional(&state.game_service.pool)
-    .await?;
-    match owner {
-        Some(id) if id == user_id => Ok(()),
-        Some(_) => Err(crate::domain::errors::project::ProjectError::Forbidden),
-        None => Err(crate::domain::errors::project::ProjectError::ProjectNotFound),
-    }
-}
-
 pub async fn start_jsdos_upload(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
@@ -644,7 +233,7 @@ pub async fn start_jsdos_upload(
         .user_id
         .parse::<i64>()
         .map_err(|_| GameError::InternalError("Cannot parse user id".to_string()))?;
-    require_game_owner(&state, game_id, user_id).await?;
+    require_owner(&state.game_service.pool, "games", game_id, user_id).await?;
     if !request.file_name.to_ascii_lowercase().ends_with(".jsdos") {
         return Err(GameError::InvalidDemo(
             "Only .jsdos bundles are accepted.".to_string(),
@@ -754,7 +343,7 @@ pub async fn complete_jsdos_upload(
         .user_id
         .parse::<i64>()
         .map_err(|_| GameError::InternalError("Cannot parse user id".to_string()))?;
-    require_game_owner(&state, game_id, user_id).await?;
+    require_owner(&state.game_service.pool, "games", game_id, user_id).await?;
     let row: Option<(String, i64, i64, String, String)> = sqlx::query_as(
         "SELECT original_file_name, expected_size_bytes, received_size_bytes, temp_storage_key, status FROM game_jsdos_upload_sessions WHERE id = ? AND game_id = ? AND uploader_id = ?",
     )
@@ -912,16 +501,6 @@ pub async fn get_jsdos_bundle(
     Ok(response)
 }
 
-fn validate_demo_url(url: Option<String>) -> Result<Option<String>, GameError> {
-    match url {
-        Some(u) if u.trim().is_empty() => Ok(Some(String::new())),
-        Some(u) => Ok(Some(
-            crate::helper::string::validate_http_url(&u, "Demo URL")
-                .map_err(GameError::InvalidDemo)?,
-        )),
-        None => Ok(None),
-    }
-}
 
 #[axum::debug_handler]
 pub async fn new_game(
@@ -933,7 +512,14 @@ pub async fn new_game(
         .user_id
         .parse::<i64>()
         .map_err(|_| GameError::InternalError("Cannot parse id".to_string()))?;
-    let parsed = parse_game_multipart::<GameData>(multipart, "game_data").await?;
+    let parsed = parse_multipart::<GameData, GameError>(
+        multipart,
+        "game_data",
+        "No game data is given.",
+        GameError::InternalError,
+        GameError::UploadFailed,
+    )
+    .await?;
     let mut data = parsed.data;
 
     if state
@@ -1009,6 +595,7 @@ pub async fn new_game(
         data.number_of_files,
         &parsed.files,
         &parsed.short_names,
+        GameError::UploadFailed,
     )
     .await?;
 
@@ -1037,7 +624,7 @@ pub async fn new_game(
             launcher_type: data.launcher_type,
             demo_width: data.demo_width,
             demo_height: data.demo_height,
-            demo_url: validate_demo_url(data.demo_url)?,
+            demo_url: validate_demo_url(data.demo_url, GameError::InvalidDemo)?,
             instruction: data.instruction,
             cheatcode: data.cheatcode,
             story: data.story,
@@ -1079,7 +666,15 @@ pub async fn new_game(
     }
 
     if let Some(zip) = demo_zip {
-        if let Err(err) = extract_demo_zip(&state.project_demo_config, game_id, zip).await {
+        if let Err(err) = extract_demo_zip(
+            &state.project_demo_config,
+            format!("game-{game_id}"),
+            zip,
+            GameError::InternalError,
+            GameError::InvalidDemo,
+        )
+        .await
+        {
             return Err(err);
         }
     }
@@ -1098,44 +693,22 @@ pub struct DeleteGameQuery {
     pub force: Option<bool>,
 }
 
-fn is_admin_or_mod_game(role: &str) -> bool {
-    role == "admin" || role == "moderator"
-}
-
-async fn require_can_delete_game(
-    state: &AppState,
-    game_id: i64,
-    claims: &Claims,
-) -> Result<i64, GameError> {
-    let user_id = claims
-        .user_id
-        .parse::<i64>()
-        .map_err(|_| GameError::InternalError("Cannot parse id".to_string()))?;
-    let owner: Option<i64> = sqlx::query_scalar(
-        "SELECT posts.user_id FROM games JOIN posts ON posts.id = games.post_id WHERE games.id = ?",
-    )
-    .bind(game_id)
-    .fetch_optional(&state.game_service.pool)
-    .await?;
-    let owner = owner.ok_or(GameError::GameNotFound)?;
-    if owner == user_id || is_admin_or_mod_game(&claims.role) {
-        let post_id: Option<i64> = sqlx::query_scalar("SELECT post_id FROM games WHERE id=?")
-            .bind(game_id)
-            .fetch_optional(&state.game_service.pool)
-            .await?;
-        post_id.ok_or(GameError::GameNotFound)
-    } else {
-        Err(GameError::Forbidden)
-    }
-}
-
 pub async fn delete_game_draft(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     AxumPath(game_id): AxumPath<i64>,
     Query(query): Query<DeleteGameQuery>,
 ) -> Result<StatusCode, GameError> {
-    let post_id = require_can_delete_game(&state, game_id, &claims).await?;
+    let post_id = require_can_delete(
+        &state.game_service.pool,
+        "games",
+        game_id,
+        &claims,
+        GameError::InternalError,
+        GameError::GameNotFound,
+        GameError::Forbidden,
+    )
+    .await?;
     let row = sqlx::query_as::<_, (String, String, String, Option<String>)>(
         "SELECT posts.content_kind, posts.title, posts.slug, posts.deleted_at FROM posts JOIN games ON games.post_id = posts.id WHERE games.id = ?",
     )
@@ -1246,7 +819,16 @@ pub async fn restore_game(
     Extension(claims): Extension<Claims>,
     AxumPath(game_id): AxumPath<i64>,
 ) -> Result<StatusCode, GameError> {
-    let post_id = require_can_delete_game(&state, game_id, &claims).await?;
+    let post_id = require_can_delete(
+        &state.game_service.pool,
+        "games",
+        game_id,
+        &claims,
+        GameError::InternalError,
+        GameError::GameNotFound,
+        GameError::Forbidden,
+    )
+    .await?;
     let deleted_at: Option<String> = sqlx::query_scalar("SELECT deleted_at FROM posts WHERE id = ?")
         .bind(post_id)
         .fetch_optional(&state.game_service.pool)
@@ -1306,7 +888,14 @@ pub async fn update_game(
         })
         .await?;
 
-    let parsed = parse_game_multipart::<GamePatchData>(multipart, "game_data").await?;
+    let parsed = parse_multipart::<GamePatchData, GameError>(
+        multipart,
+        "game_data",
+        "No game data is given.",
+        GameError::InternalError,
+        GameError::UploadFailed,
+    )
+    .await?;
     let mut data = parsed.data;
     let current_launcher_type: String =
         sqlx::query_scalar("SELECT launcher_type FROM games WHERE id = ?")
@@ -1384,6 +973,7 @@ pub async fn update_game(
         data.number_of_files,
         &parsed.files,
         &parsed.short_names,
+        GameError::UploadFailed,
     )
     .await?;
 
@@ -1410,7 +1000,7 @@ pub async fn update_game(
         })
         .await?;
 
-    let mut demo_url = validate_demo_url(data.demo_url)?.filter(|u| !u.trim().is_empty());
+    let mut demo_url = validate_demo_url(data.demo_url, GameError::InvalidDemo)?.filter(|u| !u.trim().is_empty());
     if parsed.demo_zip.is_some() {
         let local_demo_url = state
             .project_demo_config
@@ -1499,7 +1089,14 @@ pub async fn update_game(
     }
 
     if let Some(zip) = parsed.demo_zip {
-        extract_demo_zip(&state.project_demo_config, game_id, zip).await?;
+        extract_demo_zip(
+            &state.project_demo_config,
+            format!("game-{game_id}"),
+            zip,
+            GameError::InternalError,
+            GameError::InvalidDemo,
+        )
+        .await?;
     }
 
     if data.og_image_seconds.is_some() {

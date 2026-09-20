@@ -12,7 +12,7 @@ use sqlx::Row;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
 use crate::infrastructure::web::{
-    api::handlers::game::require_game_owner,
+    api::support::ownership::require_owner,
     server::AppState,
 };
 
@@ -53,7 +53,7 @@ pub async fn complete_snapshot_upload(
         ));
     }
     let game_id: i64 = row.get("game_id");
-    require_game_owner(&state, game_id, uploader_id).await?;
+    require_owner(&state.game_service.pool, "games", game_id, uploader_id).await?;
 
     let storage = &state.storage;
     let temp_key: String = row.get("temp_storage_key");

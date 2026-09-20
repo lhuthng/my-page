@@ -10,7 +10,7 @@ use sqlx::Row;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
 use crate::infrastructure::web::{
-    api::handlers::game::require_game_owner,
+    api::support::ownership::require_owner,
     server::AppState,
 };
 
@@ -42,7 +42,7 @@ pub async fn get_game_snapshot(
     Extension(claims): Extension<Claims>,
     AxumPath(game_id): AxumPath<i64>,
 ) -> Result<Json<Vec<SnapshotStatusResponse>>, ProjectError> {
-    require_game_owner(&state, game_id, user_id(&claims)?).await?;
+    require_owner(&state.game_service.pool, "games", game_id, user_id(&claims)?).await?;
     // One row per snapshot; freshness against the system's resolved machine
     // shape is computed in Rust (specs JSON can't be compared in plain SQL).
     let rows = sqlx::query(
@@ -95,7 +95,7 @@ pub async fn delete_game_snapshot(
     Extension(claims): Extension<Claims>,
     AxumPath((game_id, variant_index)): AxumPath<(i64, i32)>,
 ) -> Result<StatusCode, ProjectError> {
-    require_game_owner(&state, game_id, user_id(&claims)?).await?;
+    require_owner(&state.game_service.pool, "games", game_id, user_id(&claims)?).await?;
     let storage_key: Option<String> = sqlx::query_scalar(
         "SELECT storage_key FROM game_v86_snapshots WHERE game_id = ? AND variant_index = ?",
     )

@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
 use crate::infrastructure::web::{
-    api::handlers::game::require_game_owner,
+    api::support::ownership::require_owner,
     server::AppState,
 };
 
@@ -44,7 +44,7 @@ pub async fn start_snapshot_upload(
     Json(request): Json<StartSnapshotUploadRequest>,
 ) -> Result<Json<StartUploadResponse>, ProjectError> {
     let uploader_id = user_id(&claims)?;
-    require_game_owner(&state, request.game_id, uploader_id).await?;
+    require_owner(&state.game_service.pool, "games", request.game_id, uploader_id).await?;
     validate_sha256_hex(&request.sha256)?;
     validate_sha256_hex(&request.game_disk_sha256)?;
 
