@@ -232,3 +232,22 @@ pub async fn send_campaign(
         message: "Campaign sent.".to_string(),
     }))
 }
+
+// ---------------------------------------------------------------------------
+// Route tables
+use std::sync::Arc;
+
+use axum::{routing::{get, post}, Router};
+
+use crate::infrastructure::web::server::AppState;
+
+/// Public subscription lifecycle, nested at `/newsletter`.
+pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/subscribe", post(subscribe))
+        .route("/confirm", get(confirm))
+        .route(
+            "/unsubscribe",
+            get(unsubscribe).post(unsubscribe_by_email),
+        )
+}

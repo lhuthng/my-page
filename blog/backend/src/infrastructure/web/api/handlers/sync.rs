@@ -347,3 +347,29 @@ async fn stream_temp_file(
         .body(Body::from_stream(stream))
         .unwrap())
 }
+
+// ---------------------------------------------------------------------------
+// Route tables
+use std::sync::Arc;
+
+use axum::{
+    middleware,
+    routing::{delete, get, post},
+    Router,
+};
+
+use crate::infrastructure::web::{api::middlewares, server::AppState};
+
+/// prod -> dev pull protocol, guarded by sync keys.
+pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/manifest", get(get_manifest))
+        .route("/database", get(get_database))
+        .route("/media/{hash}", get(get_media_by_hash))
+        .route("/demo/{kind}/{id}/{*path}", get(get_demo_file))
+        .route("/artifact/{*key}", get(get_artifact))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            middlewares::auth::sync_key_guard,
+        ))
+}

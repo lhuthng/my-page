@@ -103,3 +103,20 @@ pub async fn receive_contact_form(
         message: "Message sent. Check your inbox for the confirmation email.".to_string(),
     }))
 }
+
+// ---------------------------------------------------------------------------
+// Route table
+use std::sync::Arc;
+
+use axum::{routing::{get, post}, Router};
+
+use crate::infrastructure::web::server::AppState;
+
+pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
+    let routes = Router::new().route("/contact-form", post(receive_contact_form));
+
+    #[cfg(debug_assertions)]
+    let routes = routes.route("/preview", get(preview_email_templates));
+
+    routes
+}

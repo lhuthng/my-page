@@ -319,3 +319,35 @@ pub async fn remove_post_from_series(
         .await?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Route table
+use std::sync::Arc;
+
+use axum::{
+    middleware,
+    routing::{delete, get, patch, post},
+    Router,
+};
+
+use crate::infrastructure::web::{api::middlewares, server::AppState};
+
+pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    // public
+    Router::new()
+        .route("/public/all", get(get_all_series))
+        // user protected
+        .merge(
+            Router::new()
+                .route("/all", get(get_series))
+                .route("/new", post(new_series))
+                .route("/id/{series_id}", patch(add_post_to_series))
+                .route("/id/{series_id}", delete(remove_post_from_series))
+                .route("/id/{series_id}/posts", get(get_series_posts))
+                .layer(middleware::from_fn(middlewares::auth::mod_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        )
+}

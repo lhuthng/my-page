@@ -294,3 +294,23 @@ pub async fn reset_password(
         message: "Password changed. You can log in with the new password now.".to_string(),
     }))
 }
+
+
+// ---------------------------------------------------------------------------
+// Route table (public only; the login flow mints its own tokens)
+use std::sync::Arc;
+
+use axum::{routing::{get, post}, Router};
+
+use crate::infrastructure::web::server::AppState;
+
+pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/login", post(login))
+        .route("/register", post(register))
+        .route("/verify-email", get(verify_email))
+        .route("/forgot-password", post(request_password_reset))
+        .route("/reset-password", post(reset_password))
+        .route("/resend-verification", post(resend_verification))
+        .route("/refresh", post(refresh_token))
+}

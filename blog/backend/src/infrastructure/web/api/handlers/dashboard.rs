@@ -268,3 +268,57 @@ pub async fn get_trash(
         .collect();
     Ok(Json(serde_json::json!({ "items": items })))
 }
+
+// ---------------------------------------------------------------------------
+// Route tables
+use std::sync::Arc;
+
+use axum::{
+    middleware,
+    routing::{delete, get, patch, post},
+    Router,
+};
+
+use crate::infrastructure::web::{api::handlers::{newsletter, sync}, api::middlewares, server::AppState};
+
+pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    // moderator-protected overview content
+    Router::new()
+        .route("/overview", get(get_overview))
+        .route("/posts", get(get_posts))
+        .route("/projects", get(get_projects))
+        .route("/trash", get(get_trash))
+        .route("/users", get(get_users))
+        // newsletter management under the dashboard scope
+        .route("/newsletter/subscribers", get(newsletter::list_subscribers))
+        .route("/newsletter/campaigns", get(newsletter::list_campaigns))
+        .route("/newsletter/send", post(newsletter::send_campaign))
+        .layer(middleware::from_fn(middlewares::auth::mod_check))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            middlewares::auth::user_guard,
+        ))
+        // admin-protected management
+        .merge(
+            Router::new()
+                .route("/analytics/countries", get(get_visitor_countries))
+                .route("/tags/{tag_id}", patch(update_tag))
+                .route("/tags/{tag_id}", delete(delete_tag))
+                .route(
+                    "/sync-keys",
+                    get(sync::list_sync_keys).post(sync::create_sync_key),
+                )
+                .route("/sync-keys/{key_id}", delete(sync::revoke_sync_key))
+                .layer(middleware::from_fn(middlewares::auth::admin_check))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::user_guard,
+                )),
+        )
+}
+
+/// The single public analytics beacon.
+pub fn analytics_routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
+    let _ = &state;
+    Router::new().route("/visit", post(track_visit))
+}
