@@ -272,4 +272,4 @@ impl SeriesService for SeriesServiceImpl {
         tx.commit().await?;
         Ok(true)
     }
-}}
+}
