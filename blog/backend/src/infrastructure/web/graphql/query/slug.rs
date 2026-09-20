@@ -52,5 +52,3 @@ impl QueryRoot {
         Ok(count == 0)
     }
 }
-
-}

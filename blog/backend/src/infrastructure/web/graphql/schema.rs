@@ -3,11 +3,8 @@
 use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
 use sqlx::SqlitePool;
 
-pub use super::query::*;
-
 pub struct QueryRoot;
 
-#[Object]
 pub type BlogSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 
 pub fn build_schema(pool: SqlitePool) -> BlogSchema {
