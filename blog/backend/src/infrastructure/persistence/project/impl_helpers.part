@@ -1,0 +1,248 @@
+impl ProjectServiceImpl {
+    async fn hydrate_project_rows(
+        &self,
+        rows: Vec<ProjectSnapshotRow>,
+    ) -> Result<Vec<ProjectSnapshot>, ProjectError> {
+        if rows.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let placeholders = rows.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            r#"
+            SELECT projects.id AS project_id, tags.name AS tag_name, tags.slug AS tag_slug
+            FROM projects
+            JOIN post_tags ON post_tags.post_id = projects.post_id
+            JOIN tags ON tags.id = post_tags.tag_id
+            WHERE projects.id IN ({})
+            "#,
+            placeholders
+        );
+
+        let mut query = sqlx::query_as::<_, ProjectTagRow>(&sql);
+        let mut map = HashMap::<i64, usize>::new();
+        let mut snapshots = vec![];
+
+        for row in rows {
+            map.insert(row.project_id, snapshots.len());
+            query = query.bind(row.project_id);
+            snapshots.push(row.into_snapshot(vec![], vec![]));
+        }
+
+        let tag_rows = query.fetch_all(&self.pool).await?;
+        for row in tag_rows {
+            if let Some(index) = map.get(&row.project_id)
+                && let Some(project) = snapshots.get_mut(*index)
+            {
+                project.tag_names.push(row.tag_name);
+                project.tag_slugs.push(row.tag_slug);
+            }
+        }
+
+        Ok(snapshots)
+    }
+
+    async fn links_for_project(&self, project_id: i64) -> Result<Vec<ProjectLink>, ProjectError> {
+        Ok(sqlx::query_as::<_, ProjectLinkRow>(
+            r#"
+            SELECT label, url
+            FROM project_links
+            WHERE project_id = ?
+            ORDER BY sort_order ASC, id ASC
+            "#,
+        )
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .map(|row| ProjectLink {
+            label: row.label,
+            url: row.url,
+        })
+        .collect())
+    }
+
+    async fn project_from_row(
+        &self,
+        row: ProjectContentRow,
+        viewing_user_id: Option<i64>,
+    ) -> Result<Project, ProjectError> {
+        let tag_rows = sqlx::query_as::<_, TagRow>(
+            r#"
+            SELECT post_id, tags.name AS tag_name, tags.slug AS tag_slug
+            FROM post_tags
+            JOIN tags ON tags.id = post_tags.tag_id
+            WHERE post_id = ?
+            "#,
+        )
+        .bind(row.post_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let medium_rows = sqlx::query_as::<_, MediumUsageWithNameRow>(
+            r#"
+            SELECT code, url, short_name
+            FROM post_media_usages
+            JOIN media ON media.id = medium_id
+            WHERE post_media_usages.post_id = ?
+            "#,
+        )
+        .bind(row.post_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let len = medium_rows.len() as i64;
+        let mut medium_urls = vec![String::new(); medium_rows.len()];
+        let mut medium_short_names = vec![String::new(); medium_rows.len()];
+        for medium in medium_rows {
+            if medium.code < 0 || medium.code >= len {
+                return Err(ProjectError::InternalError(
+                    "Out of range project media index found".to_string(),
+                ));
+            }
+            let index = medium.code as usize;
+            medium_urls[index] = medium.url;
+            medium_short_names[index] = medium.short_name;
+        }
+
+        let cover_url = row.cover_url;
+        let cover_media_type = row.cover_media_type;
+        let og_image_url = Some(format!("media/i/.post.{}.thumbnail", row.post_id));
+
+        // Delegation: a project with demo_type='game' plays the launcher of
+        // another game. Thumbnail/tag inheritance pulls that game's post data
+        // in at read time; the project keeps its own body and identity.
+        let mut delegated_game = None;
+        if let Some(game_id) = row.delegate_game_id {
+            let game_row = sqlx::query_as::<
+                _,
+                (
+                    i64,
+                    String,
+                    String,
+                    String,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                ),
+            >(
+                r#"
+                SELECT g.id, posts.title, posts.slug, g.launcher_type, g.demo_url,
+                       g.demo_width, g.demo_height
+                FROM games g
+                JOIN posts ON posts.id = g.post_id
+                WHERE g.id = ? AND posts.status = 'published' AND posts.deleted_at IS NULL
+                "#,
+            )
+            .bind(game_id)
+            .fetch_optional(&self.pool)
+            .await?;
+            if let Some((gid, title, slug, launcher_type, demo_url, width, height)) = game_row {
+                let bundle = sqlx::query_as::<_, (String, String, i64, String)>(
+                    "SELECT storage_key, original_file_name, size_bytes, sha256 FROM game_jsdos_bundles WHERE game_id = ?",
+                )
+                .bind(gid)
+                .fetch_optional(&self.pool)
+                .await?
+                .map(|(storage_key, original_file_name, size_bytes, sha256)| JsDosBundle {
+                    storage_key,
+                    original_file_name,
+                    size_bytes,
+                    sha256,
+                });
+                delegated_game = Some(DelegatedGame {
+                    id: gid,
+                    title,
+                    slug,
+                    launcher_type,
+                    demo_url,
+                    width,
+                    height,
+                    jsdos_bundle: bundle,
+                });
+            }
+        }
+
+        let mut tags: Vec<String> = tag_rows.into_iter().map(|row| row.tag_slug).collect();
+        let mut cover_url = cover_url;
+        let mut cover_media_type = cover_media_type;
+        if let Some(game) = &delegated_game {
+            if row.inherit_thumbnail != 0 {
+                let game_cover = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+                    r#"
+                    SELECT 'media/i/' || media.short_name, media.file_type
+                    FROM games g
+                    JOIN posts ON posts.id = g.post_id
+                    LEFT JOIN media ON media.id = posts.cover_media_id
+                    WHERE g.id = ?
+                    "#,
+                )
+                .bind(game.id)
+                .fetch_optional(&self.pool)
+                .await?
+                .and_then(|(url, media_type)| url.map(|u| (Some(u), media_type)));
+                if let Some((url, media_type)) = game_cover {
+                    cover_url = url;
+                    cover_media_type = media_type;
+                }
+            }
+            if row.inherit_tags != 0 {
+                let game_tags = sqlx::query_scalar::<_, String>(
+                    r#"
+                    SELECT tags.slug
+                    FROM games g
+                    JOIN post_tags ON post_tags.post_id = g.post_id
+                    JOIN tags ON tags.id = post_tags.tag_id
+                    WHERE g.id = ?
+                    "#,
+                )
+                .bind(game.id)
+                .fetch_all(&self.pool)
+                .await?;
+                for tag in game_tags {
+                    if !tags.contains(&tag) {
+                        tags.push(tag);
+                    }
+                }
+            }
+        }
+
+        Ok(Project {
+            id: row.project_id,
+            post_id: row.post_id,
+            title: row.title,
+            slug: row.slug,
+            author_name: row.author_name,
+            author_slug: row.author_slug,
+            author_avatar_url: row.author_avatar_url,
+            tags,
+            excerpt: row.excerpt,
+            content: row.content,
+            published_at: row.published_at,
+            updated_at: row.updated_at,
+            medium_urls,
+            medium_short_names,
+            cover_url,
+            cover_media_type,
+            og_image_url,
+            cover_video_url: row.cover_video_url,
+            cover_video_type: row.cover_video_type,
+            og_image_seconds: row.og_image_seconds,
+            demo: ProjectDemo {
+                demo_type: row.demo_type,
+                entry_path: row.demo_entry_path,
+                width: row.demo_width,
+                height: row.demo_height,
+                config: row.demo_config,
+                demo_url: row.demo_url,
+            },
+            delegate_game_id: row.delegate_game_id,
+            inherit_thumbnail: row.inherit_thumbnail != 0,
+            inherit_tags: row.inherit_tags != 0,
+            delegated_game,
+            links: self.links_for_project(row.project_id).await?,
+            is_owner: viewing_user_id == Some(row.user_id),
+        })
+    }
+}
+

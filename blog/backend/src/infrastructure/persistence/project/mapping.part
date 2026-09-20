@@ -1,0 +1,26 @@
+impl ProjectSnapshotRow {
+    fn into_snapshot(self, tag_names: Vec<String>, tag_slugs: Vec<String>) -> ProjectSnapshot {
+        ProjectSnapshot {
+            id: self.project_id,
+            post_id: self.post_id,
+            title: self.title,
+            slug: self.slug,
+            tag_names,
+            tag_slugs,
+            excerpt: self.excerpt,
+            author_name: self.author_name,
+            author_slug: self.author_slug,
+            status: self.status,
+            url: self.url,
+            cover_media_type: self.cover_media_type,
+            demo_type: self.demo_type,
+            stats: PostStats {
+                views: self.views,
+                likes: self.likes,
+                comments: self.comments_count,
+            },
+            reading_time_minutes: self.reading_time_minutes,
+        }
+    }
+}
+
