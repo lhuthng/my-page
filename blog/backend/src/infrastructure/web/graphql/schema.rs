@@ -1,6 +1,6 @@
 // The GraphQL schema type and its assembly. `QueryRoot`'s resolver fields
 // live in `query/`.
-use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
+use async_graphql::{EmptyMutation, EmptySubscription, Schema};
 use sqlx::SqlitePool;
 
 pub struct QueryRoot;
