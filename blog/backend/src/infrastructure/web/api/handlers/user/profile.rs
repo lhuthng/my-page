@@ -1,47 +1,35 @@
+// Profile endpoints: me, public profiles, user posts and comments, mod
+// check, and search.
 use std::sync::Arc;
 
 use axum::{
     Extension, Json,
-    body::Bytes,
-    extract::{Multipart, Path, Query, State},
+    extract::{Path, Query, State},
     response::IntoResponse,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     application::{
-        commands::{
-            media::ChangeAvatarCommand,
-            user::{
-                ChangeDetailsCommand, GetLatestCommentsCommand, GetPostsCommand, GetUserCommand,
-                MeCommand, SearchUserCommand,
-            },
+        commands::user::{
+            ChangeDetailsCommand, GetLatestCommentsCommand, GetPostsCommand, GetUserCommand,
+            MeCommand, SearchUserCommand,
         },
-        services::{media::MediaService, user::UserService},
+        services::user::UserService,
     },
     domain::{
-        entities::{
-            media::MediumDetails,
-            secret::Claims,
-            user::{UserRole, UserSummary},
-        },
-        errors::{media::MediaError, user::UserError},
+        entities::secret::Claims,
+        errors::user::UserError,
     },
     helper::time::normalize_utc_timestamp,
     infrastructure::web::{
-        api::handlers::support::cover::{MediumData, extract_medium},
+        api::handlers::user::dto::{
+            ChangeDetailsBody, CheckModResponse, GetLatestCommentsQuery, GetLatestCommentsResponse,
+            GetPostsQuery, GetPostsResponse, GetUserResponse, MeResponse, SearchUserQuery,
+            SearchUserResponse,
+        },
         server::AppState,
     },
 };
-
-#[derive(Debug, Serialize)]
-pub struct MeResponse {
-    username: String,
-    display_name: String,
-    role: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    avatar_url: Option<String>,
-}
 
 #[axum::debug_handler]
 pub async fn me(
@@ -67,80 +55,6 @@ pub async fn me(
 }
 
 #[axum::debug_handler]
-pub async fn change_avatar(
-    State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<Claims>,
-    mut multipart: Multipart,
-) -> Result<impl IntoResponse, MediaError> {
-    let user_id = claims
-        .user_id
-        .parse::<i64>()
-        .map_err(|_| MediaError::InternalError("Cannot parse id.".to_string()))?;
-
-    let mut opt_filename: Option<String> = None;
-    let mut opt_content_type: Option<String> = None;
-    let mut opt_bytes: Option<Bytes> = None;
-
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| MediaError::InternalError(e.to_string()))?
-    {
-        let field_name = field.name().ok_or(MediaError::UploadFailed(
-            "Empty field detected.".to_string(),
-        ))?;
-
-        if field_name == "file" {
-            if opt_filename.is_some() {
-                return Err(MediaError::UploadFailed(
-                    "Only one media is allowed at a time.".to_string(),
-                ));
-            }
-
-            let MediumData {
-                filename,
-                content_type,
-                bytes,
-            } = extract_medium(field).await?;
-
-            opt_filename = Some(filename);
-            opt_content_type = Some(content_type);
-            opt_bytes = Some(bytes);
-        }
-    }
-
-    let filename =
-        opt_filename.ok_or_else(|| MediaError::UploadFailed("Missing file".to_string()))?;
-    let content_type = opt_content_type
-        .ok_or_else(|| MediaError::UploadFailed("Missing content type".to_string()))?;
-    let bytes =
-        opt_bytes.ok_or_else(|| MediaError::UploadFailed("Missing file bytes".to_string()))?;
-
-    state
-        .media_service
-        .change_avatar(
-            ChangeAvatarCommand {
-                user_id,
-                medium_details: MediumDetails {
-                    filename,
-                    content_type,
-                    bytes,
-                },
-            },
-            &state.media_config,
-        )
-        .await?;
-
-    Ok(())
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ChangeDetailsBody {
-    pub display_name: Option<String>,
-    pub bio: Option<String>,
-}
-
-#[axum::debug_handler]
 pub async fn change_details(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
@@ -161,16 +75,6 @@ pub async fn change_details(
     Ok(())
 }
 
-#[derive(Debug, Serialize)]
-pub struct GetUserResponse {
-    username: String,
-    display_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    avatar_url: Option<String>,
-    bio: String,
-    role: String,
-}
-
 #[axum::debug_handler]
 pub async fn get_user(
     State(state): State<Arc<AppState>>,
@@ -187,58 +91,6 @@ pub async fn get_user(
         })),
         Err(e) => Err(e),
     }
-}
-
-#[derive(Deserialize)]
-pub struct GetPostsQuery {
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
-}
-
-#[derive(Serialize)]
-pub struct Post {
-    pub id: i64,
-    pub title: String,
-    pub slug: String,
-    pub tag_names: Vec<String>,
-    pub tag_slugs: Vec<String>,
-    pub excerpt: String,
-    pub author_name: String,
-    pub author_slug: String,
-    pub status: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cover_media_type: Option<String>,
-    pub reading_time_minutes: i64,
-}
-
-#[derive(Serialize)]
-pub struct GetPostsResponse {
-    pub posts: Vec<Post>,
-}
-
-#[derive(Serialize)]
-pub struct LatestComment {
-    pub id: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<i64>,
-    pub content: String,
-    pub created_at: String,
-    pub post_title: String,
-    pub post_slug: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub avatar_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct GetLatestCommentsResponse {
-    pub comments: Vec<LatestComment>,
 }
 
 #[axum::debug_handler]
@@ -293,12 +145,6 @@ pub async fn get_posts(
     Ok(Json(wrapped_posts))
 }
 
-#[derive(Deserialize)]
-pub struct GetLatestCommentsQuery {
-    pub limit: Option<i64>,
-    pub offset: Option<i64>,
-}
-
 pub async fn get_latest_comments(
     State(state): State<Arc<AppState>>,
     Path(username): Path<String>,
@@ -331,11 +177,6 @@ pub async fn get_latest_comments(
     }))
 }
 
-#[derive(Debug, Serialize)]
-pub struct CheckModResponse {
-    is_authorized: bool,
-}
-
 #[axum::debug_handler]
 pub async fn check_mod(
     Extension(claims): Extension<Claims>,
@@ -344,27 +185,6 @@ pub async fn check_mod(
         .is_ok_and(|role| UserRole::Moderator.include(&role));
 
     Ok(Json(CheckModResponse { is_authorized }))
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SearchUserQuery {
-    pub term: String,
-    pub size: Option<i64>,
-    pub offset: Option<i64>,
-}
-
-#[derive(Serialize)]
-pub struct SearchUserResult {
-    pub username: String,
-    pub display_name: String,
-    pub role: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub avatar_url: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct SearchUserResponse {
-    pub users: Vec<SearchUserResult>,
 }
 
 #[axum::debug_handler]
