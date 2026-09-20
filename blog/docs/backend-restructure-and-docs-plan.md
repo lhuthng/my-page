@@ -1,6 +1,58 @@
 # Backend Modularization and Documentation Architecture
 
-Status: **proposal** — target state only. No implementation has been performed.
+Status: **accepted 2026-09-20** — Part A (backend modularization) implemented
+starting at commit `92825bbe`; Part B (documentation) follows. The §3.4 open
+decision is resolved below.
+
+## §3.4 decision record — GraphQL's database access (2026-09-20)
+
+**Option A — accept and document the exception.** `web::graphql` keeps direct
+`SqlitePool` access. GraphQL is a read-only admin surface; the resolvers are
+shaped by the rows they select, and routing them through the service ports
+would add a reshaping pass with no boundary gain. The boundary contract in
+§3.4 records this as a named exception: `web::graphql` may use `sqlx` directly
+in addition to `domain` and `web::server::AppState`.
+
+## Implementation deviations (Part A, 2026-09-20)
+
+The target tables in Part A were refined during implementation where they
+conflicted with the file budget (§3.5) or with what the code actually
+contains. All deviations are recorded in the commit messages; the material
+ones:
+
+- **handlers/game** and **handlers/post**: the single `write.rs` the tables
+  allocate would hold 515 and 570 lines respectively, so the write side is
+  split along use case per §3.5's own rule (game: `write`/`update`/`trash`/
+  `publish`; post: `write`/`update`/`publish`/`trash`).
+- **handlers/v86**: the table's `systems.rs`/`games.rs`/`snapshots.rs` would
+  each exceed 400 lines, so the upload pipelines were split one level further
+  (`system_uploads`, `system_versions`, `game_uploads`, `snapshot_uploads`,
+  `snapshot_finalize`) and two shared modules added (`shared.rs` for the
+  cross-file helpers, `upload_session.rs` for the multipart relay).
+- **persistence/post**: the trait impl is split into `read`/`detail`/`write`/
+  `comments`/`threads` as five `impl PostService for PostServiceImpl` blocks
+  (Rust permits split impls); the table's single read.rs/write.rs/comments.rs
+  would all exceed 400 lines. `mapping.rs` carries `into_snapshot` and the
+  hydration helper; the row structs are re-exported from `mod.rs`.
+- **persistence/media**: `change_post_cover` (303 lines) is its own
+  `covers.rs`; avatar and upload are separate files. Eleven files instead of
+  the table's seven.
+- **persistence/series**: no `rows.rs` — the adapter reads via `query_as`
+  tuples, not `FromRow` structs.
+- **persistence/project**: no `links.rs` — the link-table SQL is interleaved
+  with the upserts inside the write methods, unlike post's free functions.
+- **persistence/dashboard**: the table's nine files are consolidated to six
+  (`shared.rs` carries the snapshot fetchers reused by every listing).
+- **graphql**: `types.rs` and `rows.rs` stay whole — both are within budget
+  and the per-aggregate split would create fourteen files of 20-40 lines.
+- **server/config/cors.rs**: not created; allowed-origin resolution is
+  HTTP-layer policy and lives in `api/layers.rs` (§4.4's one-fact-one-home).
+- **sync**: no `snapshot.rs` — this module contains no snapshot code; the
+  SQLite snapshot is streamed by the `/sync/database` handler.
+- **domain/ and application/**: the flat per-aggregate files are already the
+  layout the §3.3 tree describes (one file per aggregate, all under budget);
+  converting them to `post/mod.rs`-style directories would change no path and
+  no file size, so the flat layout is kept.
 Scope: `blog/backend/` (module architecture) and every tracked `*.md` file in the repository (documentation architecture).
 
 ---
@@ -294,7 +346,7 @@ style preference.
 | `web::api::support` | `domain`, `axum`, `application` | any specific `handlers::<feature>` module |
 | `web::api::handlers::<feature>` | `domain`, `application`, `web::server::AppState`, `web::api::support`, `web::api::middlewares` | `infrastructure::persistence` directly, `web::graphql`, any *other* `handlers::<feature>` |
 | `web::api::router` | every `handlers::<feature>::routes` | business logic of any kind |
-| `web::graphql` | `domain`, `web::server::AppState` | `infrastructure::web::api::handlers` |
+| `web::graphql` | `domain`, `web::server::AppState` | `infrastructure::web::api::handlers` — **named exception (Option A, 2026-09-20): graphql may use `sqlx` directly against the pool** |
 | `helper` | `std` | everything else |
 
 Three consequences worth stating explicitly:
