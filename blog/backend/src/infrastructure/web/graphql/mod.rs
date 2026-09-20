@@ -1,6 +1,7 @@
 mod helpers;
-pub(crate) mod resolvers;
+mod query;
+pub(crate) mod schema;
 mod rows;
 mod types;
 
-pub use resolvers::{BlogSchema, build_schema};
+pub use schema::{BlogSchema, build_schema};
