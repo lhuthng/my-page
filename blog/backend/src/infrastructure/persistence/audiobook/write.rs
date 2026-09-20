@@ -18,6 +18,7 @@ use super::rows::{DetailsRow, SnapshotRow, TrackRow};
 use super::{tags, tracks, validation};
 use super::AudiobookServiceImpl;
 
+#[async_trait::async_trait]
 impl AudiobookService for AudiobookServiceImpl {
     async fn new_audiobook(
         &self,

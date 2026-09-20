@@ -10,6 +10,7 @@ use crate::domain::errors::post::PostError;
 
 use super::PostServiceImpl;
 
+#[async_trait::async_trait]
 impl PostService for PostServiceImpl {
     async fn get_comments(&self, cmd: GetCommentsCommand) -> Result<CommentPage, PostError> {
         if let Some(parent_id) = cmd.parent_id {

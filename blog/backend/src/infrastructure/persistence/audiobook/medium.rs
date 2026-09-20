@@ -80,5 +80,3 @@ impl AudiobookServiceImpl {
     }
 }
 
-#[async_trait::async_trait]
-}

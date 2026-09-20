@@ -84,6 +84,7 @@ impl AudiobookServiceImpl {
     /// Attach tags to a batch of snapshots in one extra query.
 }
 
+#[async_trait::async_trait]
 impl AudiobookService for AudiobookServiceImpl {
     async fn add_track(
         &self,

@@ -12,6 +12,7 @@ use crate::domain::errors::post::PostError;
 
 use super::PostServiceImpl;
 
+#[async_trait::async_trait]
 impl PostService for PostServiceImpl {
     async fn post_new_comment(&self, cmd: PostNewCommentCommand) -> Result<i64, PostError> {
         let content = crate::helper::string::validate_text(&cmd.content, "Comment", 2000)

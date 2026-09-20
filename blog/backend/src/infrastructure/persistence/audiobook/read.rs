@@ -18,6 +18,7 @@ use super::rows::{DetailsRow, SnapshotRow};
 use super::validation;
 use super::AudiobookServiceImpl;
 
+#[async_trait::async_trait]
 impl AudiobookService for AudiobookServiceImpl {
     async fn get_audiobooks(
         &self,

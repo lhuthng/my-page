@@ -13,6 +13,7 @@ use crate::domain::errors::post::PostError;
 use super::rows::{PostContentRow, PostDetailsRow, PostRow, TagRow, TagSummaryRow};
 use super::PostServiceImpl;
 
+#[async_trait::async_trait]
 impl PostService for PostServiceImpl {
     async fn get_post(&self, cmd: GetPostCommand) -> Result<Post, PostError> {
         let PostContentRow {

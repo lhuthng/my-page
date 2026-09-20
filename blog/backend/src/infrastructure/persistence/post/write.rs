@@ -35,6 +35,7 @@ macro_rules! bind_opt {
     };
 }
 
+#[async_trait::async_trait]
 impl PostService for PostServiceImpl {
     async fn new_post(&self, cmd: NewPostCommand) -> Result<i64, PostError> {
         let title = crate::helper::string::validate_text(&cmd.title, "Title", 200)

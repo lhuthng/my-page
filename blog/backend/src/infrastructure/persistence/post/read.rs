@@ -17,6 +17,7 @@ use crate::domain::errors::post::PostError;
 
 use super::rows::{PostRow, PostSearchRow, TagRow, TagSummaryRow};
 use super::PostServiceImpl;
+#[async_trait::async_trait]
 impl PostService for PostServiceImpl {
     async fn check_slug(&self, cmd: CheckSlugCommand) -> Result<bool, PostError> {
         let exists: bool = sqlx::query_scalar(
