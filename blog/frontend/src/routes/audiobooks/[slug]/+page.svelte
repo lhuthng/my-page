@@ -61,7 +61,7 @@
 	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
-<section class="flex flex-col gap-4 pb-8">
+<article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
 	<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
 		<BackButton href="/audiobooks" text="Audiobooks" />
 
@@ -115,4 +115,4 @@
 		coverUrl={audiobook.url}
 		storageKey={audiobook.slug}
 	/>
-</section>
+</article>
