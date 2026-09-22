@@ -111,68 +111,74 @@
 		player.seekToRatio(ratio);
 		scrub = null;
 	}
+
+	// The invisible range input maps pointer positions across
+	// (width - native thumb width), so clicks near the edges land off from
+	// the cursor. Pointer coordinates on the bar itself map exactly.
+	function ratioFromPointer(event, el) {
+		const rect = el.getBoundingClientRect();
+		return Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+	}
+
+	function previewScrub(event) {
+		scrub = ratioFromPointer(event, event.currentTarget) * duration;
+	}
+
+	function commitPointerSeek(event) {
+		player.seekToRatio(ratioFromPointer(event, event.currentTarget));
+		scrub = null;
+	}
 </script>
 
-<section class="flex flex-col gap-4 bg-white rounded-xl p-4 text-dark">
+<section class="flex flex-col gap-4 text-dark border-t-2 border-dark/10 pt-4">
 	<audio bind:this={audioEl} preload="metadata" class="hidden"></audio>
 
 	{#if tracks.length === 0}
-		<p class="py-8 text-center text-dark/50">This audiobook has no tracks yet.</p>
+		<p class="py-8 text-center text-base text-dark/50">This audiobook has no tracks yet.</p>
 	{:else}
-		<!-- Header: cover, book and chapter identity -->
-		<div class="flex gap-4 items-start">
-			{#if coverUrl}
-				<img src={coverUrl} alt={`Cover of ${title}`} class="w-24 h-24 rounded-xl object-cover" />
-			{:else}
-				<div class="w-24 h-24 rounded-xl bg-primary/20 shrink-0"></div>
-			{/if}
-
-			<div class="flex flex-col min-w-0 gap-1">
-				<h1 class="text-xl font-semibold line-clamp-2">{title}</h1>
-				{#if translator}
-					<p class="text-sm text-dark/60">Translated by {translator}</p>
-				{:else if author}
-					<p class="text-sm text-dark/60">{author}</p>
-				{/if}
-				<p class="text-sm font-medium line-clamp-1">
-					<span class="text-dark/50">Chapter {current?.number ?? 1} of {tracks.length}:</span>
-					{current?.title ?? ''}
-				</p>
-			</div>
-		</div>
+		<!-- Chapter identity -->
+		<p class="text-lg md:text-xl font-bold line-clamp-2">
+			Chapter {current?.number ?? 1} - {current?.title ?? ''}
+		</p>
 
 		<!-- Resume offer -->
 		{#if player.resumeOffer}
 			<div
 				class="flex items-center gap-3 bg-accent-yellow-light-4 border border-accent-yellow rounded-lg p-3"
 			>
-				<span class="text-sm grow">
+				<span class="text-base grow">
 					Resume from {formatClock(player.resumeOffer.time)}?
 				</span>
-				<button
-					class="rounded-full bg-dark text-white text-sm px-3 py-1 hover:bg-dark/90"
-					onclick={() => player.acceptResume()}
-				>
-					Resume
-				</button>
-				<button
-					class="rounded-full border border-dark/30 text-sm px-3 py-1 hover:bg-dark/10"
-					onclick={() => player.dismissResume()}
-				>
-					Start over
-				</button>
+				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="green">
+					<button onclick={() => player.acceptResume()}>Resume</button>
+				</div>
+				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="blue">
+					<button onclick={() => player.dismissResume()}>Start over</button>
+				</div>
 			</div>
 		{/if}
 
 		{#if player.interrupted}
-			<p class="text-sm text-accent-red">
+			<p class="text-base text-accent-red">
 				Playback was blocked by the browser. Press play to start listening.
 			</p>
 		{/if}
 
-		<!-- Scrubber -->
-		<div class="flex flex-col gap-1">
-			<div class="relative h-6 flex items-center">
+		<!-- Progress -->
+		<div class="flex items-center gap-3">
+			<span class="text-base tabular-nums shrink-0">{formatClock(position)}</span>
+			<div
+				class="relative h-6 flex items-center grow cursor-pointer touch-none"
+				onpointerdown={(event) => {
+					event.currentTarget.setPointerCapture(event.pointerId);
+					previewScrub(event);
+				}}
+				onpointermove={(event) => {
+					if (event.buttons > 0) previewScrub(event);
+				}}
+				onpointerup={commitPointerSeek}
+				onpointercancel={() => (scrub = null)}
+			>
 				<div class="absolute inset-x-0 h-2 rounded-full bg-dark/15 overflow-hidden">
 					<div class="h-full bg-dark/25" style="width: {bufferedPercent}%"></div>
 				</div>
@@ -189,110 +195,86 @@
 					min="0"
 					max="1000"
 					step="1"
-					class="absolute inset-0 w-full opacity-0 cursor-pointer"
+					class="absolute inset-0 w-full opacity-0 pointer-events-none"
 					aria-label="Seek within chapter"
 					value={Math.round(playedPercent * 10)}
 					oninput={(event) => (scrub = (Number(event.currentTarget.value) / 1000) * duration)}
 					onchange={commitSeek}
 				/>
 			</div>
-
-			<div class="flex justify-between text-xs text-dark/60 tabular-nums">
-				<span>{formatClock(position)}</span>
-				<span>{formatClock(duration)}</span>
-			</div>
+			<span class="text-base tabular-nums shrink-0">{formatClock(duration)}</span>
 		</div>
 
 		<!-- Transport -->
-		<div class="flex items-center justify-center gap-2 flex-wrap">
-			<button
-				class="rounded-full p-2 hover:bg-dark/10 disabled:opacity-30"
-				disabled={!player.hasPrevious}
-				onclick={() => player.previous()}
-				aria-label="Previous chapter"
-				title="Previous chapter (p)"
-			>
-				<svg class="w-6 h-6 fill-dark" viewBox="0 0 24 24">
-					<path d="M7 6h2v12H7zm3 6l9 6V6z" />
-				</svg>
-			</button>
-
-			<button
-				class="relative rounded-full p-2 hover:bg-dark/10"
-				onclick={() => player.skip(-player.skipSeconds)}
-				aria-label="Skip back {player.skipSeconds} seconds"
-				title="Skip back (Shift+←)"
-			>
-				<svg class="w-7 h-7 fill-dark" viewBox="0 0 24 24">
-					<path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" />
-				</svg>
-				<span class="absolute inset-0 flex items-center justify-center text-[9px] font-bold pt-0.5">
-					{player.skipSeconds}
-				</span>
-			</button>
-
-			<button
-				class="rounded-full bg-dark text-white p-3 hover:bg-dark/90"
-				onclick={() => player.toggle()}
-				aria-label={player.playing ? 'Pause' : 'Play'}
-				title="Play or pause (Space)"
-			>
-				{#if player.playing}
-					<svg class="w-7 h-7 fill-white" viewBox="0 0 24 24">
-						<path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+		<div class="flex items-center justify-center gap-4">
+			<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="blue">
+				<button
+					class="p-2!"
+					disabled={!player.hasPrevious}
+					onclick={() => player.previous()}
+					aria-label="Previous chapter"
+					title="Previous chapter (p)"
+				>
+					<svg class="w-6 h-6 fill-white" viewBox="0 0 24 24">
+						<path d="M7 6h2v12H7zm3 6l9 6V6z" />
 					</svg>
-				{:else}
-					<svg class="w-7 h-7 fill-white" viewBox="0 0 24 24">
-						<path d="M8 5l11 7-11 7z" />
+				</button>
+			</div>
+
+			<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="green">
+				<button
+					class="p-3!"
+					onclick={() => player.toggle()}
+					aria-label={player.playing ? 'Pause' : 'Play'}
+					title="Play or pause (Space)"
+				>
+					{#if player.playing}
+						<svg class="w-8 h-8 fill-white" viewBox="0 0 24 24">
+							<path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+						</svg>
+					{:else}
+						<svg class="w-8 h-8 fill-white" viewBox="0 0 24 24">
+							<path d="M8 5l11 7-11 7z" />
+						</svg>
+					{/if}
+				</button>
+			</div>
+
+			<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="blue">
+				<button
+					class="p-2!"
+					disabled={!player.hasNext}
+					onclick={() => player.next()}
+					aria-label="Next chapter"
+					title="Next chapter (n)"
+				>
+					<svg class="w-6 h-6 fill-white" viewBox="0 0 24 24">
+						<path d="M15 6h2v12h-2zM5 6l9 6-9 6z" />
 					</svg>
-				{/if}
-			</button>
-
-			<button
-				class="relative rounded-full p-2 hover:bg-dark/10"
-				onclick={() => player.skip(player.skipSeconds)}
-				aria-label="Skip forward {player.skipSeconds} seconds"
-				title="Skip forward (Shift+→)"
-			>
-				<svg class="w-7 h-7 fill-dark" viewBox="0 0 24 24">
-					<path d="M12 5V2l5 4-5 4V7a5 5 0 1 0 5 5h2a7 7 0 1 1-7-7z" />
-				</svg>
-				<span class="absolute inset-0 flex items-center justify-center text-[9px] font-bold pt-0.5">
-					{player.skipSeconds}
-				</span>
-			</button>
-
-			<button
-				class="rounded-full p-2 hover:bg-dark/10 disabled:opacity-30"
-				disabled={!player.hasNext}
-				onclick={() => player.next()}
-				aria-label="Next chapter"
-				title="Next chapter (n)"
-			>
-				<svg class="w-6 h-6 fill-dark" viewBox="0 0 24 24">
-					<path d="M15 6h2v12h-2zM5 6l9 6-9 6z" />
-				</svg>
-			</button>
+				</button>
+			</div>
 		</div>
 
 		<!-- Secondary controls -->
-		<div class="flex items-center gap-3 flex-wrap justify-center text-sm">
+		<div class="flex items-center gap-3 flex-wrap justify-center text-base">
 			<div class="flex items-center gap-2">
-				<button
-					class="rounded-full p-1.5 hover:bg-dark/10"
-					onclick={() => player.toggleMute()}
-					aria-label={player.muted ? 'Unmute' : 'Mute'}
-				>
-					<svg class="w-5 h-5 fill-dark" viewBox="0 0 24 24">
-						{#if player.muted || player.volume === 0}
-							<path
-								d="M4 9v6h4l5 4V5L8 9H4zm12.5 3l2.5 2.5 1-1L17.5 11l2.5-2.5-1-1L16.5 10 14 7.5l-1 1L15.5 11 13 13.5l1 1z"
-							/>
-						{:else}
-							<path d="M4 9v6h4l5 4V5L8 9H4zm12 3a4 4 0 0 0-2-3.46v6.92A4 4 0 0 0 16 12z" />
-						{/if}
-					</svg>
-				</button>
+				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
+					<button
+						class="p-1.5!"
+						onclick={() => player.toggleMute()}
+						aria-label={player.muted ? 'Unmute' : 'Mute'}
+					>
+						<svg class="w-5 h-5 fill-dark" viewBox="0 0 24 24">
+							{#if player.muted || player.volume === 0}
+								<path
+									d="M4 9v6h4l5 4V5L8 9H4zm12.5 3l2.5 2.5 1-1L17.5 11l2.5-2.5-1-1L16.5 10 14 7.5l-1 1L15.5 11 13 13.5l1 1z"
+								/>
+							{:else}
+								<path d="M4 9v6h4l5 4V5L8 9H4zm12 3a4 4 0 0 0-2-3.46v6.92A4 4 0 0 0 16 12z" />
+							{/if}
+						</svg>
+					</button>
+				</div>
 				<input
 					type="range"
 					min="0"
@@ -305,92 +287,93 @@
 				/>
 			</div>
 
-			<details class="relative">
-				<summary
-					class="list-none cursor-pointer rounded-full border border-dark/20 px-3 py-1 hover:bg-dark/10"
-				>
-					{player.rate}×
-				</summary>
-				<ul
-					class="absolute bottom-full mb-1 z-10 bg-white border border-dark/20 rounded-lg shadow-lg py-1 min-w-20"
-				>
-					{#each player.playbackRates as value}
-						<li>
-							<button
-								class="w-full text-left px-3 py-1 hover:bg-dark/10 {value === player.rate
-									? 'font-semibold'
-									: ''}"
-								onclick={(event) => {
-									player.setRate(value);
-									event.currentTarget.closest('details')?.removeAttribute('open');
-								}}
-							>
-								{value}×
-							</button>
-						</li>
-					{/each}
-				</ul>
-			</details>
+			<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
+				<details class="relative">
+					<summary class="list-none cursor-pointer">
+						{player.rate}×
+					</summary>
+					<ul
+						class="absolute bottom-full left-0 z-30 mb-2 overflow-hidden rounded-lg border border-dark/20 bg-white py-1 shadow-lg min-w-20"
+					>
+						{#each player.playbackRates as value}
+							<li>
+								<button
+									class="w-full text-left text-base px-3 py-1 hover:bg-dark/10 {value ===
+									player.rate
+										? 'font-semibold'
+										: ''}"
+									onclick={(event) => {
+										player.setRate(value);
+										event.currentTarget.closest('details')?.removeAttribute('open');
+									}}
+								>
+									{value}×
+								</button>
+							</li>
+						{/each}
+					</ul>
+				</details>
+			</div>
 
-			<details class="relative">
-				<summary
-					class="list-none cursor-pointer rounded-full border border-dark/20 px-3 py-1 hover:bg-dark/10"
-				>
-					{#if player.sleepMode === 'chapter'}
-						Sleep: chapter
-					{:else if player.sleepMode}
-						Sleep: {formatClock(player.sleepRemaining)}
-					{:else}
-						Sleep timer
-					{/if}
-				</summary>
-				<ul
-					class="absolute bottom-full mb-1 z-10 bg-white border border-dark/20 rounded-lg shadow-lg py-1 min-w-32"
-				>
-					{#each player.sleepPresets as minutes}
+			<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
+				<details class="relative">
+					<summary class="list-none cursor-pointer">
+						{#if player.sleepMode === 'chapter'}
+							Sleep: chapter
+						{:else if player.sleepMode}
+							Sleep: {formatClock(player.sleepRemaining)}
+						{:else}
+							Sleep timer
+						{/if}
+					</summary>
+					<ul
+						class="absolute bottom-full left-0 z-30 mb-2 overflow-hidden rounded-lg border border-dark/20 bg-white py-1 shadow-lg min-w-32"
+					>
+						{#each player.sleepPresets as minutes}
+							<li>
+								<button
+									class="w-full text-left text-base px-3 py-1 hover:bg-dark/10"
+									onclick={(event) => {
+										player.startSleep(minutes);
+										event.currentTarget.closest('details')?.removeAttribute('open');
+									}}
+								>
+									{minutes} minutes
+								</button>
+							</li>
+						{/each}
 						<li>
 							<button
-								class="w-full text-left px-3 py-1 hover:bg-dark/10"
+								class="w-full text-left text-base px-3 py-1 hover:bg-dark/10"
 								onclick={(event) => {
-									player.startSleep(minutes);
+									player.startSleep('chapter');
 									event.currentTarget.closest('details')?.removeAttribute('open');
 								}}
 							>
-								{minutes} minutes
+								End of chapter
 							</button>
 						</li>
-					{/each}
-					<li>
-						<button
-							class="w-full text-left px-3 py-1 hover:bg-dark/10"
-							onclick={(event) => {
-								player.startSleep('chapter');
-								event.currentTarget.closest('details')?.removeAttribute('open');
-							}}
-						>
-							End of chapter
-						</button>
-					</li>
-					{#if player.sleepMode}
-						<li>
-							<button
-								class="w-full text-left px-3 py-1 text-accent-red hover:bg-dark/10"
-								onclick={(event) => {
-									player.cancelSleep();
-									event.currentTarget.closest('details')?.removeAttribute('open');
-								}}
-							>
-								Cancel timer
-							</button>
-						</li>
-					{/if}
-				</ul>
-			</details>
+						{#if player.sleepMode}
+							<li>
+								<button
+									class="w-full text-left text-base px-3 py-1 text-accent-red hover:bg-dark/10"
+									onclick={(event) => {
+										player.cancelSleep();
+										event.currentTarget.closest('details')?.removeAttribute('open');
+									}}
+								>
+									Cancel timer
+								</button>
+							</li>
+						{/if}
+					</ul>
+				</details>
+			</div>
 
-			<label class="flex items-center gap-1 text-dark/60">
+			<label class="flex items-center gap-1 text-base text-dark/60">
 				Skip
 				<select
-					class="rounded border border-dark/20 bg-white px-1 py-0.5"
+					class="rounded border border-dark/20 bg-white px-1 py-0.5 text-base"
 					aria-label="Skip interval in seconds"
 					value={player.skipSeconds}
 					onchange={(event) => player.setSkipSeconds(Number(event.currentTarget.value))}
@@ -401,16 +384,16 @@
 				</select>
 			</label>
 
-			<button class="text-dark/60 hover:underline" onclick={() => player.clearSaved()}>
-				Restart
-			</button>
+			<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
+				<button onclick={() => player.clearSaved()}>Restart</button>
+			</div>
 		</div>
 
 		<!-- Playlist -->
 		<div class="flex flex-col gap-2">
 			<div class="flex items-baseline justify-between">
-				<h2 class="font-semibold">Chapters</h2>
-				<span class="text-xs text-dark/50">{tracks.length} tracks</span>
+				<h2 class="text-lg font-semibold">Chapters</h2>
+				<span class="text-base text-dark/50">{tracks.length} tracks</span>
 			</div>
 
 			<ol
@@ -427,26 +410,20 @@
 							onclick={() => player.load(index, { play: true })}
 							aria-current={active ? 'true' : undefined}
 						>
-							<span class="w-8 text-right text-sm shrink-0 {active ? 'text-dark' : 'text-dark/40'}">
-								{#if active && player.playing}
-									<svg class="w-4 h-4 inline fill-primary" viewBox="0 0 24 24">
-										<path d="M7 5h3v14H7zm7 0h3v14h-3z" />
-									</svg>
-								{:else}
-									{track.number}
-								{/if}
-							</span>
-
 							<span class="grow min-w-0 flex flex-col">
-								<span class="text-sm font-medium line-clamp-1 {active ? '' : 'text-dark/80'}">
-									{track.title}
+								<span
+									class="font-['Baloo_2',Roboto,sans-serif] text-base font-medium line-clamp-1 {active
+										? ''
+										: 'text-dark/80'}"
+								>
+									Chapter {track.number} - {track.title}
 								</span>
 								{#if player.failures[track.id]}
-									<span class="text-xs text-accent-red">{player.failures[track.id]}</span>
+									<span class="text-base text-accent-red">{player.failures[track.id]}</span>
 								{/if}
 							</span>
 
-							<span class="text-xs text-dark/50 tabular-nums shrink-0">
+							<span class="text-base text-dark/50 tabular-nums shrink-0">
 								{formatClock(track.duration_seconds)}
 							</span>
 						</button>

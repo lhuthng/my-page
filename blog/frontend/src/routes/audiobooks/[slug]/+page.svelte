@@ -61,33 +61,43 @@
 	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
-<article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
-	<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
-		<BackButton href="/audiobooks" text="Audiobooks" />
+<article class="bg-white rounded-xl p-4 flex flex-col gap-4">
+	<BackButton href="/audiobooks" text="Audiobooks" />
 
-		<div class="flex flex-col gap-2">
-			<h1 class="text-2xl font-semibold">{audiobook.title}</h1>
+	<h1 class="text-3xl md:text-4xl font-bold">
+		{audiobook.title}
+	</h1>
 
-			<div class="flex items-center gap-2 flex-wrap text-sm text-dark/60">
+	<div class="flex gap-4 items-start">
+		{#if audiobook.url}
+			<img
+				src={audiobook.url}
+				alt={`Cover of ${audiobook.title}`}
+				class="w-24 h-24 md:w-40 md:h-40 rounded-xl object-cover shrink-0"
+			/>
+		{/if}
+
+		<div class="flex flex-col gap-2 min-w-0">
+			<div class="flex items-center gap-2 flex-wrap text-base text-dark/60">
+				{#if audiobook.translator}
+					<span>Translated by {audiobook.translator}</span>
+					<span aria-hidden="true">-</span>
+				{/if}
 				{#if audiobook.owner_display_name || audiobook.owner_username}
 					<a href="/profiles/{audiobook.owner_username}" class="text-dark/70">
 						{audiobook.owner_display_name || audiobook.owner_username}
 					</a>
+					<span aria-hidden="true">-</span>
 				{/if}
-				{#if audiobook.translator}
-					<span aria-hidden="true">·</span>
-					<span>Translated by {audiobook.translator}</span>
-				{/if}
-				<span aria-hidden="true">·</span>
 				<span>{audiobook.tracks.length} chapter{audiobook.tracks.length === 1 ? '' : 's'}</span>
 				{#if durationLabel}
-					<span aria-hidden="true">·</span>
+					<span aria-hidden="true">-</span>
 					<span>{durationLabel}</span>
 				{/if}
 			</div>
 
 			{#if audiobook.description}
-				<p class="text-dark/80 whitespace-pre-line">{audiobook.description}</p>
+				<p class="text-base text-dark/80 whitespace-pre-line">{audiobook.description}</p>
 			{/if}
 
 			{#if audiobook.tags?.length}
@@ -96,7 +106,7 @@
 						<li>
 							<a
 								href="/audiobooks?tag={tag.slug}"
-								class="text-xs bg-primary/20 px-2 py-0.5 rounded-full no-underline! text-dark hover:bg-primary/40"
+								class="text-base bg-primary/20 px-2 py-0.5 rounded-full no-underline! text-dark hover:bg-primary/40"
 							>
 								{tag.name}
 							</a>

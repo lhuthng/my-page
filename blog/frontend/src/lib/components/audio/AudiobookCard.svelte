@@ -1,6 +1,6 @@
 <script>
 	import GridExpander from '../shell/GridExpander.svelte';
-	import { formatDurationLabel } from '$lib/utils/duration.js';
+	import Book from '../svgs/Book.svelte';
 
 	let { audiobook } = $props();
 
@@ -11,7 +11,6 @@
 		translator,
 		url,
 		track_count,
-		total_duration_seconds,
 		tags = [],
 		tag_slugs = [],
 		status,
@@ -23,15 +22,6 @@
 
 	const link = $derived(`/audiobooks/${slug}`);
 	const coverSrc = $derived(url ?? '/missing.png');
-	const durationLabel = $derived(formatDurationLabel(total_duration_seconds));
-	const metaLabel = $derived(
-		[
-			track_count != null ? `${track_count} chapter${track_count === 1 ? '' : 's'}` : null,
-			durationLabel
-		]
-			.filter(Boolean)
-			.join(' · ')
-	);
 </script>
 
 <div class="bg-white rounded-lg drop-shadow-sm h-full">
@@ -52,8 +42,14 @@
 			<div
 				class="reading-bar absolute flex items-center justify-center z-11 left-0 right-0 bottom-0 h-8 text-sm font-semibold transition-[scale,border-radius] duration-100 border-3"
 			>
-				{#if metaLabel}
-					<span>{metaLabel}</span>
+				{#if track_count != null}
+					<span
+						class="flex items-center gap-1"
+						title={`${track_count} chapter${track_count === 1 ? '' : 's'}`}
+					>
+						<Book class="inline-block h-6 w-6" />
+						{track_count}
+					</span>
 				{:else}
 					<span>...</span>
 				{/if}
