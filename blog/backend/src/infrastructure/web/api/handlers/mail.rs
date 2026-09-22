@@ -105,10 +105,9 @@ pub async fn receive_contact_form(
 
 // ---------------------------------------------------------------------------
 // Route table
-use axum::{
-    Router,
-    routing::{get, post},
-};
+use axum::{Router, routing::post};
+#[cfg(debug_assertions)]
+use axum::routing::get;
 
 pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
     let routes = Router::new().route("/contact-form", post(receive_contact_form));

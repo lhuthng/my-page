@@ -1,4 +1,6 @@
-use super::layout::{logo_data_uri, render_button, render_shell, site_footer};
+use super::layout::{render_button, render_shell, site_footer};
+#[cfg(debug_assertions)]
+use super::layout::logo_data_uri;
 /// Branded HTML email templates.
 ///
 /// Email clients strip `<style>` blocks and don't support flexbox/grid, so
