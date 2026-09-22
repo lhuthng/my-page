@@ -10,10 +10,7 @@ use axum::{
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
-use crate::infrastructure::{
-    storage::ObjectStore,
-    web::server::AppState,
-};
+use crate::infrastructure::{storage::ObjectStore, web::server::AppState};
 
 use super::dto::UploadStatusResponse;
 use super::shared::{ensure_upload_not_expired, user_id};
@@ -58,10 +55,8 @@ async fn delete_uploaded_game_artifacts(
     disk_storage_key: Option<&str>,
     disk_reuse: bool,
 ) {
-    if !disk_reuse {
-        if let Some(key) = disk_storage_key {
-            let _ = storage.delete_prefix(key).await;
-        }
+    if !disk_reuse && let Some(key) = disk_storage_key {
+        let _ = storage.delete_prefix(key).await;
     }
     let uploaded_isos: Vec<String> = sqlx::query_scalar(
         "SELECT iso_storage_key FROM project_v86_staged_variants WHERE upload_id = ? AND reuse = 0",
@@ -139,7 +134,6 @@ pub async fn complete_game_upload(
     .await?;
     Ok(StatusCode::OK)
 }
-
 
 pub async fn attach_ready_game_tx(
     tx: &mut Transaction<'_, Sqlite>,
@@ -321,7 +315,11 @@ pub async fn get_game_upload_status(
     .fetch_optional(&state.project_service.pool)
     .await?
     .ok_or(ProjectError::ProjectNotFound)?;
-    let progress = chunk_progress_map().lock().unwrap().get(&upload_id).cloned();
+    let progress = chunk_progress_map()
+        .lock()
+        .unwrap()
+        .get(&upload_id)
+        .cloned();
     let active_uploads = chunk_progress_map()
         .lock()
         .unwrap()
@@ -335,4 +333,3 @@ pub async fn get_game_upload_status(
         active_uploads,
     }))
 }
-

@@ -78,7 +78,12 @@ pub async fn list_systems(
             name: row.get("name"),
             platform_key: row.get("platform_key"),
             memory_size_mb: row.try_get("memory_size_mb").unwrap_or(64),
-            specs: parse_system_specs(row.try_get::<Option<String>, _>("specs").ok().flatten().as_deref()),
+            specs: parse_system_specs(
+                row.try_get::<Option<String>, _>("specs")
+                    .ok()
+                    .flatten()
+                    .as_deref(),
+            ),
             is_active: row.get::<i64, _>("is_active") != 0,
             is_default: row.get::<i64, _>("is_default") != 0,
             current_version: row.get("current_version"),
@@ -117,7 +122,7 @@ pub async fn list_public_systems(
                     Some(base) => format!("{}/{storage_key}/.img.zst", base.trim_end_matches('/')),
                     None => format!("{storage_key}/.img.zst"),
                 };
-                let mut vga_memory_size_mb = 8;
+                let vga_memory_size_mb;
                 PublicSystemVersion {
                     id: row.get("id"),
                     version_number: row.get("version_number"),
@@ -126,9 +131,15 @@ pub async fn list_public_systems(
                     memory_size_mb: row.try_get("memory_size_mb").unwrap_or(64),
                     specs: {
                         let specs = parse_system_specs(
-                            row.try_get::<Option<String>, _>("specs").ok().flatten().as_deref(),
+                            row.try_get::<Option<String>, _>("specs")
+                                .ok()
+                                .flatten()
+                                .as_deref(),
                         );
-                        vga_memory_size_mb = (resolve_system_machine(&row.get::<String, _>("platform_key"), &specs).0 / 1048576) as i64;
+                        vga_memory_size_mb =
+                            (resolve_system_machine(&row.get::<String, _>("platform_key"), &specs)
+                                .0
+                                / 1048576) as i64;
                         specs
                     },
                     vga_memory_size_mb,
@@ -228,12 +239,12 @@ pub async fn update_system(
         .await?;
     }
     if let Some(specs) = request.specs {
-        if let Some(mb) = specs.vga_memory_size_mb {
-            if !(1..=32).contains(&mb) {
-                return Err(ProjectError::InvalidDemo(
-                    "VRAM must be between 1 and 32 MB.".to_string(),
-                ));
-            }
+        if let Some(mb) = specs.vga_memory_size_mb
+            && !(1..=32).contains(&mb)
+        {
+            return Err(ProjectError::InvalidDemo(
+                "VRAM must be between 1 and 32 MB.".to_string(),
+            ));
         }
         sqlx::query(
             "UPDATE v86_systems SET specs = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -246,4 +257,3 @@ pub async fn update_system(
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
-

@@ -1,4 +1,6 @@
 // Mail transport configuration: Brevo API or SMTP, selected from the env.
+use std::env;
+
 #[derive(Clone)]
 pub struct MailConfig {
     pub transport: MailTransportConfig,
@@ -18,7 +20,6 @@ pub enum MailTransportConfig {
         password: String,
     },
 }
-
 
 impl MailConfig {
     pub fn from_env() -> Option<MailConfig> {
@@ -71,5 +72,4 @@ impl MailConfig {
             to,
         })
     }
-
 }

@@ -12,12 +12,11 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
-use crate::infrastructure::web::{
-    api::support::ownership::require_owner,
-    server::AppState,
-};
+use crate::infrastructure::web::{api::support::ownership::require_owner, server::AppState};
 
-use super::constants::{V86_MEMORY_SIZE, V86_SNAPSHOT_MAX_BYTES, V86_STATE_VERSION, V86_TOPOLOGY_VERSION};
+use super::constants::{
+    V86_MEMORY_SIZE, V86_SNAPSHOT_MAX_BYTES, V86_STATE_VERSION, V86_TOPOLOGY_VERSION,
+};
 use super::dto::{ChunkUploadResponse, StartSnapshotUploadRequest, StartUploadResponse};
 use super::manifest::{parse_system_specs, resolve_system_machine};
 use super::shared::{storage_error, user_id};
@@ -44,7 +43,13 @@ pub async fn start_snapshot_upload(
     Json(request): Json<StartSnapshotUploadRequest>,
 ) -> Result<Json<StartUploadResponse>, ProjectError> {
     let uploader_id = user_id(&claims)?;
-    require_owner(&state.game_service.pool, "games", request.game_id, uploader_id).await?;
+    require_owner(
+        &state.game_service.pool,
+        "games",
+        request.game_id,
+        uploader_id,
+    )
+    .await?;
     validate_sha256_hex(&request.sha256)?;
     validate_sha256_hex(&request.game_disk_sha256)?;
 
@@ -90,7 +95,12 @@ pub async fn start_snapshot_upload(
         .ok()
         .map(|mb| mb.max(1) as u64 * 1024 * 1024)
         .unwrap_or(V86_MEMORY_SIZE);
-    let system_specs = parse_system_specs(game.try_get::<Option<String>, _>("specs").ok().flatten().as_deref());
+    let system_specs = parse_system_specs(
+        game.try_get::<Option<String>, _>("specs")
+            .ok()
+            .flatten()
+            .as_deref(),
+    );
     let (expected_vga, _) =
         resolve_system_machine(&game.get::<String, _>("platform_key"), &system_specs);
     if request.memory_size != system_memory_bytes || request.vga_memory_size != expected_vga {
@@ -189,13 +199,12 @@ pub async fn start_snapshot_upload(
     .bind(expires_at.to_rfc3339())
     .execute(&state.project_service.pool)
     .await
-    .map_err(|error| {
+    .inspect_err(|_error| {
         let storage = state.storage.clone();
         let multipart_id = multipart_id.clone();
         tokio::spawn(async move {
             let _ = storage.abort_multipart(&transient_key, &multipart_id).await;
         });
-        error
     })?;
     Ok(Json(StartUploadResponse {
         upload_id,
@@ -235,4 +244,3 @@ pub(super) async fn fail_snapshot_session(state: &AppState, upload_id: &str, mes
     .await
     .ok();
 }
-

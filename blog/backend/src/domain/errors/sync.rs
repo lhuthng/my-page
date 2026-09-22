@@ -52,7 +52,10 @@ impl IntoResponse for SyncError {
                     (StatusCode::INTERNAL_SERVER_ERROR, msg)
                 } else {
                     tracing::error!("sync internal error: {msg}");
-                    (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error".to_string())
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Internal Server Error".to_string(),
+                    )
                 }
             }
         };

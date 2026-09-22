@@ -1,26 +1,17 @@
 // Read methods: admin catalogue, public feed, single loads.
-use std::path::PathBuf;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::audiobook::{
-        GetAudiobookCommand, GetAudiobooksCommand, GetPublicAudiobookCommand,
-        GetPublicAudiobooksCommand,
-    },
-    services::audiobook::AudiobookService,
+use crate::application::commands::audiobook::{
+    GetAudiobookCommand, GetAudiobooksCommand, GetPublicAudiobookCommand,
+    GetPublicAudiobooksCommand,
 };
-use crate::domain::entities::audiobook::{AudiobookDetails, AudiobookSnapshot, AudiobookTag};
+use crate::domain::entities::audiobook::{AudiobookDetails, AudiobookSnapshot};
 use crate::domain::errors::audiobook::AudiobookError;
 
-use super::mapping;
-use super::rows::{DetailsRow, SnapshotRow};
-use super::validation;
 use super::AudiobookServiceImpl;
+use super::rows::{DetailsRow, SnapshotRow};
 
-#[async_trait::async_trait]
-impl AudiobookService for AudiobookServiceImpl {
-    async fn get_audiobooks(
+impl AudiobookServiceImpl {
+    pub(super) async fn get_audiobooks(
         &self,
         cmd: GetAudiobooksCommand,
     ) -> Result<Vec<AudiobookSnapshot>, AudiobookError> {
@@ -119,7 +110,7 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(snapshots)
     }
 
-    async fn get_public_audiobooks(
+    pub(super) async fn get_public_audiobooks(
         &self,
         cmd: GetPublicAudiobooksCommand,
     ) -> Result<Vec<AudiobookSnapshot>, AudiobookError> {
@@ -207,7 +198,7 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(snapshots)
     }
 
-    async fn get_audiobook(
+    pub(super) async fn get_audiobook(
         &self,
         cmd: GetAudiobookCommand,
     ) -> Result<AudiobookDetails, AudiobookError> {
@@ -279,7 +270,7 @@ impl AudiobookService for AudiobookServiceImpl {
         })
     }
 
-    async fn get_public_audiobook(
+    pub(super) async fn get_public_audiobook(
         &self,
         cmd: GetPublicAudiobookCommand,
     ) -> Result<AudiobookDetails, AudiobookError> {
@@ -326,5 +317,4 @@ impl AudiobookService for AudiobookServiceImpl {
             published_at: row.11,
         })
     }
-
 }

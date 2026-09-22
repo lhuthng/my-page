@@ -2,8 +2,9 @@
 // and request tracing. Wired once in `router.rs`.
 use axum::http::header::CONTENT_TYPE;
 use http::{HeaderValue, Method};
+use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::compression::CompressionLayer;
-use tower_http::compression::predicate::{DefaultPredicate, NotForContentType};
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -38,7 +39,7 @@ pub fn cors() -> CorsLayer {
 /// Saves, ISO/disk chunks, and js-dos bundles are already compressed and
 /// media files are binary; recompressing them per download burns CPU for no
 /// size win.
-pub fn compression() -> CompressionLayer {
+pub fn compression() -> CompressionLayer<impl tower_http::compression::Predicate> {
     CompressionLayer::new().compress_when(
         DefaultPredicate::new()
             .and(NotForContentType::const_new("application/octet-stream"))
@@ -47,6 +48,6 @@ pub fn compression() -> CompressionLayer {
     )
 }
 
-pub fn trace() -> TraceLayer {
+pub fn trace() -> TraceLayer<SharedClassifier<ServerErrorsAsFailures>> {
     TraceLayer::new_for_http()
 }

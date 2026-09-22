@@ -36,4 +36,3 @@ pub(super) const V86_SNAPSHOT_MAX_BYTES: u64 = 192 * 1024 * 1024;
 
 pub(super) const SAVE_FILE_MAX_LEN: usize = 260;
 pub(super) const SAVE_FILE_MAX_COUNT: usize = 64;
-

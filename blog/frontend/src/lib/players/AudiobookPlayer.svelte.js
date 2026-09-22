@@ -193,11 +193,17 @@ export class AudiobookPlayer {
 
 		const attempt = audio.play();
 		if (attempt && typeof attempt.catch === 'function') {
-			attempt.catch(() => {
-				// Autoplay policy or an unsupported source; surface it instead of
-				// leaving the UI showing a play state that never started.
-				this.playing = false;
-				this.interrupted = true;
+			attempt.catch((e) => {
+				// Only autoplay refusal means the browser blocked us. AbortError
+				// means a newer load superseded this request (the element's own
+				// events drive state from there), and decode/network failures
+				// arrive via the `error` event — neither is "blocked".
+				if (e?.name === 'NotAllowedError') {
+					this.playing = false;
+					this.interrupted = true;
+				} else if (e?.name !== 'AbortError') {
+					this.playing = false;
+				}
 			});
 		}
 	}

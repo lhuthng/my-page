@@ -1,5 +1,5 @@
 // Tuple row shapes for the audiobook aggregate's queries.
-type SnapshotRow = (
+pub(super) type SnapshotRow = (
     i64,
     String,
     String,
@@ -15,7 +15,7 @@ type SnapshotRow = (
     Option<String>,
 );
 
-type DetailsRow = (
+pub(super) type DetailsRow = (
     i64,
     String,
     String,
@@ -31,7 +31,7 @@ type DetailsRow = (
 );
 
 /// A track joined with the media row it plays from.
-type TrackRow = (
+pub(super) type TrackRow = (
     i64,
     String,
     i64,
@@ -39,7 +39,3 @@ type TrackRow = (
     Option<String>,
     Option<String>,
 );
-
-/// A cover upload already written to disk, ready to be registered as a media
-/// row. Built before the transaction opens so no large write happens while the
-/// database write lock is held.

@@ -12,29 +12,24 @@
 //! Direction policy: this tool only ever writes to the machine it runs on.
 //! Pushing to a production environment is deliberately not implemented.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use backend::infrastructure::sync::{fix_imported_database, SyncManifest};
-use futures::StreamExt;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous};
-use sqlx::SqlitePool;
-use tokio::io::AsyncWriteExt;
+use backend::infrastructure::sync::SyncManifest;
 
 mod cli;
 mod download;
 mod rewrite;
 #[cfg(test)]
 mod tests;
+mod transfer;
 
-use backend::infrastructure::sync::{SyncManifest, fix_imported_database};
-use cli::{parse_args, print_usage};
-use download::{Counters, download_to_file};
-use rewrite::{
-    database_path_from_url, format_bytes, read_env_file, resolve_key, update_env_file,
-};
+pub use transfer::{Counters, Session};
 
+use cli::parse_args;
+use rewrite::{database_path_from_url, format_bytes, read_env_file, resolve_key, update_env_file};
+
+#[tokio::main]
 async fn main() {
     if let Err(error) = run().await {
         eprintln!("\nsync-pull failed: {error}");
@@ -117,8 +112,7 @@ async fn run() -> Result<(), String> {
             match attempt {
                 Ok(response) if response.status() == reqwest::StatusCode::NOT_FOUND => continue,
                 Ok(response) => {
-                    let api =
-                        move |section: &str| format!("{base_url}{prefix}/sync/{section}");
+                    let api = move |section: &str| format!("{base_url}{prefix}/sync/{section}");
                     break 'probe (api, response);
                 }
                 Err(e) => return Err(format!("manifest request: {e}")),
@@ -147,8 +141,14 @@ async fn run() -> Result<(), String> {
     let artifacts_total: u64 = manifest.artifacts.iter().map(|a| a.size).sum();
 
     println!();
-    println!("Source environment        : {} backend", manifest.storage_backend);
-    println!("Database                  : {}", format_bytes(manifest.database_size_bytes));
+    println!(
+        "Source environment        : {} backend",
+        manifest.storage_backend
+    );
+    println!(
+        "Database                  : {}",
+        format_bytes(manifest.database_size_bytes)
+    );
     println!(
         "Media files               : {:>5}  ({})",
         manifest.media.len(),
@@ -186,7 +186,7 @@ async fn run() -> Result<(), String> {
             db_path.display()
         );
         println!(
-            "    Anything that exists only locally — drafts, posts, media,\n    uploads, users — will be GONE. A copy of the current database\n    is kept aside next to it as *.pre-sync-*."
+            "    Anything that exists only locally — drafts, posts, media,\n    uploads, users — will be GONE. A copy of the current database\n    is kept aside next to it as *.pre-sync-*.\""
         );
         println!(
             "  • Every synced file under {} and\n    {} is overwritten to match the source:\n    media, demo files, js-dos and v86 artifacts.",
@@ -215,7 +215,28 @@ async fn run() -> Result<(), String> {
         }
     }
 
-    // ── Media ──
+    let session = Session {
+        client: &client,
+        api: &api,
+        key: &key,
+    };
+    let mut counters = Counters::default();
+
+    // ── Database ─────────────────────────────────────────────────────────
+    if args.dry_run {
+        println!("[dry-run] would replace database {}", db_path.display());
+    } else {
+        transfer::sync_database(
+            &session,
+            &db_path,
+            &media_dir,
+            &demos_dir,
+            manifest.database_size_bytes,
+        )
+        .await?;
+    }
+
+    // ── Media ────────────────────────────────────────────────────────────
     if !args.skip.contains("media") {
         println!("\n── Media ──");
         if args.dry_run {
@@ -225,10 +246,8 @@ async fn run() -> Result<(), String> {
                 media_dir.display()
             );
         } else {
-            sync_media(
-                &client,
-                &api,
-                &key,
+            transfer::sync_media(
+                &session,
                 &media_dir,
                 &manifest.media,
                 args.prune,
@@ -238,13 +257,11 @@ async fn run() -> Result<(), String> {
         }
     }
 
-    // ── Demo files ──
+    // ── Demo files ───────────────────────────────────────────────────────
     if !args.skip.contains("demos") {
         println!("\n── Demo files ──");
-        sync_demo_dirs(
-            &client,
-            &api,
-            &key,
+        transfer::sync_demo_dirs(
+            &session,
             &demos_dir,
             &manifest.project_demos,
             &manifest.game_demos,
@@ -254,7 +271,7 @@ async fn run() -> Result<(), String> {
         .await?;
     }
 
-    // ── Artifacts (js-dos bundles + v86 disks/ISOs/snapshots/saves) ──
+    // ── Artifacts (js-dos bundles + v86 disks/ISOs/snapshots/saves) ──────
     if !args.skip.contains("artifacts") {
         println!("\n── Game artifacts ──");
         if args.dry_run {
@@ -264,10 +281,8 @@ async fn run() -> Result<(), String> {
                 demos_dir.display()
             );
         } else {
-            sync_artifacts(
-                &client,
-                &api,
-                &key,
+            transfer::sync_artifacts(
+                &session,
                 &demos_dir,
                 &manifest.artifacts,
                 args.prune,
@@ -292,7 +307,11 @@ async fn run() -> Result<(), String> {
                 .join("example.env");
             if example.is_file() {
                 std::fs::copy(&example, &env_target).map_err(|e| {
-                    format!("seed {} from {}: {e}", env_target.display(), example.display())
+                    format!(
+                        "seed {} from {}: {e}",
+                        env_target.display(),
+                        example.display()
+                    )
                 })?;
                 println!("seeded {} from {}", env_target.display(), example.display());
             }
@@ -302,7 +321,10 @@ async fn run() -> Result<(), String> {
             &[
                 ("DATABASE_URL", format!("sqlite:{}", db_path.display())),
                 ("MEDIA_PATH", media_dir.to_string_lossy().into_owned()),
-                ("PROJECT_DEMOS_PATH", demos_dir.to_string_lossy().into_owned()),
+                (
+                    "PROJECT_DEMOS_PATH",
+                    demos_dir.to_string_lossy().into_owned(),
+                ),
                 ("STORAGE_BACKEND", "fs".to_string()),
             ],
         )?;
@@ -321,7 +343,7 @@ async fn run() -> Result<(), String> {
 
     println!();
     println!(
-        "Done in {:.1}s — {} file(s) counters.downloaded ({}), {} already up to date, {} counters.missing on source.",
+        "Done in {:.1}s — {} file(s) downloaded ({}), {} already up to date, {} missing on source.",
         started.elapsed().as_secs_f32(),
         counters.downloaded,
         format_bytes(counters.transferred),

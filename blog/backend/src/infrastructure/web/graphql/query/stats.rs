@@ -4,25 +4,17 @@ use std::collections::HashMap;
 use async_graphql::{Context, Object};
 use sqlx::SqlitePool;
 
-use super::super::helpers::{
-    DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts, attach_tags_to_projects,
-};
-use super::super::rows::{
-    CategoryRow, CommentRow, DashboardPostRow, DashboardProjectRow, GqlPostRow, GrowthDayRow,
-    MediaRow, PostDetailRow, RoleCountRow, SeriesPostRow, SeriesRow, TagRow, UserInfoRow, UserRow,
-};
+use super::super::helpers::{DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts};
+use super::super::rows::{DashboardPostRow, GrowthDayRow, RoleCountRow, UserInfoRow};
 use super::super::types::{
-    CategoryConnection, CommentConnection, DashboardPostConnection, DbStats, GqlCategory,
-    GqlComment, GqlDashboardOverview, GqlDashboardPost, GqlDashboardProject, GqlDashboardUser,
-    GqlGrowthPoint, GqlMedia, GqlPost, GqlPostDetail, GqlRoleCounts, GqlSeries, GqlSeriesPost,
-    GqlTag, GqlUser, MediaConnection, PostConnection, ProjectConnection, SeriesConnection,
-    TagConnection, UserConnection,
+    DbStats, GqlDashboardOverview, GqlDashboardUser, GqlGrowthPoint, GqlRoleCounts,
 };
 
-use super::QueryRoot;
+#[derive(Default)]
+pub struct StatsQuery;
 
 #[Object]
-impl QueryRoot {
+impl StatsQuery {
     async fn db_stats(&self, ctx: &Context<'_>) -> async_graphql::Result<DbStats> {
         let pool = ctx.data::<SqlitePool>()?;
 
@@ -252,5 +244,4 @@ impl QueryRoot {
             growth,
         })
     }
-
 }

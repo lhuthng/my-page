@@ -1,12 +1,15 @@
 // Audiobook tag replacement, loading, and listing.
-use std::collections::HashMap;
 
-use sqlx::Row;
+use sqlx::{Sqlite, Transaction};
 
+use crate::application::commands::audiobook::{
+    CheckAudiobookSlugCommand, ListAudiobookTagsCommand,
+};
 use crate::domain::entities::audiobook::AudiobookTag;
 use crate::domain::errors::audiobook::AudiobookError;
 
 use super::AudiobookServiceImpl;
+use super::validation::{MAX_TAG_NAME_CHARS, MAX_TAGS_PER_AUDIOBOOK};
 
 impl AudiobookServiceImpl {
     pub(super) async fn replace_tags(
@@ -101,7 +104,7 @@ impl AudiobookServiceImpl {
             .collect())
     }
 
-    async fn list_audiobook_tags(
+    pub(super) async fn list_audiobook_tags(
         &self,
         cmd: ListAudiobookTagsCommand,
     ) -> Result<Vec<AudiobookTag>, AudiobookError> {
@@ -146,22 +149,24 @@ impl AudiobookServiceImpl {
 
         Ok(rows
             .into_iter()
-            .map(|(id, name, slug, description, audiobook_count)| AudiobookTag {
-                id,
-                name,
-                slug,
-                description,
-                audiobook_count,
-            })
+            .map(
+                |(id, name, slug, description, audiobook_count)| AudiobookTag {
+                    id,
+                    name,
+                    slug,
+                    description,
+                    audiobook_count,
+                },
+            )
             .collect())
     }
 
-    async fn check_audiobook_slug(
+    pub(super) async fn check_audiobook_slug(
         &self,
         cmd: CheckAudiobookSlugCommand,
     ) -> Result<bool, AudiobookError> {
-        let slug = crate::helper::string::validate_slug(&cmd.slug)
-            .map_err(AudiobookError::Validation)?;
+        let slug =
+            crate::helper::string::validate_slug(&cmd.slug).map_err(AudiobookError::Validation)?;
 
         let taken: bool =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM audiobooks WHERE slug = ?)")

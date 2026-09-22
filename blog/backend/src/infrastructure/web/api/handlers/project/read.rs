@@ -7,7 +7,6 @@ use axum::{
     extract::{Path as AxumPath, Query, State},
     response::IntoResponse,
 };
-use sqlx::Row;
 
 use crate::{
     application::{
@@ -175,4 +174,3 @@ pub async fn get_all_projects(
         has_more: projects.has_more,
     }))
 }
-

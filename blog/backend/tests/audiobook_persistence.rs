@@ -21,9 +21,7 @@ use backend::{
         entities::{media::MediaType, media::MediumDetails},
         errors::audiobook::AudiobookError,
     },
-    infrastructure::{
-        persistence::audiobook::AudiobookServiceImpl, web::server::MediaConfig,
-    },
+    infrastructure::{persistence::audiobook::AudiobookServiceImpl, web::server::MediaConfig},
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
@@ -54,23 +52,25 @@ async fn fixture(name: &str) -> Fixture {
         .await
         .unwrap();
 
-    sqlx::migrate::Migrator::new(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations"),
+    sqlx::migrate::Migrator::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations"))
+        .await
+        .unwrap()
+        .run(&pool)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO users (id,username,email,password_hash) VALUES (1,'alice','a@x.com','h')",
     )
-    .await
-    .unwrap()
-    .run(&pool)
+    .execute(&pool)
     .await
     .unwrap();
-
-    sqlx::query("INSERT INTO users (id,username,email,password_hash) VALUES (1,'alice','a@x.com','h')")
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO users (id,username,email,password_hash) VALUES (2,'bob','b@x.com','h')")
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "INSERT INTO users (id,username,email,password_hash) VALUES (2,'bob','b@x.com','h')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
 
     Fixture {
         db_path,
@@ -126,7 +126,13 @@ impl Fixture {
             .unwrap()
     }
 
-    async fn add_track(&self, audiobook_id: i64, title: &str, seed: u8, number: Option<i64>) -> i64 {
+    async fn add_track(
+        &self,
+        audiobook_id: i64,
+        title: &str,
+        seed: u8,
+        number: Option<i64>,
+    ) -> i64 {
         self.service
             .add_track(
                 AddTrackCommand {
@@ -356,7 +362,10 @@ async fn moving_a_track_up_and_down_shifts_the_others() {
 async fn dedicated_tags_are_separate_from_global_tags_and_dedupe_by_slug() {
     let fx = fixture("tags").await;
     let book = fx
-        .create("tagged-book", &["Science Fiction", "science fiction", "Drama"])
+        .create(
+            "tagged-book",
+            &["Science Fiction", "science fiction", "Drama"],
+        )
         .await;
 
     let details = fx
@@ -412,7 +421,11 @@ async fn dedicated_tags_are_separate_from_global_tags_and_dedupe_by_slug() {
         .await
         .unwrap();
     assert_eq!(
-        details.tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
+        details
+            .tags
+            .iter()
+            .map(|t| t.name.as_str())
+            .collect::<Vec<_>>(),
         vec!["Mystery"]
     );
     fx.cleanup().await;
@@ -581,7 +594,10 @@ async fn ownership_is_enforced_and_slugs_are_unique() {
         })
         .await
         .unwrap_err();
-    assert!(matches!(err, AudiobookError::PermissionDenied), "got {err:?}");
+    assert!(
+        matches!(err, AudiobookError::PermissionDenied),
+        "got {err:?}"
+    );
 
     // An admin can read and mutate anything.
     fx.service

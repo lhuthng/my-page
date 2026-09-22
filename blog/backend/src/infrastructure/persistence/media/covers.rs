@@ -1,21 +1,20 @@
 // Post cover replacement: stores the new cover medium, rewires the post,
 // and cleans up the replaced object.
-use std::path::PathBuf;
+use std::str::FromStr;
 
-use axum::body::Bytes;
-use sqlx::Row;
+use tokio::fs;
 
 use crate::application::commands::media::ChangePostCoverCommand;
-use crate::domain::entities::media::{MediaDetails, MediaType, MediumDetails};
+use crate::domain::entities::media::{MediaType, MediumDetails};
 use crate::domain::errors::media::MediaError;
+use crate::infrastructure::persistence::image_convert::convert_to_webp;
+use crate::infrastructure::web::server::MediaConfig;
 
-use super::hashing::{generate_dir_and_name, hash_bytes};
-use super::validation;
 use super::MediaServiceImpl;
+use super::hashing::{HashData, generate_dir_and_name, hash_bytes};
 
-#[async_trait::async_trait]
-impl MediaService for MediaServiceImpl {
-    async fn change_post_cover(
+impl MediaServiceImpl {
+    pub(super) async fn change_post_cover(
         &self,
         cmd: ChangePostCoverCommand,
         config: &MediaConfig,
@@ -26,7 +25,8 @@ impl MediaService for MediaServiceImpl {
             bytes,
         } = cmd.medium_details;
 
-        let (bytes, content_type, filename) = convert_to_webp(bytes, &content_type, &filename).await?;
+        let (bytes, content_type, filename) =
+            convert_to_webp(bytes, &content_type, &filename).await?;
 
         let media_type = MediaType::from_str(&content_type)?;
         if !config.allowed_cover_types.contains(&media_type) {
@@ -288,15 +288,15 @@ impl MediaService for MediaServiceImpl {
                 Some(e) => format!(".{}", e),
                 None => String::new(),
             };
-            if let Some(sha256) = old_video_hash.split('.').nth(3) {
-                if sha256 != content_hash {
-                    let old_video_path = config
-                        .dir
-                        .join("post")
-                        .join(cmd.user_id.to_string())
-                        .join(format!("{}{}", sha256, ext));
-                    let _ = fs::remove_file(&old_video_path).await;
-                }
+            if let Some(sha256) = old_video_hash.split('.').nth(3)
+                && sha256 != content_hash
+            {
+                let old_video_path = config
+                    .dir
+                    .join("post")
+                    .join(cmd.user_id.to_string())
+                    .join(format!("{}{}", sha256, ext));
+                let _ = fs::remove_file(&old_video_path).await;
             }
         }
 

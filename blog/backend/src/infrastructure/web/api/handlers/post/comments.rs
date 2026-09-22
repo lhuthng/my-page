@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use axum::{
     Extension, Json,
-    extract::{Path as AxumPath, Query, State},
+    extract::{Path, Query, State},
     response::IntoResponse,
 };
 
@@ -15,6 +15,7 @@ use crate::{
         services::post::PostService,
     },
     domain::{entities::secret::Claims, errors::post::PostError},
+    helper::time::normalize_utc_timestamp,
     infrastructure::web::{
         api::handlers::post::dto::{CommentsQuery, NewCommentBody},
         api::handlers::post::response::{Comment, CommentsResponse, NewCommentResponse},
@@ -109,4 +110,3 @@ pub async fn get_comments(
 
     Ok(Json(wrapped_comments))
 }
-

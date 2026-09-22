@@ -1,21 +1,14 @@
 // Post write methods: create/update/publish, related posts, featured flag,
 // and cover metadata.
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::post::{
-        NewPostCommand, PublishCommand, SetFeaturedPostCommand, SetRelatedPostsCommand,
-        UpdatePostCommand, UpdatePostCoverCommand,
-    },
-    services::post::PostService,
+use crate::application::commands::post::{
+    NewPostCommand, PublishCommand, SetFeaturedPostCommand, SetRelatedPostsCommand,
+    UpdatePostCommand, UpdatePostCoverCommand,
 };
-use crate::domain::entities::post::PostStats;
 use crate::domain::errors::post::PostError;
 
-use super::links::{link_post_media, link_post_tags, resolve_tag_ids, MAX_TAGS_PER_POST};
 use super::PostServiceImpl;
+use super::links::{link_post_media, link_post_tags, resolve_tag_ids};
 
 macro_rules! set_opt {
     ($fields:expr, $( ($str: expr, $opt:expr) ),* ) => {
@@ -35,9 +28,8 @@ macro_rules! bind_opt {
     };
 }
 
-#[async_trait::async_trait]
-impl PostService for PostServiceImpl {
-    async fn new_post(&self, cmd: NewPostCommand) -> Result<i64, PostError> {
+impl PostServiceImpl {
+    pub(super) async fn new_post(&self, cmd: NewPostCommand) -> Result<i64, PostError> {
         let title = crate::helper::string::validate_text(&cmd.title, "Title", 200)
             .map_err(PostError::Validation)?;
         let slug =
@@ -81,7 +73,7 @@ impl PostService for PostServiceImpl {
         tx.commit().await?;
         Ok(post_id)
     }
-    async fn update_post(&self, cmd: UpdatePostCommand) -> Result<String, PostError> {
+    pub(super) async fn update_post(&self, cmd: UpdatePostCommand) -> Result<String, PostError> {
         use crate::{application::commands::post::UpdatePostCommand as C, helper::string::*};
         let cmd = C {
             title: cmd
@@ -194,7 +186,7 @@ impl PostService for PostServiceImpl {
         tx.commit().await?;
         Ok(crate::helper::time::normalize_utc_timestamp(new_updated_at))
     }
-    async fn publish(&self, cmd: PublishCommand) -> Result<(), PostError> {
+    pub(super) async fn publish(&self, cmd: PublishCommand) -> Result<(), PostError> {
         // Publishing is now a pure visibility flip. The body is a single column
         // that the last save already wrote, so there is nothing to copy across
         // and no reading time to recompute — only the state changes.
@@ -229,7 +221,10 @@ impl PostService for PostServiceImpl {
     // async fn unpublish(&self, cmd: UnpublishCommand) -> Result<(), PostError> {
 
     // }
-    async fn set_related_posts(&self, cmd: SetRelatedPostsCommand) -> Result<(), PostError> {
+    pub(super) async fn set_related_posts(
+        &self,
+        cmd: SetRelatedPostsCommand,
+    ) -> Result<(), PostError> {
         let mut tx = self.pool.begin().await?;
 
         let owner_id: Option<i64> = sqlx::query_scalar("SELECT user_id FROM posts WHERE id = ?")
@@ -261,7 +256,10 @@ impl PostService for PostServiceImpl {
         Ok(())
     }
 
-    async fn set_post_featured(&self, cmd: SetFeaturedPostCommand) -> Result<(), PostError> {
+    pub(super) async fn set_post_featured(
+        &self,
+        cmd: SetFeaturedPostCommand,
+    ) -> Result<(), PostError> {
         let is_featured_val = if cmd.is_featured { 1 } else { 0 };
         sqlx::query(
             r#"
@@ -278,7 +276,10 @@ impl PostService for PostServiceImpl {
         Ok(())
     }
 
-    async fn update_post_cover(&self, cmd: UpdatePostCoverCommand) -> Result<(), PostError> {
+    pub(super) async fn update_post_cover(
+        &self,
+        cmd: UpdatePostCoverCommand,
+    ) -> Result<(), PostError> {
         let mut set_fields: Vec<String> = vec![];
         if cmd.og_image_seconds.is_some() {
             set_fields.push("og_image_seconds = ?".to_string());

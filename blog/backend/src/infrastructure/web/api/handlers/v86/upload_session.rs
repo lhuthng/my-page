@@ -53,7 +53,7 @@ pub(super) fn split_asset(
     fs::create_dir_all(destination)?;
     let mut input = File::open(source)?;
     let file_len = input.metadata()?.len();
-    let total_chunks = file_len.div_ceil(chunk_size as u64);
+    let total_chunks = file_len.div_ceil(chunk_size);
     if let Some(p) = progress {
         let mut p = p.lock().unwrap();
         p.total_chunks = total_chunks;
@@ -94,7 +94,6 @@ pub(super) fn split_asset(
     Ok(count)
 }
 
-
 pub(super) async fn append_upload_chunk(
     state: &AppState,
     table: &str,
@@ -134,17 +133,27 @@ pub(super) async fn append_upload_chunk(
     }
 
     let storage = &state.storage;
-    let multipart_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
-        ProjectError::InternalError("Upload session is missing its multipart id.".to_string())
-    })?;
+    let multipart_id = row
+        .get::<Option<String>, _>("r2_upload_id")
+        .ok_or_else(|| {
+            ProjectError::InternalError("Upload session is missing its multipart id.".to_string())
+        })?;
     let etag = storage
-        .upload_part(&temp_key, &multipart_id, (chunk_index as i32) + 1, bytes.to_vec())
+        .upload_part(
+            &temp_key,
+            &multipart_id,
+            (chunk_index as i32) + 1,
+            bytes.to_vec(),
+        )
         .await
         .map_err(storage_error)?;
 
     let new_received = received + bytes.len() as i64;
     let new_next = next + 1;
-    let new_etags = append_part_etag(row.get::<Option<String>, _>("r2_part_etags").as_deref(), &etag);
+    let new_etags = append_part_etag(
+        row.get::<Option<String>, _>("r2_part_etags").as_deref(),
+        &etag,
+    );
     let update = format!(
         "UPDATE {table} SET received_size_bytes = ?, next_chunk_index = ?, r2_part_etags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active' AND next_chunk_index = ?"
     );

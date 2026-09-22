@@ -295,14 +295,12 @@ pub async fn reset_password(
     }))
 }
 
-
 // ---------------------------------------------------------------------------
 // Route table (public only; the login flow mints its own tokens)
-use std::sync::Arc;
-
-use axum::{routing::{get, post}, Router};
-
-use crate::infrastructure::web::server::AppState;
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()

@@ -1,25 +1,18 @@
 // Post read methods on PostService: listings, search, tags, feeds.
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::post::{
-        CheckSlugCommand, GetCategoriesCommand, GetFeaturedPostsCommand, GetLatestPostsCommand,
-        GetPostsByTagCommand, GetRelatedPostsCommand, SearchPostCommand, SearchTagsCommand,
-    },
-    services::post::PostService,
+use crate::application::commands::post::{
+    CheckSlugCommand, GetCategoriesCommand, GetFeaturedPostsCommand, GetLatestPostsCommand,
+    GetPostsByTagCommand, GetRelatedPostsCommand, SearchPostCommand, SearchTagsCommand,
 };
 use crate::domain::entities::post::{
-    CategoryResult, PostSnapshot, PostSummary, TagSummary,
+    CategoryResult, PostSnapshot, PostSnapshotPage, PostSummary, TagSummary,
 };
 use crate::domain::errors::post::PostError;
 
-use super::rows::{PostRow, PostSearchRow, TagRow, TagSummaryRow};
 use super::PostServiceImpl;
-#[async_trait::async_trait]
-impl PostService for PostServiceImpl {
-    async fn check_slug(&self, cmd: CheckSlugCommand) -> Result<bool, PostError> {
+use super::rows::{PostRow, PostSearchRow, TagSummaryRow};
+impl PostServiceImpl {
+    pub(super) async fn check_slug(&self, cmd: CheckSlugCommand) -> Result<bool, PostError> {
         let exists: bool = sqlx::query_scalar(
             r#"
             SELECT EXISTS(
@@ -33,7 +26,7 @@ impl PostService for PostServiceImpl {
 
         Ok(exists)
     }
-    async fn get_categories(
+    pub(super) async fn get_categories(
         &self,
         _cmd: GetCategoriesCommand,
     ) -> Result<Vec<CategoryResult>, PostError> {
@@ -51,7 +44,10 @@ impl PostService for PostServiceImpl {
 
         Ok(results)
     }
-    async fn search(&self, cmd: SearchPostCommand) -> Result<Vec<PostSummary>, PostError> {
+    pub(super) async fn search(
+        &self,
+        cmd: SearchPostCommand,
+    ) -> Result<Vec<PostSummary>, PostError> {
         let rows = sqlx::query_as::<_, PostSearchRow>(
             r#"
             SELECT
@@ -99,7 +95,10 @@ impl PostService for PostServiceImpl {
 
         Ok(summaries)
     }
-    async fn search_tags(&self, cmd: SearchTagsCommand) -> Result<Vec<TagSummary>, PostError> {
+    pub(super) async fn search_tags(
+        &self,
+        cmd: SearchTagsCommand,
+    ) -> Result<Vec<TagSummary>, PostError> {
         let rows = sqlx::query_as::<_, TagSummaryRow>(
             r#"
             SELECT
@@ -141,7 +140,7 @@ impl PostService for PostServiceImpl {
             })
             .collect())
     }
-    async fn get_posts_by_tag(
+    pub(super) async fn get_posts_by_tag(
         &self,
         cmd: GetPostsByTagCommand,
     ) -> Result<(TagSummary, Vec<PostSnapshot>), PostError> {
@@ -216,7 +215,7 @@ impl PostService for PostServiceImpl {
             posts,
         ))
     }
-    async fn get_featured_post_snapshots(
+    pub(super) async fn get_featured_post_snapshots(
         &self,
         cmd: GetFeaturedPostsCommand,
     ) -> Result<Vec<PostSnapshot>, PostError> {
@@ -227,7 +226,7 @@ impl PostService for PostServiceImpl {
         Ok(featured_posts)
     }
 
-    async fn get_latest_post_snapshots(
+    pub(super) async fn get_latest_post_snapshots(
         &self,
         cmd: GetLatestPostsCommand,
     ) -> Result<PostSnapshotPage, PostError> {
@@ -243,7 +242,7 @@ impl PostService for PostServiceImpl {
             has_more,
         })
     }
-    async fn get_related_posts(
+    pub(super) async fn get_related_posts(
         &self,
         cmd: GetRelatedPostsCommand,
     ) -> Result<Vec<PostSummary>, PostError> {
@@ -270,5 +269,4 @@ impl PostService for PostServiceImpl {
             })
             .collect())
     }
-
 }

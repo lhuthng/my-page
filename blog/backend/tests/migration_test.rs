@@ -80,12 +80,11 @@ async fn relax_media_hash_migration_applies_with_data_and_fk_off() {
 
     // verify data survived and schema is relaxed
     let ok = sqlx::SqlitePool::connect(&url).await.unwrap();
-    let (id, hash, short_name): (i64, String, String) = sqlx::query_as(
-        "SELECT id, hash, short_name FROM media WHERE id = 1",
-    )
-    .fetch_one(&ok)
-    .await
-    .unwrap();
+    let (id, hash, short_name): (i64, String, String) =
+        sqlx::query_as("SELECT id, hash, short_name FROM media WHERE id = 1")
+            .fetch_one(&ok)
+            .await
+            .unwrap();
     assert_eq!((id, hash.as_str(), short_name.as_str()), (1, "h1", "n1"));
     let aliases: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media_aliases")
         .fetch_one(&ok)
@@ -122,18 +121,18 @@ async fn v86_platform_key_accepts_windows9x_and_converts_old_rows() {
     assert!(keys.is_empty(), "fresh DB has no seeded systems");
 
     // The new CHECK accepts the renamed key and rejects the old one.
-    sqlx::query(
-        "INSERT INTO v86_systems (name, platform_key) VALUES ('Windows 9x', 'windows9x')",
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-    let rejected = sqlx::query(
-        "INSERT INTO v86_systems (name, platform_key) VALUES ('Old', 'windows95')",
-    )
-    .execute(&pool)
-    .await;
-    assert!(rejected.is_err(), "the windows95 key must be rejected by the CHECK");
+    sqlx::query("INSERT INTO v86_systems (name, platform_key) VALUES ('Windows 9x', 'windows9x')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let rejected =
+        sqlx::query("INSERT INTO v86_systems (name, platform_key) VALUES ('Old', 'windows95')")
+            .execute(&pool)
+            .await;
+    assert!(
+        rejected.is_err(),
+        "the windows95 key must be rejected by the CHECK"
+    );
 
     // The upload-session CHECK follows the same rule.
     let session_rejected = sqlx::query(
@@ -145,7 +144,10 @@ async fn v86_platform_key_accepts_windows9x_and_converts_old_rows() {
     )
     .execute(&pool)
     .await;
-    assert!(session_rejected.is_err(), "session must reject the windows95 key");
+    assert!(
+        session_rejected.is_err(),
+        "session must reject the windows95 key"
+    );
     pool.close().await;
 
     let _ = std::fs::remove_file(&db);

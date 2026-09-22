@@ -3,15 +3,14 @@ use std::sync::Arc;
 
 use axum::{
     Extension,
-    extract::{Path as AxumPath, Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
 };
 
 use crate::{
     domain::{entities::secret::Claims, errors::post::PostError},
     infrastructure::web::{
-        api::handlers::post::dto::DeletePostQuery,
-        api::support::ownership::is_admin_or_mod,
+        api::handlers::post::dto::DeletePostQuery, api::support::ownership::is_admin_or_mod,
         server::AppState,
     },
 };
@@ -47,7 +46,9 @@ pub async fn delete_post(
     let reason = query.reason.unwrap_or_else(|| "user_request".to_string());
     let allowed = ["user_request", "dmca", "moderation", "replaced", "other"];
     if !allowed.contains(&reason.as_str()) {
-        return Err(PostError::Validation("Invalid deletion reason.".to_string()));
+        return Err(PostError::Validation(
+            "Invalid deletion reason.".to_string(),
+        ));
     }
     sqlx::query(
         "UPDATE posts SET deleted_at = CURRENT_TIMESTAMP, deletion_reason = ?, deletion_detail = ?, deleted_by = ?, scheduled_purge_at = datetime('now','+7 days'), prev_status = status WHERE id = ?",

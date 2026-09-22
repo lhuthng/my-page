@@ -1,5 +1,5 @@
 // Audiobook request payloads and query params.
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct ListQuery {
@@ -57,4 +57,3 @@ pub struct ReorderTracksPayload {
 // ---------------------------------------------------------------------------
 // Dashboard (moderator/admin) endpoints
 // ---------------------------------------------------------------------------
-

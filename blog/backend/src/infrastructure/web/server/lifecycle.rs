@@ -2,11 +2,10 @@
 // and the axum serve loop.
 use std::io::{Error, ErrorKind};
 
-use super::config::{media::MediaConfig, project_demo::ProjectDemoConfig, storage, AppConfig, AppState};
-use super::maintenance::{
-    backfill_reading_times, cleanup_orphaned_uploads, purge_expired_trash,
-};
-use crate::infrastructure::{persistence, web::api};
+use super::config::{media::MediaConfig, project_demo::ProjectDemoConfig};
+use super::maintenance::{backfill_reading_times, cleanup_orphaned_uploads, purge_expired_trash};
+use super::state::{AppConfig, AppState};
+use crate::infrastructure::{persistence, storage::ObjectStore, web::api};
 
 pub struct HTTPServer<'a> {
     addr: Option<&'a str>,
@@ -110,7 +109,7 @@ impl<'a> HTTPServer<'a> {
         let port = self.port.unwrap_or("3000");
 
         let addr = format!("{}:{}", addr, port);
-        println!("Starting {}", &addr);
+        println!("Starting {}", addr);
         let listener = tokio::net::TcpListener::bind(addr).await?;
         axum::serve(listener, router).await.unwrap();
 

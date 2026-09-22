@@ -1,21 +1,15 @@
 // Media CRUD: short-link resolution, detail fetch, detail change.
-use std::path::PathBuf;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::media::{ChangeMediaDetailsCommand, GetLinkCommand, GetMediaDetailsCommand},
-    services::media::MediaService,
+use crate::application::commands::media::{
+    ChangeMediaDetailsCommand, GetLinkCommand, GetMediaDetailsCommand,
 };
-use crate::domain::entities::media::{LinkResult, MediaDetails};
+use crate::domain::entities::media::{LinkResult, MediaDetailResult};
 use crate::domain::errors::media::MediaError;
 
-use super::rows::MediaSearchRow;
 use super::MediaServiceImpl;
 
-#[async_trait::async_trait]
-impl MediaService for MediaServiceImpl {
-    async fn get_link(&self, cmd: GetLinkCommand) -> Result<LinkResult, MediaError> {
+impl MediaServiceImpl {
+    pub(super) async fn get_link(&self, cmd: GetLinkCommand) -> Result<LinkResult, MediaError> {
         match sqlx::query_as::<_, (String, String, String, i64)>(
             r#"
                 SELECT url, file_type, hash, uploader_id FROM media WHERE short_name = ?;
@@ -35,7 +29,7 @@ impl MediaService for MediaServiceImpl {
             Err(_) => Err(MediaError::FileNotFound),
         }
     }
-    async fn get_details(
+    pub(super) async fn get_details(
         &self,
         cmd: GetMediaDetailsCommand,
     ) -> Result<MediaDetailResult, MediaError> {
@@ -75,7 +69,10 @@ impl MediaService for MediaServiceImpl {
             aliases,
         })
     }
-    async fn change_details(&self, cmd: ChangeMediaDetailsCommand) -> Result<(), MediaError> {
+    pub(super) async fn change_details(
+        &self,
+        cmd: ChangeMediaDetailsCommand,
+    ) -> Result<(), MediaError> {
         let mut tx = self.pool.begin().await?;
 
         if let Some(description) = cmd.description {
@@ -118,5 +115,4 @@ impl MediaService for MediaServiceImpl {
 
         Ok(())
     }
-
 }

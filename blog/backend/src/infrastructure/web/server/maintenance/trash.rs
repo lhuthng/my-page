@@ -1,11 +1,10 @@
 // Expired trash purge: hard-deletes posts past their purge date.
-use std::path::Path;
 
 use crate::infrastructure::storage::ObjectStore;
 
 use super::game_artifacts::cleanup_game_artifacts;
 
-async fn purge_expired_trash(
+pub async fn purge_expired_trash(
     pool: &sqlx::SqlitePool,
     storage: &ObjectStore,
     demos_dir: &std::path::Path,
@@ -46,8 +45,3 @@ async fn purge_expired_trash(
     println!("Purged {} trashed post(s)", ids.len());
     Ok(())
 }
-
-/// Best-effort removal of a game's object-store artifacts (js-dos bundle,
-/// v86 disk/ISO prefixes, snapshots). Runs before the FK cascade deletes the
-/// rows, so keys still referenced by other games are detected and kept —
-/// v86 keys are content-addressed and can be shared.

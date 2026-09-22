@@ -1,13 +1,13 @@
 // sqlx FromRow struct for subscribers.
+use chrono::{DateTime, Utc};
 use sqlx::prelude::FromRow;
 
 #[derive(FromRow, Debug)]
-struct SubscriberRow {
-    id: i64,
+pub(crate) struct SubscriberRow {
+    pub(crate) id: i64,
     #[allow(dead_code)]
-    email: String,
-    status: String,
-    confirm_token_hash: Option<String>,
-    confirm_token_expires_at: Option<DateTime<Utc>>,
+    pub(crate) email: String,
+    pub(crate) status: String,
+    pub(crate) confirm_token_hash: Option<String>,
+    pub(crate) confirm_token_expires_at: Option<DateTime<Utc>>,
 }
-

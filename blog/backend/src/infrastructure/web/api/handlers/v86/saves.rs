@@ -61,10 +61,7 @@ fn save_rate_limited(key: &str) -> bool {
     false
 }
 
-async fn save_game_id(
-    state: &AppState,
-    slug: &str,
-) -> Result<i64, ProjectError> {
+async fn save_game_id(state: &AppState, slug: &str) -> Result<i64, ProjectError> {
     sqlx::query_scalar(
         r#"SELECT gm.id FROM games gm
            JOIN posts ON posts.id = gm.post_id
@@ -94,7 +91,10 @@ pub async fn get_game_save(
     .fetch_optional(&state.project_service.pool)
     .await?;
     let (storage_key, _size) = match row {
-        Some(row) => (row.get::<String, _>("storage_key"), row.get::<i64, _>("size_bytes")),
+        Some(row) => (
+            row.get::<String, _>("storage_key"),
+            row.get::<i64, _>("size_bytes"),
+        ),
         None => return Err(ProjectError::SaveNotFound),
     };
     match &state.storage {
@@ -179,13 +179,12 @@ pub async fn delete_game_save(
 ) -> Result<StatusCode, ProjectError> {
     let user_id = user_id(&opt_claims.ok_or(ProjectError::Forbidden)?)?;
     let game_id = save_game_id(&state, &slug).await?;
-    let row = sqlx::query(
-        "SELECT storage_key FROM game_v86_saves WHERE game_id = ? AND user_id = ?",
-    )
-    .bind(game_id)
-    .bind(user_id)
-    .fetch_optional(&state.project_service.pool)
-    .await?;
+    let row =
+        sqlx::query("SELECT storage_key FROM game_v86_saves WHERE game_id = ? AND user_id = ?")
+            .bind(game_id)
+            .bind(user_id)
+            .fetch_optional(&state.project_service.pool)
+            .await?;
     if let Some(row) = row {
         let storage_key: String = row.get("storage_key");
         let _ = state.storage.delete_object(&storage_key).await;
@@ -197,4 +196,3 @@ pub async fn delete_game_save(
     }
     Ok(StatusCode::NO_CONTENT)
 }
-

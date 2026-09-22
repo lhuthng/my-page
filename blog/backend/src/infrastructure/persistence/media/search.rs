@@ -1,18 +1,17 @@
 // Media search over short names, file names, and aliases.
-use std::path::PathBuf;
-
-use sqlx::Row;
 
 use crate::application::commands::media::SearchMediaCommand;
 use crate::domain::entities::media::LinkResult;
 use crate::domain::errors::media::MediaError;
 
-use super::rows::MediaSearchRow;
 use super::MediaServiceImpl;
+use super::rows::MediaSearchRow;
 
-#[async_trait::async_trait]
-impl MediaService for MediaServiceImpl {
-    async fn search(&self, cmd: SearchMediaCommand) -> Result<Vec<LinkResult>, MediaError> {
+impl MediaServiceImpl {
+    pub(super) async fn search(
+        &self,
+        cmd: SearchMediaCommand,
+    ) -> Result<Vec<LinkResult>, MediaError> {
         let rows = sqlx::query_as::<_, MediaSearchRow>(
             r#"
             SELECT DISTINCT
@@ -54,5 +53,4 @@ impl MediaService for MediaServiceImpl {
             })
             .collect())
     }
-
 }

@@ -1,25 +1,17 @@
 // Project read methods: by-slug, details, post id, listings, tag feed.
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::project::{
-        GetFeaturedProjectsCommand, GetLatestProjectsCommand, GetProjectBySlugCommand,
-        GetProjectDetailsCommand, GetProjectPostIdCommand,
-    },
-    services::project::ProjectService,
+use crate::application::commands::project::{
+    GetFeaturedProjectsCommand, GetLatestProjectsCommand, GetProjectBySlugCommand,
+    GetProjectDetailsCommand, GetProjectPostIdCommand, GetProjectsByTagCommand,
 };
-use crate::domain::entities::project::{ProjectSnapshot, ProjectSummary};
+use crate::domain::entities::project::{Project, ProjectSnapshot, ProjectSnapshotPage};
 use crate::domain::errors::project::ProjectError;
 
-use super::mapping;
-use super::rows::{ProjectContentRow, ProjectLinkRow, ProjectSnapshotRow, ProjectTagRow};
 use super::ProjectServiceImpl;
+use super::rows::{ProjectContentRow, ProjectSnapshotRow};
 
-#[async_trait::async_trait]
-impl ProjectService for ProjectServiceImpl {
-    async fn get_project_by_slug(
+impl ProjectServiceImpl {
+    pub(super) async fn get_project_by_slug(
         &self,
         cmd: GetProjectBySlugCommand,
     ) -> Result<Project, ProjectError> {
@@ -70,7 +62,7 @@ impl ProjectService for ProjectServiceImpl {
         self.project_from_row(row, cmd.as_id).await
     }
 
-    async fn get_project_details(
+    pub(super) async fn get_project_details(
         &self,
         cmd: GetProjectDetailsCommand,
     ) -> Result<Project, ProjectError> {
@@ -127,7 +119,10 @@ impl ProjectService for ProjectServiceImpl {
         self.project_from_row(row, Some(cmd.viewing_user_id)).await
     }
 
-    async fn get_project_post_id(&self, cmd: GetProjectPostIdCommand) -> Result<i64, ProjectError> {
+    pub(super) async fn get_project_post_id(
+        &self,
+        cmd: GetProjectPostIdCommand,
+    ) -> Result<i64, ProjectError> {
         let row: Option<(i64, i64)> = sqlx::query_as(
             r#"
             SELECT posts.id, posts.user_id
@@ -149,7 +144,7 @@ impl ProjectService for ProjectServiceImpl {
         Ok(post_id)
     }
 
-    async fn get_latest_project_snapshots(
+    pub(super) async fn get_latest_project_snapshots(
         &self,
         cmd: GetLatestProjectsCommand,
     ) -> Result<ProjectSnapshotPage, ProjectError> {
@@ -217,7 +212,7 @@ impl ProjectService for ProjectServiceImpl {
         Ok(ProjectSnapshotPage { projects, has_more })
     }
 
-    async fn get_featured_project_snapshots(
+    pub(super) async fn get_featured_project_snapshots(
         &self,
         cmd: GetFeaturedProjectsCommand,
     ) -> Result<Vec<ProjectSnapshot>, ProjectError> {
@@ -257,7 +252,7 @@ impl ProjectService for ProjectServiceImpl {
         self.hydrate_project_rows(rows).await
     }
 
-    async fn get_project_snapshots_by_tag(
+    pub(super) async fn get_project_snapshots_by_tag(
         &self,
         cmd: GetProjectsByTagCommand,
     ) -> Result<Vec<ProjectSnapshot>, ProjectError> {

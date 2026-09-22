@@ -7,4 +7,7 @@ pub mod maintenance;
 pub mod state;
 
 pub use lifecycle::HTTPServer;
-pub use state::{AppConfig, AppState, DatabaseSource, MailConfig, MailTransportConfig, MediaConfig, ProjectDemoConfig};
+pub use state::{
+    AppConfig, AppState, DatabaseSource, MailConfig, MailTransportConfig, MediaConfig,
+    ProjectDemoConfig,
+};

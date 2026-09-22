@@ -1,21 +1,17 @@
 // Media alias management: add, change, delete, list.
-use std::path::PathBuf;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::media::{
-        AddAliasCommand, ChangeAliasCommand, DeleteAliasCommand, GetAliasesCommand,
-    },
-    services::media::MediaService,
+use crate::application::commands::media::{
+    AddAliasCommand, ChangeAliasCommand, DeleteAliasCommand, GetAliasesCommand,
 };
 use crate::domain::errors::media::MediaError;
 
 use super::MediaServiceImpl;
 
-#[async_trait::async_trait]
-impl MediaService for MediaServiceImpl {
-    async fn get_aliases(&self, cmd: GetAliasesCommand) -> Result<Vec<String>, MediaError> {
+impl MediaServiceImpl {
+    pub(super) async fn get_aliases(
+        &self,
+        cmd: GetAliasesCommand,
+    ) -> Result<Vec<String>, MediaError> {
         let aliases: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT alias
@@ -31,7 +27,7 @@ impl MediaService for MediaServiceImpl {
         Ok(aliases.into_iter().map(|r| r.0).collect())
     }
 
-    async fn add_alias(&self, cmd: AddAliasCommand) -> Result<(), MediaError> {
+    pub(super) async fn add_alias(&self, cmd: AddAliasCommand) -> Result<(), MediaError> {
         sqlx::query(
             r#"
             INSERT INTO media_aliases (media_id, alias)
@@ -47,7 +43,7 @@ impl MediaService for MediaServiceImpl {
         Ok(())
     }
 
-    async fn change_alias(&self, cmd: ChangeAliasCommand) -> Result<(), MediaError> {
+    pub(super) async fn change_alias(&self, cmd: ChangeAliasCommand) -> Result<(), MediaError> {
         sqlx::query(
             r#"
             UPDATE media_aliases
@@ -66,7 +62,7 @@ impl MediaService for MediaServiceImpl {
         Ok(())
     }
 
-    async fn delete_alias(&self, cmd: DeleteAliasCommand) -> Result<(), MediaError> {
+    pub(super) async fn delete_alias(&self, cmd: DeleteAliasCommand) -> Result<(), MediaError> {
         sqlx::query(
             r#"
             DELETE FROM media_aliases

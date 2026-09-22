@@ -1,10 +1,12 @@
 // Media type allow-lists for uploads and avatars.
+use std::str::FromStr;
+
 use crate::domain::entities::media::MediaType;
 use crate::domain::errors::media::MediaError;
+use crate::infrastructure::web::server::MediaConfig;
 
 use super::MediaServiceImpl;
 
-impl MediaServiceImpl {
 impl MediaServiceImpl {
     pub(super) async fn is_supported(
         &self,
@@ -25,6 +27,4 @@ impl MediaServiceImpl {
 
         Ok(config.allowed_avatar_types.contains(&media_type))
     }
-}
-
 }

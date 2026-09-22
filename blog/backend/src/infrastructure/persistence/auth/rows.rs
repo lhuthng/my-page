@@ -1,28 +1,28 @@
 // sqlx FromRow structs for the auth flows.
+use chrono::{DateTime, Utc};
 use sqlx::prelude::FromRow;
 
 #[derive(FromRow, Debug)]
-struct UserRow {
-    id: i64,
-    username: String,
-    password_hash: String,
-    email: String,
-    role: String,
-    email_verified_at: Option<DateTime<Utc>>,
+pub(crate) struct UserRow {
+    pub(crate) id: i64,
+    pub(crate) username: String,
+    pub(crate) password_hash: String,
+    pub(crate) email: String,
+    pub(crate) role: String,
+    pub(crate) email_verified_at: Option<DateTime<Utc>>,
 }
 
 #[derive(FromRow, Debug)]
-struct SessionRow {
-    user_id: i64,
-    role: String,
-    token_hash: String,
-    expires_at: DateTime<Utc>,
+pub(crate) struct SessionRow {
+    pub(crate) user_id: i64,
+    pub(crate) role: String,
+    pub(crate) token_hash: String,
+    pub(crate) expires_at: DateTime<Utc>,
 }
 
 #[derive(FromRow, Debug)]
-struct VerificationRow {
-    token_hash: String,
-    expires_at: DateTime<Utc>,
-    sent_at: DateTime<Utc>,
+pub(crate) struct VerificationRow {
+    pub(crate) token_hash: String,
+    pub(crate) expires_at: DateTime<Utc>,
+    pub(crate) sent_at: DateTime<Utc>,
 }
-

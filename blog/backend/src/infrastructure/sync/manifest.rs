@@ -9,14 +9,15 @@
 
 // The transfer manifest: the JSON shape the pull flow fetches first, and the
 // directory walker that builds it.
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
-use crate::domain::entities::media::MediaType;
 use crate::infrastructure::storage::ObjectStore;
 
+use super::rewrite::canonical_media_url;
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SyncManifest {
     pub generated_at: String,
     /// Backend the source environment currently uses for v86 artifacts.
@@ -81,9 +82,7 @@ pub(super) fn walk_demo_dir(base: &Path) -> Result<Vec<DemoFile>, std::io::Error
                 && !name.ends_with(".tmp")
                 && !name.contains(".multipart")
             {
-                let relative = path
-                    .strip_prefix(base)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                let relative = path.strip_prefix(base).map_err(std::io::Error::other)?;
                 files.push(DemoFile {
                     path: relative.to_string_lossy().to_string(),
                     size: entry.metadata().map(|m| m.len()).unwrap_or(0),
@@ -129,10 +128,14 @@ pub async fn build_manifest(
         }
     }
 
-    let project_ids: Vec<(i64,)> =
-        sqlx::query_as("SELECT id FROM projects ORDER BY id").fetch_all(pool).await.map_err(|e| e.to_string())?;
-    let game_ids: Vec<(i64,)> =
-        sqlx::query_as("SELECT id FROM games ORDER BY id").fetch_all(pool).await.map_err(|e| e.to_string())?;
+    let project_ids: Vec<(i64,)> = sqlx::query_as("SELECT id FROM projects ORDER BY id")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    let game_ids: Vec<(i64,)> = sqlx::query_as("SELECT id FROM games ORDER BY id")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let walk_projects = {
         let demos_dir = demos_dir.to_path_buf();
@@ -215,5 +218,5 @@ pub async fn build_manifest(
     })
 }
 
-/// Shape check for an artifact key: backend keys are root-relative with no
-/// traversal. Applied before the DB membership query.
+// Shape check for an artifact key: backend keys are root-relative with no
+// traversal. Applied before the DB membership query (see `files.rs`).

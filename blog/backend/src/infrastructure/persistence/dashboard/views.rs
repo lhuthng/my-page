@@ -1,24 +1,23 @@
 // Listing views: posts, users, and projects (with shared snapshot
 // hydration).
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::dashboard::{
-        GetDetailedPostsCommand, GetPostsCommand, GetProjectsCommand, GetUsersCommand,
-    },
-    services::dashboard::DashboardService,
+use crate::application::commands::dashboard::{
+    GetDashboardPostsCommand, GetDashboardProjectsCommand, GetDashboardUsersCommand,
 };
-use crate::domain::errors::dashboard::DashboardError;
+use crate::domain::entities::dashboard::{
+    DashboardPostsResult, DashboardProjectsResult, DashboardUserInfo, DashboardUsersResult,
+    RoleCounts,
+};
+use crate::domain::errors::user::UserError;
 
-use super::rows::{DashProjectRow, UserInfoRow};
-use super::shared::{fetch_project_snapshots_with_tags, fetch_snapshots_with_tags};
+use crate::infrastructure::persistence::post::PostRow;
+
 use super::DashboardServiceImpl;
+use super::rows::{DashProjectRow, RoleCountRow, UserInfoRow};
+use super::shared::{fetch_project_snapshots_with_tags, fetch_snapshots_with_tags};
 
-#[async_trait::async_trait]
-impl DashboardService for DashboardServiceImpl {
-    async fn get_posts(
+impl DashboardServiceImpl {
+    pub(super) async fn get_posts(
         &self,
         cmd: GetDashboardPostsCommand,
     ) -> Result<DashboardPostsResult, UserError> {
@@ -81,7 +80,7 @@ impl DashboardService for DashboardServiceImpl {
         Ok(DashboardPostsResult { posts, total })
     }
 
-    async fn get_users(
+    pub(super) async fn get_users(
         &self,
         cmd: GetDashboardUsersCommand,
     ) -> Result<DashboardUsersResult, UserError> {
@@ -132,10 +131,10 @@ impl DashboardService for DashboardServiceImpl {
             where_clause
         );
         let mut count_query = sqlx::query_scalar::<_, i64>(&count_sql);
-        if let Some(ref rf) = cmd.role_filter {
-            if is_admin {
-                count_query = count_query.bind(rf);
-            }
+        if let Some(ref rf) = cmd.role_filter
+            && is_admin
+        {
+            count_query = count_query.bind(rf);
         }
         if let Some(ref s) = cmd.search {
             count_query = count_query.bind(s).bind(s);
@@ -156,10 +155,10 @@ impl DashboardService for DashboardServiceImpl {
             where_clause, cmd.limit, cmd.offset
         );
         let mut data_query = sqlx::query_as::<_, UserInfoRow>(&data_sql);
-        if let Some(ref rf) = cmd.role_filter {
-            if is_admin {
-                data_query = data_query.bind(rf);
-            }
+        if let Some(ref rf) = cmd.role_filter
+            && is_admin
+        {
+            data_query = data_query.bind(rf);
         }
         if let Some(ref s) = cmd.search {
             data_query = data_query.bind(s).bind(s);
@@ -184,7 +183,7 @@ impl DashboardService for DashboardServiceImpl {
         })
     }
 
-    async fn get_projects(
+    pub(super) async fn get_projects(
         &self,
         cmd: GetDashboardProjectsCommand,
     ) -> Result<DashboardProjectsResult, UserError> {
@@ -268,5 +267,4 @@ impl DashboardService for DashboardServiceImpl {
 
         Ok(DashboardProjectsResult { projects, total })
     }
-
 }

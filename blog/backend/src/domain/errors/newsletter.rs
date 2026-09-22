@@ -39,10 +39,9 @@ impl IntoResponse for NewsletterError {
                 StatusCode::CONFLICT,
                 "This email is already subscribed.".to_string(),
             ),
-            NewsletterError::AlreadyConfirmed => (
-                StatusCode::OK,
-                "You're already subscribed.".to_string(),
-            ),
+            NewsletterError::AlreadyConfirmed => {
+                (StatusCode::OK, "You're already subscribed.".to_string())
+            }
             NewsletterError::AlreadyUnsubscribed => (
                 StatusCode::OK,
                 "This subscription was already removed.".to_string(),

@@ -2,20 +2,14 @@
 use std::sync::Arc;
 
 use axum::{
-    Extension, Json,
+    Extension,
+    body::Bytes,
     extract::{Multipart, State},
-    response::IntoResponse,
 };
 
 use crate::{
-    application::{
-        commands::media::UploadMediumCommand,
-        services::media::MediaService,
-    },
-    domain::{
-        entities::secret::Claims,
-        errors::media::MediaError,
-    },
+    application::{commands::media::UploadMediumCommand, services::media::MediaService},
+    domain::{entities::secret::Claims, errors::media::MediaError},
     infrastructure::web::{
         api::handlers::support::cover::{MediumData, extract_medium},
         server::AppState,
@@ -109,4 +103,3 @@ pub async fn upload(
         Err(e) => Err(e),
     }
 }
-

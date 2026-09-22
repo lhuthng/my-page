@@ -29,11 +29,19 @@ ones:
   (`system_uploads`, `system_versions`, `game_uploads`, `snapshot_uploads`,
   `snapshot_finalize`) and two shared modules added (`shared.rs` for the
   cross-file helpers, `upload_session.rs` for the multipart relay).
-- **persistence/post**: the trait impl is split into `read`/`detail`/`write`/
-  `comments`/`threads` as five `impl PostService for PostServiceImpl` blocks
-  (Rust permits split impls); the table's single read.rs/write.rs/comments.rs
-  would all exceed 400 lines. `mapping.rs` carries `into_snapshot` and the
-  hydration helper; the row structs are re-exported from `mod.rs`.
+- **persistence/post**: the trait impl is a single block in `mod.rs` whose
+  methods delegate to `pub(super)` inherent methods in `read`/`detail`/`write`/
+  `comments`/`threads`. (The table's single read.rs/write.rs/comments.rs would
+  all exceed 400 lines.) A first cut that gave each file its own
+  `impl PostService for PostServiceImpl` block does not compile: Rust forbids
+  multiple trait-impl blocks for the same trait-and-type pair (E0119), so the
+  ADR's earlier claim that "Rust permits split impls" was wrong and is
+  retracted. Inherent candidates win over trait candidates in method
+  resolution, so the delegation is a one-line body per method. `mapping.rs`
+  carries `into_snapshot` and the hydration helper; the row structs are
+  re-exported from `mod.rs`. The same one-impl-per-adapter pattern applies to
+  every split persistence adapter (audiobook, auth, dashboard, game, media,
+  newsletter, project, series).
 - **persistence/media**: `change_post_cover` (303 lines) is its own
   `covers.rs`; avatar and upload are separate files. Eleven files instead of
   the table's seven.

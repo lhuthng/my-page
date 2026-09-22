@@ -1,21 +1,14 @@
 // Single-post reads: the full post body and the detail view with media.
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::post::{GetDetailedPostsCommand, GetPostCommand},
-    services::post::PostService,
-};
-use crate::domain::entities::post::{Post, PostDetails, PostSnapshot, PostStats, PostSummary, TagSummary};
+use crate::application::commands::post::{GetDetailedPostsCommand, GetPostCommand};
+use crate::domain::entities::post::{Post, PostDetails, PostSeries, PostSummary};
 use crate::domain::errors::post::PostError;
 
-use super::rows::{PostContentRow, PostDetailsRow, PostRow, TagRow, TagSummaryRow};
 use super::PostServiceImpl;
+use super::rows::{MediumUsageRow, MediumUsageWithNameRow, PostContentRow, PostDetailsRow, TagRow};
 
-#[async_trait::async_trait]
-impl PostService for PostServiceImpl {
-    async fn get_post(&self, cmd: GetPostCommand) -> Result<Post, PostError> {
+impl PostServiceImpl {
+    pub(super) async fn get_post(&self, cmd: GetPostCommand) -> Result<Post, PostError> {
         let PostContentRow {
             post_id,
             author_name,
@@ -196,7 +189,7 @@ impl PostService for PostServiceImpl {
             reading_time_minutes,
         })
     }
-    async fn get_post_details(
+    pub(super) async fn get_post_details(
         &self,
         cmd: GetDetailedPostsCommand,
     ) -> Result<PostDetails, PostError> {

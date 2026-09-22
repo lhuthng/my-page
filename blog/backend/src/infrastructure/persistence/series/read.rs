@@ -1,20 +1,18 @@
 // Series read methods: user series and the public catalogue.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::series::{GetAllSeriesCommand, GetSeriesCommand},
-    services::series::SeriesService,
-};
-use crate::domain::entities::series::SeriesSnapshot;
+use crate::application::commands::series::{GetAllSeriesCommand, GetSeriesCommand};
+use crate::domain::entities::post::{PostSnapshot, PostStats};
+use crate::domain::entities::series::{SeriesSnapshot, SeriesWithPosts};
 use crate::domain::errors::series::SeriesError;
 
 use super::SeriesServiceImpl;
 
-#[async_trait::async_trait]
-impl SeriesService for SeriesServiceImpl {
-    async fn get_series(&self, cmd: GetSeriesCommand) -> Result<Vec<SeriesSnapshot>, SeriesError> {
+impl SeriesServiceImpl {
+    pub(super) async fn get_series(
+        &self,
+        cmd: GetSeriesCommand,
+    ) -> Result<Vec<SeriesSnapshot>, SeriesError> {
         // Row type: (series_id, title, slug, description, cover_url, post_count, owner_username)
         type Row = (
             i64,
@@ -78,7 +76,7 @@ impl SeriesService for SeriesServiceImpl {
 
         Ok(result)
     }
-    async fn get_all_series(
+    pub(super) async fn get_all_series(
         &self,
         cmd: GetAllSeriesCommand,
     ) -> Result<Vec<SeriesWithPosts>, SeriesError> {

@@ -10,15 +10,15 @@ mod update;
 mod write;
 
 pub use dto::{
-    CheckQuery, CheckResponse, DeleteProjectQuery, FeaturedProjectsQuery,
-    FeaturedProjectsResponse, LatestProjectsQuery, LatestProjectsResponse, ProjectCard,
-    ProjectStats, SetProjectFeaturedBody, StartJsDosUploadRequest, StartJsDosUploadResponse,
-    JsDosUploadResponse, CompleteJsDosUploadResponse,
+    CheckQuery, CheckResponse, CompleteJsDosUploadResponse, DeleteProjectQuery,
+    FeaturedProjectsQuery, FeaturedProjectsResponse, JsDosUploadResponse, LatestProjectsQuery,
+    LatestProjectsResponse, ProjectCard, ProjectStats, SetProjectFeaturedBody,
+    StartJsDosUploadRequest, StartJsDosUploadResponse,
 };
 pub use publish::{publish_project, set_project_featured};
 pub use read::{
-    check_project, get_all_projects, get_featured_projects, get_project_by_slug,
-    get_project_details, get_latest_projects,
+    check_project, get_all_projects, get_featured_projects, get_latest_projects,
+    get_project_by_slug, get_project_details,
 };
 pub use response::{DelegatedGameResponse, ProjectResponse, UpdateProjectResponse};
 pub use trash::{delete_project_draft, purge_project_now, restore_project};
@@ -30,10 +30,10 @@ pub use write::{change_cover, new_project};
 use std::sync::Arc;
 
 use axum::{
+    Router,
     extract::DefaultBodyLimit,
     middleware,
     routing::{delete, get, patch, post, put},
-    Router,
 };
 
 use crate::infrastructure::web::{api::middlewares, server::AppState};

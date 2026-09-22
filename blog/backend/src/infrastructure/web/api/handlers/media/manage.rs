@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use axum::{
-    Extension, Json,
+    Json,
     extract::{Path, State},
     response::IntoResponse,
 };
@@ -12,10 +12,7 @@ use crate::{
         commands::media::{ChangeMediaDetailsCommand, GetMediaDetailsCommand},
         services::media::MediaService,
     },
-    domain::{
-        entities::secret::Claims,
-        errors::media::MediaError,
-    },
+    domain::errors::media::MediaError,
     infrastructure::web::{
         api::handlers::media::dto::{ChangeDetailsPayload, GetMediaDetailsResponse},
         server::AppState,
@@ -40,12 +37,6 @@ pub async fn get_details(
     }))
 }
 
-#[derive(Deserialize)]
-pub struct ChangeDetailsPayload {
-    pub new_short_name: Option<String>,
-    pub description: Option<String>,
-}
-
 #[axum::debug_handler]
 pub async fn change_details(
     State(state): State<Arc<AppState>>,
@@ -60,4 +51,3 @@ pub async fn change_details(
 
     state.media_service.change_details(cmd).await
 }
-

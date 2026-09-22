@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use axum::{
     Extension, Json,
-    extract::{Path as AxumPath, Query, State},
+    extract::{Path, Query, State},
     response::IntoResponse,
 };
 
@@ -12,22 +12,31 @@ use crate::{
         commands::{
             post::{
                 CheckSlugCommand, GetCategoriesCommand, GetDetailedPostsCommand,
-                GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostsByTagCommand,
-                GetRelatedPostsCommand, SearchPostCommand, SearchTagsCommand,
+                GetFeaturedPostsCommand, GetLatestPostsCommand, GetPostCommand,
+                GetPostsByTagCommand, GetRelatedPostsCommand, SearchPostCommand, SearchTagsCommand,
             },
             project::GetProjectsByTagCommand,
         },
         services::{post::PostService, project::ProjectService},
     },
-    domain::{entities::secret::Claims, errors::post::PostError},
+    domain::{
+        entities::{
+            post::{PostDetails, PostSummary, TagSummary},
+            secret::Claims,
+        },
+        errors::post::PostError,
+    },
+    helper::time::normalize_optional_utc_timestamp,
     infrastructure::web::{
         api::handlers::post::dto::{
-            CheckQuery, CheckResponse, GetFeaturedPostsQuery, GetTagPostsQuery, SearchPostQuery,
-            SearchTagsQuery,
+            CheckQuery, CheckResponse, GetFeaturedPostsBody, GetFeaturedPostsQuery,
+            GetTagPostsQuery, SearchPostQuery, SearchTagsQuery,
         },
         api::handlers::post::response::{
-            GetFeaturedPostsResponse, GetPostDetailsResponse, GetRelatedPostsResponse,
-            Post, PostSeriesResponse, SearchPostResponse, SearchTagsResponse, TagPostsResponse,
+            CategoryResponse, GetCategoriesResponse, GetFeaturedPostsResponse,
+            GetPostDetailsResponse, GetRelatedPostsResponse, PostResponse, PostSeriesResponse,
+            SearchPostResponse, SearchPostResult, SearchTagResult, SearchTagsResponse,
+            TagPostsResponse,
         },
         server::AppState,
     },
@@ -131,11 +140,6 @@ pub async fn get_related_posts(
         .collect();
 
     Ok(Json(GetRelatedPostsResponse { posts }))
-}
-
-#[derive(Deserialize)]
-pub struct SetRelatedPostsBody {
-    pub related_post_slugs: Vec<String>,
 }
 
 pub async fn get_post_by_slug(
@@ -367,4 +371,3 @@ pub async fn get_latest_posts(
 
     Ok(Json(wrapped_featured_posts))
 }
-

@@ -1,20 +1,19 @@
 // Comment creation (authenticated and anonymous) and the view/like counters.
-use sqlx::Row;
+use std::collections::HashSet;
 
-use crate::application::{
-    commands::post::{
-        PostNewAnynymouseCommentCommand, PostNewCommentCommand, PushNewLikeCommand,
-        PushNewViewCommand,
-    },
-    services::post::PostService,
+use crate::application::commands::post::{
+    PostNewAnynymouseCommentCommand, PostNewCommentCommand, PushNewLikeCommand, PushNewViewCommand,
 };
 use crate::domain::errors::post::PostError;
 
 use super::PostServiceImpl;
+use super::links::MENTION_RE;
 
-#[async_trait::async_trait]
-impl PostService for PostServiceImpl {
-    async fn post_new_comment(&self, cmd: PostNewCommentCommand) -> Result<i64, PostError> {
+impl PostServiceImpl {
+    pub(super) async fn post_new_comment(
+        &self,
+        cmd: PostNewCommentCommand,
+    ) -> Result<i64, PostError> {
         let content = crate::helper::string::validate_text(&cmd.content, "Comment", 2000)
             .map_err(PostError::Validation)?;
         let cmd = PostNewCommentCommand { content, ..cmd };
@@ -124,7 +123,7 @@ impl PostService for PostServiceImpl {
         tx.commit().await?;
         Ok(id)
     }
-    async fn post_new_anonymous_comment(
+    pub(super) async fn post_new_anonymous_comment(
         &self,
         cmd: PostNewAnynymouseCommentCommand,
     ) -> Result<i64, PostError> {
@@ -196,7 +195,7 @@ impl PostService for PostServiceImpl {
         tx.commit().await?;
         Ok(id)
     }
-    async fn push_new_view(&self, cmd: PushNewViewCommand) -> Result<(), PostError> {
+    pub(super) async fn push_new_view(&self, cmd: PushNewViewCommand) -> Result<(), PostError> {
         sqlx::query(
             r#"
             INSERT INTO post_stats (post_id, views, updated_at)
@@ -212,7 +211,7 @@ impl PostService for PostServiceImpl {
         Ok(())
     }
 
-    async fn push_new_like(&self, cmd: PushNewLikeCommand) -> Result<(), PostError> {
+    pub(super) async fn push_new_like(&self, cmd: PushNewLikeCommand) -> Result<(), PostError> {
         sqlx::query(
             r#"
             INSERT INTO post_stats (post_id, likes, updated_at)
@@ -227,5 +226,4 @@ impl PostService for PostServiceImpl {
         .await?;
         Ok(())
     }
-
 }

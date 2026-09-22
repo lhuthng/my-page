@@ -1,13 +1,13 @@
 // Post-import database fix pass: rewrites stored URLs and paths to the
 // target environment's layout.
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::str::FromStr;
 
-use sha2::{Digest, Sha256};
-use sqlx::Row;
+use serde::Serialize;
 
 use crate::domain::entities::media::MediaType;
-use crate::infrastructure::storage::ObjectStore;
 
+#[derive(Debug, Default, Serialize)]
 pub struct FixSummary {
     pub media_urls_fixed: u64,
     pub project_demo_urls_fixed: u64,
@@ -24,29 +24,27 @@ pub fn canonical_media_url(
     media_dir: &Path,
 ) -> Option<String> {
     let extension = MediaType::from_str(file_type).ok()?.get_extension();
-    let path = if hash.starts_with(".post.")
-        || hash.starts_with(".avt.")
-        || hash.starts_with(".srs.")
-    {
-        // ".<type>.<id>.<sha256>" — splitn(4, '.') yields ["", type, id, sha].
-        // The id part is NOT the on-disk directory; the uploader id is.
-        let mut parts = hash.splitn(4, '.');
-        let _empty = parts.next()?;
-        let type_dir = parts.next()?;
-        let _id = parts.next()?;
-        let sha = parts.next()?;
-        media_dir
-            .join(type_dir)
-            .join(uploader_id.to_string())
-            .join(format!("{sha}{extension}"))
-    } else if hash.len() >= 4 && hash.bytes().all(|b| b.is_ascii_hexdigit()) {
-        media_dir
-            .join(&hash[0..2])
-            .join(&hash[2..4])
-            .join(format!("{hash}{extension}"))
-    } else {
-        return None;
-    };
+    let path =
+        if hash.starts_with(".post.") || hash.starts_with(".avt.") || hash.starts_with(".srs.") {
+            // ".<type>.<id>.<sha256>" — splitn(4, '.') yields ["", type, id, sha].
+            // The id part is NOT the on-disk directory; the uploader id is.
+            let mut parts = hash.splitn(4, '.');
+            let _empty = parts.next()?;
+            let type_dir = parts.next()?;
+            let _id = parts.next()?;
+            let sha = parts.next()?;
+            media_dir
+                .join(type_dir)
+                .join(uploader_id.to_string())
+                .join(format!("{sha}{extension}"))
+        } else if hash.len() >= 4 && hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+            media_dir
+                .join(&hash[0..2])
+                .join(&hash[2..4])
+                .join(format!("{hash}{extension}"))
+        } else {
+            return None;
+        };
     Some(path.to_string_lossy().to_string())
 }
 
@@ -87,12 +85,11 @@ pub async fn fix_imported_database(
     // html5/webgl zip demos live at {PROJECT_DEMOS_PATH}/{id}/index.html on
     // whatever machine extracted them; embed/download/video keep their https
     // URLs and jsdos/v86 keep NULL.
-    let projects: Vec<(i64, String, String)> = sqlx::query_as(
-        "SELECT id, demo_type, COALESCE(demo_url, '') FROM projects",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let projects: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT id, demo_type, COALESCE(demo_url, '') FROM projects")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
     for (id, demo_type, demo_url) in projects {
         if demo_type != "html5" && demo_type != "webgl" {
             continue;
@@ -111,12 +108,11 @@ pub async fn fix_imported_database(
         summary.project_demo_urls_fixed += 1;
     }
 
-    let games: Vec<(i64, String, String)> = sqlx::query_as(
-        "SELECT id, launcher_type, COALESCE(demo_url, '') FROM games",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let games: Vec<(i64, String, String)> =
+        sqlx::query_as("SELECT id, launcher_type, COALESCE(demo_url, '') FROM games")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| e.to_string())?;
     for (id, launcher_type, demo_url) in games {
         if launcher_type != "html5" && launcher_type != "webgl" {
             continue;
@@ -137,4 +133,3 @@ pub async fn fix_imported_database(
 
     Ok(summary)
 }
-

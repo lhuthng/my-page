@@ -1,10 +1,4 @@
-use lettre::message::header::HeaderValue;
-
-use crate::domain::entities::{
-    auth::{PasswordResetMailPayload, VerificationMailPayload},
-    mail::ContactFormCredential,
-    newsletter::ConfirmSubscriptionMailPayload,
-};
+use crate::domain::entities::auth::PasswordResetMailPayload;
 use crate::infrastructure::web::server::{MailConfig, MailTransportConfig};
 
 use super::super::brevo::{BrevoAddress, BrevoEmailPayload, send_brevo_email};
@@ -57,4 +51,3 @@ pub async fn send_password_reset_email(
         }
     }
 }
-

@@ -11,48 +11,48 @@ pub struct CheckQuery {
 
 #[derive(Serialize)]
 pub struct CheckResponse {
-    exists: bool,
+    pub exists: bool,
 }
 
 #[derive(Deserialize)]
-pub(super) struct ProjectData {
-    title: String,
-    slug: String,
-    excerpt: String,
-    content: String,
-    tags: Vec<String>,
-    links: Vec<ProjectLink>,
-    number_of_files: usize,
-    demo_type: String,
-    demo_width: Option<String>,
-    demo_height: Option<String>,
-    demo_config: Option<String>,
-    demo_url: Option<String>,
-    delegate_game_id: Option<i64>,
-    inherit_thumbnail: Option<bool>,
-    inherit_tags: Option<bool>,
+pub struct ProjectData {
+    pub title: String,
+    pub slug: String,
+    pub excerpt: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub links: Vec<ProjectLink>,
+    pub number_of_files: usize,
+    pub demo_type: String,
+    pub demo_width: Option<String>,
+    pub demo_height: Option<String>,
+    pub demo_config: Option<String>,
+    pub demo_url: Option<String>,
+    pub delegate_game_id: Option<i64>,
+    pub inherit_thumbnail: Option<bool>,
+    pub inherit_tags: Option<bool>,
 }
 
 #[derive(Deserialize)]
-pub(super) struct ProjectPatchData {
-    title: Option<String>,
-    slug: Option<String>,
-    excerpt: Option<String>,
-    content: Option<String>,
-    tags: Option<Vec<String>>,
-    links: Option<Vec<ProjectLink>>,
-    number_of_files: usize,
-    demo_type: Option<String>,
-    demo_width: Option<String>,
-    demo_height: Option<String>,
-    demo_config: Option<String>,
-    demo_url: Option<String>,
-    delegate_game_id: Option<i64>,
-    inherit_thumbnail: Option<bool>,
-    inherit_tags: Option<bool>,
-    og_image_seconds: Option<i64>,
+pub struct ProjectPatchData {
+    pub title: Option<String>,
+    pub slug: Option<String>,
+    pub excerpt: Option<String>,
+    pub content: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub links: Option<Vec<ProjectLink>>,
+    pub number_of_files: usize,
+    pub demo_type: Option<String>,
+    pub demo_width: Option<String>,
+    pub demo_height: Option<String>,
+    pub demo_config: Option<String>,
+    pub demo_url: Option<String>,
+    pub delegate_game_id: Option<i64>,
+    pub inherit_thumbnail: Option<bool>,
+    pub inherit_tags: Option<bool>,
+    pub og_image_seconds: Option<i64>,
     /// Optional optimistic-lock token; see `UpdatePostCommand`.
-    expected_updated_at: Option<String>,
+    pub expected_updated_at: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -129,27 +129,18 @@ pub struct LatestProjectsResponse {
     pub has_more: bool,
 }
 
-pub async fn get_latest_projects(
-    State(state): State<Arc<AppState>>,
-    Query(query): Query<LatestProjectsQuery>,
-) -> Result<impl IntoResponse, ProjectError> {
-    let projects = state
-        .project_service
-        .get_latest_project_snapshots(GetLatestProjectsCommand {
-            limit: query.limit.unwrap_or(24),
-            offset: query.offset.unwrap_or(0),
-            public_only: true,
-            required_author_id: None,
-        })
-        .await?;
-    Ok(Json(LatestProjectsResponse {
-        projects: projects.projects.into_iter().map(Into::into).collect(),
-        has_more: projects.has_more,
-    }))
+#[derive(Deserialize)]
+pub struct FeaturedProjectsQuery {
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct FeaturedProjectsResponse {
+    pub featured_projects: Vec<ProjectCard>,
+    pub has_more: bool,
 }
 
 #[derive(Deserialize)]
 pub struct SetProjectFeaturedBody {
     pub is_featured: bool,
 }
-

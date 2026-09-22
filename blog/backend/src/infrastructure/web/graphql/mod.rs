@@ -1,7 +1,7 @@
 mod helpers;
 mod query;
-pub(crate) mod schema;
 mod rows;
+pub(crate) mod schema;
 mod types;
 
 pub use schema::{BlogSchema, QueryRoot, build_schema};

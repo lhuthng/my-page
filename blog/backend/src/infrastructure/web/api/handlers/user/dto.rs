@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub struct MeResponse {
-    username: String,
-    display_name: String,
-    role: String,
+    pub username: String,
+    pub display_name: String,
+    pub role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar_url: Option<String>,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -18,12 +18,12 @@ pub struct ChangeDetailsBody {
 
 #[derive(Debug, Serialize)]
 pub struct GetUserResponse {
-    username: String,
-    display_name: String,
+    pub username: String,
+    pub display_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    avatar_url: Option<String>,
-    bio: String,
-    role: String,
+    pub avatar_url: Option<String>,
+    pub bio: String,
+    pub role: String,
 }
 
 #[derive(Deserialize)]
@@ -86,7 +86,7 @@ pub struct GetLatestCommentsQuery {
 
 #[derive(Debug, Serialize)]
 pub struct CheckModResponse {
-    is_authorized: bool,
+    pub is_authorized: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -109,4 +109,3 @@ pub struct SearchUserResult {
 pub struct SearchUserResponse {
     pub users: Vec<SearchUserResult>,
 }
-

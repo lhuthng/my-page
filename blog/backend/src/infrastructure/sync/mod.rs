@@ -7,6 +7,8 @@
 //! source environment — a future push flow needs its own mode, key scoping and
 //! confirmation steps.
 
+use sha2::{Digest, Sha256};
+
 pub const SYNC_KEY_PREFIX: &str = "bsk_";
 
 // ── Keys ─────────────────────────────────────────────────────────────────────
@@ -27,8 +29,6 @@ pub fn hash_sync_key(secret: &str) -> String {
 }
 
 // ── Manifest ─────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Serialize, Deserialize)]
 
 mod files;
 mod manifest;

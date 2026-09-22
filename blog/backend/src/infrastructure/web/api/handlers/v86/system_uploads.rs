@@ -1,6 +1,9 @@
 // System base-image upload sessions: start, per-part PUT, abort, and the
 // in-memory chunk-progress registry the status endpoints read.
-use std::{collections::HashMap, sync::{Arc, Mutex, OnceLock}};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, OnceLock},
+};
 
 use axum::{
     Extension, Json,
@@ -40,7 +43,10 @@ pub async fn start_system_upload(
     }
     // .raw and .img are both flat disk dumps — identical to the emulator;
     // container formats (VHD/VDI/...) are not supported.
-    if !matches!(request.file_name.to_ascii_lowercase().rsplit('.').next(), Some("img" | "raw")) {
+    if !matches!(
+        request.file_name.to_ascii_lowercase().rsplit('.').next(),
+        Some("img" | "raw")
+    ) {
         return Err(ProjectError::InvalidDemo(
             "Expected an .img or .raw disk image.".to_string(),
         ));
@@ -75,12 +81,11 @@ pub async fn start_system_upload(
 
     // Content-addressed dedup: if a version with this exact sha already exists,
     // skip the upload entirely.
-    let existing_version: Option<String> = sqlx::query_scalar(
-        "SELECT storage_key FROM v86_system_versions WHERE sha256 = ? LIMIT 1",
-    )
-    .bind(&request.sha256)
-    .fetch_optional(&state.project_service.pool)
-    .await?;
+    let existing_version: Option<String> =
+        sqlx::query_scalar("SELECT storage_key FROM v86_system_versions WHERE sha256 = ? LIMIT 1")
+            .bind(&request.sha256)
+            .fetch_optional(&state.project_service.pool)
+            .await?;
 
     if let Some(existing_key) = existing_version {
         let upload_id = Uuid::new_v4().to_string();
@@ -199,22 +204,17 @@ pub async fn upload_system_part(
 
     // Record the part atomically. INSERT is concurrency-safe, unlike the old
     // read-modify-write of a received_parts JSON column.
-    let changed = sqlx::query(
-        "INSERT INTO v86_system_upload_parts (upload_id, part_index) VALUES (?, ?)",
-    )
-    .bind(&upload_id)
-    .bind(part_index as i64)
-    .execute(&state.project_service.pool)
-    .await;
+    let changed =
+        sqlx::query("INSERT INTO v86_system_upload_parts (upload_id, part_index) VALUES (?, ?)")
+            .bind(&upload_id)
+            .bind(part_index as i64)
+            .execute(&state.project_service.pool)
+            .await;
     match changed {
         Ok(_) => Ok(StatusCode::NO_CONTENT),
-        Err(sqlx::Error::Database(db_err))
-            if db_err.is_unique_violation() =>
-        {
-            Err(ProjectError::Conflict(
-                "This part was already uploaded.".to_string(),
-            ))
-        }
+        Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => Err(
+            ProjectError::Conflict("This part was already uploaded.".to_string()),
+        ),
         Err(e) => Err(e.into()),
     }
 }
@@ -244,10 +244,10 @@ pub async fn abort_system_upload(
     .execute(&state.project_service.pool)
     .await?;
     let reuse: i64 = row.get("reuse");
-    if reuse == 0 {
-        if let Some(key) = row.get::<Option<String>, _>("staged_storage_key") {
-            let _ = state.storage.delete_prefix(&key).await;
-        }
+    if reuse == 0
+        && let Some(key) = row.get::<Option<String>, _>("staged_storage_key")
+    {
+        let _ = state.storage.delete_prefix(&key).await;
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -270,7 +270,11 @@ pub async fn get_system_upload_status(
     .fetch_optional(&state.project_service.pool)
     .await?
     .ok_or(ProjectError::ProjectNotFound)?;
-    let progress = chunk_progress_map().lock().unwrap().get(&upload_id).cloned();
+    let progress = chunk_progress_map()
+        .lock()
+        .unwrap()
+        .get(&upload_id)
+        .cloned();
     let active_uploads = chunk_progress_map()
         .lock()
         .unwrap()
@@ -299,4 +303,3 @@ pub async fn get_server_status(
         active_uploads,
     }))
 }
-

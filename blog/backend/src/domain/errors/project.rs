@@ -45,10 +45,11 @@ impl IntoResponse for ProjectError {
             ProjectError::ProjectNotFound => {
                 (StatusCode::NOT_FOUND, "Project not found".to_string()).into_response()
             }
-            ProjectError::SaveNotFound => {
-                (StatusCode::NOT_FOUND, "No save exists for this game yet".to_string())
-                    .into_response()
-            }
+            ProjectError::SaveNotFound => (
+                StatusCode::NOT_FOUND,
+                "No save exists for this game yet".to_string(),
+            )
+                .into_response(),
             ProjectError::Forbidden => (
                 StatusCode::FORBIDDEN,
                 "You do not have permission to perform this action".to_string(),

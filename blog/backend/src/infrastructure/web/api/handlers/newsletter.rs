@@ -48,9 +48,9 @@ pub async fn subscribe(
 
     let mail_payload = timeout(
         Duration::from_secs(15),
-        state.newsletter_service.subscribe(SubscribeCommand {
-            email: req.email,
-        }),
+        state
+            .newsletter_service
+            .subscribe(SubscribeCommand { email: req.email }),
     )
     .await
     .map_err(|_| {
@@ -235,19 +235,15 @@ pub async fn send_campaign(
 
 // ---------------------------------------------------------------------------
 // Route tables
-use std::sync::Arc;
-
-use axum::{routing::{get, post}, Router};
-
-use crate::infrastructure::web::server::AppState;
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 /// Public subscription lifecycle, nested at `/newsletter`.
 pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/subscribe", post(subscribe))
         .route("/confirm", get(confirm))
-        .route(
-            "/unsubscribe",
-            get(unsubscribe).post(unsubscribe_by_email),
-        )
+        .route("/unsubscribe", get(unsubscribe).post(unsubscribe_by_email))
 }

@@ -1,19 +1,25 @@
 // Session lifecycle: login and access-token refresh.
-use sqlx::Row;
+use base64::{Engine, engine::general_purpose};
+use bcrypt::verify;
+use chrono::{Duration, Utc};
+use tokio::join;
 
-use crate::application::{
-    commands::auth::{LoginCommand, RefreshAccessTokenCommand},
-    services::auth::AuthService,
-};
+use crate::application::commands::auth::{LoginCommand, RefreshAccessTokenCommand};
+use crate::domain::entities::auth::{AuthConfig, AuthTokens, LoginResult};
+use crate::domain::entities::secret::Claims;
 use crate::domain::errors::auth::AuthError;
+use crate::infrastructure::web::api::secrets::encode_into_jwt_token;
 
-use super::rows::{SessionRow, UserRow};
-use super::tokens::{generate_token_pair, hash_verification_secret};
-use super::AuthServiceImpl;
+use super::rows::{SessionRow, UserRow, VerificationRow};
+use super::tokens::{generate_token_pair, upsert_verification_token, verification_mail_payload};
+use super::{AuthServiceImpl, DELIMITER};
 
-#[async_trait::async_trait]
-impl AuthService for AuthServiceImpl {
-    async fn login(&self, cmd: LoginCommand, config: AuthConfig) -> Result<LoginResult, AuthError> {
+impl AuthServiceImpl {
+    pub(super) async fn login(
+        &self,
+        cmd: LoginCommand,
+        config: AuthConfig,
+    ) -> Result<LoginResult, AuthError> {
         let user_row = sqlx::query_as::<_, UserRow>(
             r#"
             SELECT id, username, password_hash, email, role, email_verified_at
@@ -104,7 +110,7 @@ impl AuthService for AuthServiceImpl {
         }))
     }
 
-    async fn refresh_access_token(
+    pub(super) async fn refresh_access_token(
         &self,
         cmd: RefreshAccessTokenCommand,
         config: AuthConfig,
@@ -135,10 +141,11 @@ impl AuthService for AuthServiceImpl {
             Ok(row) => {
                 let token_hash = row.token_hash.clone();
                 let token_owned = token.to_string();
-                let is_valid = tokio::task::spawn_blocking(move || verify(&token_owned, &token_hash))
-                    .await
-                    .map_err(|e| AuthError::InternalError(e.to_string()))?
-                    .map_err(|e| AuthError::InternalError(e.to_string()))?;
+                let is_valid =
+                    tokio::task::spawn_blocking(move || verify(&token_owned, &token_hash))
+                        .await
+                        .map_err(|e| AuthError::InternalError(e.to_string()))?
+                        .map_err(|e| AuthError::InternalError(e.to_string()))?;
 
                 if !is_valid {
                     return Err(AuthError::InvalidToken);
@@ -166,5 +173,4 @@ impl AuthService for AuthServiceImpl {
             Err(e) => Err(AuthError::InternalError(e.to_string())),
         }
     }
-
 }

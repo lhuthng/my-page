@@ -8,6 +8,9 @@ use lettre::{
     transport::smtp::authentication::Credentials,
 };
 
+use tokio::task;
+
+use crate::domain::entities::mail::ContactFormCredential;
 use crate::infrastructure::web::server::{MailConfig, MailTransportConfig};
 
 use super::templates;
@@ -21,10 +24,6 @@ pub(super) fn raw_header(name: &str, value: String) -> HeaderValue {
         value,
     )
 }
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-
 
 pub(super) async fn send_html_email_via_smtp(
     mail_config: &MailConfig,
@@ -171,33 +170,6 @@ pub(super) async fn send_contact_emails_via_smtp(
     })
     .await
     .map_err(|err| format!("SMTP worker failed: {err}"))?
-}
-
-async fn send_brevo_email(api_key: &str, payload: &BrevoEmailPayload<'_>) -> Result<(), String> {
-    let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|err| format!("Failed to build Brevo client: {err}"))?;
-
-    let response = client
-        .post("https://api.brevo.com/v3/smtp/email")
-        .header("api-key", api_key)
-        .header("accept", "application/json")
-        .json(payload)
-        .send()
-        .await
-        .map_err(|err| format!("Brevo API request failed: {err}"))?;
-
-    if response.status().is_success() {
-        Ok(())
-    } else {
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unable to read Brevo error response".to_string());
-        Err(format!("Brevo API returned {status}: {body}"))
-    }
 }
 
 pub(super) fn build_smtp_mailer(mail_config: &MailConfig) -> Result<SmtpTransport, String> {

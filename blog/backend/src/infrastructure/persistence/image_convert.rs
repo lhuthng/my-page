@@ -26,7 +26,11 @@ pub async fn convert_to_webp(
         let path = std::path::Path::new(&filename);
         let new_filename = path.with_extension("webp").to_string_lossy().to_string();
 
-        Ok((Bytes::from(webp_bytes), "image/webp".to_string(), new_filename))
+        Ok((
+            Bytes::from(webp_bytes),
+            "image/webp".to_string(),
+            new_filename,
+        ))
     })
     .await
     .map_err(|e| MediaError::UploadFailed(format!("Image processing task failed: {}", e)))?

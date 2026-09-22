@@ -1,25 +1,17 @@
 // Game read methods: by-slug, details, post id, listings, tag feed.
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::game::{
-        GetFeaturedGamesCommand, GetGameBySlugCommand, GetGameDetailsCommand,
-        GetGamePostIdCommand, GetLatestGamesCommand,
-    },
-    services::game::GameService,
+use crate::application::commands::game::{
+    GetFeaturedGamesCommand, GetGameBySlugCommand, GetGameDetailsCommand, GetGamePostIdCommand,
+    GetGamesByTagCommand, GetLatestGamesCommand,
 };
-use crate::domain::entities::game::GameSnapshot;
+use crate::domain::entities::game::{Game, GameSnapshot, GameSnapshotPage};
 use crate::domain::errors::game::GameError;
 
-use super::mapping;
-use super::rows::{GameContentRow, GameSnapshotRow, GameTagRow};
 use super::GameServiceImpl;
+use super::rows::{GameContentRow, GameSnapshotRow};
 
-#[async_trait::async_trait]
-impl GameService for GameServiceImpl {
-    async fn get_game_by_slug(
+impl GameServiceImpl {
+    pub(super) async fn get_game_by_slug(
         &self,
         cmd: GetGameBySlugCommand,
     ) -> Result<Game, GameError> {
@@ -68,7 +60,7 @@ impl GameService for GameServiceImpl {
         self.game_from_row(row, cmd.as_id).await
     }
 
-    async fn get_game_details(
+    pub(super) async fn get_game_details(
         &self,
         cmd: GetGameDetailsCommand,
     ) -> Result<Game, GameError> {
@@ -123,7 +115,10 @@ impl GameService for GameServiceImpl {
         self.game_from_row(row, Some(cmd.viewing_user_id)).await
     }
 
-    async fn get_game_post_id(&self, cmd: GetGamePostIdCommand) -> Result<i64, GameError> {
+    pub(super) async fn get_game_post_id(
+        &self,
+        cmd: GetGamePostIdCommand,
+    ) -> Result<i64, GameError> {
         let row: Option<(i64, i64)> = sqlx::query_as(
             r#"
             SELECT posts.id, posts.user_id
@@ -145,7 +140,7 @@ impl GameService for GameServiceImpl {
         Ok(post_id)
     }
 
-    async fn get_latest_game_snapshots(
+    pub(super) async fn get_latest_game_snapshots(
         &self,
         cmd: GetLatestGamesCommand,
     ) -> Result<GameSnapshotPage, GameError> {
@@ -213,7 +208,7 @@ impl GameService for GameServiceImpl {
         Ok(GameSnapshotPage { games, has_more })
     }
 
-    async fn get_featured_game_snapshots(
+    pub(super) async fn get_featured_game_snapshots(
         &self,
         cmd: GetFeaturedGamesCommand,
     ) -> Result<Vec<GameSnapshot>, GameError> {
@@ -253,7 +248,7 @@ impl GameService for GameServiceImpl {
         self.hydrate_game_rows(rows).await
     }
 
-    async fn get_game_snapshots_by_tag(
+    pub(super) async fn get_game_snapshots_by_tag(
         &self,
         cmd: GetGamesByTagCommand,
     ) -> Result<Vec<GameSnapshot>, GameError> {

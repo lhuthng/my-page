@@ -19,11 +19,7 @@ use crate::{
         services::{media::MediaService, post::PostService, project::ProjectService},
     },
     domain::{
-        entities::{
-            media::MediumDetails,
-            project::ProjectLink,
-            secret::Claims,
-        },
+        entities::{media::MediumDetails, project::ProjectLink, secret::Claims},
         errors::{media::MediaError, project::ProjectError},
     },
     infrastructure::web::{
@@ -31,7 +27,7 @@ use crate::{
         api::handlers::support::cover::{MediumData, apply_created_cover_upload, extract_medium},
         api::support::{
             demo_archive::extract_demo_zip,
-            links::{validate_demo_url, validate_link},
+            links::validate_demo_url,
             media_short_names::replace_media_short_names,
             multipart::{parse_multipart, upload_inline_media},
         },
@@ -46,7 +42,7 @@ const MAX_PROJECT_LINKS: usize = 20;
 ///
 /// Link URLs are rendered into an `href`, so a `javascript:` or `data:` value
 /// must not be storable in the first place.
-fn normalize_links(links: Vec<ProjectLink>) -> Result<Vec<ProjectLink>, ProjectError> {
+pub(crate) fn normalize_links(links: Vec<ProjectLink>) -> Result<Vec<ProjectLink>, ProjectError> {
     let kept: Vec<ProjectLink> = links
         .into_iter()
         .filter(|link| !link.label.trim().is_empty() && !link.url.trim().is_empty())
@@ -225,22 +221,19 @@ pub async fn new_project(
                 .execute(&state.project_service.pool)
                 .await
                 .ok();
-            return Err(error.into());
+            return Err(error);
         }
     };
 
     if let Some(zip) = demo_zip {
-        if let Err(err) = extract_demo_zip(
+        extract_demo_zip(
             &state.project_demo_config,
             project_id.to_string(),
             zip,
             ProjectError::InternalError,
             ProjectError::InvalidDemo,
         )
-        .await
-        {
-            return Err(err);
-        }
+        .await?;
     }
 
     apply_created_cover_upload(&state, uploader_id, post_id, create_cover).await?;

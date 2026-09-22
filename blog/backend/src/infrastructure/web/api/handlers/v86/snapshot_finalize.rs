@@ -11,12 +11,9 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
-use crate::infrastructure::web::{
-    api::support::ownership::require_owner,
-    server::AppState,
-};
+use crate::infrastructure::web::{api::support::ownership::require_owner, server::AppState};
 
-use super::constants::ZSTD_MAGIC;
+use super::constants::{V86_TOPOLOGY_VERSION, ZSTD_MAGIC};
 use super::shared::{ensure_upload_not_expired, storage_error, user_id};
 use super::snapshot_uploads::{fail_snapshot_session, snapshot_storage_key};
 use super::upload_session::parse_part_etags;
@@ -57,9 +54,11 @@ pub async fn complete_snapshot_upload(
 
     let storage = &state.storage;
     let temp_key: String = row.get("temp_storage_key");
-    let multipart_id = row.get::<Option<String>, _>("r2_upload_id").ok_or_else(|| {
-        ProjectError::InternalError("Upload session is missing its multipart id.".to_string())
-    })?;
+    let multipart_id = row
+        .get::<Option<String>, _>("r2_upload_id")
+        .ok_or_else(|| {
+            ProjectError::InternalError("Upload session is missing its multipart id.".to_string())
+        })?;
     let etags = parse_part_etags(row.get::<Option<String>, _>("r2_part_etags").as_deref());
     storage
         .complete_multipart(&temp_key, &multipart_id, etags)
@@ -87,13 +86,12 @@ pub async fn complete_snapshot_upload(
 
     // Re-check the disk pinning: the game disk may have been replaced while
     // the (slow) compress + upload was in flight.
-    let game = sqlx::query(
-        "SELECT system_version_id, disk_sha256 FROM game_v86_games WHERE game_id = ?",
-    )
-    .bind(game_id)
-    .fetch_optional(&state.project_service.pool)
-    .await?
-    .ok_or(ProjectError::ProjectNotFound)?;
+    let game =
+        sqlx::query("SELECT system_version_id, disk_sha256 FROM game_v86_games WHERE game_id = ?")
+            .bind(game_id)
+            .fetch_optional(&state.project_service.pool)
+            .await?
+            .ok_or(ProjectError::ProjectNotFound)?;
     let game_disk_sha: String = row.get("game_disk_sha256");
     let current_disk_sha: Option<String> = game.get("disk_sha256");
     if game.get::<i64, _>("system_version_id") != row.get::<i64, _>("system_version_id")
@@ -190,18 +188,17 @@ pub async fn complete_snapshot_upload(
     // reuses the same object, and two variants could in principle land on the
     // same one. Only drop the old object when it changed and nothing else
     // still points at it.
-    if let Some(previous) = previous_key {
-        if previous != storage_key {
-            let still_referenced: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM game_v86_snapshots WHERE storage_key = ?",
-            )
-            .bind(&previous)
-            .fetch_one(&state.project_service.pool)
-            .await
-            .unwrap_or(1);
-            if still_referenced == 0 {
-                let _ = storage.delete_object(&previous).await;
-            }
+    if let Some(previous) = previous_key
+        && previous != storage_key
+    {
+        let still_referenced: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM game_v86_snapshots WHERE storage_key = ?")
+                .bind(&previous)
+                .fetch_one(&state.project_service.pool)
+                .await
+                .unwrap_or(1);
+        if still_referenced == 0 {
+            let _ = storage.delete_object(&previous).await;
         }
     }
     Ok(StatusCode::NO_CONTENT)
@@ -221,16 +218,13 @@ pub async fn abort_snapshot_upload(
     .fetch_optional(&state.project_service.pool)
     .await?
     .ok_or(ProjectError::ProjectNotFound)?;
-    if row.get::<String, _>("status") == "active" {
-        if let Some(multipart_id) = row.get::<Option<String>, _>("r2_upload_id") {
-            let _ = state
-                .storage
-                .abort_multipart(
-                    &row.get::<String, _>("temp_storage_key"),
-                    &multipart_id,
-                )
-                .await;
-        }
+    if row.get::<String, _>("status") == "active"
+        && let Some(multipart_id) = row.get::<Option<String>, _>("r2_upload_id")
+    {
+        let _ = state
+            .storage
+            .abort_multipart(&row.get::<String, _>("temp_storage_key"), &multipart_id)
+            .await;
     }
     sqlx::query(
         "UPDATE game_v86_snapshot_upload_sessions SET status = 'aborted', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -240,4 +234,3 @@ pub async fn abort_snapshot_upload(
     .await?;
     Ok(StatusCode::NO_CONTENT)
 }
-

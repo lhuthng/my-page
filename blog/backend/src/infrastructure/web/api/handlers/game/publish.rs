@@ -4,21 +4,19 @@ use std::sync::Arc;
 use axum::{
     Extension, Json,
     extract::{Path as AxumPath, State},
+    response::IntoResponse,
 };
 
 use crate::{
     application::{
         commands::{
-            post::PublishCommand,
             game::{GetGamePostIdCommand, SetFeaturedGameCommand},
+            post::PublishCommand,
         },
         services::{game::GameService, post::PostService},
     },
     domain::{entities::secret::Claims, errors::game::GameError},
-    infrastructure::web::{
-        api::handlers::game::dto::SetGameFeaturedBody,
-        server::AppState,
-    },
+    infrastructure::web::{api::handlers::game::dto::SetGameFeaturedBody, server::AppState},
 };
 
 #[axum::debug_handler]
@@ -87,4 +85,3 @@ pub async fn set_game_featured(
         .await?;
     Ok(())
 }
-

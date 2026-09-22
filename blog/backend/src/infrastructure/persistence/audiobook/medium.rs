@@ -1,22 +1,24 @@
 // Cover/audio media storage shared by the write paths.
 use std::path::PathBuf;
 
-use sqlx::Sqlite;
+use sqlx::{Sqlite, Transaction};
+use tokio::fs;
 
 use crate::domain::entities::media::MediaType;
 use crate::domain::errors::audiobook::AudiobookError;
+use crate::infrastructure::persistence::media::{HashData, hash_bytes};
+use crate::infrastructure::web::server::MediaConfig;
 
 use super::AudiobookServiceImpl;
 
 pub(super) struct PreparedCover {
-    media_type: MediaType,
-    file_path: PathBuf,
-    short_name: String,
-    stored_hash: String,
-    filename: String,
-    size: i64,
+    pub(super) media_type: MediaType,
+    pub(super) file_path: PathBuf,
+    pub(super) short_name: String,
+    pub(super) stored_hash: String,
+    pub(super) filename: String,
+    pub(super) size: i64,
 }
-
 
 impl AudiobookServiceImpl {
     pub(super) async fn store_medium(
@@ -79,4 +81,3 @@ impl AudiobookServiceImpl {
         Ok(media_id)
     }
 }
-

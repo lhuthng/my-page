@@ -4,32 +4,28 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     Extension, Json,
-    extract::{Multipart, Path as AxumPath, State},
+    body::Bytes,
+    extract::{Multipart, Path, State},
     response::IntoResponse,
 };
 
 use crate::{
     application::{
         commands::{
-            media::UploadMediaWithoutDescriptionCommand,
+            media::{ChangePostCoverCommand, UploadMediaWithoutDescriptionCommand},
             post::{SetRelatedPostsCommand, UpdatePostCommand, UpdatePostCoverCommand},
         },
         services::{media::MediaService, post::PostService},
     },
     domain::{
-        entities::{
-            media::MediumDetails,
-            secret::Claims,
-        },
+        entities::{media::MediumDetails, secret::Claims},
         errors::{media::MediaError, post::PostError},
     },
     infrastructure::web::{
-        api::handlers::support::cover::{MediumData, extract_medium},
         api::handlers::post::dto::{PostPatchData, SetRelatedPostsBody},
-        api::support::{
-            media_short_names::replace_media_short_names,
-            multipart::FileData,
-        },
+        api::handlers::post::response::UpdatePostResponse,
+        api::handlers::support::cover::{MediumData, extract_medium},
+        api::support::{media_short_names::replace_media_short_names, multipart::FileData},
         server::AppState,
     },
 };
@@ -327,4 +323,3 @@ pub async fn change_cover(
 
     Ok(())
 }
-

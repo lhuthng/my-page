@@ -252,7 +252,18 @@ pub async fn get_trash(
     let items: Vec<TrashItem> = rows
         .into_iter()
         .map(
-            |(post_id, project_id, game_id, title, slug, content_kind, deleted_at, scheduled_purge_at, deletion_reason, status)| TrashItem {
+            |(
+                post_id,
+                project_id,
+                game_id,
+                title,
+                slug,
+                content_kind,
+                deleted_at,
+                scheduled_purge_at,
+                deletion_reason,
+                status,
+            )| TrashItem {
                 post_id,
                 project_id,
                 game_id,
@@ -271,15 +282,15 @@ pub async fn get_trash(
 
 // ---------------------------------------------------------------------------
 // Route tables
-use std::sync::Arc;
-
 use axum::{
-    middleware,
+    Router, middleware,
     routing::{delete, get, patch, post},
-    Router,
 };
 
-use crate::infrastructure::web::{api::handlers::{newsletter, sync}, api::middlewares, server::AppState};
+use crate::infrastructure::web::{
+    api::handlers::{newsletter, sync},
+    api::middlewares,
+};
 
 pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     // moderator-protected overview content

@@ -1,28 +1,16 @@
 // Comment queries.
-use std::collections::HashMap;
 
 use async_graphql::{Context, Object};
 use sqlx::SqlitePool;
 
-use super::super::helpers::{
-    DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts, attach_tags_to_projects,
-};
-use super::super::rows::{
-    CategoryRow, CommentRow, DashboardPostRow, DashboardProjectRow, GqlPostRow, GrowthDayRow,
-    MediaRow, PostDetailRow, RoleCountRow, SeriesPostRow, SeriesRow, TagRow, UserInfoRow, UserRow,
-};
-use super::super::types::{
-    CategoryConnection, CommentConnection, DashboardPostConnection, DbStats, GqlCategory,
-    GqlComment, GqlDashboardOverview, GqlDashboardPost, GqlDashboardProject, GqlDashboardUser,
-    GqlGrowthPoint, GqlMedia, GqlPost, GqlPostDetail, GqlRoleCounts, GqlSeries, GqlSeriesPost,
-    GqlTag, GqlUser, MediaConnection, PostConnection, ProjectConnection, SeriesConnection,
-    TagConnection, UserConnection,
-};
+use super::super::rows::CommentRow;
+use super::super::types::{CommentConnection, GqlComment};
 
-use super::QueryRoot;
+#[derive(Default)]
+pub struct CommentsQuery;
 
 #[Object]
-impl QueryRoot {
+impl CommentsQuery {
     async fn comments(
         &self,
         ctx: &Context<'_>,
@@ -101,5 +89,4 @@ impl QueryRoot {
 
         Ok(CommentConnection { items, total })
     }
-
 }

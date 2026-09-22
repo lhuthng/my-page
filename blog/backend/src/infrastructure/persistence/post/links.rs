@@ -1,17 +1,16 @@
 // Post link tables: tag resolution/linking and the media @-mention scan.
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
 use regex::Regex;
-use sqlx::SqlitePool;
 
 use crate::domain::errors::post::PostError;
 
-static MENTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"@([A-Za-z0-9_-]+)").unwrap());
+pub(super) static MENTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"@([A-Za-z0-9_-]+)").unwrap());
 
 /// Upper bound on how many tags one post may carry. The tag SQL is built by
 /// joining one placeholder per tag, so this also bounds the generated statement.
-const MAX_TAGS_PER_POST: usize = 30;
+pub(super) const MAX_TAGS_PER_POST: usize = 30;
 
 /// Validate, deduplicate, insert-if-missing, and resolve `tags` to tag ids.
 ///
@@ -21,7 +20,6 @@ const MAX_TAGS_PER_POST: usize = 30;
 /// input) produced a placeholder/bind mismatch and a sqlx error. Deriving the
 /// placeholders from the resolved ids keeps the two counts in step by
 /// construction.
-
 pub(super) async fn resolve_tag_ids(
     tx: &mut sqlx::SqliteConnection,
     tags: &[String],
@@ -151,4 +149,3 @@ pub(super) async fn link_post_media(
     query.execute(&mut *tx).await?;
     Ok(())
 }
-

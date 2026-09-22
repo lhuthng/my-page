@@ -1,22 +1,17 @@
 // Campaign delivery: listing, per-post fan-out, manual campaigns, and the
 // chunked run_campaign loop.
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::newsletter::{ListCampaignsCommand, ListSubscribersCommand},
-    services::newsletter::NewsletterService,
-};
+use crate::application::commands::newsletter::{ListSubscribersCommand, SendCampaignCommand};
+use crate::domain::entities::newsletter::{CampaignSnapshot, SubscriberSnapshot};
 use crate::domain::errors::newsletter::NewsletterError;
+use crate::infrastructure::{mail::send_campaign_email, web::server::MailConfig};
 
-use super::rows::SubscriberRow;
-use super::NewsletterServiceImpl;
+use super::subscribers::derive_unsubscribe_token;
+use super::{CAMPAIGN_CHUNK_DELAY_MS, CAMPAIGN_CHUNK_SIZE, NewsletterServiceImpl};
 
-impl NewsletterServiceImpl {
 impl NewsletterServiceImpl {
     #[allow(clippy::too_many_arguments)]
-    async fn run_campaign(
+    pub(super) async fn run_campaign(
         &self,
         post_id: Option<i64>,
         source: &str,
@@ -122,9 +117,8 @@ impl NewsletterServiceImpl {
     }
 }
 
-#[async_trait::async_trait]
-impl NewsletterService for NewsletterServiceImpl {
-    async fn list_subscribers(
+impl NewsletterServiceImpl {
+    pub(super) async fn list_subscribers(
         &self,
         cmd: ListSubscribersCommand,
     ) -> Result<Vec<SubscriberSnapshot>, NewsletterError> {
@@ -144,17 +138,19 @@ impl NewsletterService for NewsletterServiceImpl {
 
         Ok(rows
             .into_iter()
-            .map(|(id, email, status, created_at, confirmed_at)| SubscriberSnapshot {
-                id,
-                email,
-                status,
-                created_at,
-                confirmed_at,
-            })
+            .map(
+                |(id, email, status, created_at, confirmed_at)| SubscriberSnapshot {
+                    id,
+                    email,
+                    status,
+                    created_at,
+                    confirmed_at,
+                },
+            )
             .collect())
     }
 
-    async fn list_campaigns(
+    pub(super) async fn list_campaigns(
         &self,
         cmd: ListSubscribersCommand,
     ) -> Result<Vec<CampaignSnapshot>, NewsletterError> {
@@ -210,7 +206,8 @@ impl NewsletterService for NewsletterServiceImpl {
             .collect())
     }
 
-    async fn send_campaign_for_post(
+    #[allow(clippy::too_many_arguments)] // mirrors the port trait's signature
+    pub(super) async fn send_campaign_for_post(
         &self,
         post_id: i64,
         subject: String,
@@ -233,7 +230,7 @@ impl NewsletterService for NewsletterServiceImpl {
         .await
     }
 
-    async fn send_manual_campaign(
+    pub(super) async fn send_manual_campaign(
         &self,
         cmd: SendCampaignCommand,
         mail_config: MailConfig,
@@ -251,6 +248,4 @@ impl NewsletterService for NewsletterServiceImpl {
         )
         .await
     }
-}
-
 }

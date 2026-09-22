@@ -1,25 +1,42 @@
 import { api } from './client.js';
+import { fixUrl } from '$lib/utils/media-path.js';
 
 /**
  * Client for the audiobook module.
  *
  * Authoring calls go through the same-origin `/api` proxy with the auth header
- * attached by `client.js`. Audio itself is never fetched here: track `url`
- * values are handed straight to an `<audio>` element so the browser streams
- * them (with HTTP Range requests) instead of buffering a whole file in memory.
+ * attached by `client.js`. Audio itself is never fetched here: the backend
+ * reports track `url` values as backend-relative paths (`media/i/...`), which
+ * this client rewrites to browser-fetchable `/api/media/i/...` URLs before
+ * they are handed to an `<audio>` element so the browser streams them (with
+ * HTTP Range requests) instead of buffering a whole file in memory.
  */
+function mapMediaUrls(audiobook) {
+	audiobook.url = fixUrl(audiobook.url);
+	for (const track of audiobook.tracks ?? []) {
+		track.url = fixUrl(track.url);
+	}
+	return audiobook;
+}
+
 export const audiobooks = {
 	/** Dashboard listing. Admins see every audiobook; others see their own. */
-	list: ({ term, limit = 50, offset = 0 } = {}) => {
+	list: async ({ term, limit = 50, offset = 0 } = {}) => {
 		const params = new URLSearchParams();
 		if (term) params.set('term', term);
 		params.set('limit', String(limit));
 		params.set('offset', String(offset));
-		return api.get(`audiobooks/all?${params}`);
+		const result = await api.get(`audiobooks/all?${params}`);
+		for (const audiobook of result.audiobooks) mapMediaUrls(audiobook);
+		return result;
 	},
 
 	/** Full details including ordered tracks, for the editor. */
-	details: (audiobookId) => api.get(`audiobooks/id/${audiobookId}`),
+	details: async (audiobookId) => {
+		const result = await api.get(`audiobooks/id/${audiobookId}`);
+		mapMediaUrls(result.audiobook);
+		return result;
+	},
 
 	/** The dedicated audiobook tag vocabulary. */
 	tags: ({ limit = 100, offset = 0 } = {}) =>

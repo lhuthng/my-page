@@ -133,14 +133,13 @@ pub async fn sync_key_guard(
         .ok_or(crate::domain::errors::sync::SyncError::InvalidKey)?;
 
     let token_hash = crate::infrastructure::sync::hash_sync_key(token);
-    let row = sqlx::query(
-        "SELECT id, mode, expires_at, revoked_at FROM sync_keys WHERE token_hash = ?",
-    )
-    .bind(&token_hash)
-    .fetch_optional(&state.project_service.pool)
-    .await
-    .map_err(|e| crate::domain::errors::sync::SyncError::InternalError(e.to_string()))?
-    .ok_or(crate::domain::errors::sync::SyncError::InvalidKey)?;
+    let row =
+        sqlx::query("SELECT id, mode, expires_at, revoked_at FROM sync_keys WHERE token_hash = ?")
+            .bind(&token_hash)
+            .fetch_optional(&state.project_service.pool)
+            .await
+            .map_err(|e| crate::domain::errors::sync::SyncError::InternalError(e.to_string()))?
+            .ok_or(crate::domain::errors::sync::SyncError::InvalidKey)?;
 
     if row.get::<String, _>("mode") != "pull" {
         return Err(crate::domain::errors::sync::SyncError::ForbiddenMode);
@@ -155,7 +154,11 @@ pub async fn sync_key_guard(
             chrono::NaiveDateTime::parse_from_str(&expires_at, "%Y-%m-%d %H:%M:%S")
                 .map(|naive| chrono::DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc))
         })
-        .map_err(|_| crate::domain::errors::sync::SyncError::InternalError("Unparseable key expiry.".to_string()))?;
+        .map_err(|_| {
+            crate::domain::errors::sync::SyncError::InternalError(
+                "Unparseable key expiry.".to_string(),
+            )
+        })?;
     if expires < Utc::now() {
         return Err(crate::domain::errors::sync::SyncError::KeyExpired);
     }

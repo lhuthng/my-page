@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use axum::{
-    Extension, Json,
+    Json,
     extract::{Path, State},
     response::IntoResponse,
 };
@@ -14,17 +14,24 @@ use crate::{
         },
         services::media::MediaService,
     },
-    domain::{
-        entities::secret::Claims,
-        errors::media::MediaError,
-    },
+    domain::errors::media::MediaError,
     infrastructure::web::{
-        api::handlers::media::dto::{
-            AddAliasPayload, ChangeAliasPayload, GetAliasesResponse, MediaQuery,
-        },
+        api::handlers::media::dto::{AddAliasPayload, ChangeAliasPayload, GetAliasesResponse},
         server::AppState,
     },
 };
+
+#[axum::debug_handler]
+pub async fn get_aliases(
+    State(state): State<Arc<AppState>>,
+    Path(short_name): Path<String>,
+) -> Result<impl IntoResponse, MediaError> {
+    let cmd = GetAliasesCommand { short_name };
+
+    Ok(Json(GetAliasesResponse {
+        aliases: state.media_service.get_aliases(cmd).await?,
+    }))
+}
 
 #[axum::debug_handler]
 pub async fn add_alias(

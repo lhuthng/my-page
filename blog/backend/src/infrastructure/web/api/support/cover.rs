@@ -1,10 +1,7 @@
 use axum::{body::Bytes, extract::multipart::Field};
 
 use crate::{
-    application::commands::{
-        media::ChangePostCoverCommand,
-        post::UpdatePostCoverCommand,
-    },
+    application::commands::{media::ChangePostCoverCommand, post::UpdatePostCoverCommand},
     application::services::{media::MediaService, post::PostService},
     domain::{
         entities::media::MediumDetails,

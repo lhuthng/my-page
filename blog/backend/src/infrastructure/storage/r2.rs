@@ -1,7 +1,8 @@
 use std::{env, path::Path};
 
 use aws_sdk_s3::{
-    Client, config::{BehaviorVersion, Credentials, Region},
+    Client,
+    config::{BehaviorVersion, Credentials, Region},
     operation::create_multipart_upload::CreateMultipartUploadOutput,
     primitives::ByteStream,
     types::{CompletedMultipartUpload, CompletedPart},
@@ -31,13 +32,7 @@ impl R2Client {
 
         let endpoint = env::var("R2_ENDPOINT")
             .unwrap_or_else(|_| format!("https://{account_id}.r2.cloudflarestorage.com"));
-        let credentials = Credentials::new(
-            access_key,
-            secret_key,
-            None,
-            None,
-            "backend",
-        );
+        let credentials = Credentials::new(access_key, secret_key, None, None, "backend");
         let config = aws_sdk_s3::config::Builder::new()
             .behavior_version(BehaviorVersion::latest())
             .region(Region::new("auto"))
@@ -83,10 +78,9 @@ impl R2Client {
             .await
             .map_err(|e| StorageError(format!("upload_part {key}#{part_number}: {e}")))
             .and_then(|output| {
-                output
-                    .e_tag()
-                    .map(str::to_string)
-                    .ok_or_else(|| StorageError(format!("upload_part {key}#{part_number} missing etag")))
+                output.e_tag().map(str::to_string).ok_or_else(|| {
+                    StorageError(format!("upload_part {key}#{part_number} missing etag"))
+                })
             })
     }
 
@@ -140,7 +134,10 @@ impl R2Client {
             .bucket(&self.bucket)
             .key(key)
             .body(ByteStream::from_path(path).await.map_err(|e| {
-                StorageError(format!("put_object_from_file {key}: could not open {}: {e}", path.display()))
+                StorageError(format!(
+                    "put_object_from_file {key}: could not open {}: {e}",
+                    path.display()
+                ))
             })?)
             .send()
             .await
@@ -265,9 +262,12 @@ impl R2Client {
             }
         };
         let mut stream = output.body.into_async_read();
-        let mut file = tokio::fs::File::create(path)
-            .await
-            .map_err(|e| StorageError(format!("download_to_file {key}: create {}: {e}", path.display())))?;
+        let mut file = tokio::fs::File::create(path).await.map_err(|e| {
+            StorageError(format!(
+                "download_to_file {key}: create {}: {e}",
+                path.display()
+            ))
+        })?;
         tokio::io::copy(&mut stream, &mut file)
             .await
             .map_err(|e| StorageError(format!("download_to_file {key}: copy: {e}")))?;

@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use axum::{
     Extension, Json,
-    extract::{Path as AxumPath, State},
+    extract::{Path, State},
+    response::IntoResponse,
 };
 
 use crate::{
@@ -13,10 +14,7 @@ use crate::{
         services::{newsletter::NewsletterService, post::PostService},
     },
     domain::{entities::secret::Claims, errors::post::PostError},
-    infrastructure::web::{
-        api::handlers::post::dto::SetPostFeaturedBody,
-        server::AppState,
-    },
+    infrastructure::web::{api::handlers::post::dto::SetPostFeaturedBody, server::AppState},
 };
 
 pub async fn publish(
@@ -132,4 +130,3 @@ pub async fn set_post_featured(
     state.post_service.set_post_featured(cmd).await?;
     Ok(())
 }
-

@@ -9,10 +9,7 @@ use axum::{
 use sqlx::Row;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
-use crate::infrastructure::web::{
-    api::support::ownership::require_owner,
-    server::AppState,
-};
+use crate::infrastructure::web::{api::support::ownership::require_owner, server::AppState};
 
 use super::constants::{V86_STATE_VERSION, V86_TOPOLOGY_VERSION};
 use super::dto::SnapshotStatusResponse;
@@ -36,13 +33,18 @@ fn dir_size(root: &Path) -> u64 {
     total
 }
 
-
 pub async fn get_game_snapshot(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     AxumPath(game_id): AxumPath<i64>,
 ) -> Result<Json<Vec<SnapshotStatusResponse>>, ProjectError> {
-    require_owner(&state.game_service.pool, "games", game_id, user_id(&claims)?).await?;
+    require_owner(
+        &state.game_service.pool,
+        "games",
+        game_id,
+        user_id(&claims)?,
+    )
+    .await?;
     // One row per snapshot; freshness against the system's resolved machine
     // shape is computed in Rust (specs JSON can't be compared in plain SQL).
     let rows = sqlx::query(
@@ -68,9 +70,13 @@ pub async fn get_game_snapshot(
         rows.iter()
             .map(|row| {
                 let specs = parse_system_specs(
-                    row.try_get::<Option<String>, _>("specs").ok().flatten().as_deref(),
+                    row.try_get::<Option<String>, _>("specs")
+                        .ok()
+                        .flatten()
+                        .as_deref(),
                 );
-                let (expected_vga, _) = resolve_system_machine(&row.get::<String, _>("platform_key"), &specs);
+                let (expected_vga, _) =
+                    resolve_system_machine(&row.get::<String, _>("platform_key"), &specs);
                 let fresh = row.get::<i64, _>("disks_fresh") != 0
                     && row.get::<i64, _>("state_version") == V86_STATE_VERSION
                     && row.get::<i64, _>("topology_version") == V86_TOPOLOGY_VERSION
@@ -95,7 +101,13 @@ pub async fn delete_game_snapshot(
     Extension(claims): Extension<Claims>,
     AxumPath((game_id, variant_index)): AxumPath<(i64, i32)>,
 ) -> Result<StatusCode, ProjectError> {
-    require_owner(&state.game_service.pool, "games", game_id, user_id(&claims)?).await?;
+    require_owner(
+        &state.game_service.pool,
+        "games",
+        game_id,
+        user_id(&claims)?,
+    )
+    .await?;
     let storage_key: Option<String> = sqlx::query_scalar(
         "SELECT storage_key FROM game_v86_snapshots WHERE game_id = ? AND variant_index = ?",
     )
@@ -123,4 +135,3 @@ pub async fn delete_game_snapshot(
     }
     Ok(StatusCode::NO_CONTENT)
 }
-

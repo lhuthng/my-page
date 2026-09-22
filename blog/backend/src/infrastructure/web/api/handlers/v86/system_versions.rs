@@ -211,24 +211,21 @@ pub async fn delete_system_version(
             "The current system version cannot be deleted; replace it first.".to_string(),
         ));
     }
-    sqlx::query(
-        "DELETE FROM project_v86_upload_sessions WHERE system_version_id = ?",
-    )
-    .bind(version_id)
-    .execute(&state.project_service.pool)
-    .await?;
+    sqlx::query("DELETE FROM project_v86_upload_sessions WHERE system_version_id = ?")
+        .bind(version_id)
+        .execute(&state.project_service.pool)
+        .await?;
     let storage_key: String = row.get("storage_key");
     sqlx::query("DELETE FROM v86_system_versions WHERE id = ?")
         .bind(version_id)
         .execute(&state.project_service.pool)
         .await?;
     // Content-addressed: only delete the prefix if no other version references it.
-    let remaining: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?",
-    )
-    .bind(&storage_key)
-    .fetch_one(&state.project_service.pool)
-    .await?;
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?")
+            .bind(&storage_key)
+            .fetch_one(&state.project_service.pool)
+            .await?;
     if remaining == 0 {
         let _ = state.storage.delete_prefix(&storage_key).await;
     }
@@ -274,16 +271,14 @@ pub async fn delete_system(
         return Err(ProjectError::ProjectNotFound);
     }
     for key in &keys {
-        let remaining: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?",
-        )
-        .bind(key)
-        .fetch_one(&state.project_service.pool)
-        .await?;
+        let remaining: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM v86_system_versions WHERE storage_key = ?")
+                .bind(key)
+                .fetch_one(&state.project_service.pool)
+                .await?;
         if remaining == 0 {
             let _ = state.storage.delete_prefix(key).await;
         }
     }
     Ok(StatusCode::NO_CONTENT)
 }
-

@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::entities::game::GameLink;
 
-
 #[derive(Deserialize)]
 pub struct CheckQuery {
     pub slug: Option<String>,
@@ -12,48 +11,48 @@ pub struct CheckQuery {
 
 #[derive(Serialize)]
 pub struct CheckResponse {
-    exists: bool,
+    pub exists: bool,
 }
 
 #[derive(Deserialize)]
-pub(super) struct GameData {
-    title: String,
-    slug: String,
-    excerpt: String,
-    content: String,
-    tags: Vec<String>,
-    number_of_files: usize,
-    launcher_type: String,
-    demo_width: Option<String>,
-    demo_height: Option<String>,
-    demo_url: Option<String>,
-    instruction: String,
-    cheatcode: String,
-    story: String,
-    related_games: Vec<GameLink>,
-    v86_upload_id: Option<String>,
+pub struct GameData {
+    pub title: String,
+    pub slug: String,
+    pub excerpt: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub number_of_files: usize,
+    pub launcher_type: String,
+    pub demo_width: Option<String>,
+    pub demo_height: Option<String>,
+    pub demo_url: Option<String>,
+    pub instruction: String,
+    pub cheatcode: String,
+    pub story: String,
+    pub related_games: Vec<GameLink>,
+    pub v86_upload_id: Option<String>,
 }
 
 #[derive(Deserialize)]
-pub(super) struct GamePatchData {
-    title: Option<String>,
-    slug: Option<String>,
-    excerpt: Option<String>,
-    content: Option<String>,
-    tags: Option<Vec<String>>,
-    number_of_files: usize,
-    launcher_type: Option<String>,
-    demo_width: Option<String>,
-    demo_height: Option<String>,
-    demo_url: Option<String>,
-    instruction: Option<String>,
-    cheatcode: Option<String>,
-    story: Option<String>,
-    related_games: Option<Vec<GameLink>>,
-    og_image_seconds: Option<i64>,
-    v86_upload_id: Option<String>,
-    v86_system_version_id: Option<i64>,
-    expected_updated_at: Option<String>,
+pub struct GamePatchData {
+    pub title: Option<String>,
+    pub slug: Option<String>,
+    pub excerpt: Option<String>,
+    pub content: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub number_of_files: usize,
+    pub launcher_type: Option<String>,
+    pub demo_width: Option<String>,
+    pub demo_height: Option<String>,
+    pub demo_url: Option<String>,
+    pub instruction: Option<String>,
+    pub cheatcode: Option<String>,
+    pub story: Option<String>,
+    pub related_games: Option<Vec<GameLink>>,
+    pub og_image_seconds: Option<i64>,
+    pub v86_upload_id: Option<String>,
+    pub v86_system_version_id: Option<i64>,
+    pub expected_updated_at: Option<String>,
 }
 
 #[derive(Deserialize)]

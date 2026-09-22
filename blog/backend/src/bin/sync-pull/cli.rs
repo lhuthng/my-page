@@ -1,21 +1,22 @@
 // Argument parsing: flags and usage text.
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Default)]
-struct Args {
-    url: Option<String>,
-    key: Option<String>,
-    env_file: Option<PathBuf>,
-    db_path: Option<PathBuf>,
-    media_dir: Option<PathBuf>,
-    demos_dir: Option<PathBuf>,
-    skip: HashSet<String>,
-    prune: bool,
-    dry_run: bool,
-    yes: bool,
+pub struct Args {
+    pub url: Option<String>,
+    pub key: Option<String>,
+    pub env_file: Option<PathBuf>,
+    pub db_path: Option<PathBuf>,
+    pub media_dir: Option<PathBuf>,
+    pub demos_dir: Option<PathBuf>,
+    pub skip: HashSet<String>,
+    pub prune: bool,
+    pub dry_run: bool,
+    pub yes: bool,
 }
 
-fn print_usage() {
+pub fn print_usage() {
     println!(
         "Usage: cargo run --bin sync-pull -- --url <site-url> --key <bsk_…|@file> [options]
 
@@ -37,7 +38,7 @@ Options:
     );
 }
 
-fn parse_args() -> Result<Args, String> {
+pub fn parse_args() -> Result<Args, String> {
     let mut args = Args::default();
     let mut iter = std::env::args().skip(1);
     while let Some(flag) = iter.next() {
@@ -72,5 +73,3 @@ fn parse_args() -> Result<Args, String> {
     }
     Ok(args)
 }
-
-/// Reads KEY=VALUE lines from a .env file without touching real env vars.

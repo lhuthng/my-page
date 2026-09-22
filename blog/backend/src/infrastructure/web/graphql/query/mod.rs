@@ -1,5 +1,6 @@
-// GraphQL query resolvers, one file per domain. async-graphql merges the
-// multiple `#[Object] impl QueryRoot` blocks into a single schema type.
+// GraphQL query resolvers, one struct per domain. `QueryRoot` (in
+// `super::schema`) merges them into a single schema type via
+// `MergedObject`.
 pub mod comments;
 pub mod dashboard;
 pub mod detail;
@@ -11,5 +12,3 @@ pub mod slug;
 pub mod stats;
 pub mod taxonomy;
 pub mod users;
-
-pub use super::schema::QueryRoot;

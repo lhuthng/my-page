@@ -17,15 +17,18 @@ use crate::{
         services::user::UserService,
     },
     domain::{
-        entities::secret::Claims,
+        entities::{
+            secret::Claims,
+            user::{UserRole, UserSummary},
+        },
         errors::user::UserError,
     },
     helper::time::normalize_utc_timestamp,
     infrastructure::web::{
         api::handlers::user::dto::{
             ChangeDetailsBody, CheckModResponse, GetLatestCommentsQuery, GetLatestCommentsResponse,
-            GetPostsQuery, GetPostsResponse, GetUserResponse, MeResponse, SearchUserQuery,
-            SearchUserResponse,
+            GetPostsQuery, GetPostsResponse, GetUserResponse, LatestComment, MeResponse, Post,
+            SearchUserQuery, SearchUserResponse, SearchUserResult,
         },
         server::AppState,
     },

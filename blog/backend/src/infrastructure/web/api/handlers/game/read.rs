@@ -20,12 +20,12 @@ use crate::{
     },
     domain::{entities::secret::Claims, errors::game::GameError},
     infrastructure::web::{
-        api::handlers::v86::runtime_descriptor,
-        api::handlers::game::response::game_response,
         api::handlers::game::dto::{
-            CheckQuery, CheckResponse, FeaturedGamesQuery, FeaturedGamesResponse,
-            LatestGamesQuery, LatestGamesResponse,
+            CheckQuery, CheckResponse, FeaturedGamesQuery, FeaturedGamesResponse, LatestGamesQuery,
+            LatestGamesResponse,
         },
+        api::handlers::game::response::game_response,
+        api::handlers::v86::runtime_descriptor,
         server::AppState,
     },
 };
@@ -187,4 +187,3 @@ pub async fn get_all_games(
         has_more: games.has_more,
     }))
 }
-

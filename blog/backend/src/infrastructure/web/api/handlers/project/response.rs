@@ -4,8 +4,8 @@ use serde::Serialize;
 
 use crate::domain::entities::project::{Project, ProjectLink, ProjectSnapshot};
 use crate::helper::time::normalize_optional_utc_timestamp;
-use crate::infrastructure::web::api::handlers::v86::V86RuntimeDescriptor;
 use crate::infrastructure::web::api::handlers::project::dto::{ProjectCard, ProjectStats};
+use crate::infrastructure::web::api::handlers::v86::V86RuntimeDescriptor;
 
 #[derive(Serialize)]
 pub struct UpdateProjectResponse {
@@ -163,4 +163,3 @@ impl From<ProjectSnapshot> for ProjectCard {
         }
     }
 }
-

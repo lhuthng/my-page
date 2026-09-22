@@ -1,3 +1,4 @@
+use super::layout::{render_button, render_shell, site_footer};
 /// Branded HTML email templates.
 ///
 /// Email clients strip `<style>` blocks and don't support flexbox/grid, so
@@ -5,10 +6,7 @@
 /// The design is a light theme (white card on light gray) with the site's
 /// navy/lavender accents, matching the huuthangle.site brand.
 /// Verification and password-reset email bodies.
-use super::escape_html;
-use super::layout::{
-    CARD, DIVIDER, MUTED, NAVY, PRIMARY, TEXT, render_button, render_shell, site_footer,
-};
+use super::{MUTED, TEXT, escape_html};
 
 pub fn verification(app_base_url: &str, username: &str, verify_link: &str) -> (String, String) {
     let text = format!(
@@ -24,8 +22,16 @@ pub fn verification(app_base_url: &str, username: &str, verify_link: &str) -> (S
         button = render_button("Verify email", verify_link),
     );
 
-    let footer = site_footer(app_base_url, "You received this email because this address was used to create an account.");
-    let html = render_shell(app_base_url, "Verify your HuuThangLe account", &inner, &footer);
+    let footer = site_footer(
+        app_base_url,
+        "You received this email because this address was used to create an account.",
+    );
+    let html = render_shell(
+        app_base_url,
+        "Verify your HuuThangLe account",
+        &inner,
+        &footer,
+    );
     (text, html)
 }
 
@@ -44,9 +50,15 @@ pub fn password_reset(app_base_url: &str, username: &str, reset_link: &str) -> (
         button = render_button("Reset password", reset_link),
     );
 
-    let footer = site_footer(app_base_url, "You received this email because a password reset was requested for this address.");
-    let html = render_shell(app_base_url, "Reset your HuuThangLe password", &inner, &footer);
+    let footer = site_footer(
+        app_base_url,
+        "You received this email because a password reset was requested for this address.",
+    );
+    let html = render_shell(
+        app_base_url,
+        "Reset your HuuThangLe password",
+        &inner,
+        &footer,
+    );
     (text, html)
 }
-
-/// Contact form confirmation email sent back to the visitor.

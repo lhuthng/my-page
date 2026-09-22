@@ -1,7 +1,10 @@
 use axum::http::HeaderMap;
 
 pub fn normalize_country_code(headers: &HeaderMap) -> String {
-    let Some(value) = headers.get("cf-ipcountry").and_then(|value| value.to_str().ok()) else {
+    let Some(value) = headers
+        .get("cf-ipcountry")
+        .and_then(|value| value.to_str().ok())
+    else {
         return "XX".to_string();
     };
 

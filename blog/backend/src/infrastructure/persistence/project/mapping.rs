@@ -1,16 +1,23 @@
 // Row -> entity conversion: snapshot assembly, link and tag hydration.
 use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::domain::entities::project::{ProjectLink, ProjectSnapshot};
+use crate::domain::entities::post::PostStats;
+use crate::domain::entities::project::{
+    DelegatedGame, JsDosBundle, Project, ProjectDemo, ProjectLink, ProjectSnapshot,
+};
 use crate::domain::errors::project::ProjectError;
 
-use super::rows::{ProjectLinkRow, ProjectSnapshotRow, ProjectTagRow};
+use crate::infrastructure::persistence::post::{MediumUsageWithNameRow, TagRow};
+
 use super::ProjectServiceImpl;
+use super::rows::{ProjectContentRow, ProjectLinkRow, ProjectSnapshotRow, ProjectTagRow};
 
 impl ProjectSnapshotRow {
-    fn into_snapshot(self, tag_names: Vec<String>, tag_slugs: Vec<String>) -> ProjectSnapshot {
+    pub(super) fn into_snapshot(
+        self,
+        tag_names: Vec<String>,
+        tag_slugs: Vec<String>,
+    ) -> ProjectSnapshot {
         ProjectSnapshot {
             id: self.project_id,
             post_id: self.post_id,
@@ -35,7 +42,6 @@ impl ProjectSnapshotRow {
     }
 }
 
-impl ProjectServiceImpl {
 impl ProjectServiceImpl {
     pub(super) async fn hydrate_project_rows(
         &self,
@@ -80,7 +86,10 @@ impl ProjectServiceImpl {
         Ok(snapshots)
     }
 
-    pub(super) async fn links_for_project(&self, project_id: i64) -> Result<Vec<ProjectLink>, ProjectError> {
+    pub(super) async fn links_for_project(
+        &self,
+        project_id: i64,
+    ) -> Result<Vec<ProjectLink>, ProjectError> {
         Ok(sqlx::query_as::<_, ProjectLinkRow>(
             r#"
             SELECT label, url
@@ -282,6 +291,4 @@ impl ProjectServiceImpl {
             is_owner: viewing_user_id == Some(row.user_id),
         })
     }
-}
-
 }

@@ -1,9 +1,8 @@
 // Orphaned upload-session cleanup, run at boot and periodically.
-use std::path::Path;
 
 use crate::infrastructure::storage::ObjectStore;
 
-async fn cleanup_orphaned_uploads(
+pub async fn cleanup_orphaned_uploads(
     pool: &sqlx::SqlitePool,
     storage: &ObjectStore,
     demos_dir: &std::path::Path,
@@ -28,10 +27,10 @@ async fn cleanup_orphaned_uploads(
             // objects this session uploaded (never shared/reused ones) are
             // removed, matching the abort path.
             let disk_reuse: i64 = row.get("disk_reuse");
-            if disk_reuse == 0 {
-                if let Some(key) = row.get::<Option<String>, _>("staged_disk_storage_key") {
-                    let _ = storage.delete_prefix(&key).await;
-                }
+            if disk_reuse == 0
+                && let Some(key) = row.get::<Option<String>, _>("staged_disk_storage_key")
+            {
+                let _ = storage.delete_prefix(&key).await;
             }
             let uploaded_isos: Vec<String> = sqlx::query_scalar(
                 "SELECT iso_storage_key FROM project_v86_staged_variants WHERE upload_id = ? AND reuse = 0",
@@ -43,8 +42,8 @@ async fn cleanup_orphaned_uploads(
             for key in uploaded_isos {
                 let _ = storage.delete_object(&format!("{key}/full.iso")).await;
             }
-            let _ = tokio::fs::remove_dir_all(demos_dir.join("v86/tmp/build").join(session_id))
-                .await;
+            let _ =
+                tokio::fs::remove_dir_all(demos_dir.join("v86/tmp/build").join(session_id)).await;
         }
     }
 
@@ -64,22 +63,22 @@ async fn cleanup_orphaned_uploads(
         .flatten();
         if let Some(row) = row {
             let reuse: i64 = row.get("reuse");
-            if reuse == 0 {
-                if let Some(key) = row.get::<Option<String>, _>("staged_storage_key") {
-                    // Only delete if no other active session still owns this key.
-                    let other_owners: i64 = sqlx::query_scalar(
-                        "SELECT COUNT(*) FROM v86_system_upload_sessions
+            if reuse == 0
+                && let Some(key) = row.get::<Option<String>, _>("staged_storage_key")
+            {
+                // Only delete if no other active session still owns this key.
+                let other_owners: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM v86_system_upload_sessions
                          WHERE id != ? AND staged_storage_key = ?
                          AND status IN ('active', 'building')",
-                    )
-                    .bind(session_id)
-                    .bind(&key)
-                    .fetch_one(pool)
-                    .await
-                    .unwrap_or(0);
-                    if other_owners == 0 {
-                        let _ = storage.delete_prefix(&key).await;
-                    }
+                )
+                .bind(session_id)
+                .bind(&key)
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+                if other_owners == 0 {
+                    let _ = storage.delete_prefix(&key).await;
                 }
             }
         }
@@ -106,12 +105,11 @@ async fn cleanup_orphaned_uploads(
         .await?;
         if let Some(version_id) = orphan_version_id {
             // Grab the content-addressed storage key before dropping the row.
-            let orphan_key: Option<String> = sqlx::query_scalar(
-                "SELECT storage_key FROM v86_system_versions WHERE id = ?",
-            )
-            .bind(version_id)
-            .fetch_optional(pool)
-            .await?;
+            let orphan_key: Option<String> =
+                sqlx::query_scalar("SELECT storage_key FROM v86_system_versions WHERE id = ?")
+                    .bind(version_id)
+                    .fetch_optional(pool)
+                    .await?;
             sqlx::query("DELETE FROM v86_system_versions WHERE id = ?")
                 .bind(version_id)
                 .execute(pool)
@@ -198,4 +196,3 @@ async fn cleanup_orphaned_uploads(
 
     Ok(())
 }
-

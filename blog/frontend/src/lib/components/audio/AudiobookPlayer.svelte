@@ -33,7 +33,12 @@
 
 	$effect(() => {
 		if (!audioEl) return;
-		player.attach(audioEl);
+		// attach() reads and writes engine state (restore() loads the saved
+		// track), so it must not be tracked: tracking would re-run this effect
+		// on every playlist/index change, and the re-attach's audio.load()
+		// aborts any play() the user just triggered (AbortError) — the player
+		// then shows "blocked by browser" instead of playing.
+		untrack(() => player.attach(audioEl));
 		return () => player.detach();
 	});
 

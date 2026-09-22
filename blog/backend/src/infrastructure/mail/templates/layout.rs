@@ -5,12 +5,18 @@
 /// The design is a light theme (white card on light gray) with the site's
 /// navy/lavender accents, matching the huuthangle.site brand.
 /// Shared chrome for every email: colors, buttons, and the page shell.
+use super::{
+    BACKGROUND, CARD, DIVIDER, FONT_STACK, MUTED, NAVY, PRIMARY, TEXT, WHITE, escape_html,
+};
 
 #[cfg(debug_assertions)]
 pub(super) fn logo_data_uri() -> String {
     use base64::{Engine, engine::general_purpose};
-    const LOGO: &[u8] = include_bytes!("logo.png");
-    format!("data:image/png;base64,{}", general_purpose::STANDARD.encode(LOGO))
+    const LOGO: &[u8] = include_bytes!("../logo.png");
+    format!(
+        "data:image/png;base64,{}",
+        general_purpose::STANDARD.encode(LOGO)
+    )
 }
 
 /// Table-based call-to-action button.
@@ -24,7 +30,12 @@ pub(super) fn render_button(label: &str, href: &str) -> String {
 
 /// Wraps `inner_html` in the full branded email document (preheader, logo
 /// header, content card, footer).
-pub fn render_shell(app_base_url: &str, preheader: &str, inner_html: &str, footer_html: &str) -> String {
+pub fn render_shell(
+    app_base_url: &str,
+    preheader: &str,
+    inner_html: &str,
+    footer_html: &str,
+) -> String {
     let logo_url = escape_html(&format!("{}/logo.png", app_base_url.trim_end_matches('/')));
     let preheader = escape_html(preheader);
     let spacer = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
@@ -91,5 +102,3 @@ pub(super) fn site_footer(app_base_url: &str, note: &str) -> String {
         site = site,
     )
 }
-
-/// Subscription confirmation email (newsletter).

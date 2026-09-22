@@ -17,6 +17,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 use uuid::Uuid;
+use zip::ZipArchive;
 
 use crate::{
     domain::{entities::secret::Claims, errors::game::GameError},
@@ -226,8 +227,7 @@ pub async fn complete_jsdos_upload(
     .bind(user_id)
     .fetch_optional(&state.game_service.pool)
     .await?;
-    let (file_name, expected, received, temp_key, status) =
-        row.ok_or(GameError::GameNotFound)?;
+    let (file_name, expected, received, temp_key, status) = row.ok_or(GameError::GameNotFound)?;
     if status != "active" || expected != received {
         return Err(GameError::InvalidDemo(
             "js-dos upload is incomplete.".to_string(),
@@ -272,7 +272,10 @@ pub async fn complete_jsdos_upload(
         file_name,
         size_bytes: size,
         sha256,
-        bundle_url: format!("games/s/{}/jsdos", game_slug(&state, game_id).await?.unwrap_or_default()),
+        bundle_url: format!(
+            "games/s/{}/jsdos",
+            game_slug(&state, game_id).await?.unwrap_or_default()
+        ),
     }))
 }
 
@@ -357,5 +360,3 @@ pub async fn get_jsdos_bundle(
     );
     Ok(response)
 }
-
-

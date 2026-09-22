@@ -91,4 +91,3 @@ pub struct PostDetailsRow {
     pub cover_media_type: Option<String>,
     pub og_image_seconds: i64,
 }
-

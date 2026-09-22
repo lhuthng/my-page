@@ -49,8 +49,7 @@ pub async fn preview_email_templates(
             crate::infrastructure::mail::CampaignPostData {
                 title,
                 excerpt,
-                cover_url: short_name
-                    .map(|short| format!("{app_base_url}/api/media/i/{short}")),
+                cover_url: short_name.map(|short| format!("{app_base_url}/api/media/i/{short}")),
                 post_url: format!("{app_base_url}/posts/{slug}"),
             }
         })
@@ -106,11 +105,10 @@ pub async fn receive_contact_form(
 
 // ---------------------------------------------------------------------------
 // Route table
-use std::sync::Arc;
-
-use axum::{routing::{get, post}, Router};
-
-use crate::infrastructure::web::server::AppState;
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
     let routes = Router::new().route("/contact-form", post(receive_contact_form));

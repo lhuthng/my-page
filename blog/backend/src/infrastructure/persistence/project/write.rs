@@ -1,23 +1,16 @@
 // Project write methods: create, update, featured flag. The link/tag
 // table maintenance stays inline here (it is interleaved with the project
 // upserts rather than being a free helper like the post aggregate's).
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::project::{NewProjectCommand, SetFeaturedProjectCommand, UpdateProjectCommand},
-    services::project::ProjectService,
+use crate::application::commands::project::{
+    NewProjectCommand, SetFeaturedProjectCommand, UpdateProjectCommand,
 };
-use crate::domain::entities::project::ProjectLink;
 use crate::domain::errors::project::ProjectError;
 
-use super::mapping;
 use super::ProjectServiceImpl;
 
-#[async_trait::async_trait]
-impl ProjectService for ProjectServiceImpl {
-    async fn new_project(&self, cmd: NewProjectCommand) -> Result<i64, ProjectError> {
+impl ProjectServiceImpl {
+    pub(super) async fn new_project(&self, cmd: NewProjectCommand) -> Result<i64, ProjectError> {
         let mut tx = self.pool.begin().await?;
         let initial_demo_url = cmd.demo_url.clone();
         let demo_type = cmd.demo_type.clone();
@@ -95,7 +88,10 @@ impl ProjectService for ProjectServiceImpl {
         Ok(project_id)
     }
 
-    async fn update_project(&self, cmd: UpdateProjectCommand) -> Result<(), ProjectError> {
+    pub(super) async fn update_project(
+        &self,
+        cmd: UpdateProjectCommand,
+    ) -> Result<(), ProjectError> {
         let post_user_id: Option<i64> = sqlx::query_scalar(
             r#"
             SELECT posts.user_id
@@ -210,7 +206,7 @@ impl ProjectService for ProjectServiceImpl {
         Ok(())
     }
 
-    async fn set_project_featured(
+    pub(super) async fn set_project_featured(
         &self,
         cmd: SetFeaturedProjectCommand,
     ) -> Result<(), ProjectError> {
@@ -229,5 +225,4 @@ impl ProjectService for ProjectServiceImpl {
 
         Ok(())
     }
-
 }

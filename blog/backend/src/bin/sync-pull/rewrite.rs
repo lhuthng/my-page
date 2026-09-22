@@ -2,7 +2,10 @@
 // and path derivation from the database URL.
 use std::path::{Path, PathBuf};
 
-fn read_env_file(path: &Path) -> Result<(Option<String>, Option<String>, Option<String>), String> {
+/// `(DATABASE_URL, MEDIA_PATH, PROJECT_DEMOS_PATH)` as read from a .env file.
+pub type EnvValues = (Option<String>, Option<String>, Option<String>);
+
+pub fn read_env_file(path: &Path) -> Result<EnvValues, String> {
     let mut database_url = None;
     let mut media_path = None;
     let mut demos_path = None;
@@ -29,7 +32,7 @@ fn read_env_file(path: &Path) -> Result<(Option<String>, Option<String>, Option<
 
 /// Rewrites KEY=VALUE lines for the given pairs in place, preserving comments,
 /// ordering and all other keys; appends missing keys under a local section.
-fn update_env_file(path: &Path, updates: &[(&str, String)]) -> Result<(), String> {
+pub fn update_env_file(path: &Path, updates: &[(&str, String)]) -> Result<(), String> {
     let content = std::fs::read_to_string(path).unwrap_or_default();
     let mut pending: Vec<(String, String)> = updates
         .iter()
@@ -61,10 +64,10 @@ fn update_env_file(path: &Path, updates: &[(&str, String)]) -> Result<(), String
     std::fs::write(path, out).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
-fn resolve_key(key: &str) -> Result<String, String> {
+pub fn resolve_key(key: &str) -> Result<String, String> {
     if let Some(path) = key.strip_prefix('@') {
-        let content =
-            std::fs::read_to_string(path).map_err(|e| format!("cannot read key file {path}: {e}"))?;
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("cannot read key file {path}: {e}"))?;
         Ok(content.trim().to_string())
     } else {
         Ok(key.to_string())
@@ -72,13 +75,13 @@ fn resolve_key(key: &str) -> Result<String, String> {
 }
 
 /// Mirrors the backend's DATABASE_URL parsing: `sqlite:<path>`.
-fn database_path_from_url(url: &str) -> Result<PathBuf, String> {
+pub fn database_path_from_url(url: &str) -> Result<PathBuf, String> {
     url.strip_prefix("sqlite:")
         .map(PathBuf::from)
         .ok_or_else(|| format!("unsupported DATABASE_URL '{url}' (only sqlite: is supported)"))
 }
 
-fn format_bytes(size: u64) -> String {
+pub fn format_bytes(size: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
     let mut value = size as f64;
     let mut unit = 0;
@@ -92,5 +95,3 @@ fn format_bytes(size: u64) -> String {
         format!("{value:.1} {}", UNITS[unit])
     }
 }
-
-/// Outcome of one file fetch.

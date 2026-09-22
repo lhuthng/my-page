@@ -1,185 +1,127 @@
+// File transfer plumbing: the fetch primitive, local tree listing, and
+// pruning of files the source manifest no longer lists.
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
-pub async fn sync_media(
-    client: &reqwest::Client,
-    api: &Api<'_>,
-    key: &str,
-    media_dir: &Path,
-    entries: &[MediaEntry],
-    prune: bool,
-    c: &mut Counters,
-) -> Result<(), String> {
-            let mut expected = HashSet::new();
-            let count = manifest.media.len();
-            for entry in &manifest.media {
-                let target = media_dir.join(&entry.path);
-                expected.insert(entry.path.clone());
-                match download_to_file(
-                    &client,
-                    &api(&format!("media/{}", entry.hash)),
-                    &key,
-                    &target,
-                    Some(entry.size.max(0) as u64),
-                    true,
-                    false,
-                )
-                .await
-                {
-                    Ok(Fetched::Downloaded) => {
-                        c.downloaded += 1;
-                        c.transferred += entry.size.max(0) as u64;
-                    }
-                    Ok(Fetched::Current) => c.skipped += 1,
-                    Ok(Fetched::Missing) => {
-                        c.missing += 1;
-                        println!("  c.missing on source: {}", entry.path);
-                    }
-                    Err(e) => return Err(e),
-                }
-                let done = c.downloaded + c.skipped;
-                if done % 200 == 0 && done < count {
-                    println!("  {done}/{count} …");
-                }
-            }
-            println!("  {c.downloaded} c.downloaded, {c.skipped} already up to date");
-            if args.prune {
-                let (removed, freed) = prune_extras(&media_dir, &expected, false).await;
-                println!(
-                    "  pruned {removed} extra file(s), freed {}",
-                    format_bytes(freed)
-                );
-            }
+use futures::StreamExt;
+use tokio::io::AsyncWriteExt;
+
+/// Outcome of one file fetch.
+pub enum Fetched {
+    /// Newly downloaded (or would be, in dry-run).
+    Downloaded,
+    /// Already present with the expected size.
+    Current,
+    /// Source answered 404 and missing files are allowed.
+    Missing,
 }
 
-pub async fn sync_demo_dirs(
+/// Downloads `url` into `target` (temp file + rename). `Missing` = the source
+/// has no such file: the manifest is built from the database, so it can list
+/// media rows whose file no longer exists on the source disk.
+pub async fn download_to_file(
     client: &reqwest::Client,
-    api: &Api<'_>,
+    url: &str,
     key: &str,
-    demos_dir: &Path,
-    project_demos: &[DemoDir],
-    game_demos: &[DemoDir],
-    prune: bool,
-    c: &mut Counters,
-) -> Result<(), String> {
-        println!("\n── Demo files ──");
-        let mut expected_per_dir: Vec<(PathBuf, HashSet<String>)> = Vec::new();
-        for (kind, dirs) in [
-            ("project", &manifest.project_demos),
-            ("game", &manifest.game_demos),
-        ] {
-            for dir in dirs {
-                let base = match kind {
-                    "project" => demos_dir.join(dir.id.to_string()),
-                    _ => demos_dir.join(format!("game-{}", dir.id)),
-                };
-                let mut local = HashSet::new();
-                for file in &dir.files {
-                    local.insert(file.path.clone());
-                    let target = base.join(&file.path);
-                    let section = format!("demo/{kind}/{}/{}", dir.id, file.path);
-                    match download_to_file(&client, &api(&section), &key, &target, Some(file.size), true, false)
-                        .await
-                    {
-                        Ok(Fetched::Downloaded) => {
-                            c.downloaded += 1;
-                            c.transferred += file.size;
-                        }
-                        Ok(Fetched::Current) => c.skipped += 1,
-                        Ok(Fetched::Missing) => {
-                            c.missing += 1;
-                            println!("  c.missing on source: {section}");
-                        }
-                        Err(e) => return Err(e),
-                    }
-                }
-                expected_per_dir.push((base, local));
-            }
+    target: &Path,
+    expected_size: Option<u64>,
+    allow_missing: bool,
+    dry_run: bool,
+) -> Result<Fetched, String> {
+    if let Some(size) = expected_size
+        && target.is_file()
+        && let Ok(meta) = tokio::fs::metadata(target).await
+        && meta.len() == size
+    {
+        return Ok(Fetched::Current);
+    }
+    if dry_run {
+        return Ok(Fetched::Downloaded);
+    }
+    if let Some(parent) = target.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    let response = client
+        .get(url)
+        .bearer_auth(key)
+        .send()
+        .await
+        .map_err(|e| format!("GET {url}: {e}"))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        if allow_missing && status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(Fetched::Missing);
         }
-        println!("  {c.downloaded} c.downloaded (cumulative), {c.skipped} already up to date");
-        if args.prune {
-            let mut removed = 0usize;
-            let mut freed = 0u64;
-            for (base, local) in &expected_per_dir {
-                let (r, f) = prune_extras(base, local, false).await;
-                removed += r;
-                freed += f;
-            }
-            println!(
-                "  pruned {removed} extra file(s), freed {}",
-                format_bytes(freed)
-            );
-        }
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("GET {url}: {status} {}", body.trim()));
+    }
+    let temp = target.with_extension(format!(
+        "{}.sync-tmp",
+        target
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+    ));
+    let mut file = tokio::fs::File::create(&temp)
+        .await
+        .map_err(|e| format!("create {}: {e}", temp.display()))?;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.map_err(|e| format!("stream {url}: {e}"))?;
+        file.write_all(&bytes)
+            .await
+            .map_err(|e| format!("write {}: {e}", temp.display()))?;
+    }
+    file.flush()
+        .await
+        .map_err(|e| format!("flush {}: {e}", temp.display()))?;
+    drop(file);
+    tokio::fs::rename(&temp, target)
+        .await
+        .map_err(|e| format!("finalize {}: {e}", target.display()))?;
+    Ok(Fetched::Downloaded)
 }
 
-pub async fn sync_artifacts(
-    client: &reqwest::Client,
-    api: &Api<'_>,
-    key: &str,
-    demos_dir: &Path,
-    entries: &[ArtifactEntry],
-    prune: bool,
-    c: &mut Counters,
-) -> Result<(), String> {
-            let mut expected = HashSet::new();
-            for entry in &manifest.artifacts {
-                expected.insert(entry.key.clone());
-                let target = demos_dir.join(&entry.key);
-                match download_to_file(
-                    &client,
-                    &api(&format!("artifact/{}", entry.key)),
-                    &key,
-                    &target,
-                    Some(entry.size),
-                    true,
-                    false,
-                )
-                .await
-                {
-                    Ok(Fetched::Downloaded) => {
-                        c.downloaded += 1;
-                        c.transferred += entry.size;
-                    }
-                    Ok(Fetched::Current) => c.skipped += 1,
-                    Ok(Fetched::Missing) => {
-                        c.missing += 1;
-                        println!("  c.missing on source: {}", entry.key);
-                    }
-                    Err(e) => return Err(e),
-                }
+pub fn collect_local_files(dir: &Path) -> Vec<(PathBuf, u64)> {
+    let mut out = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.is_file() {
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                out.push((path, size));
             }
-            println!("  {c.downloaded} c.downloaded (cumulative), {c.skipped} already up to date");
-            if args.prune {
-                // Anything under v86/ or jsdos/ that the manifest does not list
-                // is a leftover (including transient v86/tmp files).
-                let mut local = HashSet::new();
-                for prefix in ["v86", "jsdos"] {
-                    let dir = demos_dir.join(prefix);
-                    if !dir.is_dir() {
-                        continue;
-                    }
-                    for (path, _) in collect_local_files(&dir) {
-                        if let Ok(relative) = path.strip_prefix(&demos_dir) {
-                            local.insert(relative.to_string_lossy().to_string());
-                        }
-                    }
-                }
-                let mut removed = 0usize;
-                let mut freed = 0u64;
-                for key in local {
-                    if expected.contains(&key) {
-                        continue;
-                    }
-                    let size = tokio::fs::metadata(demos_dir.join(&key))
-                        .await
-                        .map(|m| m.len())
-                        .unwrap_or(0);
-                    if tokio::fs::remove_file(demos_dir.join(&key)).await.is_ok() {
-                        removed += 1;
-                        freed += size;
-                    }
-                }
-                println!(
-                    "  pruned {removed} extra file(s), freed {}",
-                    format_bytes(freed)
-                );
+        }
+    }
+    out
+}
+
+pub async fn prune_extras(
+    local_dir: &Path,
+    expected: &HashSet<String>,
+    dry_run: bool,
+) -> (usize, u64) {
+    let mut removed = 0usize;
+    let mut freed = 0u64;
+    for (path, size) in collect_local_files(local_dir) {
+        let Ok(relative) = path.strip_prefix(local_dir) else {
+            continue;
+        };
+        if !expected.contains(&relative.to_string_lossy().to_string()) {
+            freed += size;
+            removed += 1;
+            if !dry_run {
+                let _ = tokio::fs::remove_file(&path).await;
             }
+        }
+    }
+    (removed, freed)
 }

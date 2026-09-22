@@ -9,8 +9,8 @@ mod upload;
 
 pub use aliases::{add_alias, change_alias, delete_alias, get_aliases};
 pub use dto::{
-    AddAliasPayload, ChangeAliasPayload, ChangeDetailsPayload, GetAliasesResponse,
-    GetLinkResponse, GetMediaDetailsResponse, MediaQuery, SearchResponse,
+    AddAliasPayload, ChangeAliasPayload, ChangeDetailsPayload, GetAliasesResponse, GetLinkResponse,
+    GetMediaDetailsResponse, MediaQuery, SearchResponse,
 };
 pub use manage::{change_details, get_details};
 pub use serving::{get_link, get_media, search};
@@ -21,10 +21,10 @@ pub use upload::upload;
 use std::sync::Arc;
 
 use axum::{
+    Router,
     extract::DefaultBodyLimit,
     middleware,
     routing::{delete, get, get_service, patch, post},
-    Router,
 };
 use tower_http::services::ServeDir;
 

@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use crate::domain::entities::auth::AuthConfig;
-use crate::infrastructure::{persistence, storage::ObjectStore, web::graphql};
+use crate::infrastructure::{persistence, storage::ObjectStore};
 
 pub use super::config::mail::{MailConfig, MailTransportConfig};
 pub use super::config::media::MediaConfig;
@@ -21,7 +21,6 @@ pub struct AppConfig {
 pub enum DatabaseSource {
     Sqlite { path: PathBuf },
 }
-
 
 pub struct AppState {
     pub config: AppConfig,
@@ -52,7 +51,6 @@ impl AppState {
         }
     }
 }
-
 
 impl AppConfig {
     pub fn from_env() -> Self {

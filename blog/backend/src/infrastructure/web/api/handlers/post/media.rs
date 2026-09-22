@@ -2,8 +2,8 @@
 use std::sync::Arc;
 
 use axum::{
-    Extension,
-    extract::{Path as AxumPath, State},
+    extract::{Path, State},
+    response::IntoResponse,
 };
 
 use crate::{
@@ -40,4 +40,3 @@ pub async fn push_like(
         .await?;
     Ok(())
 }
-

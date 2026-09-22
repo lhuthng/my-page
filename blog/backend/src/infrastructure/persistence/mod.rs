@@ -1,6 +1,6 @@
+pub mod analytics;
 pub mod audiobook;
 pub mod auth;
-pub mod analytics;
 pub mod dashboard;
 pub mod game;
 pub mod image_convert;

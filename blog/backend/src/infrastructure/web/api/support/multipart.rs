@@ -8,6 +8,7 @@ use axum::body::Bytes;
 use axum::extract::multipart::Multipart;
 
 use crate::application::commands::media::UploadMediaWithoutDescriptionCommand;
+use crate::application::services::media::MediaService;
 use crate::domain::errors::media::MediaError;
 use crate::infrastructure::web::server::AppState;
 
@@ -60,15 +61,11 @@ where
                 .bytes()
                 .await
                 .map_err(|e| upload_error(e.to_string()))?;
-            data = Some(
-                serde_json::from_slice::<T>(&bytes)
-                    .map_err(|e| upload_error(e.to_string()))?,
-            );
+            data =
+                Some(serde_json::from_slice::<T>(&bytes).map_err(|e| upload_error(e.to_string()))?);
         } else if field_name == "demo_zip" {
             if demo_zip.is_some() {
-                return Err(upload_error(
-                    "Only one demo zip is allowed.".to_string(),
-                ));
+                return Err(upload_error("Only one demo zip is allowed.".to_string()));
             }
             demo_zip = Some(
                 field
@@ -89,9 +86,7 @@ where
                 .to_string();
             let content_type = field
                 .content_type()
-                .ok_or_else(|| {
-                    upload_error(format!("Cannot read content type of {}.", file_name))
-                })?
+                .ok_or_else(|| upload_error(format!("Cannot read content type of {}.", file_name)))?
                 .to_string();
             let bytes = field
                 .bytes()

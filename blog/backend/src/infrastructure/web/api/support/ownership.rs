@@ -1,10 +1,7 @@
 // Ownership and role guards shared by the game, project, and v86 handlers.
 // The aggregate's pool and table are parameters; error construction is
 // injected so each caller keeps its own error type.
-use crate::domain::{
-    entities::secret::Claims,
-    errors::project::ProjectError,
-};
+use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
 
 pub fn is_admin_or_mod(role: &str) -> bool {
     role == "admin" || role == "moderator"
@@ -42,7 +39,10 @@ pub async fn require_can_delete<E>(
     internal_error: impl Fn(String) -> E,
     not_found_error: impl Fn() -> E,
     forbidden_error: impl Fn() -> E,
-) -> Result<i64, E> {
+) -> Result<i64, E>
+where
+    E: From<sqlx::Error>,
+{
     let user_id = claims
         .user_id
         .parse::<i64>()
@@ -53,7 +53,7 @@ pub async fn require_can_delete<E>(
     .bind(id)
     .fetch_optional(pool)
     .await?;
-    let owner = owner.ok_or_else(not_found_error)?;
+    let owner = owner.ok_or_else(&not_found_error)?;
     if owner == user_id || is_admin_or_mod(&claims.role) {
         // need post_id for soft-delete; fetch it
         let post_id: Option<i64> =

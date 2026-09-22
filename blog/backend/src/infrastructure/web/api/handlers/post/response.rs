@@ -3,7 +3,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::entities::post::PostSnapshot;
-use crate::helper::time::{normalize_optional_utc_timestamp, normalize_utc_timestamp};
 
 #[derive(Serialize, Deserialize)]
 pub struct GetPostDetailsResponse {
@@ -82,13 +81,13 @@ pub struct PostResponse {
 
 #[derive(Serialize, Deserialize)]
 pub struct CategoryResponse {
-    name: String,
-    slug: String,
+    pub name: String,
+    pub slug: String,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct GetCategoriesResponse {
-    categories: Vec<CategoryResponse>,
+    pub categories: Vec<CategoryResponse>,
 }
 
 #[derive(Serialize)]
@@ -126,7 +125,7 @@ pub struct SearchTagsResponse {
 pub struct TagPostsResponse {
     pub tag: SearchTagResult,
     pub posts: Vec<Post>,
-    pub projects: Vec<super::project::ProjectCard>,
+    pub projects: Vec<crate::infrastructure::web::api::handlers::project::ProjectCard>,
 }
 
 #[derive(Serialize)]
@@ -223,7 +222,6 @@ pub struct Comment {
 
 #[derive(Deserialize, Serialize)]
 pub struct CommentsResponse {
-    comments: Vec<Comment>,
-    has_more: bool,
+    pub comments: Vec<Comment>,
+    pub has_more: bool,
 }
-

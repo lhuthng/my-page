@@ -9,7 +9,9 @@ use sha2::{Digest, Sha256};
 
 use crate::domain::errors::project::ProjectError;
 
-use super::constants::{MANIFEST_MAX_BYTES, SAVE_FILE_MAX_COUNT, SAVE_FILE_MAX_LEN, V86_VGA_MEMORY_SIZE};
+use super::constants::{
+    MANIFEST_MAX_BYTES, SAVE_FILE_MAX_COUNT, SAVE_FILE_MAX_LEN, V86_VGA_MEMORY_SIZE,
+};
 use super::dto::V86SystemSpecs;
 
 /// XP's VESA driver rejects 8 MB of VRAM ("cannot find enough video memory");
@@ -51,7 +53,7 @@ pub(super) struct VariantSpec {
 }
 
 pub(super) fn validate_manifest(manifest: &str) -> Result<String, ProjectError> {
-    if manifest.as_bytes().len() > MANIFEST_MAX_BYTES {
+    if manifest.len() > MANIFEST_MAX_BYTES {
         return Err(ProjectError::InvalidDemo(
             "The v86 manifest cannot exceed 64 KiB.".to_string(),
         ));
@@ -63,7 +65,6 @@ pub(super) fn validate_manifest(manifest: &str) -> Result<String, ProjectError> 
     }
     Ok(hex::encode(Sha256::digest(manifest.as_bytes())))
 }
-
 
 fn normalize_manifest_path(value: &str) -> Result<String, ProjectError> {
     let mut normalized = value.trim().trim_matches('"').replace('\\', "/");
@@ -262,7 +263,12 @@ pub(super) fn parse_variants(manifest: &str) -> Result<Vec<VariantSpec>, Project
             )));
         }
         let args = resolve_for(&fields, "args", i, true).unwrap_or_default();
-        variants.push(VariantSpec { index: i, name, exe, args });
+        variants.push(VariantSpec {
+            index: i,
+            name,
+            exe,
+            args,
+        });
     }
     Ok(variants)
 }
@@ -335,7 +341,7 @@ pub(super) fn save_files_from_manifest(manifest: &str) -> Result<Vec<String>, Pr
         .unwrap_or("");
     let mut files = Vec::new();
     let mut seen = HashSet::new();
-    for entry in raw.split(|ch| ch == ',' || ch == ';').map(str::trim) {
+    for entry in raw.split([',', ';']).map(str::trim) {
         let entry = entry.trim_matches('"');
         if entry.is_empty() {
             continue;
@@ -355,5 +361,3 @@ pub(super) fn save_files_from_manifest(manifest: &str) -> Result<Vec<String>, Pr
     }
     Ok(files)
 }
-
-

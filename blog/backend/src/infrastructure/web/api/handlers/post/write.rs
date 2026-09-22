@@ -4,31 +4,23 @@ use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     Extension, Json,
+    body::Bytes,
     extract::{Multipart, State},
     response::IntoResponse,
 };
 
 use crate::{
     application::{
-        commands::{
-            media::UploadMediaWithoutDescriptionCommand,
-            post::NewPostCommand,
-        },
+        commands::{media::UploadMediaWithoutDescriptionCommand, post::NewPostCommand},
         services::{media::MediaService, post::PostService},
     },
-    domain::{
-        entities::secret::Claims,
-        errors::post::PostError,
-    },
+    domain::{entities::secret::Claims, errors::post::PostError},
     infrastructure::web::{
+        api::handlers::post::dto::PostData,
         api::handlers::support::cover::{
             CreateCoverUpload, apply_created_cover_upload, try_collect_create_cover_field,
         },
-        api::handlers::post::dto::PostData,
-        api::support::{
-            media_short_names::replace_media_short_names,
-            multipart::FileData,
-        },
+        api::support::{media_short_names::replace_media_short_names, multipart::FileData},
         server::AppState,
     },
 };
@@ -125,7 +117,7 @@ pub async fn new_post(
                 })?,
             );
         } else if try_collect_create_cover_field(&field_name, field, &mut create_cover).await? {
-        } else if field_name == "excerpt" {
+            // cover field consumed by the helper
         }
     }
 
@@ -194,4 +186,3 @@ pub async fn new_post(
 
     Ok(Json(serde_json::json!({ "id": post_id })))
 }
-

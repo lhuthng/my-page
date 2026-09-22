@@ -1,24 +1,24 @@
 // Audiobook validation rules and ownership guard.
-use std::path::PathBuf;
+use std::str::FromStr;
 
-use sqlx::Row;
+use sqlx::{Sqlite, Transaction};
 
-use crate::domain::errors::audiobook::AudiobookError;
+use crate::domain::entities::media::MediaType;
+use crate::domain::errors::{audiobook::AudiobookError, media::MediaError};
+use crate::infrastructure::web::server::MediaConfig;
 
 use super::AudiobookServiceImpl;
-use super::rows::TrackRow;
 
-const MAX_TITLE_CHARS: usize = 300;
-const MAX_DESCRIPTION_CHARS: usize = 4000;
-const MAX_TRANSLATOR_CHARS: usize = 200;
-const MAX_TRACK_TITLE_CHARS: usize = 300;
-const MAX_TAG_NAME_CHARS: usize = 60;
+pub(super) const MAX_TITLE_CHARS: usize = 300;
+pub(super) const MAX_DESCRIPTION_CHARS: usize = 4000;
+pub(super) const MAX_TRANSLATOR_CHARS: usize = 200;
+pub(super) const MAX_TRACK_TITLE_CHARS: usize = 300;
+pub(super) const MAX_TAG_NAME_CHARS: usize = 60;
 /// Upper bound on tracks per audiobook: the editor reorders in memory and the
 /// player renders a flat playlist, so an unbounded count would let one request
 /// pull an enormous payload.
-const MAX_TRACKS_PER_AUDIOBOOK: i64 = 2000;
-const MAX_TAGS_PER_AUDIOBOOK: usize = 25;
-
+pub(super) const MAX_TRACKS_PER_AUDIOBOOK: i64 = 2000;
+pub(super) const MAX_TAGS_PER_AUDIOBOOK: usize = 25;
 
 impl AudiobookServiceImpl {
     pub(super) async fn is_cover_supported(
@@ -52,11 +52,10 @@ impl AudiobookServiceImpl {
         user_id: i64,
         is_admin: bool,
     ) -> Result<(), AudiobookError> {
-        let owner: Option<i64> =
-            sqlx::query_scalar("SELECT user_id FROM audiobooks WHERE id = ?")
-                .bind(audiobook_id)
-                .fetch_optional(&mut **tx)
-                .await?;
+        let owner: Option<i64> = sqlx::query_scalar("SELECT user_id FROM audiobooks WHERE id = ?")
+            .bind(audiobook_id)
+            .fetch_optional(&mut **tx)
+            .await?;
 
         match owner {
             None => Err(AudiobookError::NotFound),
@@ -64,8 +63,4 @@ impl AudiobookServiceImpl {
             Some(_) => Err(AudiobookError::PermissionDenied),
         }
     }
-
-    /// Renumber an audiobook's tracks contiguously from 1, preserving the
-    /// current (number, id) ordering. Called after every insert/remove so the
-    /// player's "next track" is always simply `number + 1`.
 }

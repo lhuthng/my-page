@@ -14,12 +14,11 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
-use crate::infrastructure::web::{
-    api::support::ownership::require_owner,
-    server::AppState,
-};
+use crate::infrastructure::web::{api::support::ownership::require_owner, server::AppState};
 
-use super::dto::{DiskUploadSpec, StartGameUploadRequest, StartGameUploadResponse, VariantUploadSpec};
+use super::dto::{
+    DiskUploadSpec, StartGameUploadRequest, StartGameUploadResponse, VariantUploadSpec,
+};
 use super::game_uploads::fetch_stored_game_artifact;
 use super::manifest::{parse_mouse_config, parse_variants, validate_manifest};
 use super::shared::{ensure_upload_not_expired, storage_error, user_id};
@@ -61,7 +60,10 @@ pub async fn start_game_upload(
     parse_mouse_config(&request.manifest)?;
     let upload_id = Uuid::new_v4().to_string();
     let chunk_size = state.project_demo_config.v86_download_chunk_size;
-    let max_disk = state.project_demo_config.max_v86_game_extracted_size.saturating_mul(2);
+    let max_disk = state
+        .project_demo_config
+        .max_v86_game_extracted_size
+        .saturating_mul(2);
 
     // When editing an existing game, the stored artifact resolves the
     // manifest-only fast path (no new ZIP) and validates the revision.
@@ -118,9 +120,7 @@ pub async fn start_game_upload(
         }
         None => {
             let artifact = stored.as_ref().ok_or_else(|| {
-                ProjectError::InvalidDemo(
-                    "A game disk is required for new projects.".to_string(),
-                )
+                ProjectError::InvalidDemo("A game disk is required for new projects.".to_string())
             })?;
             let disk_sha = artifact.disk_sha256.clone().ok_or_else(|| {
                 ProjectError::InvalidDemo("The source project has no game disk.".to_string())
@@ -181,7 +181,7 @@ pub async fn start_game_upload(
         ProjectError::InvalidDemo("The build plan has no launcher CDs.".to_string())
     })?;
     let disk_key = disk.as_ref().map(|d| format!("v86/games/{}", d.sha256));
-    let disk_reuse = disk.as_ref().map_or(false, |d| d.reuse);
+    let disk_reuse = disk.as_ref().is_some_and(|d| d.reuse);
     sqlx::query(
         r#"INSERT INTO project_v86_upload_sessions
            (id, uploader_id, source_project_id, system_version_id,
@@ -205,7 +205,7 @@ pub async fn start_game_upload(
     .bind(disk.as_ref().map(|d| d.chunk_count as i64))
     .bind(disk_reuse)
     .bind(Option::<String>::None)
-    .bind(&format!("v86/games/{}", first.sha256))
+    .bind(format!("v86/games/{}", first.sha256))
     .bind(&first.sha256)
     .bind(first.size_bytes as i64)
     .bind(expires_at.to_rfc3339())
@@ -224,7 +224,7 @@ pub async fn start_game_upload(
         .bind(&variant.name)
         .bind(&variant.exe)
         .bind(&variant.args)
-        .bind(&format!("v86/games/{}", plan.sha256))
+        .bind(format!("v86/games/{}", plan.sha256))
         .bind(plan.size_bytes as i64)
         .bind(&plan.sha256)
         .bind(spec.reuse)
@@ -274,7 +274,11 @@ pub async fn upload_game_disk_part(
             "Disk part index is out of range.".to_string(),
         ));
     }
-    let part = disk_part_name(&key, part_index, state.project_demo_config.v86_download_chunk_size);
+    let part = disk_part_name(
+        &key,
+        part_index,
+        state.project_demo_config.v86_download_chunk_size,
+    );
     state
         .storage
         .put_object_bytes(&part, bytes.to_vec())
@@ -348,4 +352,3 @@ pub async fn upload_game_variant_iso(
     .await?;
     Ok(StatusCode::NO_CONTENT)
 }
-

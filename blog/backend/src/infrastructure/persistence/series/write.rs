@@ -1,28 +1,29 @@
 // Series write methods: create, attach and detach posts.
-use std::collections::HashMap;
+use std::path::PathBuf;
+use std::str::FromStr;
 
-use sqlx::Row;
+use tokio::fs;
 
-use crate::application::{
-    commands::series::{
-        AddPostToSeriesCommand, NewSeriesCommand, RemovePostFromSeriesCommand,
-    },
-    services::series::SeriesService,
+use crate::application::commands::series::{
+    AddPostToSeriesCommand, NewSeriesCommand, RemovePostFromSeriesCommand,
 };
-use crate::domain::errors::series::SeriesError;
+use crate::domain::entities::media::MediaType;
+use crate::domain::errors::{media::MediaError, series::SeriesError};
+use crate::infrastructure::persistence::{
+    image_convert::convert_to_webp,
+    media::{HashData, hash_bytes},
+};
+use crate::infrastructure::web::server::MediaConfig;
 
 use super::SeriesServiceImpl;
 
-#[async_trait::async_trait]
-impl SeriesService for SeriesServiceImpl {
-    async fn new_series(
+impl SeriesServiceImpl {
+    pub(super) async fn new_series(
         &self,
         cmd: NewSeriesCommand,
         config: &MediaConfig,
-) -> Result<bool, SeriesError> {
-        use crate::{
-            application::commands::series::NewSeriesCommand as C, helper::string::*,
-        };
+    ) -> Result<bool, SeriesError> {
+        use crate::{application::commands::series::NewSeriesCommand as C, helper::string::*};
         let description = {
             let trimmed = cmd.description.trim();
             if trimmed.chars().count() > 1000 {
@@ -75,7 +76,7 @@ impl SeriesService for SeriesServiceImpl {
 
             let short_name = format!(".srs.{}", hash);
 
-            hash = format!(".srs.{}.{}", &cmd.user_id, hash);
+            hash = format!(".srs.{}.{}", cmd.user_id, hash);
 
             image_id = match sqlx::query_as::<_, (i64,)>(
                 r#"
@@ -136,11 +137,14 @@ impl SeriesService for SeriesServiceImpl {
                         format!("Failed to remove file after DB error {}", remove_err),
                     )));
                 }
-                return Err(SeriesError::Media(MediaError::InternalError(e.to_string())));
+                Err(SeriesError::Media(MediaError::InternalError(e.to_string())))
             }
         }
     }
-    async fn add_post_to_series(&self, cmd: AddPostToSeriesCommand) -> Result<bool, SeriesError> {
+    pub(super) async fn add_post_to_series(
+        &self,
+        cmd: AddPostToSeriesCommand,
+    ) -> Result<bool, SeriesError> {
         let mut tx = self.pool.begin().await?;
         // 2. PERMISSION CHECK
         let exists: bool = sqlx::query_scalar(
@@ -222,7 +226,7 @@ impl SeriesService for SeriesServiceImpl {
         Ok(true)
     }
 
-    async fn remove_post_from_series(
+    pub(super) async fn remove_post_from_series(
         &self,
         cmd: RemovePostFromSeriesCommand,
     ) -> Result<bool, SeriesError> {

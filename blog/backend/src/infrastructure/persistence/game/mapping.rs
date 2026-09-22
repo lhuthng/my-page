@@ -1,16 +1,21 @@
 // Row -> entity conversion: snapshot assembly, related games, tag hydration.
 use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::domain::entities::game::{GameLink, GameSnapshot};
+use crate::domain::entities::game::{Game, GameDemo, GameLink, GameSnapshot, JsDosBundle};
+use crate::domain::entities::post::PostStats;
 use crate::domain::errors::game::GameError;
 
-use super::rows::{GameSnapshotRow, GameTagRow};
+use crate::infrastructure::persistence::post::{MediumUsageWithNameRow, TagRow};
+
 use super::GameServiceImpl;
+use super::rows::{GameContentRow, GameSnapshotRow, GameTagRow};
 
 impl GameSnapshotRow {
-    fn into_snapshot(self, tag_names: Vec<String>, tag_slugs: Vec<String>) -> GameSnapshot {
+    pub(super) fn into_snapshot(
+        self,
+        tag_names: Vec<String>,
+        tag_slugs: Vec<String>,
+    ) -> GameSnapshot {
         GameSnapshot {
             id: self.game_id,
             post_id: self.post_id,
@@ -35,7 +40,6 @@ impl GameSnapshotRow {
     }
 }
 
-impl GameServiceImpl {
 impl GameServiceImpl {
     pub(super) async fn hydrate_game_rows(
         &self,
@@ -193,6 +197,4 @@ impl GameServiceImpl {
             is_owner: viewing_user_id == Some(row.user_id),
         })
     }
-}
-
 }

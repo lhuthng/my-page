@@ -1,6 +1,7 @@
 // Snapshot assembly: attaching tags to loaded audiobook snapshots.
-use sqlx::Row;
+use sqlx::SqlitePool;
 
+use crate::domain::entities::audiobook::AudiobookSnapshot;
 use crate::domain::errors::audiobook::AudiobookError;
 
 use super::AudiobookServiceImpl;
@@ -43,12 +44,4 @@ impl AudiobookServiceImpl {
 
         Ok(())
     }
-
-    /// Write an uploaded file into content-addressed storage and register a
-    /// media row, returning the new media id.
-    ///
-    /// Regular media layout (`<media_dir>/<sha[0..2]>/<sha[2..4]>/<sha><ext>`)
-    /// is used on purpose: the `/media/i/{short_name}` handler reconstructs
-    /// exactly that path from a plain-SHA `hash` column, which is what makes
-    /// range-request streaming work for these files.
 }

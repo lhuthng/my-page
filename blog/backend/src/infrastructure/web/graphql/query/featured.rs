@@ -1,5 +1,4 @@
 // Featured content queries.
-use std::collections::HashMap;
 
 use async_graphql::{Context, Object};
 use sqlx::SqlitePool;
@@ -7,22 +6,14 @@ use sqlx::SqlitePool;
 use super::super::helpers::{
     DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts, attach_tags_to_projects,
 };
-use super::super::rows::{
-    CategoryRow, CommentRow, DashboardPostRow, DashboardProjectRow, GqlPostRow, GrowthDayRow,
-    MediaRow, PostDetailRow, RoleCountRow, SeriesPostRow, SeriesRow, TagRow, UserInfoRow, UserRow,
-};
-use super::super::types::{
-    CategoryConnection, CommentConnection, DashboardPostConnection, DbStats, GqlCategory,
-    GqlComment, GqlDashboardOverview, GqlDashboardPost, GqlDashboardProject, GqlDashboardUser,
-    GqlGrowthPoint, GqlMedia, GqlPost, GqlPostDetail, GqlRoleCounts, GqlSeries, GqlSeriesPost,
-    GqlTag, GqlUser, MediaConnection, PostConnection, ProjectConnection, SeriesConnection,
-    TagConnection, UserConnection,
-};
+use super::super::rows::{DashboardPostRow, DashboardProjectRow};
+use super::super::types::{GqlDashboardPost, GqlDashboardProject};
 
-use super::QueryRoot;
+#[derive(Default)]
+pub struct FeaturedQuery;
 
 #[Object]
-impl QueryRoot {
+impl FeaturedQuery {
     async fn featured_posts(
         &self,
         ctx: &Context<'_>,
@@ -81,5 +72,4 @@ impl QueryRoot {
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))
     }
-
 }

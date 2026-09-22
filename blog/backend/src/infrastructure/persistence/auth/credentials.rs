@@ -1,22 +1,26 @@
 // Credential lifecycle: registration, password reset request and reset.
-use sqlx::Row;
+use bcrypt::{DEFAULT_COST, hash};
+use chrono::{Duration, Utc};
+use validator::Validate;
 
-use crate::application::{
-    commands::auth::ResetPasswordCommand,
-    services::auth::AuthService,
+use crate::application::commands::auth::{RequestPasswordResetCommand, ResetPasswordCommand};
+use crate::domain::entities::auth::{
+    RegisterCredentials, RegisterResult, RequestPasswordResetResult, ResetPasswordCredentials,
 };
 use crate::domain::errors::auth::AuthError;
 
-use super::rows::UserRow;
+use super::rows::{UserRow, VerificationRow};
 use super::tokens::{
-    generate_token_pair, hash_verification_secret, password_reset_mail_payload,
-    upsert_password_reset_token,
+    decode_verification_token, hash_verification_secret, password_reset_mail_payload,
+    upsert_password_reset_token, upsert_verification_token, verification_mail_payload,
 };
-use super::AuthServiceImpl;
+use super::{AuthServiceImpl, PASSWORD_RESET_COOLDOWN_SECONDS};
 
-#[async_trait::async_trait]
-impl AuthService for AuthServiceImpl {
-    async fn register(&self, reg_creds: RegisterCredentials) -> Result<RegisterResult, AuthError> {
+impl AuthServiceImpl {
+    pub(super) async fn register(
+        &self,
+        reg_creds: RegisterCredentials,
+    ) -> Result<RegisterResult, AuthError> {
         let existing_row = sqlx::query(
             r#"
             SELECT username, email
@@ -75,7 +79,7 @@ impl AuthService for AuthServiceImpl {
         }
     }
 
-    async fn request_password_reset(
+    pub(super) async fn request_password_reset(
         &self,
         cmd: RequestPasswordResetCommand,
     ) -> Result<RequestPasswordResetResult, AuthError> {
@@ -132,7 +136,7 @@ impl AuthService for AuthServiceImpl {
         ))
     }
 
-    async fn reset_password(&self, cmd: ResetPasswordCommand) -> Result<(), AuthError> {
+    pub(super) async fn reset_password(&self, cmd: ResetPasswordCommand) -> Result<(), AuthError> {
         let reset_creds = ResetPasswordCredentials {
             password: cmd.password,
         };
@@ -169,9 +173,10 @@ impl AuthService for AuthServiceImpl {
         }
 
         let reset_password = reset_creds.password.clone();
-        let password_hash = tokio::task::spawn_blocking(move || hash(&reset_password, DEFAULT_COST))
-            .await
-            .map_err(|e| AuthError::InternalError(e.to_string()))??;
+        let password_hash =
+            tokio::task::spawn_blocking(move || hash(&reset_password, DEFAULT_COST))
+                .await
+                .map_err(|e| AuthError::InternalError(e.to_string()))??;
         let mut tx = self.pool.begin().await?;
 
         sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")

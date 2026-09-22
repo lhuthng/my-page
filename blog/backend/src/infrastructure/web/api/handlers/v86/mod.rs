@@ -50,19 +50,17 @@ pub use system_uploads::{
     upload_system_part,
 };
 pub use system_versions::{complete_system_upload, delete_system, delete_system_version};
-pub use systems::{
-    list_active_systems, list_public_systems, list_systems, update_system,
-};
+pub use systems::{list_active_systems, list_public_systems, list_systems, update_system};
 
 // ---------------------------------------------------------------------------
 // Route table
 use std::sync::Arc;
 
 use axum::{
+    Router,
     extract::DefaultBodyLimit,
     middleware,
     routing::{delete, get, patch, post, put},
-    Router,
 };
 
 use crate::infrastructure::web::{api::middlewares, server::AppState};
@@ -85,14 +83,8 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/games/upload/{upload_id}/complete",
             post(complete_game_upload),
         )
-        .route(
-            "/games/upload/{upload_id}",
-            get(get_game_upload_status),
-        )
-        .route(
-            "/games/upload/{upload_id}",
-            delete(abort_game_upload),
-        )
+        .route("/games/upload/{upload_id}", get(get_game_upload_status))
+        .route("/games/upload/{upload_id}", delete(abort_game_upload))
         .route("/snapshots/upload", post(start_snapshot_upload))
         .route(
             "/snapshots/upload/{upload_id}/chunk/{chunk_index}",
@@ -106,10 +98,7 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/snapshots/upload/{upload_id}",
             delete(abort_snapshot_upload),
         )
-        .route(
-            "/games/id/{game_id}/snapshot",
-            get(get_game_snapshot),
-        )
+        .route("/games/id/{game_id}/snapshot", get(get_game_snapshot))
         .route(
             "/games/id/{game_id}/snapshot/{variant_index}",
             delete(delete_game_snapshot),
@@ -138,14 +127,8 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                     "/systems/upload/{upload_id}/complete",
                     post(complete_system_upload),
                 )
-                .route(
-                    "/systems/upload/{upload_id}",
-                    get(get_system_upload_status),
-                )
-                .route(
-                    "/systems/upload/{upload_id}",
-                    delete(abort_system_upload),
-                )
+                .route("/systems/upload/{upload_id}", get(get_system_upload_status))
+                .route("/systems/upload/{upload_id}", delete(abort_system_upload))
                 .route("/systems/{system_id}", patch(update_system))
                 .route("/systems/{system_id}", delete(delete_system))
                 .route(
@@ -161,12 +144,6 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         )
         // public: published artifacts
         .route("/systems/public", get(list_public_systems))
-        .route(
-            "/assets/systems/{sha256}/{part}",
-            get(get_system_chunk),
-        )
-        .route(
-            "/snapshots/{sha256}/{part}",
-            get(get_snapshot_blob),
-        )
+        .route("/assets/systems/{sha256}/{part}", get(get_system_chunk))
+        .route("/snapshots/{sha256}/{part}", get(get_snapshot_blob))
 }

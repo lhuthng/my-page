@@ -1,6 +1,9 @@
 // Multi-file cleanup used by replace/delete flows.
 use std::path::PathBuf;
 
+use futures::future::join_all;
+use tokio::fs;
+
 use crate::domain::errors::media::MediaError;
 
 pub async fn clean_up_files(file_paths: &[PathBuf]) -> Result<(), MediaError> {
@@ -18,4 +21,3 @@ pub async fn clean_up_files(file_paths: &[PathBuf]) -> Result<(), MediaError> {
     }
     Ok(())
 }
-

@@ -10,12 +10,10 @@ use axum::{
 use crate::{
     domain::{entities::secret::Claims, errors::game::GameError},
     infrastructure::web::{
-        api::handlers::game::dto::DeleteGameQuery,
-        api::support::ownership::require_can_delete,
+        api::handlers::game::dto::DeleteGameQuery, api::support::ownership::require_can_delete,
         server::AppState,
     },
 };
-
 
 pub async fn delete_game_draft(
     State(state): State<Arc<AppState>>,
@@ -29,8 +27,8 @@ pub async fn delete_game_draft(
         game_id,
         &claims,
         GameError::InternalError,
-        GameError::GameNotFound,
-        GameError::Forbidden,
+        || GameError::GameNotFound,
+        || GameError::Forbidden,
     )
     .await?;
     let row = sqlx::query_as::<_, (String, String, String, Option<String>)>(
@@ -42,11 +40,12 @@ pub async fn delete_game_draft(
     .ok_or(GameError::GameNotFound)?;
     // For legacy shared posts (project and game share same post_id with content_kind='project'),
     // allow deletion via the game endpoint — the kind guard would otherwise block it.
-    let is_shared = sqlx::query_scalar::<_, Option<i64>>("SELECT id FROM projects WHERE post_id = ?")
-        .bind(post_id)
-        .fetch_optional(&state.game_service.pool)
-        .await?
-        .is_some();
+    let is_shared =
+        sqlx::query_scalar::<_, Option<i64>>("SELECT id FROM projects WHERE post_id = ?")
+            .bind(post_id)
+            .fetch_optional(&state.game_service.pool)
+            .await?
+            .is_some();
     if row.0 != "game" && !(is_shared && row.0 == "project") {
         return Err(GameError::InvalidDemo(
             "Use the typed delete endpoint for this content kind.".to_string(),
@@ -70,7 +69,8 @@ pub async fn delete_game_draft(
                 delegating.len()
             )));
         }
-        let delegating_json = serde_json::to_string(&delegating).unwrap_or_else(|_| "[]".to_string());
+        let delegating_json =
+            serde_json::to_string(&delegating).unwrap_or_else(|_| "[]".to_string());
         sqlx::query(
             "INSERT INTO game_deletion_log (game_id, slug, title, reason, detail, deleted_by, delegated_project_ids) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
@@ -88,14 +88,19 @@ pub async fn delete_game_draft(
             .bind(game_id)
             .execute(&state.game_service.pool)
             .await?;
-        let dir = state.project_demo_config.dir.join(format!("game-{}", game_id));
+        let dir = state
+            .project_demo_config
+            .dir
+            .join(format!("game-{}", game_id));
         let _ = tokio::fs::remove_dir_all(&dir).await;
         return Ok(StatusCode::NO_CONTENT);
     }
     let reason = query.reason.unwrap_or_else(|| "user_request".to_string());
     let allowed = ["user_request", "dmca", "moderation", "replaced", "other"];
     if !allowed.contains(&reason.as_str()) {
-        return Err(GameError::InvalidDemo("Invalid deletion reason.".to_string()));
+        return Err(GameError::InvalidDemo(
+            "Invalid deletion reason.".to_string(),
+        ));
     }
     // check delegated published projects
     let delegating: Vec<i64> = sqlx::query_scalar(
@@ -149,15 +154,16 @@ pub async fn restore_game(
         game_id,
         &claims,
         GameError::InternalError,
-        GameError::GameNotFound,
-        GameError::Forbidden,
+        || GameError::GameNotFound,
+        || GameError::Forbidden,
     )
     .await?;
-    let deleted_at: Option<String> = sqlx::query_scalar("SELECT deleted_at FROM posts WHERE id = ?")
-        .bind(post_id)
-        .fetch_optional(&state.game_service.pool)
-        .await?
-        .ok_or(GameError::GameNotFound)?;
+    let deleted_at: Option<String> =
+        sqlx::query_scalar("SELECT deleted_at FROM posts WHERE id = ?")
+            .bind(post_id)
+            .fetch_optional(&state.game_service.pool)
+            .await?
+            .ok_or(GameError::GameNotFound)?;
     if deleted_at.is_none() {
         return Err(GameError::Conflict("Game is not in trash.".to_string()));
     }
@@ -187,8 +193,10 @@ pub async fn purge_game_now(
         .bind(post_id)
         .execute(&state.game_service.pool)
         .await?;
-    let dir = state.project_demo_config.dir.join(format!("game-{}", game_id));
+    let dir = state
+        .project_demo_config
+        .dir
+        .join(format!("game-{}", game_id));
     let _ = tokio::fs::remove_dir_all(&dir).await;
     Ok(StatusCode::NO_CONTENT)
 }
-

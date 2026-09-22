@@ -11,8 +11,8 @@ use axum::{
 use crate::{
     application::{
         commands::{
-            post::UpdatePostCommand,
             game::{GetGamePostIdCommand, UpdateGameCommand},
+            post::{UpdatePostCommand, UpdatePostCoverCommand},
         },
         services::{game::GameService, post::PostService},
     },
@@ -20,6 +20,7 @@ use crate::{
     infrastructure::web::{
         api::handlers::game::dto::GamePatchData,
         api::handlers::game::response::UpdateGameResponse,
+        api::handlers::game::write::normalize_links,
         api::handlers::v86::attach_ready_game_tx,
         api::support::{
             demo_archive::extract_demo_zip,
@@ -163,7 +164,8 @@ pub async fn update_game(
         })
         .await?;
 
-    let mut demo_url = validate_demo_url(data.demo_url, GameError::InvalidDemo)?.filter(|u| !u.trim().is_empty());
+    let mut demo_url =
+        validate_demo_url(data.demo_url, GameError::InvalidDemo)?.filter(|u| !u.trim().is_empty());
     if parsed.demo_zip.is_some() {
         let local_demo_url = state
             .project_demo_config
@@ -220,28 +222,27 @@ pub async fn update_game(
     // are content-addressed and OS-agnostic within a platform, so nothing is
     // re-uploaded. When the launcher type moves away from v86, the artifact
     // row is deleted below and the field is moot.
-    if let Some(system_version_id) = data.v86_system_version_id {
-        if keeps_v86_game {
-            repoint_game_system(&state.game_service.pool, game_id, system_version_id).await?;
-        }
+    if let Some(system_version_id) = data.v86_system_version_id
+        && keeps_v86_game
+    {
+        repoint_game_system(&state.game_service.pool, game_id, system_version_id).await?;
     }
 
-    if !keeps_jsdos_bundle {
-        if let Some(storage_key) = sqlx::query_scalar::<_, String>(
+    if !keeps_jsdos_bundle
+        && let Some(storage_key) = sqlx::query_scalar::<_, String>(
             "SELECT storage_key FROM game_jsdos_bundles WHERE game_id = ?",
         )
         .bind(game_id)
         .fetch_optional(&state.game_service.pool)
         .await?
-        {
-            sqlx::query("DELETE FROM game_jsdos_bundles WHERE game_id = ?")
-                .bind(game_id)
-                .execute(&state.game_service.pool)
-                .await?;
-            tokio::fs::remove_file(state.project_demo_config.dir.join(storage_key))
-                .await
-                .ok();
-        }
+    {
+        sqlx::query("DELETE FROM game_jsdos_bundles WHERE game_id = ?")
+            .bind(game_id)
+            .execute(&state.game_service.pool)
+            .await?;
+        tokio::fs::remove_file(state.project_demo_config.dir.join(storage_key))
+            .await
+            .ok();
     }
 
     if !keeps_v86_game {
@@ -276,3 +277,77 @@ pub async fn update_game(
     Ok(Json(UpdateGameResponse { updated_at }))
 }
 
+/// Re-point a game's v86 artifact at another system version. Only the base
+/// OS image changes; the game disk and launcher ISOs stay content-addressed
+/// as-is, so this is a plain row update. Bumping `artifact_revision` mirrors
+/// `attach_ready_game_tx` and makes any in-flight package build or snapshot
+/// capture fail its revision/system checks instead of half-landing.
+pub(super) async fn repoint_game_system(
+    pool: &sqlx::SqlitePool,
+    game_id: i64,
+    system_version_id: i64,
+) -> Result<(), GameError> {
+    let current: Option<(i64, String)> = sqlx::query_as(
+        "SELECT g.system_version_id, s.platform_key
+         FROM game_v86_games g
+         JOIN v86_system_versions v ON v.id = g.system_version_id
+         JOIN v86_systems s ON s.id = v.system_id
+         WHERE g.game_id = ?",
+    )
+    .bind(game_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((current_version_id, current_platform)) = current else {
+        return Err(GameError::InvalidDemo(
+            "A completed v86 game artifact is required before switching systems.".to_string(),
+        ));
+    };
+
+    if current_version_id == system_version_id {
+        return Ok(());
+    }
+
+    let target: Option<(String, bool)> = sqlx::query_as(
+        "SELECT s.platform_key, s.is_active
+         FROM v86_system_versions v
+         JOIN v86_systems s ON s.id = v.system_id
+         WHERE v.id = ?",
+    )
+    .bind(system_version_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some((target_platform, target_active)) = target else {
+        return Err(GameError::InvalidDemo(
+            "The selected v86 system version does not exist.".to_string(),
+        ));
+    };
+    if !target_active {
+        return Err(GameError::InvalidDemo(
+            "The selected v86 system is not active.".to_string(),
+        ));
+    }
+    if target_platform != current_platform {
+        return Err(GameError::InvalidDemo(
+            "A v86 game can only be switched between systems of the same platform.".to_string(),
+        ));
+    }
+
+    let mut tx = pool.begin().await?;
+    let updated = sqlx::query(
+        "UPDATE game_v86_games
+         SET system_version_id = ?, artifact_revision = artifact_revision + 1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE game_id = ?",
+    )
+    .bind(system_version_id)
+    .bind(game_id)
+    .execute(&mut *tx)
+    .await?;
+    if updated.rows_affected() != 1 {
+        return Err(GameError::InvalidDemo(
+            "The v86 artifact changed while switching systems.".to_string(),
+        ));
+    }
+    tx.commit().await?;
+    Ok(())
+}

@@ -30,7 +30,10 @@ async function request(path, { method = 'GET', body, auth: useAuth = true, ...op
 		throw new ApiError(data?.message || text || res.statusText, res.status, data);
 	}
 	if (res.status === 204) return null;
-	return res.json();
+	const text = await res.text();
+	// Mutation endpoints may answer with an empty 200/204 body; there is no
+	// JSON to parse in that case.
+	return text ? JSON.parse(text) : null;
 }
 
 export const api = {

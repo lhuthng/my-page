@@ -1,20 +1,20 @@
 // Track management: add/edit/remove/reorder plus sequencing and loading.
 use std::path::PathBuf;
 
-use sqlx::{Row, Sqlite, Transaction};
+use sqlx::{Sqlite, Transaction};
+use tokio::fs;
 
-use crate::application::{
-    commands::audiobook::{
-        AddTrackCommand, RemoveTrackCommand, ReorderTracksCommand, UpdateTrackCommand,
-    },
-    services::audiobook::AudiobookService,
+use crate::application::commands::audiobook::{
+    AddTrackCommand, RemoveTrackCommand, ReorderTracksCommand, UpdateTrackCommand,
 };
 use crate::domain::entities::audiobook::AudiobookTrack;
-use crate::domain::errors::audiobook::AudiobookError;
+use crate::domain::entities::media::MediaType;
+use crate::domain::errors::{audiobook::AudiobookError, media::MediaError};
+use crate::infrastructure::web::server::MediaConfig;
 
-use super::rows::TrackRow;
-use super::validation::MAX_TRACKS_PER_AUDIOBOOK;
 use super::AudiobookServiceImpl;
+use super::rows::TrackRow;
+use super::validation::{MAX_TRACK_TITLE_CHARS, MAX_TRACKS_PER_AUDIOBOOK};
 
 impl AudiobookServiceImpl {
     pub(super) async fn resequence_tracks(
@@ -56,9 +56,9 @@ impl AudiobookServiceImpl {
             ORDER BY t.number ASC
             "#,
         )
-            .bind(audiobook_id)
-            .fetch_all(&mut **tx)
-            .await?;
+        .bind(audiobook_id)
+        .fetch_all(&mut **tx)
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -80,13 +80,10 @@ impl AudiobookServiceImpl {
             )
             .collect())
     }
-
-    /// Attach tags to a batch of snapshots in one extra query.
 }
 
-#[async_trait::async_trait]
-impl AudiobookService for AudiobookServiceImpl {
-    async fn add_track(
+impl AudiobookServiceImpl {
+    pub(super) async fn add_track(
         &self,
         cmd: AddTrackCommand,
         config: &MediaConfig,
@@ -97,7 +94,10 @@ impl AudiobookService for AudiobookServiceImpl {
         let duration_seconds = cmd.duration_seconds.filter(|d| *d >= 0);
 
         let media_type = MediaType::from_upload(&cmd.medium.content_type, &cmd.medium.filename)?;
-        if !self.is_audio_supported(media_type.get_content_type(), config).await? {
+        if !self
+            .is_audio_supported(media_type.get_content_type(), config)
+            .await?
+        {
             return Err(AudiobookError::Media(MediaError::InvalidFileType));
         }
 
@@ -122,17 +122,12 @@ impl AudiobookService for AudiobookServiceImpl {
             None => track_count + 1,
         };
 
-        // Readable, collision-free media handle: audiobook + a slugged slice of
-        // the title, with the content hash and a random tail appended by
-        // `store_medium`.
-        let short_name_prefix = format!(
-            "abt-{}-{}",
-            cmd.audiobook_id,
-            crate::helper::string::slugify(&title)
-                .chars()
-                .take(24)
-                .collect::<String>()
-        );
+        // Opaque, collision-free media handle: the audiobook id, with the
+        // content hash and a random tail appended by `store_medium`. The track
+        // title is deliberately not slugged in — non-ASCII titles (Vietnamese
+        // in particular) would degrade into a mangled letter soup — and the
+        // handle is never user-visible anyway.
+        let short_name_prefix = format!("abt-{}", cmd.audiobook_id);
 
         let mut created_path: Option<PathBuf> = None;
         let media_id = match Self::store_medium(
@@ -198,7 +193,7 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(track_id)
     }
 
-    async fn update_track(&self, cmd: UpdateTrackCommand) -> Result<(), AudiobookError> {
+    pub(super) async fn update_track(&self, cmd: UpdateTrackCommand) -> Result<(), AudiobookError> {
         let mut tx = self.pool.begin().await?;
         Self::assert_owned(&mut tx, cmd.audiobook_id, cmd.user_id, cmd.is_admin).await?;
 
@@ -278,16 +273,17 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(())
     }
 
-    async fn remove_track(&self, cmd: RemoveTrackCommand) -> Result<(), AudiobookError> {
+    pub(super) async fn remove_track(&self, cmd: RemoveTrackCommand) -> Result<(), AudiobookError> {
         let mut tx = self.pool.begin().await?;
         Self::assert_owned(&mut tx, cmd.audiobook_id, cmd.user_id, cmd.is_admin).await?;
 
-        let affected = sqlx::query("DELETE FROM audiobook_tracks WHERE id = ? AND audiobook_id = ?")
-            .bind(cmd.track_id)
-            .bind(cmd.audiobook_id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
+        let affected =
+            sqlx::query("DELETE FROM audiobook_tracks WHERE id = ? AND audiobook_id = ?")
+                .bind(cmd.track_id)
+                .bind(cmd.audiobook_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected();
 
         if affected == 0 {
             return Err(AudiobookError::NotFound);
@@ -304,7 +300,10 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(())
     }
 
-    async fn reorder_tracks(&self, cmd: ReorderTracksCommand) -> Result<(), AudiobookError> {
+    pub(super) async fn reorder_tracks(
+        &self,
+        cmd: ReorderTracksCommand,
+    ) -> Result<(), AudiobookError> {
         let mut tx = self.pool.begin().await?;
         Self::assert_owned(&mut tx, cmd.audiobook_id, cmd.user_id, cmd.is_admin).await?;
 
@@ -344,5 +343,4 @@ impl AudiobookService for AudiobookServiceImpl {
         tx.commit().await?;
         Ok(())
     }
-
 }

@@ -301,4 +301,3 @@ pub struct ServerStatusResponse {
     pub ok: bool,
     pub active_uploads: Vec<ChunkProgress>,
 }
-

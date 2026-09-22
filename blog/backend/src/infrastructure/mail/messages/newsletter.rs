@@ -1,14 +1,8 @@
-use lettre::message::header::HeaderValue;
-
-use crate::domain::entities::{
-    auth::{PasswordResetMailPayload, VerificationMailPayload},
-    mail::ContactFormCredential,
-    newsletter::ConfirmSubscriptionMailPayload,
-};
+use crate::domain::entities::newsletter::ConfirmSubscriptionMailPayload;
 use crate::infrastructure::web::server::{MailConfig, MailTransportConfig};
 
 use super::super::brevo::{BrevoAddress, BrevoEmailPayload, send_brevo_email};
-use super::super::smtp::send_campaign_email_via_smtp;
+use super::super::smtp::{send_campaign_email_via_smtp, send_html_email_via_smtp};
 use super::super::templates;
 
 pub async fn send_subscription_confirm_email(
@@ -115,5 +109,3 @@ pub async fn send_campaign_email(
         }
     }
 }
-
-/// Sends a plain + HTML multipart email over SMTP.

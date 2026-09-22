@@ -2,7 +2,7 @@
 // entities.
 use serde::{Deserialize, Serialize};
 
-use crate::domain::entities::audiobook::AudiobookSnapshot;
+use crate::domain::entities::audiobook::{AudiobookDetails, AudiobookSnapshot, AudiobookTag};
 
 #[derive(Serialize, Deserialize)]
 pub struct AudiobookSummaryResponse {
@@ -77,4 +77,3 @@ pub struct SlugAvailabilityResponse {
     /// `true` when the slug is free to use.
     pub available: bool,
 }
-

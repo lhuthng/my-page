@@ -322,15 +322,12 @@ pub async fn remove_post_from_series(
 
 // ---------------------------------------------------------------------------
 // Route table
-use std::sync::Arc;
-
 use axum::{
-    middleware,
+    Router, middleware,
     routing::{delete, get, patch, post},
-    Router,
 };
 
-use crate::infrastructure::web::{api::middlewares, server::AppState};
+use crate::infrastructure::web::api::middlewares;
 
 pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
     // public

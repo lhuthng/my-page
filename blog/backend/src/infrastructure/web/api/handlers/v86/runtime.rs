@@ -10,12 +10,11 @@ use axum::{
 use sqlx::Row;
 
 use crate::domain::{entities::secret::Claims, errors::project::ProjectError};
-use crate::infrastructure::web::{
-    api::support::ownership::require_owner,
-    server::AppState,
-};
+use crate::infrastructure::web::{api::support::ownership::require_owner, server::AppState};
 
-use super::constants::{V86_MEMORY_SIZE, V86_SAVE_FLOPPY_BYTES, V86_STATE_VERSION, V86_TOPOLOGY_VERSION};
+use super::constants::{
+    V86_MEMORY_SIZE, V86_SAVE_FLOPPY_BYTES, V86_STATE_VERSION, V86_TOPOLOGY_VERSION,
+};
 use super::dto::{V86RuntimeDescriptor, VariantDescriptor};
 use super::manifest::{
     MouseConfig, parse_mouse_config, parse_system_specs, resolve_system_machine,
@@ -38,7 +37,13 @@ pub async fn runtime_descriptor(
     slug: &str,
     public_base_url: Option<&str>,
 ) -> Result<Option<V86RuntimeDescriptor>, ProjectError> {
-    runtime_descriptor_for(pool, RuntimeLookup::PublishedSlug(slug), public_base_url, true).await
+    runtime_descriptor_for(
+        pool,
+        RuntimeLookup::PublishedSlug(slug),
+        public_base_url,
+        true,
+    )
+    .await
 }
 
 pub async fn runtime_descriptor_for(
@@ -90,7 +95,12 @@ pub async fn runtime_descriptor_for(
         .ok()
         .map(|mb| mb.max(1) as u64 * 1024 * 1024)
         .unwrap_or(V86_MEMORY_SIZE);
-    let system_specs = parse_system_specs(row.try_get::<Option<String>, _>("specs").ok().flatten().as_deref());
+    let system_specs = parse_system_specs(
+        row.try_get::<Option<String>, _>("specs")
+            .ok()
+            .flatten()
+            .as_deref(),
+    );
     let (vga_memory_size, _) = resolve_system_machine(row.get("platform_key"), &system_specs);
 
     // Per-variant autorun CDs. Always at least one row (backfilled on migrate).
@@ -145,7 +155,10 @@ pub async fn runtime_descriptor_for(
         .map(|row| {
             (
                 row.get::<i32, _>("variant_index"),
-                (row.get::<String, _>("sha256"), row.get::<i64, _>("size_bytes")),
+                (
+                    row.get::<String, _>("sha256"),
+                    row.get::<i64, _>("size_bytes"),
+                ),
             )
         })
         .collect(),
@@ -285,7 +298,13 @@ pub async fn get_game_capture_runtime(
     Extension(claims): Extension<Claims>,
     AxumPath(game_id): AxumPath<i64>,
 ) -> Result<Json<V86RuntimeDescriptor>, ProjectError> {
-    require_owner(&state.game_service.pool, "games", game_id, user_id(&claims)?).await?;
+    require_owner(
+        &state.game_service.pool,
+        "games",
+        game_id,
+        user_id(&claims)?,
+    )
+    .await?;
     runtime_descriptor_for(
         &state.project_service.pool,
         RuntimeLookup::GameId(game_id),
@@ -315,4 +334,3 @@ pub async fn get_game_launcher(
     };
     streamed_fs_file(launcher, "application/octet-stream", "public, max-age=3600").await
 }
-

@@ -1,21 +1,14 @@
 // Game write methods: create, update, featured flag.
-use std::collections::HashMap;
 
-use sqlx::Row;
-
-use crate::application::{
-    commands::game::{NewGameCommand, SetFeaturedGameCommand, UpdateGameCommand},
-    services::game::GameService,
+use crate::application::commands::game::{
+    NewGameCommand, SetFeaturedGameCommand, UpdateGameCommand,
 };
-use crate::domain::entities::game::GameLink;
 use crate::domain::errors::game::GameError;
 
-use super::mapping;
 use super::GameServiceImpl;
 
-#[async_trait::async_trait]
-impl GameService for GameServiceImpl {
-    async fn new_game(&self, cmd: NewGameCommand) -> Result<i64, GameError> {
+impl GameServiceImpl {
+    pub(super) async fn new_game(&self, cmd: NewGameCommand) -> Result<i64, GameError> {
         let mut tx = self.pool.begin().await?;
         let game_id: i64 = sqlx::query_scalar(
             r#"
@@ -51,10 +44,7 @@ impl GameService for GameServiceImpl {
             );
             let mut query = sqlx::query(&sql);
             for (index, link) in cmd.related_games.iter().enumerate() {
-                query = query
-                    .bind(game_id)
-                    .bind(link.id)
-                    .bind(index as i64);
+                query = query.bind(game_id).bind(link.id).bind(index as i64);
             }
             query.execute(&mut *tx).await?;
         }
@@ -63,7 +53,7 @@ impl GameService for GameServiceImpl {
         Ok(game_id)
     }
 
-    async fn update_game(&self, cmd: UpdateGameCommand) -> Result<(), GameError> {
+    pub(super) async fn update_game(&self, cmd: UpdateGameCommand) -> Result<(), GameError> {
         let post_user_id: Option<i64> = sqlx::query_scalar(
             r#"
             SELECT posts.user_id
@@ -152,10 +142,7 @@ impl GameService for GameServiceImpl {
                 );
                 let mut query = sqlx::query(&sql);
                 for (index, link) in related.iter().enumerate() {
-                    query = query
-                        .bind(cmd.game_id)
-                        .bind(link.id)
-                        .bind(index as i64);
+                    query = query.bind(cmd.game_id).bind(link.id).bind(index as i64);
                 }
                 query.execute(&mut *tx).await?;
             }
@@ -165,7 +152,7 @@ impl GameService for GameServiceImpl {
         Ok(())
     }
 
-    async fn set_game_featured(
+    pub(super) async fn set_game_featured(
         &self,
         cmd: SetFeaturedGameCommand,
     ) -> Result<(), GameError> {
@@ -184,5 +171,4 @@ impl GameService for GameServiceImpl {
 
         Ok(())
     }
-
 }

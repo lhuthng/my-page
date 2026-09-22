@@ -1,16 +1,19 @@
 // Subscriber lifecycle: subscribe, confirm, unsubscribe; plus the token
 // helpers those flows share.
-use sqlx::Row;
+use base64::{Engine, engine::general_purpose};
+use chrono::{Duration, Utc};
+use rand::RngCore;
+use sha2::{Digest, Sha256};
 
-use crate::application::{
-    commands::newsletter::SubscribeCommand,
-    services::newsletter::NewsletterService,
+use crate::application::commands::newsletter::{
+    ConfirmSubscriptionCommand, SubscribeCommand, UnsubscribeByEmailCommand, UnsubscribeCommand,
 };
+use crate::domain::entities::newsletter::ConfirmSubscriptionMailPayload;
 use crate::domain::errors::newsletter::NewsletterError;
 
 use super::rows::SubscriberRow;
-use super::NewsletterServiceImpl;
-fn hash_secret(secret: &str) -> String {
+use super::{CONFIRM_TOKEN_EXPIRY_MINUTES, DELIMITER, NewsletterServiceImpl};
+pub(crate) fn hash_secret(secret: &str) -> String {
     hex::encode(Sha256::digest(secret.as_bytes()))
 }
 
@@ -18,7 +21,7 @@ fn hash_secret(secret: &str) -> String {
 /// same scheme used by `email_verification_tokens` / `password_reset_tokens`:
 /// a random secret is SHA256-hashed for storage, while the plaintext token
 /// (base64 of `"{id}`{secret}"`) is handed back to embed in the email link.
-fn generate_confirm_token(subscriber_id: i64) -> (String, String) {
+pub(crate) fn generate_confirm_token(subscriber_id: i64) -> (String, String) {
     let mut token_bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut token_bytes);
 
@@ -30,7 +33,7 @@ fn generate_confirm_token(subscriber_id: i64) -> (String, String) {
     (token, token_hash)
 }
 
-fn decode_token(token: &str) -> Result<(i64, String), NewsletterError> {
+pub(crate) fn decode_token(token: &str) -> Result<(i64, String), NewsletterError> {
     let raw = general_purpose::URL_SAFE_NO_PAD
         .decode(token)
         .map_err(|_| NewsletterError::InvalidToken)?;
@@ -52,14 +55,14 @@ fn decode_token(token: &str) -> Result<(i64, String), NewsletterError> {
 /// dedicated lookup table. `unsubscribe_token_hash` still stores
 /// `SHA256(secret)` (same shape as the confirm-token hash) purely so
 /// verification stays a uniform "re-hash and compare" operation.
-fn derive_unsubscribe_secret(subscriber_id: i64) -> String {
+pub(crate) fn derive_unsubscribe_secret(subscriber_id: i64) -> String {
     let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_default();
     hex::encode(Sha256::digest(
         format!("{}{}{}", jwt_secret, DELIMITER, subscriber_id).as_bytes(),
     ))
 }
 
-fn derive_unsubscribe_token(subscriber_id: i64) -> (String, String) {
+pub(super) fn derive_unsubscribe_token(subscriber_id: i64) -> (String, String) {
     let secret = derive_unsubscribe_secret(subscriber_id);
     let token_hash = hash_secret(&secret);
     let raw = format!("{}{}{}", subscriber_id, DELIMITER, secret);
@@ -67,10 +70,8 @@ fn derive_unsubscribe_token(subscriber_id: i64) -> (String, String) {
     (token, token_hash)
 }
 
-
-#[async_trait::async_trait]
-impl NewsletterService for NewsletterServiceImpl {
-    async fn subscribe(
+impl NewsletterServiceImpl {
+    pub(super) async fn subscribe(
         &self,
         cmd: SubscribeCommand,
     ) -> Result<ConfirmSubscriptionMailPayload, NewsletterError> {
@@ -107,11 +108,13 @@ impl NewsletterService for NewsletterServiceImpl {
                 .await?;
 
                 let (_, unsubscribe_token_hash) = derive_unsubscribe_token(id);
-                sqlx::query("UPDATE newsletter_subscribers SET unsubscribe_token_hash = ? WHERE id = ?")
-                    .bind(unsubscribe_token_hash)
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?;
+                sqlx::query(
+                    "UPDATE newsletter_subscribers SET unsubscribe_token_hash = ? WHERE id = ?",
+                )
+                .bind(unsubscribe_token_hash)
+                .bind(id)
+                .execute(&self.pool)
+                .await?;
 
                 id
             }
@@ -138,7 +141,7 @@ impl NewsletterService for NewsletterServiceImpl {
         Ok(ConfirmSubscriptionMailPayload { email, token })
     }
 
-    async fn confirm_subscription(
+    pub(super) async fn confirm_subscription(
         &self,
         cmd: ConfirmSubscriptionCommand,
     ) -> Result<(), NewsletterError> {
@@ -200,7 +203,10 @@ impl NewsletterService for NewsletterServiceImpl {
         Ok(())
     }
 
-    async fn unsubscribe(&self, cmd: UnsubscribeCommand) -> Result<bool, NewsletterError> {
+    pub(super) async fn unsubscribe(
+        &self,
+        cmd: UnsubscribeCommand,
+    ) -> Result<bool, NewsletterError> {
         let (subscriber_id, secret) = match decode_token(&cmd.token) {
             Ok(v) => v,
             // Unsubscribing is idempotent/friendly: an invalid token just
@@ -228,7 +234,7 @@ impl NewsletterService for NewsletterServiceImpl {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn unsubscribe_by_email(
+    pub(super) async fn unsubscribe_by_email(
         &self,
         cmd: UnsubscribeByEmailCommand,
     ) -> Result<bool, NewsletterError> {
@@ -251,5 +257,4 @@ impl NewsletterService for NewsletterServiceImpl {
 
         Ok(result.rows_affected() > 0)
     }
-
 }

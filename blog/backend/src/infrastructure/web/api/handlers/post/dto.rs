@@ -9,30 +9,30 @@ pub struct CheckQuery {
 
 #[derive(Serialize, Deserialize)]
 pub struct CheckResponse {
-    exists: bool,
+    pub exists: bool,
 }
 
 #[derive(Deserialize)]
 pub struct PostData {
-    title: String,
-    slug: String,
-    excerpt: String,
-    content: String,
-    tags: Vec<String>,
-    number_of_files: usize,
+    pub title: String,
+    pub slug: String,
+    pub excerpt: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub number_of_files: usize,
 }
 
 #[derive(Deserialize)]
 pub struct PostPatchData {
-    title: Option<String>,
-    slug: Option<String>,
-    excerpt: Option<String>,
-    content: Option<String>,
-    tags: Option<Vec<String>>,
-    number_of_files: usize,
-    og_image_seconds: Option<i64>,
+    pub title: Option<String>,
+    pub slug: Option<String>,
+    pub excerpt: Option<String>,
+    pub content: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub number_of_files: usize,
+    pub og_image_seconds: Option<i64>,
     /// Optional optimistic-lock token; see `UpdatePostCommand`.
-    expected_updated_at: Option<String>,
+    pub expected_updated_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -97,4 +97,3 @@ pub struct DeletePostQuery {
 pub struct SetRelatedPostsBody {
     pub related_post_slugs: Vec<String>,
 }
-

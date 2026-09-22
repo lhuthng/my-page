@@ -1,13 +1,7 @@
-use sqlx::sqlite::{
-    SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous,
-};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
 use super::update::repoint_game_system;
 use crate::domain::errors::game::GameError;
-
-use sqlx::sqlite::{
-    SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous,
-};
 
 /// Migrated temp pool. FK checks stay off (as in the app's own migration
 /// run) so the fixture can seed only the three tables under test without
@@ -60,9 +54,12 @@ async fn seed(pool: &sqlx::SqlitePool) {
         .await
         .unwrap();
     }
-    for (id, system_id, key) in
-        [(11, 1, "img-11"), (12, 2, "img-12"), (13, 3, "img-13"), (14, 4, "img-14")]
-    {
+    for (id, system_id, key) in [
+        (11, 1, "img-11"),
+        (12, 2, "img-12"),
+        (13, 3, "img-13"),
+        (14, 4, "img-14"),
+    ] {
         sqlx::query(
             "INSERT INTO v86_system_versions
                  (id, system_id, version_number, original_file_name, storage_key,

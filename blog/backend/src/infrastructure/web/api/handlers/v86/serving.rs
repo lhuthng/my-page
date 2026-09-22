@@ -80,9 +80,7 @@ fn streamed_response(
         HeaderValue::from_static(cache_control),
     );
     if let Ok(value) = HeaderValue::from_str(&size.to_string()) {
-        response
-            .headers_mut()
-            .insert(header::CONTENT_LENGTH, value);
+        response.headers_mut().insert(header::CONTENT_LENGTH, value);
     }
     response
 }
@@ -121,7 +119,10 @@ pub(super) async fn streamed_object(
         .await
         .map_err(storage_error)?
         .ok_or(ProjectError::ProjectNotFound)?;
-    let reader = storage.get_object_reader(key).await.map_err(storage_error)?;
+    let reader = storage
+        .get_object_reader(key)
+        .await
+        .map_err(storage_error)?;
     Ok(streamed_response(
         axum::body::Body::from_stream(ReaderStream::new(reader)),
         size,
@@ -146,7 +147,10 @@ pub async fn get_system_chunk(
     .fetch_optional(&state.project_service.pool)
     .await?;
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
-    if part == ".img" || part.contains('/') || !(part.ends_with(".img") || part.ends_with(".img.zst")) {
+    if part == ".img"
+        || part.contains('/')
+        || !(part.ends_with(".img") || part.ends_with(".img.zst"))
+    {
         return Err(ProjectError::ProjectNotFound);
     }
     streamed_fs_file(
@@ -184,7 +188,10 @@ pub async fn get_game_chunk(
     .fetch_optional(&state.project_service.pool)
     .await?;
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
-    if part == ".iso" || part.contains('/') || !(part.ends_with(".iso") || part.ends_with(".iso.zst")) {
+    if part == ".iso"
+        || part.contains('/')
+        || !(part.ends_with(".iso") || part.ends_with(".iso.zst"))
+    {
         return Err(ProjectError::ProjectNotFound);
     }
     streamed_fs_file(
@@ -216,7 +223,9 @@ pub async fn get_game_disk_chunk(
     .fetch_optional(&state.project_service.pool)
     .await?;
     let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
-    if part == ".img" || part.contains('/') || !(part.ends_with(".img") || part.ends_with(".img.zst"))
+    if part == ".img"
+        || part.contains('/')
+        || !(part.ends_with(".img") || part.ends_with(".img.zst"))
     {
         return Err(ProjectError::ProjectNotFound);
     }
@@ -294,7 +303,8 @@ pub async fn get_game_iso(
                 .get_object_reader(&key)
                 .await
                 .map_err(storage_error)?;
-            let mut response = Response::new(axum::body::Body::from_stream(ReaderStream::new(reader)));
+            let mut response =
+                Response::new(axum::body::Body::from_stream(ReaderStream::new(reader)));
             response.headers_mut().insert(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("application/octet-stream"),
@@ -313,7 +323,7 @@ pub async fn get_game_iso(
                 HeaderValue::from_str(&format!("\"{sha256}\""))
                     .map_err(|error| ProjectError::InternalError(error.to_string()))?,
             );
-            return Ok(response);
+            Ok(response)
         }
         ObjectStore::Fs(_) => {
             // New uploads land at {iso_storage_key}/full.iso; installs that
@@ -348,8 +358,7 @@ pub async fn get_game_iso(
                 HeaderValue::from_str(&format!("\"{sha256}\""))
                     .map_err(|error| ProjectError::InternalError(error.to_string()))?,
             );
-            return Ok(response);
+            Ok(response)
         }
     }
 }
-

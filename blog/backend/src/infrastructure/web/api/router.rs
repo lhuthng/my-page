@@ -3,14 +3,14 @@
 // layers. See `layers.rs` for the CORS/compression/trace policy.
 use std::sync::Arc;
 
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
+    Router,
     extract::{DefaultBodyLimit, Extension},
     middleware,
     routing::get,
     routing::get_service,
-    Router,
 };
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use tower_http::services::ServeDir;
 
 use crate::domain::entities::secret::Claims;
@@ -50,10 +50,7 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
     let project_demos_path = format!("/{}", demos_dir_name);
 
     let graphql_routes = Router::new()
-        .route(
-            "/graphql",
-            get(graphql_playground).post(graphql_handler),
-        )
+        .route("/graphql", get(graphql_playground).post(graphql_handler))
         .layer(Extension(state.graphql_schema.clone()))
         .layer(middleware::from_fn(middlewares::auth::mod_check))
         .layer(middleware::from_fn_with_state(
@@ -83,7 +80,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/audiobooks", handlers::audiobook::routes(state.clone()))
         .nest("/mail", handlers::mail::routes(state.clone()))
         .nest("/newsletter", handlers::newsletter::routes(state.clone()))
-        .nest("/analytics", handlers::dashboard::analytics_routes(state.clone()))
+        .nest(
+            "/analytics",
+            handlers::dashboard::analytics_routes(state.clone()),
+        )
         .nest("/dashboard", handlers::dashboard::routes(state.clone()))
         .route("/health", get(health))
         .merge(graphql_routes)

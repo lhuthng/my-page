@@ -1,5 +1,8 @@
 import { GraphQLClient } from 'graphql-request';
 import { auth } from '$lib/auth/user.svelte.js';
+import { fixUrl } from '$lib/utils/media-path.js';
+
+export { fixUrl };
 
 let client;
 
@@ -78,11 +81,6 @@ const Q = {
 	    }
 	  }`
 };
-
-export function fixUrl(path) {
-	if (!path || path.includes('://') || path.startsWith('/')) return path;
-	return `/api/${path}`;
-}
 
 function fixUrls(data) {
 	if (Array.isArray(data)) return data.map(fixUrls);

@@ -4,8 +4,8 @@ use serde::Serialize;
 
 use crate::domain::entities::game::{Game, GameLink, GameSnapshot};
 use crate::helper::time::normalize_optional_utc_timestamp;
-use crate::infrastructure::web::api::handlers::v86::V86RuntimeDescriptor;
 use crate::infrastructure::web::api::handlers::game::dto::{GameCard, GameStats};
+use crate::infrastructure::web::api::handlers::v86::V86RuntimeDescriptor;
 
 #[derive(Serialize)]
 pub struct UpdateGameResponse {
@@ -170,4 +170,3 @@ impl From<GameSnapshot> for GameCard {
         }
     }
 }
-

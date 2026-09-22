@@ -15,3 +15,15 @@ export function normalizeMediaPath(path) {
 		.filter((segment) => segment !== '' && segment !== '.')
 		.join('/');
 }
+
+/**
+ * Turn a backend media path ("media/i/my-slug") into a URL a browser can
+ * fetch, for client-side code that cannot read the server-only BACKEND_ORIGIN
+ * (fixClientRoute): everything goes through the same-origin /api proxy.
+ * Absolute URLs and already-rooted paths pass through untouched, so the
+ * mapping is idempotent.
+ */
+export function fixUrl(path) {
+	if (!path || path.includes('://') || path.startsWith('/')) return path;
+	return `/api/${path}`;
+}

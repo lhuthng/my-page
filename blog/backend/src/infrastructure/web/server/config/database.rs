@@ -1,7 +1,7 @@
 // Database source selection from the environment.
 use std::{env, path::PathBuf};
 
-use super::state::DatabaseSource;
+use super::super::state::DatabaseSource;
 
 impl DatabaseSource {
     pub fn from_env() -> Self {

@@ -1,34 +1,34 @@
 // Write methods: create, update, cover, status, delete.
-use std::path::PathBuf;
+use std::str::FromStr;
 
-use sqlx::Row;
+use tokio::fs;
 
-use crate::application::{
-    commands::audiobook::{
-        ChangeAudiobookStatusCommand, DeleteAudiobookCommand, NewAudiobookCommand,
-        SetAudiobookCoverCommand, UpdateAudiobookCommand,
-    },
-    services::audiobook::AudiobookService,
+use crate::application::commands::audiobook::{
+    ChangeAudiobookStatusCommand, DeleteAudiobookCommand, NewAudiobookCommand,
+    SetAudiobookCoverCommand, UpdateAudiobookCommand,
 };
-use crate::domain::entities::audiobook::{AudiobookDetails, AudiobookSnapshot, AudiobookTrack};
+use crate::domain::entities::media::MediaType;
 use crate::domain::errors::{audiobook::AudiobookError, media::MediaError};
+use crate::infrastructure::persistence::{
+    image_convert::convert_to_webp,
+    media::{HashData, hash_bytes},
+};
+use crate::infrastructure::web::server::MediaConfig;
 
-use super::medium::PreparedCover;
-use super::rows::{DetailsRow, SnapshotRow, TrackRow};
-use super::{tags, tracks, validation};
 use super::AudiobookServiceImpl;
+use super::medium::PreparedCover;
+use super::validation::{MAX_DESCRIPTION_CHARS, MAX_TITLE_CHARS, MAX_TRANSLATOR_CHARS};
 
-#[async_trait::async_trait]
-impl AudiobookService for AudiobookServiceImpl {
-    async fn new_audiobook(
+impl AudiobookServiceImpl {
+    pub(super) async fn new_audiobook(
         &self,
         cmd: NewAudiobookCommand,
         config: &MediaConfig,
     ) -> Result<i64, AudiobookError> {
         let title = crate::helper::string::validate_text(&cmd.title, "Title", MAX_TITLE_CHARS)
             .map_err(AudiobookError::Validation)?;
-        let slug = crate::helper::string::validate_slug(&cmd.slug)
-            .map_err(AudiobookError::Validation)?;
+        let slug =
+            crate::helper::string::validate_slug(&cmd.slug).map_err(AudiobookError::Validation)?;
         let description = {
             let trimmed = cmd.description.trim();
             if trimmed.chars().count() > MAX_DESCRIPTION_CHARS {
@@ -147,7 +147,7 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(audiobook_id)
     }
 
-    async fn update_audiobook(
+    pub(super) async fn update_audiobook(
         &self,
         cmd: UpdateAudiobookCommand,
     ) -> Result<(), AudiobookError> {
@@ -225,7 +225,7 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(())
     }
 
-    async fn set_audiobook_cover(
+    pub(super) async fn set_audiobook_cover(
         &self,
         cmd: SetAudiobookCoverCommand,
         config: &MediaConfig,
@@ -297,7 +297,7 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(())
     }
 
-    async fn change_audiobook_status(
+    pub(super) async fn change_audiobook_status(
         &self,
         cmd: ChangeAudiobookStatusCommand,
     ) -> Result<(), AudiobookError> {
@@ -349,7 +349,7 @@ impl AudiobookService for AudiobookServiceImpl {
         Ok(())
     }
 
-    async fn delete_audiobook(
+    pub(super) async fn delete_audiobook(
         &self,
         cmd: DeleteAudiobookCommand,
     ) -> Result<(), AudiobookError> {
@@ -367,5 +367,4 @@ impl AudiobookService for AudiobookServiceImpl {
         tx.commit().await?;
         Ok(())
     }
-
 }

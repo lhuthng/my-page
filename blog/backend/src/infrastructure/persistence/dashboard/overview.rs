@@ -1,13 +1,17 @@
 // Dashboard overview: counts, growth, and top-content SQL.
 use std::collections::HashMap;
 
-use sqlx::Row;
-
 use crate::application::commands::dashboard::GetOverviewCommand;
-use crate::domain::errors::dashboard::DashboardError;
+use crate::domain::entities::dashboard::{
+    DashboardOverview, DashboardUserInfo, GrowthPoint, RoleCounts,
+};
+use crate::domain::errors::user::UserError;
 
-use super::rows::{GrowthDayRow, RoleCountRow};
+use crate::infrastructure::persistence::post::PostRow;
+
 use super::DashboardServiceImpl;
+use super::rows::{GrowthDayRow, RoleCountRow, UserInfoRow};
+use super::shared::fetch_snapshots_with_tags;
 
 const TOP_POSTS_SQL: &str = r#"
     SELECT p.id AS post_id, p.title, p.slug, p.excerpt,
@@ -24,10 +28,11 @@ const TOP_POSTS_SQL: &str = r#"
     LIMIT 5
 "#;
 
-
-#[async_trait::async_trait]
-impl DashboardService for DashboardServiceImpl {
-    async fn get_overview(&self, _cmd: GetOverviewCommand) -> Result<DashboardOverview, UserError> {
+impl DashboardServiceImpl {
+    pub(super) async fn get_overview(
+        &self,
+        _cmd: GetOverviewCommand,
+    ) -> Result<DashboardOverview, UserError> {
         // --- Scalar counts ---
         let total_published: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM posts WHERE status = 'published' AND deleted_at IS NULL AND content_kind = 'post'",
@@ -192,5 +197,4 @@ impl DashboardService for DashboardServiceImpl {
             growth,
         })
     }
-
 }

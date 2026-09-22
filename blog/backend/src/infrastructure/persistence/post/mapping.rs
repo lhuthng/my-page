@@ -1,12 +1,11 @@
 // Row -> entity conversion: snapshot assembly and tag/media hydration.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use sqlx::Row;
+use crate::domain::entities::post::{PostSnapshot, PostStats};
+use crate::domain::errors::post::PostError;
 
-use crate::domain::entities::post::{PostSnapshot, PostStats, TagSummary};
-
-use super::rows::{MediumUsageRow, MediumUsageWithNameRow, PostRow, PostDetailsRow, TagRow};
 use super::PostServiceImpl;
+use super::rows::{PostRow, TagRow};
 
 impl PostRow {
     pub fn into_snapshot(self, tag_names: Vec<String>, tag_slugs: Vec<String>) -> PostSnapshot {
@@ -82,7 +81,7 @@ impl PostServiceImpl {
         Ok(snapshots)
     }
 
-    async fn get_posts(
+    pub(super) async fn get_posts(
         &self,
         is_public: bool,
         featured: Option<i64>,
@@ -138,5 +137,3 @@ impl PostServiceImpl {
         self.hydrate_post_rows(post_rows).await
     }
 }
-
-#[async_trait::async_trait]

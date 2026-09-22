@@ -1,28 +1,17 @@
 // Single-item detail queries.
-use std::collections::HashMap;
 
 use async_graphql::{Context, Object};
 use sqlx::SqlitePool;
 
-use super::super::helpers::{
-    DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts, attach_tags_to_projects,
-};
-use super::super::rows::{
-    CategoryRow, CommentRow, DashboardPostRow, DashboardProjectRow, GqlPostRow, GrowthDayRow,
-    MediaRow, PostDetailRow, RoleCountRow, SeriesPostRow, SeriesRow, TagRow, UserInfoRow, UserRow,
-};
-use super::super::types::{
-    CategoryConnection, CommentConnection, DashboardPostConnection, DbStats, GqlCategory,
-    GqlComment, GqlDashboardOverview, GqlDashboardPost, GqlDashboardProject, GqlDashboardUser,
-    GqlGrowthPoint, GqlMedia, GqlPost, GqlPostDetail, GqlRoleCounts, GqlSeries, GqlSeriesPost,
-    GqlTag, GqlUser, MediaConnection, PostConnection, ProjectConnection, SeriesConnection,
-    TagConnection, UserConnection,
-};
+use super::super::helpers::{DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts};
+use super::super::rows::{DashboardPostRow, DashboardProjectRow, PostDetailRow};
+use super::super::types::{GqlDashboardPost, GqlDashboardProject, GqlPostDetail};
 
-use super::QueryRoot;
+#[derive(Default)]
+pub struct DetailQuery;
 
 #[Object]
-impl QueryRoot {
+impl DetailQuery {
     async fn post_detail(
         &self,
         ctx: &Context<'_>,
@@ -177,5 +166,4 @@ impl QueryRoot {
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))
     }
-
 }

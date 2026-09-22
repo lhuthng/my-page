@@ -2,64 +2,63 @@
 use sqlx::prelude::FromRow;
 
 #[derive(Debug, FromRow)]
-struct ProjectSnapshotRow {
-    project_id: i64,
-    post_id: i64,
-    title: String,
-    slug: String,
-    excerpt: String,
-    author_name: String,
-    author_slug: String,
-    status: String,
-    url: Option<String>,
-    cover_media_type: Option<String>,
-    demo_type: String,
-    views: i64,
-    likes: i64,
-    comments_count: i64,
-    reading_time_minutes: i64,
+pub(crate) struct ProjectSnapshotRow {
+    pub(crate) project_id: i64,
+    pub(crate) post_id: i64,
+    pub(crate) title: String,
+    pub(crate) slug: String,
+    pub(crate) excerpt: String,
+    pub(crate) author_name: String,
+    pub(crate) author_slug: String,
+    pub(crate) status: String,
+    pub(crate) url: Option<String>,
+    pub(crate) cover_media_type: Option<String>,
+    pub(crate) demo_type: String,
+    pub(crate) views: i64,
+    pub(crate) likes: i64,
+    pub(crate) comments_count: i64,
+    pub(crate) reading_time_minutes: i64,
 }
 
 #[derive(Debug, FromRow)]
-struct ProjectContentRow {
-    project_id: i64,
-    post_id: i64,
-    user_id: i64,
-    author_name: String,
-    author_slug: String,
-    author_avatar_url: Option<String>,
-    title: String,
-    slug: String,
-    excerpt: String,
-    content: String,
-    published_at: Option<String>,
-    updated_at: Option<String>,
-    cover_url: Option<String>,
-    cover_media_type: Option<String>,
-    cover_video_url: Option<String>,
-    cover_video_type: Option<String>,
-    og_image_seconds: i64,
-    demo_type: String,
-    demo_entry_path: String,
-    demo_width: Option<String>,
-    demo_height: Option<String>,
-    demo_config: Option<String>,
-    demo_url: Option<String>,
-    delegate_game_id: Option<i64>,
-    inherit_thumbnail: i64,
-    inherit_tags: i64,
+pub(crate) struct ProjectContentRow {
+    pub(crate) project_id: i64,
+    pub(crate) post_id: i64,
+    pub(crate) user_id: i64,
+    pub(crate) author_name: String,
+    pub(crate) author_slug: String,
+    pub(crate) author_avatar_url: Option<String>,
+    pub(crate) title: String,
+    pub(crate) slug: String,
+    pub(crate) excerpt: String,
+    pub(crate) content: String,
+    pub(crate) published_at: Option<String>,
+    pub(crate) updated_at: Option<String>,
+    pub(crate) cover_url: Option<String>,
+    pub(crate) cover_media_type: Option<String>,
+    pub(crate) cover_video_url: Option<String>,
+    pub(crate) cover_video_type: Option<String>,
+    pub(crate) og_image_seconds: i64,
+    pub(crate) demo_type: String,
+    pub(crate) demo_entry_path: String,
+    pub(crate) demo_width: Option<String>,
+    pub(crate) demo_height: Option<String>,
+    pub(crate) demo_config: Option<String>,
+    pub(crate) demo_url: Option<String>,
+    pub(crate) delegate_game_id: Option<i64>,
+    pub(crate) inherit_thumbnail: i64,
+    pub(crate) inherit_tags: i64,
 }
 
 #[derive(Debug, FromRow)]
-struct ProjectLinkRow {
-    label: String,
-    url: String,
+pub(crate) struct ProjectLinkRow {
+    pub(crate) label: String,
+    pub(crate) url: String,
 }
 
 #[derive(Debug, FromRow)]
-struct ProjectTagRow {
-    project_id: i64,
-    tag_name: String,
-    tag_slug: String,
+pub(crate) struct ProjectTagRow {
+    pub(crate) project_id: i64,
+    pub(crate) tag_name: String,
+    pub(crate) tag_slug: String,
 }
-

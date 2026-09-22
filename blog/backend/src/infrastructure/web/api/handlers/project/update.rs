@@ -11,7 +11,7 @@ use axum::{
 use crate::{
     application::{
         commands::{
-            post::UpdatePostCommand,
+            post::{UpdatePostCommand, UpdatePostCoverCommand},
             project::{GetProjectPostIdCommand, UpdateProjectCommand},
         },
         services::{post::PostService, project::ProjectService},
@@ -19,8 +19,8 @@ use crate::{
     domain::{entities::secret::Claims, errors::project::ProjectError},
     infrastructure::web::{
         api::handlers::project::dto::ProjectPatchData,
-        api::handlers::project::write::normalize_links,
         api::handlers::project::response::UpdateProjectResponse,
+        api::handlers::project::write::normalize_links,
         api::support::{
             demo_archive::extract_demo_zip,
             links::validate_demo_url,
@@ -167,7 +167,8 @@ pub async fn update_project(
 
     // Validate the client-supplied URL before it can be replaced by the
     // locally-extracted demo path below.
-    let mut demo_url = validate_demo_url(data.demo_url, ProjectError::InvalidDemo)?.filter(|u| !u.trim().is_empty());
+    let mut demo_url = validate_demo_url(data.demo_url, ProjectError::InvalidDemo)?
+        .filter(|u| !u.trim().is_empty());
     if parsed.demo_zip.is_some() {
         let local_demo_url = state
             .project_demo_config
@@ -219,4 +220,3 @@ pub async fn update_project(
 
     Ok(Json(UpdateProjectResponse { updated_at }))
 }
-

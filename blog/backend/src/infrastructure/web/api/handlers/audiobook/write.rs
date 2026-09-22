@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use axum::{
     Extension, Json,
+    body::Bytes,
     extract::{Multipart, Path, State},
+    http::StatusCode,
     response::IntoResponse,
 };
 
@@ -16,15 +18,13 @@ use crate::{
         services::audiobook::AudiobookService,
     },
     domain::{
-        entities::{audiobook::AudiobookDetails, media::MediumDetails, secret::Claims},
+        entities::{media::MediumDetails, secret::Claims},
         errors::{audiobook::AudiobookError, media::MediaError},
     },
     infrastructure::web::{
-        api::handlers::audiobook::shared::{caller_id, is_admin, read_text},
         api::handlers::audiobook::dto::{ChangeStatusPayload, UpdateAudiobookPayload},
-        api::handlers::audiobook::response::{
-            AudiobookCreatedResponse, AudiobookDetailsResponse, AudiobookSummaryResponse,
-        },
+        api::handlers::audiobook::response::AudiobookCreatedResponse,
+        api::handlers::audiobook::shared::{caller_id, is_admin, read_text},
         api::handlers::support::cover::extract_medium,
         server::AppState,
     },
@@ -51,9 +51,11 @@ pub async fn new_audiobook(
         .await
         .map_err(|e| AudiobookError::InternalError(e.to_string()))?
     {
-        let field_name = field.name().ok_or(AudiobookError::Media(
-            MediaError::UploadFailed("Empty field detected.".to_string()),
-        ))?;
+        let field_name = field
+            .name()
+            .ok_or(AudiobookError::Media(MediaError::UploadFailed(
+                "Empty field detected.".to_string(),
+            )))?;
 
         match field_name {
             "file" => {
@@ -112,7 +114,7 @@ pub async fn update_audiobook(
     Extension(claims): Extension<Claims>,
     Path(audiobook_id): Path<i64>,
     Json(payload): Json<UpdateAudiobookPayload>,
-) -> Result<(), AudiobookError> {
+) -> Result<StatusCode, AudiobookError> {
     state
         .audiobook_service
         .update_audiobook(UpdateAudiobookCommand {
@@ -125,7 +127,8 @@ pub async fn update_audiobook(
             translator: payload.translator,
             tags: payload.tags,
         })
-        .await
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn change_cover(
@@ -133,7 +136,7 @@ pub async fn change_cover(
     Extension(claims): Extension<Claims>,
     Path(audiobook_id): Path<i64>,
     mut multipart: Multipart,
-) -> Result<(), AudiobookError> {
+) -> Result<StatusCode, AudiobookError> {
     let mut opt_filename: Option<String> = None;
     let mut opt_content_type: Option<String> = None;
     let mut opt_bytes: Option<Bytes> = None;
@@ -180,7 +183,8 @@ pub async fn change_cover(
             },
             &state.media_config,
         )
-        .await
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn change_status(
@@ -188,7 +192,7 @@ pub async fn change_status(
     Extension(claims): Extension<Claims>,
     Path(audiobook_id): Path<i64>,
     Json(payload): Json<ChangeStatusPayload>,
-) -> Result<(), AudiobookError> {
+) -> Result<StatusCode, AudiobookError> {
     state
         .audiobook_service
         .change_audiobook_status(ChangeAudiobookStatusCommand {
@@ -197,14 +201,15 @@ pub async fn change_status(
             is_admin: is_admin(&claims),
             status: payload.status,
         })
-        .await
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn delete_audiobook(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     Path(audiobook_id): Path<i64>,
-) -> Result<(), AudiobookError> {
+) -> Result<StatusCode, AudiobookError> {
     state
         .audiobook_service
         .delete_audiobook(DeleteAudiobookCommand {
@@ -212,12 +217,6 @@ pub async fn delete_audiobook(
             user_id: caller_id(&claims)?,
             is_admin: is_admin(&claims),
         })
-        .await
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
-
-// ---------------------------------------------------------------------------
-// Track endpoints
-// ---------------------------------------------------------------------------
-
-/// Upload one audio track. Multipart carries the audio plus its title, the
-/// optional playback position, and the browser-probed duration.

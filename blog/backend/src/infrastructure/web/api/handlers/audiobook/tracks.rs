@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use axum::{
     Extension, Json,
+    body::Bytes,
     extract::{Multipart, Path, State},
+    http::StatusCode,
     response::IntoResponse,
 };
 
@@ -15,14 +17,14 @@ use crate::{
         services::audiobook::AudiobookService,
     },
     domain::{
-        entities::audiobook::AudiobookTag,
-        secret::Claims,
-        errors::audiobook::AudiobookError,
+        entities::{media::MediumDetails, secret::Claims},
+        errors::{audiobook::AudiobookError, media::MediaError},
     },
     infrastructure::web::{
-        api::handlers::audiobook::shared::{caller_id, is_admin, read_text},
         api::handlers::audiobook::dto::{ReorderTracksPayload, UpdateTrackPayload},
         api::handlers::audiobook::response::TrackCreatedResponse,
+        api::handlers::audiobook::shared::{caller_id, is_admin, read_text},
+        api::handlers::support::cover::extract_medium,
         server::AppState,
     },
 };
@@ -45,9 +47,11 @@ pub async fn add_track(
         .await
         .map_err(|e| AudiobookError::InternalError(e.to_string()))?
     {
-        let field_name = field.name().ok_or(AudiobookError::Media(
-            MediaError::UploadFailed("Empty field detected.".to_string()),
-        ))?;
+        let field_name = field
+            .name()
+            .ok_or(AudiobookError::Media(MediaError::UploadFailed(
+                "Empty field detected.".to_string(),
+            )))?;
 
         match field_name {
             "file" => {
@@ -114,7 +118,7 @@ pub async fn update_track(
     Extension(claims): Extension<Claims>,
     Path((audiobook_id, track_id)): Path<(i64, i64)>,
     Json(payload): Json<UpdateTrackPayload>,
-) -> Result<(), AudiobookError> {
+) -> Result<StatusCode, AudiobookError> {
     state
         .audiobook_service
         .update_track(UpdateTrackCommand {
@@ -126,14 +130,15 @@ pub async fn update_track(
             number: payload.number,
             duration_seconds: payload.duration_seconds,
         })
-        .await
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn remove_track(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     Path((audiobook_id, track_id)): Path<(i64, i64)>,
-) -> Result<(), AudiobookError> {
+) -> Result<StatusCode, AudiobookError> {
     state
         .audiobook_service
         .remove_track(RemoveTrackCommand {
@@ -142,7 +147,8 @@ pub async fn remove_track(
             user_id: caller_id(&claims)?,
             is_admin: is_admin(&claims),
         })
-        .await
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn reorder_tracks(
@@ -150,7 +156,7 @@ pub async fn reorder_tracks(
     Extension(claims): Extension<Claims>,
     Path(audiobook_id): Path<i64>,
     Json(payload): Json<ReorderTracksPayload>,
-) -> Result<(), AudiobookError> {
+) -> Result<StatusCode, AudiobookError> {
     state
         .audiobook_service
         .reorder_tracks(ReorderTracksCommand {
@@ -159,10 +165,10 @@ pub async fn reorder_tracks(
             is_admin: is_admin(&claims),
             order: payload.order,
         })
-        .await
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------------------------------------------------------------------------
 // Public endpoints
 // ---------------------------------------------------------------------------
-

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use axum::{
     Extension, Json,
     extract::{Path as AxumPath, State},
+    response::IntoResponse,
 };
 
 use crate::{
@@ -15,10 +16,7 @@ use crate::{
         services::{post::PostService, project::ProjectService},
     },
     domain::{entities::secret::Claims, errors::project::ProjectError},
-    infrastructure::web::{
-        api::handlers::project::dto::SetProjectFeaturedBody,
-        server::AppState,
-    },
+    infrastructure::web::{api::handlers::project::dto::SetProjectFeaturedBody, server::AppState},
 };
 
 #[axum::debug_handler]
@@ -59,4 +57,3 @@ pub async fn set_project_featured(
         .await?;
     Ok(())
 }
-

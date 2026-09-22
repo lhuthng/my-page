@@ -48,10 +48,9 @@ impl IntoResponse for AudiobookError {
             AudiobookError::Media(inner) => inner.into_response(),
             _ => {
                 let (status, body) = match self {
-                    AudiobookError::NotFound => (
-                        StatusCode::NOT_FOUND,
-                        "Audiobook not found.".to_string(),
-                    ),
+                    AudiobookError::NotFound => {
+                        (StatusCode::NOT_FOUND, "Audiobook not found.".to_string())
+                    }
                     AudiobookError::Duplication => {
                         (StatusCode::CONFLICT, "Duplication detected.".to_string())
                     }

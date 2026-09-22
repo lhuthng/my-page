@@ -1,23 +1,23 @@
 // Media ingestion: single upload and bulk inline-media upload.
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use axum::body::Bytes;
-use sqlx::Row;
+use tokio::fs;
 
-use crate::application::{
-    commands::media::{UploadMediaWithoutDescriptionCommand, UploadMediumCommand},
-    services::media::MediaService,
+use crate::application::commands::media::{
+    UploadMediaWithoutDescriptionCommand, UploadMediumCommand,
 };
-use crate::domain::entities::media::{MediaDetails, MediaType, MediumDetails};
+use crate::domain::entities::media::MediaType;
 use crate::domain::errors::media::MediaError;
+use crate::infrastructure::persistence::image_convert::convert_to_webp;
+use crate::infrastructure::web::server::MediaConfig;
 
-use super::hashing::{generate_dir_and_name, hash_bytes};
-use super::validation;
 use super::MediaServiceImpl;
+use super::files::clean_up_files;
+use super::hashing::{HashData, hash_bytes};
 
-#[async_trait::async_trait]
-impl MediaService for MediaServiceImpl {
-    async fn upload(
+impl MediaServiceImpl {
+    pub(super) async fn upload(
         &self,
         cmd: UploadMediumCommand,
         config: &MediaConfig,
@@ -81,7 +81,7 @@ impl MediaService for MediaServiceImpl {
 
         Ok(())
     }
-    async fn bulk_upload(
+    pub(super) async fn bulk_upload(
         &self,
         cmd: UploadMediaWithoutDescriptionCommand,
         config: &MediaConfig,
@@ -189,7 +189,7 @@ impl MediaService for MediaServiceImpl {
             Ok(()) => Ok(()),
             Err(e) => {
                 clean_up_files(&file_paths).await?;
-                return Err(MediaError::from(e));
+                Err(MediaError::from(e))
             }
         }
     }

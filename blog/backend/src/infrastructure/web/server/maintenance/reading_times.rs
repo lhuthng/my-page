@@ -1,5 +1,5 @@
 // One-shot reading-time backfill, run at boot.
-async fn backfill_reading_times(
+pub async fn backfill_reading_times(
     pool: &sqlx::SqlitePool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let rows: Vec<(i64, String)> = sqlx::query_as(

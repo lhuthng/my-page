@@ -1,17 +1,16 @@
 // Tag management: update and delete from the dashboard.
-use std::collections::HashMap;
 
-use sqlx::Row;
+use crate::application::commands::dashboard::{
+    DeleteDashboardTagCommand, UpdateDashboardTagCommand,
+};
+use crate::domain::entities::dashboard::DashboardTagRecord;
+use crate::domain::errors::user::UserError;
 
-use crate::application::commands::dashboard::{DeleteTagCommand, UpdateTagCommand};
-use crate::domain::errors::dashboard::DashboardError;
-
-use super::rows::{DashboardTagRecordRow, DashTagRow};
 use super::DashboardServiceImpl;
+use super::rows::DashboardTagRecordRow;
 
-#[async_trait::async_trait]
-impl DashboardService for DashboardServiceImpl {
-    async fn update_tag(
+impl DashboardServiceImpl {
+    pub(super) async fn update_tag(
         &self,
         cmd: UpdateDashboardTagCommand,
     ) -> Result<DashboardTagRecord, UserError> {
@@ -97,11 +96,12 @@ impl DashboardService for DashboardServiceImpl {
         })
     }
 
-    async fn delete_tag(&self, cmd: DeleteDashboardTagCommand) -> Result<(), UserError> {
-        let usage_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM post_tags WHERE tag_id = ?")
-            .bind(cmd.id)
-            .fetch_one(&self.pool)
-            .await?;
+    pub(super) async fn delete_tag(&self, cmd: DeleteDashboardTagCommand) -> Result<(), UserError> {
+        let usage_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM post_tags WHERE tag_id = ?")
+                .bind(cmd.id)
+                .fetch_one(&self.pool)
+                .await?;
 
         if usage_count > 0 {
             return Err(UserError::InvalidData(

@@ -11,17 +11,19 @@ pub use dto::{
     GetPostsQuery, GetPostsResponse, GetUserResponse, MeResponse, SearchUserQuery,
     SearchUserResponse,
 };
-pub use profile::{change_details, check_mod, get_latest_comments, get_posts, get_user, me, search};
+pub use profile::{
+    change_details, check_mod, get_latest_comments, get_posts, get_user, me, search,
+};
 
 // ---------------------------------------------------------------------------
 // Route table
 use std::sync::Arc;
 
 use axum::{
+    Router,
     extract::DefaultBodyLimit,
     middleware,
     routing::{get, patch},
-    Router,
 };
 
 use crate::infrastructure::web::{api::middlewares, server::AppState};

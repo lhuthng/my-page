@@ -2,11 +2,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{
+    Json,
     body::{Body, Bytes},
     extract::{Extension, Path, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::Response,
-    Json,
 };
 use chrono::{Duration, Utc};
 use futures::StreamExt;
@@ -16,10 +16,7 @@ use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
 use crate::{
-    domain::{
-        entities::secret::Claims,
-        errors::sync::SyncError,
-    },
+    domain::{entities::secret::Claims, errors::sync::SyncError},
     infrastructure::{
         sync::{
             artifact_key_exists, build_manifest, canonical_media_url, generate_sync_key,
@@ -61,7 +58,10 @@ pub async fn create_sync_key(
         .user_id
         .parse()
         .map_err(|_| SyncError::InternalError("Cannot parse id".to_string()))?;
-    let ttl = request.ttl_hours.unwrap_or(24).clamp(1, MAX_SYNC_KEY_TTL_HOURS);
+    let ttl = request
+        .ttl_hours
+        .unwrap_or(24)
+        .clamp(1, MAX_SYNC_KEY_TTL_HOURS);
     let label = request.label.unwrap_or_default().trim().to_string();
     let label = if label.len() > 100 {
         label[..100].to_string()
@@ -130,10 +130,12 @@ pub async fn revoke_sync_key(
     State(state): State<Arc<AppState>>,
     Path(key_id): Path<i64>,
 ) -> Result<StatusCode, SyncError> {
-    let result = sqlx::query("UPDATE sync_keys SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL")
-        .bind(key_id)
-        .execute(&state.project_service.pool)
-        .await?;
+    let result = sqlx::query(
+        "UPDATE sync_keys SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL",
+    )
+    .bind(key_id)
+    .execute(&state.project_service.pool)
+    .await?;
     if result.rows_affected() == 0 {
         let exists: Option<i64> = sqlx::query_scalar("SELECT id FROM sync_keys WHERE id = ?")
             .bind(key_id)
@@ -178,7 +180,11 @@ pub async fn get_database(
     let db_path = match &state.config.database_source {
         DatabaseSource::Sqlite { path } => path.clone(),
     };
-    let temp_path = std::env::temp_dir().join(format!("sync-db-{}-{}.db", Utc::now().timestamp(), Uuid::new_v4()));
+    let temp_path = std::env::temp_dir().join(format!(
+        "sync-db-{}-{}.db",
+        Utc::now().timestamp(),
+        Uuid::new_v4()
+    ));
     let escaped = temp_path.to_string_lossy().replace('\'', "''");
     sqlx::query(&format!("VACUUM INTO '{escaped}'"))
         .execute(&state.project_service.pool)
@@ -224,34 +230,34 @@ pub async fn get_demo_file(
 ) -> Result<Response, SyncError> {
     let dir_name = match kind.as_str() {
         "project" => {
-            let exists: Option<i64> =
-                sqlx::query_scalar("SELECT id FROM projects WHERE id = ?")
-                    .bind(id)
-                    .fetch_optional(&state.project_service.pool)
-                    .await?;
+            let exists: Option<i64> = sqlx::query_scalar("SELECT id FROM projects WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&state.project_service.pool)
+                .await?;
             exists.ok_or(SyncError::NotFound)?;
             id.to_string()
         }
         "game" => {
-            let exists: Option<i64> =
-                sqlx::query_scalar("SELECT id FROM games WHERE id = ?")
-                    .bind(id)
-                    .fetch_optional(&state.project_service.pool)
-                    .await?;
+            let exists: Option<i64> = sqlx::query_scalar("SELECT id FROM games WHERE id = ?")
+                .bind(id)
+                .fetch_optional(&state.project_service.pool)
+                .await?;
             exists.ok_or(SyncError::NotFound)?;
             format!("game-{id}")
         }
-        _ => return Err(SyncError::InvalidData("kind must be project or game".to_string())),
+        _ => {
+            return Err(SyncError::InvalidData(
+                "kind must be project or game".to_string(),
+            ));
+        }
     };
     if !is_safe_relative_path(&relative) {
         return Err(SyncError::NotFound);
     }
-    let path = state
-        .project_demo_config
-        .dir
-        .join(dir_name)
-        .join(&relative);
-    let file = tokio::fs::File::open(&path).await.map_err(|_| SyncError::NotFound)?;
+    let path = state.project_demo_config.dir.join(dir_name).join(&relative);
+    let file = tokio::fs::File::open(&path)
+        .await
+        .map_err(|_| SyncError::NotFound)?;
     let size = file.metadata().await?.len();
     Ok(streamed_response(
         Body::from_stream(ReaderStream::new(file)),
@@ -299,16 +305,17 @@ fn is_safe_relative_path(relative: &str) -> bool {
     !relative.is_empty()
         && !relative.starts_with('/')
         && !relative.contains('\\')
-        && relative
-            .split('/')
-            .all(|segment| !segment.is_empty() && segment != "." && segment != ".." && !segment.starts_with('.'))
+        && relative.split('/').all(|segment| {
+            !segment.is_empty() && segment != "." && segment != ".." && !segment.starts_with('.')
+        })
 }
 
 fn streamed_response(body: Body, size: u64, content_type: &'static str) -> Response {
     let mut response = Response::new(body);
-    response
-        .headers_mut()
-        .insert(header::CONTENT_TYPE, header::HeaderValue::from_static(content_type));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static(content_type),
+    );
     if let Ok(value) = header::HeaderValue::from_str(&size.to_string()) {
         response.headers_mut().insert(header::CONTENT_LENGTH, value);
     }
@@ -350,15 +357,9 @@ async fn stream_temp_file(
 
 // ---------------------------------------------------------------------------
 // Route tables
-use std::sync::Arc;
+use axum::{Router, middleware, routing::get};
 
-use axum::{
-    middleware,
-    routing::{delete, get, post},
-    Router,
-};
-
-use crate::infrastructure::web::{api::middlewares, server::AppState};
+use crate::infrastructure::web::api::middlewares;
 
 /// prod -> dev pull protocol, guarded by sync keys.
 pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {

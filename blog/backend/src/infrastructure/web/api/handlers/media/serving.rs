@@ -3,7 +3,7 @@
 use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use axum::{
-    Extension, Json,
+    Json,
     body::Body,
     extract::{Path, Query, State},
     http::{HeaderMap, header},
@@ -22,10 +22,7 @@ use crate::{
         services::media::MediaService,
     },
     domain::{
-        entities::{
-            media::{LinkResult, MediaType},
-            secret::Claims,
-        },
+        entities::media::{LinkResult, MediaType},
         errors::media::MediaError,
     },
     infrastructure::web::{
@@ -152,9 +149,7 @@ pub async fn get_media(
         .map(|value| value == etag)
         .unwrap_or(true);
 
-    if if_range_matches
-        && let Some((start, end)) = range.and_then(|r| parse_byte_range(r, size))
-    {
+    if if_range_matches && let Some((start, end)) = range.and_then(|r| parse_byte_range(r, size)) {
         let length = end - start + 1;
         let mut file = file;
         file.seek(std::io::SeekFrom::Start(start))
@@ -337,4 +332,3 @@ fn reroot_path(stored_url: &str, media_dir: &std::path::Path) -> Option<std::pat
         None
     }
 }
-

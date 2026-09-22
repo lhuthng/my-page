@@ -1,9 +1,6 @@
 // Creating a game (multipart intake + post/game service calls) and changing
 // its cover. Updates live in `update`, the delete lifecycle in `trash`.
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     Extension, Json,
@@ -14,25 +11,19 @@ use axum::{
 use crate::{
     application::{
         commands::{
+            game::{GetGamePostIdCommand, NewGameCommand},
             media::ChangePostCoverCommand,
             post::{CheckSlugCommand, NewPostCommand, UpdatePostCoverCommand},
-            game::NewGameCommand,
         },
         services::{game::GameService, media::MediaService, post::PostService},
     },
     domain::{
-        entities::{
-            game::GameLink,
-            media::MediumDetails,
-            secret::Claims,
-        },
+        entities::{game::GameLink, media::MediumDetails, secret::Claims},
         errors::{game::GameError, media::MediaError},
     },
     infrastructure::web::{
-        api::handlers::support::cover::{
-            MediumData, apply_created_cover_upload, extract_medium,
-        },
         api::handlers::game::dto::GameData,
+        api::handlers::support::cover::{MediumData, apply_created_cover_upload, extract_medium},
         api::handlers::v86::attach_ready_game_tx,
         api::support::{
             demo_archive::extract_demo_zip,
@@ -46,7 +37,7 @@ use crate::{
 
 pub(super) const MAX_GAME_LINKS: usize = 20;
 
-pub(super) fn normalize_links(links: Vec<GameLink>) -> Result<Vec<GameLink>, GameError> {
+pub(crate) fn normalize_links(links: Vec<GameLink>) -> Result<Vec<GameLink>, GameError> {
     let kept: Vec<GameLink> = links
         .into_iter()
         .filter(|link| !link.title.trim().is_empty() && !link.slug.trim().is_empty())
@@ -198,7 +189,7 @@ pub async fn new_game(
                 .execute(&state.game_service.pool)
                 .await
                 .ok();
-            return Err(error.into());
+            return Err(error);
         }
     };
 
@@ -225,17 +216,14 @@ pub async fn new_game(
     }
 
     if let Some(zip) = demo_zip {
-        if let Err(err) = extract_demo_zip(
+        extract_demo_zip(
             &state.project_demo_config,
             format!("game-{game_id}"),
             zip,
             GameError::InternalError,
             GameError::InvalidDemo,
         )
-        .await
-        {
-            return Err(err);
-        }
+        .await?;
     }
 
     apply_created_cover_upload(&state, uploader_id, post_id, create_cover).await?;
@@ -328,4 +316,3 @@ pub async fn change_cover(
 
     Ok(())
 }
-

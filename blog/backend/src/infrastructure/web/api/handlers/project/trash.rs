@@ -12,8 +12,7 @@ use crate::{
     domain::{entities::secret::Claims, errors::project::ProjectError},
     infrastructure::web::{
         api::handlers::project::dto::DeleteProjectQuery,
-        api::support::ownership::require_can_delete,
-        server::AppState,
+        api::support::ownership::require_can_delete, server::AppState,
     },
 };
 
@@ -29,19 +28,17 @@ pub async fn delete_project_draft(
         project_id,
         &claims,
         ProjectError::InternalError,
-        ProjectError::ProjectNotFound,
-        ProjectError::Forbidden,
+        || ProjectError::ProjectNotFound,
+        || ProjectError::Forbidden,
     )
     .await?;
     // If this project's post is shared with its delegated game (legacy migration),
     // deleting the project must NOT soft-delete the shared post — that would also hide the game.
     // In that case just hard-delete the project row and keep the post/game.
-    let shared_game: Option<i64> = sqlx::query_scalar(
-        "SELECT id FROM games WHERE post_id = ?",
-    )
-    .bind(post_id)
-    .fetch_optional(&state.project_service.pool)
-    .await?;
+    let shared_game: Option<i64> = sqlx::query_scalar("SELECT id FROM games WHERE post_id = ?")
+        .bind(post_id)
+        .fetch_optional(&state.project_service.pool)
+        .await?;
     if shared_game.is_some() {
         sqlx::query("DELETE FROM projects WHERE id = ?")
             .bind(project_id)
@@ -67,12 +64,12 @@ pub async fn delete_project_draft(
             "Project already in trash.".to_string(),
         ));
     }
-    let reason = query
-        .reason
-        .unwrap_or_else(|| "user_request".to_string());
+    let reason = query.reason.unwrap_or_else(|| "user_request".to_string());
     let allowed = ["user_request", "dmca", "moderation", "replaced", "other"];
     if !allowed.contains(&reason.as_str()) {
-        return Err(ProjectError::InvalidDemo("Invalid deletion reason.".to_string()));
+        return Err(ProjectError::InvalidDemo(
+            "Invalid deletion reason.".to_string(),
+        ));
     }
     // soft-delete: flag, keep row for 7-day rollback
     sqlx::query(
@@ -103,17 +100,20 @@ pub async fn restore_project(
         project_id,
         &claims,
         ProjectError::InternalError,
-        ProjectError::ProjectNotFound,
-        ProjectError::Forbidden,
+        || ProjectError::ProjectNotFound,
+        || ProjectError::Forbidden,
     )
     .await?;
-    let deleted_at: Option<String> = sqlx::query_scalar("SELECT deleted_at FROM posts WHERE id = ?")
-        .bind(post_id)
-        .fetch_optional(&state.project_service.pool)
-        .await?
-        .ok_or(ProjectError::ProjectNotFound)?;
+    let deleted_at: Option<String> =
+        sqlx::query_scalar("SELECT deleted_at FROM posts WHERE id = ?")
+            .bind(post_id)
+            .fetch_optional(&state.project_service.pool)
+            .await?
+            .ok_or(ProjectError::ProjectNotFound)?;
     if deleted_at.is_none() {
-        return Err(ProjectError::Conflict("Project is not in trash.".to_string()));
+        return Err(ProjectError::Conflict(
+            "Project is not in trash.".to_string(),
+        ));
     }
     sqlx::query(
         "UPDATE posts SET deleted_at = NULL, deletion_reason = NULL, deletion_detail = NULL, deleted_by = NULL, scheduled_purge_at = NULL, prev_status = NULL WHERE id = ?",
@@ -147,4 +147,3 @@ pub async fn purge_project_now(
     let _ = tokio::fs::remove_dir_all(&dir).await;
     Ok(StatusCode::NO_CONTENT)
 }
-

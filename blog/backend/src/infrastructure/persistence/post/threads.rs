@@ -1,18 +1,16 @@
 // Reading a post's comment thread.
-use sqlx::Row;
 
-use crate::application::{
-    commands::post::GetCommentsCommand,
-    services::post::PostService,
-};
+use crate::application::commands::post::GetCommentsCommand;
 use crate::domain::entities::post::{Comment, CommentPage};
 use crate::domain::errors::post::PostError;
 
 use super::PostServiceImpl;
 
-#[async_trait::async_trait]
-impl PostService for PostServiceImpl {
-    async fn get_comments(&self, cmd: GetCommentsCommand) -> Result<CommentPage, PostError> {
+impl PostServiceImpl {
+    pub(super) async fn get_comments(
+        &self,
+        cmd: GetCommentsCommand,
+    ) -> Result<CommentPage, PostError> {
         if let Some(parent_id) = cmd.parent_id {
             let parent_post_id: Option<i64> = sqlx::query_scalar(
                 r#"
@@ -231,5 +229,4 @@ impl PostService for PostServiceImpl {
 
         Ok(CommentPage { comments, has_more })
     }
-
 }

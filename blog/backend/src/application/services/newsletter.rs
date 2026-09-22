@@ -9,7 +9,10 @@ pub trait NewsletterService {
     async fn subscribe(
         &self,
         cmd: commands::newsletter::SubscribeCommand,
-    ) -> Result<entities::newsletter::ConfirmSubscriptionMailPayload, errors::newsletter::NewsletterError>;
+    ) -> Result<
+        entities::newsletter::ConfirmSubscriptionMailPayload,
+        errors::newsletter::NewsletterError,
+    >;
 
     async fn confirm_subscription(
         &self,
@@ -42,6 +45,7 @@ pub trait NewsletterService {
         cmd: commands::newsletter::ListSubscribersCommand,
     ) -> Result<Vec<entities::newsletter::CampaignSnapshot>, errors::newsletter::NewsletterError>;
 
+    #[allow(clippy::too_many_arguments)] // flat call signature; no API shape change
     async fn send_campaign_for_post(
         &self,
         post_id: i64,

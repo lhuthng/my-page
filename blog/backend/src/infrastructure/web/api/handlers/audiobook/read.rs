@@ -15,17 +15,14 @@ use crate::{
         },
         services::audiobook::AudiobookService,
     },
-    domain::{
-        entities::{audiobook::AudiobookTag, secret::Claims},
-        errors::audiobook::AudiobookError,
-    },
+    domain::{entities::secret::Claims, errors::audiobook::AudiobookError},
     infrastructure::web::{
-        api::handlers::audiobook::shared::{caller_id, is_admin, page_window},
         api::handlers::audiobook::dto::{ListQuery, SlugQuery},
         api::handlers::audiobook::response::{
-            AudiobookListResponse, AudiobookSummaryResponse, AudiobookTagsResponse,
+            AudiobookDetailsResponse, AudiobookListResponse, AudiobookTagsResponse,
             SlugAvailabilityResponse,
         },
+        api::handlers::audiobook::shared::{caller_id, is_admin, page_window},
         server::AppState,
     },
 };
@@ -136,5 +133,3 @@ pub async fn get_public_audiobook(
 
     Ok(Json(AudiobookDetailsResponse { audiobook }))
 }
-
-/// Read a multipart text field, mapping transport failures onto our error type.

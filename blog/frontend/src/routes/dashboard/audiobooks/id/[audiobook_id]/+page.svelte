@@ -105,10 +105,15 @@
 		}
 	}
 
-	/** Strip the extension so the file name becomes a usable chapter title. */
+	/**
+	 * Strip the extension so the file name becomes a usable chapter title.
+	 * A leading chapter marker ("Ch.1", "Chapter 2", optional punctuation
+	 * after the number) is dropped: the player already shows "Chapter N of M".
+	 */
 	function titleFromFilename(name) {
 		return name
 			.replace(/\.[^.]+$/, '')
+			.replace(/^\s*(?:ch\.?|chapter)\s*\d+\s*[-–—:._]*\s*/i, '')
 			.replace(/[_-]+/g, ' ')
 			.trim();
 	}

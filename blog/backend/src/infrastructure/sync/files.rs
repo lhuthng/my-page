@@ -1,10 +1,4 @@
 // Artifact key validation and existence checks for the transfer flow.
-use std::str::FromStr;
-
-use sqlx::SqlitePool;
-
-use crate::domain::entities::media::MediaType;
-use crate::infrastructure::storage::ObjectStore;
 
 pub fn is_valid_artifact_key_shape(key: &str) -> bool {
     !key.is_empty()
@@ -42,7 +36,3 @@ pub async fn artifact_key_exists(pool: &sqlx::SqlitePool, key: &str) -> Result<b
     .map_err(|e| e.to_string())?;
     Ok(hits.0 > 0)
 }
-
-// ── Database fix ─────────────────────────────────────────────────────────────
-
-#[derive(Debug, Default, Serialize)]

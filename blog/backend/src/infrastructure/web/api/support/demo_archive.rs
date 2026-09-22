@@ -54,9 +54,7 @@ pub fn strip_common_root(paths: &[PathBuf]) -> Option<String> {
             Some(Component::Normal(part)) => part.to_string_lossy().to_string(),
             _ => return None,
         };
-        if components.next().is_none() {
-            return None;
-        }
+        components.next()?;
         match &first_root {
             Some(root) if root != &first => return None,
             None => first_root = Some(first),
@@ -99,8 +97,8 @@ where
         return Err(invalid_demo("Demo archive is too large.".to_string()));
     }
 
-    let mut archive = ZipArchive::new(Cursor::new(zip_bytes))
-        .map_err(|e| invalid_demo(e.to_string()))?;
+    let mut archive =
+        ZipArchive::new(Cursor::new(zip_bytes)).map_err(|e| invalid_demo(e.to_string()))?;
     if archive.is_empty() {
         return Err(invalid_demo("Demo archive is empty.".to_string()));
     }
@@ -130,7 +128,7 @@ where
         let enclosed = file
             .enclosed_name()
             .ok_or_else(|| invalid_demo("Demo archive contains an unsafe path.".to_string()))?;
-        let normalized = normalized_zip_path(&enclosed)
+        let normalized = normalized_zip_path(enclosed)
             .ok_or_else(|| invalid_demo("Demo archive contains an unsafe path.".to_string()))?;
         paths.push(normalized);
     }
@@ -175,7 +173,7 @@ where
         let enclosed = file
             .enclosed_name()
             .ok_or_else(|| invalid_demo("Demo archive contains an unsafe path.".to_string()))?;
-        let original = normalized_zip_path(&enclosed)
+        let original = normalized_zip_path(enclosed)
             .ok_or_else(|| invalid_demo("Demo archive contains an unsafe path.".to_string()))?;
         let rel = common_root
             .as_ref()
@@ -192,9 +190,7 @@ where
         extracted_size = extracted_size.saturating_add(file.size());
         if extracted_size > config.max_extracted_size {
             fs::remove_dir_all(&tmp_dir).ok();
-            return Err(invalid_demo(
-                "Demo archive expands too large.".to_string(),
-            ));
+            return Err(invalid_demo("Demo archive expands too large.".to_string()));
         }
 
         let out_path = tmp_dir.join(&rel);

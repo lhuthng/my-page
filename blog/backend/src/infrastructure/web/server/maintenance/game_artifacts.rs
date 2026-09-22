@@ -1,7 +1,11 @@
 // Game artifact GC: removes orphaned v86/js-dos objects for a game.
 use crate::infrastructure::storage::ObjectStore;
 
-pub(super) async fn cleanup_game_artifacts(pool: &sqlx::SqlitePool, storage: &ObjectStore, game_id: i64) {
+pub(super) async fn cleanup_game_artifacts(
+    pool: &sqlx::SqlitePool,
+    storage: &ObjectStore,
+    game_id: i64,
+) {
     let rows: Vec<(String,)> = sqlx::query_as(
         r#"SELECT zip_storage_key FROM game_v86_games WHERE game_id = ?
            UNION ALL SELECT iso_storage_key FROM game_v86_games WHERE game_id = ?
@@ -37,13 +41,12 @@ pub(super) async fn cleanup_game_artifacts(pool: &sqlx::SqlitePool, storage: &Ob
         }
     }
 
-    let snapshot_keys: Vec<(String,)> = sqlx::query_as(
-        "SELECT storage_key FROM game_v86_snapshots WHERE game_id = ?",
-    )
-    .bind(game_id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
+    let snapshot_keys: Vec<(String,)> =
+        sqlx::query_as("SELECT storage_key FROM game_v86_snapshots WHERE game_id = ?")
+            .bind(game_id)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
     for (key,) in snapshot_keys {
         let still_used: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM game_v86_snapshots WHERE storage_key = ? AND game_id != ?",
@@ -59,15 +62,13 @@ pub(super) async fn cleanup_game_artifacts(pool: &sqlx::SqlitePool, storage: &Ob
     }
 
     // A js-dos bundle belongs to exactly one game (game_id is its primary key).
-    let jsdos_key: Option<String> = sqlx::query_scalar(
-        "SELECT storage_key FROM game_jsdos_bundles WHERE game_id = ?",
-    )
-    .bind(game_id)
-    .fetch_optional(pool)
-    .await
-    .unwrap_or(None);
+    let jsdos_key: Option<String> =
+        sqlx::query_scalar("SELECT storage_key FROM game_jsdos_bundles WHERE game_id = ?")
+            .bind(game_id)
+            .fetch_optional(pool)
+            .await
+            .unwrap_or(None);
     if let Some(key) = jsdos_key {
         let _ = storage.delete_object(&key).await;
     }
 }
-

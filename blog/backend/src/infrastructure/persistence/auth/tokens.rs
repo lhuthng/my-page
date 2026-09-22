@@ -1,12 +1,25 @@
 // Token plumbing: JWT pairs, verification/reset token generation, hashing,
-and the mail payload builders.
+// and the mail payload builders.
+use base64::{Engine, engine::general_purpose};
+use bcrypt::{DEFAULT_COST, hash};
+use chrono::{Duration, Utc};
+use rand::RngCore;
+use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 
+use crate::application::commands::auth::{ResendVerificationCommand, VerifyEmailCommand};
+use crate::domain::entities::auth::{
+    PasswordResetMailPayload, ResendVerificationResult, VerificationMailPayload,
+};
 use crate::domain::errors::auth::AuthError;
 
-use super::rows::UserRow;
+use super::rows::{UserRow, VerificationRow};
+use super::{
+    AuthServiceImpl, DELIMITER, EMAIL_VERIFICATION_EXPIRY_MINUTES, PASSWORD_RESET_EXPIRY_MINUTES,
+    RESEND_VERIFICATION_COOLDOWN_SECONDS,
+};
 
-async fn generate_token_pair(id: &i64) -> (String, String) {
+pub(crate) async fn generate_token_pair(id: &i64) -> (String, String) {
     let mut token_bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut token_bytes);
     let mut token = hex::encode(token_bytes);
@@ -19,11 +32,11 @@ async fn generate_token_pair(id: &i64) -> (String, String) {
     (token, token_hash)
 }
 
-fn hash_verification_secret(secret: &str) -> String {
+pub(crate) fn hash_verification_secret(secret: &str) -> String {
     hex::encode(Sha256::digest(secret.as_bytes()))
 }
 
-fn generate_verification_token(user_id: i64) -> (String, String) {
+pub(crate) fn generate_verification_token(user_id: i64) -> (String, String) {
     let mut token_bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut token_bytes);
 
@@ -35,7 +48,7 @@ fn generate_verification_token(user_id: i64) -> (String, String) {
     (token, token_hash)
 }
 
-fn decode_verification_token(token: &str) -> Result<(i64, String), AuthError> {
+pub(crate) fn decode_verification_token(token: &str) -> Result<(i64, String), AuthError> {
     let raw = general_purpose::URL_SAFE_NO_PAD
         .decode(token)
         .map_err(|_| AuthError::InvalidToken)?;
@@ -51,7 +64,10 @@ fn decode_verification_token(token: &str) -> Result<(i64, String), AuthError> {
     Ok((user_id, parts[1].to_string()))
 }
 
-async fn upsert_verification_token(pool: &SqlitePool, user_id: i64) -> Result<String, AuthError> {
+pub(crate) async fn upsert_verification_token(
+    pool: &SqlitePool,
+    user_id: i64,
+) -> Result<String, AuthError> {
     let (token, token_hash) = generate_verification_token(user_id);
     let now = Utc::now();
     let expires_at = now + Duration::minutes(EMAIL_VERIFICATION_EXPIRY_MINUTES);
@@ -77,7 +93,10 @@ async fn upsert_verification_token(pool: &SqlitePool, user_id: i64) -> Result<St
     Ok(token)
 }
 
-fn verification_mail_payload(user_row: &UserRow, token: String) -> VerificationMailPayload {
+pub(crate) fn verification_mail_payload(
+    user_row: &UserRow,
+    token: String,
+) -> VerificationMailPayload {
     VerificationMailPayload {
         username: user_row.username.clone(),
         email: user_row.email.clone(),
@@ -85,7 +104,10 @@ fn verification_mail_payload(user_row: &UserRow, token: String) -> VerificationM
     }
 }
 
-fn password_reset_mail_payload(user_row: &UserRow, token: String) -> PasswordResetMailPayload {
+pub(crate) fn password_reset_mail_payload(
+    user_row: &UserRow,
+    token: String,
+) -> PasswordResetMailPayload {
     PasswordResetMailPayload {
         username: user_row.username.clone(),
         email: user_row.email.clone(),
@@ -93,7 +115,10 @@ fn password_reset_mail_payload(user_row: &UserRow, token: String) -> PasswordRes
     }
 }
 
-async fn upsert_password_reset_token(pool: &SqlitePool, user_id: i64) -> Result<String, AuthError> {
+pub(crate) async fn upsert_password_reset_token(
+    pool: &SqlitePool,
+    user_id: i64,
+) -> Result<String, AuthError> {
     let (token, token_hash) = generate_verification_token(user_id);
     let now = Utc::now();
     let expires_at = now + Duration::minutes(PASSWORD_RESET_EXPIRY_MINUTES);
@@ -119,10 +144,8 @@ async fn upsert_password_reset_token(pool: &SqlitePool, user_id: i64) -> Result<
     Ok(token)
 }
 
-
-#[async_trait::async_trait]
-impl AuthService for AuthServiceImpl {
-    async fn verify_email(&self, cmd: VerifyEmailCommand) -> Result<(), AuthError> {
+impl AuthServiceImpl {
+    pub(super) async fn verify_email(&self, cmd: VerifyEmailCommand) -> Result<(), AuthError> {
         let (user_id, secret) = decode_verification_token(&cmd.token)?;
         let verification_row = sqlx::query_as::<_, VerificationRow>(
             r#"
@@ -172,7 +195,7 @@ impl AuthService for AuthServiceImpl {
         Ok(())
     }
 
-    async fn resend_verification(
+    pub(super) async fn resend_verification(
         &self,
         cmd: ResendVerificationCommand,
     ) -> Result<ResendVerificationResult, AuthError> {
@@ -227,5 +250,4 @@ impl AuthService for AuthServiceImpl {
             verification_mail_payload(&user_row, token),
         ))
     }
-
 }

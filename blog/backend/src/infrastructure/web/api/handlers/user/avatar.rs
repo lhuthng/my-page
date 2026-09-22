@@ -2,19 +2,17 @@
 use std::sync::Arc;
 
 use axum::{
-    Extension, Json,
+    Extension,
+    body::Bytes,
     extract::{Multipart, State},
     response::IntoResponse,
 };
 
 use crate::{
-    application::{
-        commands::media::ChangeAvatarCommand,
-        services::media::MediaService,
-    },
+    application::{commands::media::ChangeAvatarCommand, services::media::MediaService},
     domain::{
         entities::{media::MediumDetails, secret::Claims},
-        errors::{media::MediaError, user::UserError},
+        errors::media::MediaError,
     },
     infrastructure::web::{
         api::handlers::support::cover::{MediumData, extract_medium},
@@ -89,4 +87,3 @@ pub async fn change_avatar(
 
     Ok(())
 }
-
