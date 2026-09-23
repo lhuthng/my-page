@@ -73,7 +73,7 @@
 						{owner_display_name || owner_username || 'Unknown'}
 					</a>
 					{#if translator}
-						<span class="text-dark/50">· Translated by {translator}</span>
+						<span class="text-dark/50">· By {translator}</span>
 					{/if}
 				</span>
 			</div>

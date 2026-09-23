@@ -346,7 +346,7 @@
 						<span class="text-sm text-dark/50 font-mono">/{audiobook.slug}</span>
 
 						{#if audiobook.translator}
-							<p class="text-sm text-dark/60">Translated by {audiobook.translator}</p>
+							<p class="text-sm text-dark/60">By {audiobook.translator}</p>
 						{/if}
 
 						<div class="flex items-center gap-2 flex-wrap text-xs text-dark/60">

@@ -80,7 +80,7 @@
 		<div class="flex flex-col gap-2 min-w-0">
 			<div class="flex items-center gap-2 flex-wrap text-base text-dark/60">
 				{#if audiobook.translator}
-					<span>Translated by {audiobook.translator}</span>
+					<span>By {audiobook.translator}</span>
 					<span aria-hidden="true">-</span>
 				{/if}
 				{#if audiobook.owner_display_name || audiobook.owner_username}
