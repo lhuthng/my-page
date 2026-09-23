@@ -61,19 +61,19 @@
 	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
-<article class="bg-white rounded-xl p-4 flex flex-col gap-4">
+<article class="bg-white rounded-xl p-4 mb-2 md:mb-4 flex flex-col gap-4">
 	<BackButton href="/audiobooks" text="Audiobooks" />
 
 	<h1 class="text-3xl md:text-4xl font-bold">
 		{audiobook.title}
 	</h1>
 
-	<div class="flex gap-4 items-start">
+	<div class="flex flex-col md:flex-row gap-4 items-start">
 		{#if audiobook.url}
 			<img
 				src={audiobook.url}
 				alt={`Cover of ${audiobook.title}`}
-				class="w-24 h-24 md:w-40 md:h-40 rounded-xl object-cover shrink-0"
+				class="w-full aspect-[1.91/1] md:w-40 md:h-40 rounded-xl object-cover shrink-0"
 			/>
 		{/if}
 

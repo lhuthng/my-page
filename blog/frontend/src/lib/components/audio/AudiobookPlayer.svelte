@@ -1,5 +1,5 @@
 <script>
-	import { onMount, untrack } from 'svelte';
+	import { onMount, untrack, flushSync } from 'svelte';
 	import { AudiobookPlayer } from '$lib/players/AudiobookPlayer.svelte.js';
 	import { formatClock, percentOf } from '$lib/utils/duration.js';
 
@@ -128,23 +128,60 @@
 		player.seekToRatio(ratioFromPointer(event, event.currentTarget));
 		scrub = null;
 	}
+
+	let sortAsc = $state(true);
+	const displayTracks = $derived(sortAsc ? tracks : [...tracks].reverse());
+
+	// FLIP: measure before the reorder, flush the DOM, then play from old → new.
+	function toggleSort() {
+		const first = playlistEl
+			? new Map(
+					[...playlistEl.children].map((li) => [li.dataset.trackId, li.getBoundingClientRect().top])
+				)
+			: null;
+		sortAsc = !sortAsc;
+		if (!first || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		flushSync();
+		for (const li of playlistEl.children) {
+			const dy = first.get(li.dataset.trackId) - li.getBoundingClientRect().top;
+			if (dy)
+				li.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }], {
+					duration: 300,
+					easing: 'ease'
+				});
+		}
+	}
 </script>
 
-<section class="flex flex-col gap-4 text-dark border-t-2 border-dark/10 pt-4">
+<section
+	class="flex flex-col gap-4 text-dark rounded-2xl border-2 border-dark/20 bg-background/40 p-4"
+>
 	<audio bind:this={audioEl} preload="metadata" class="hidden"></audio>
 
 	{#if tracks.length === 0}
 		<p class="py-8 text-center text-base text-dark/50">This audiobook has no tracks yet.</p>
 	{:else}
-		<!-- Chapter identity -->
-		<p class="text-lg md:text-xl font-bold line-clamp-2">
-			Chapter {current?.number ?? 1} - {current?.title ?? ''}
-		</p>
+		<!-- Cassette label window: chapter title centered between two dots -->
+		<div
+			class="flex items-center gap-2 sm:gap-3 rounded-xl border-2 border-dark/20 bg-white px-2 sm:px-3 py-2"
+		>
+			<span
+				class="w-3 h-3 sm:w-4 sm:h-4 rounded-full border-2 border-dark/40 shrink-0"
+				aria-hidden="true"
+			></span>
+			<p class="grow min-w-0 text-center text-sm sm:text-base md:text-xl font-bold line-clamp-2">
+				Chapter {current?.number ?? 1} - {current?.title ?? ''}
+			</p>
+			<span
+				class="w-3 h-3 sm:w-4 sm:h-4 rounded-full border-2 border-dark/40 shrink-0"
+				aria-hidden="true"
+			></span>
+		</div>
 
 		<!-- Resume offer -->
 		{#if player.resumeOffer}
 			<div
-				class="flex items-center gap-3 bg-accent-yellow-light-4 border border-accent-yellow rounded-lg p-3"
+				class="flex items-center gap-3 bg-white border border-dark/20 rounded-xl p-3 text-sm md:text-base"
 			>
 				<span class="text-base grow">
 					Resume from {formatClock(player.resumeOffer.time)}?
@@ -159,14 +196,14 @@
 		{/if}
 
 		{#if player.interrupted}
-			<p class="text-base text-accent-red">
+			<p class="text-sm md:text-base text-accent-red">
 				Playback was blocked by the browser. Press play to start listening.
 			</p>
 		{/if}
 
 		<!-- Progress -->
-		<div class="flex items-center gap-3">
-			<span class="text-base tabular-nums shrink-0">{formatClock(position)}</span>
+		<div class="flex items-center gap-2 sm:gap-3">
+			<span class="text-sm md:text-base tabular-nums shrink-0">{formatClock(position)}</span>
 			<div
 				class="relative h-6 flex items-center grow cursor-pointer touch-none"
 				onpointerdown={(event) => {
@@ -202,7 +239,7 @@
 					onchange={commitSeek}
 				/>
 			</div>
-			<span class="text-base tabular-nums shrink-0">{formatClock(duration)}</span>
+			<span class="text-sm md:text-base tabular-nums shrink-0">{formatClock(duration)}</span>
 		</div>
 
 		<!-- Transport -->
@@ -256,7 +293,7 @@
 		</div>
 
 		<!-- Secondary controls -->
-		<div class="flex items-center gap-3 flex-wrap justify-center text-base">
+		<div class="flex items-center gap-2 sm:gap-3 flex-wrap justify-center text-sm md:text-base">
 			<div class="flex items-center gap-2">
 				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
 					<button
@@ -390,33 +427,54 @@
 		</div>
 
 		<!-- Playlist -->
-		<div class="flex flex-col gap-2">
-			<div class="flex items-baseline justify-between">
+		<div class="flex flex-col gap-2 border-t border-dark/20 pt-4">
+			<div class="flex items-center justify-between">
 				<h2 class="text-lg font-semibold">Chapters</h2>
-				<span class="text-base text-dark/50">{tracks.length} tracks</span>
+				<div class="flex items-center gap-2">
+					<span class="text-base text-dark/50">{tracks.length} tracks</span>
+					<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
+						<button
+							class="p-1.5!"
+							onclick={toggleSort}
+							aria-label={sortAsc ? 'Sort chapters high to low' : 'Sort chapters low to high'}
+							title={sortAsc ? 'High to low' : 'Low to high'}
+						>
+							<svg
+								class="w-5 h-5 fill-dark transition-transform {sortAsc ? '' : 'rotate-180'}"
+								viewBox="0 0 24 24"
+							>
+								<path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" />
+							</svg>
+						</button>
+					</div>
+				</div>
 			</div>
 
 			<ol
 				bind:this={playlistEl}
 				class="flex flex-col max-h-96 overflow-y-auto custom-scrollbar divide-y divide-background"
 			>
-				{#each tracks as track, index (track.id)}
+				{#each displayTracks as track (track.id)}
+					{@const index = tracks.indexOf(track)}
 					{@const active = isCurrent(track)}
-					<li data-track-index={index}>
+					<li data-track-index={index} data-track-id={track.id}>
 						<button
-							class="w-full flex items-center gap-3 py-2 px-2 text-left rounded-lg {active
-								? 'bg-primary/20'
-								: 'hover:bg-dark/5'}"
+							class="w-full flex items-center gap-3 py-2 px-2 text-left {active
+								? 'bg-white/80'
+								: 'hover:bg-white/60'}"
 							onclick={() => player.load(index, { play: true })}
 							aria-current={active ? 'true' : undefined}
 						>
 							<span class="grow min-w-0 flex flex-col">
+								<!-- Mobile: number on its own line so the title can wrap -->
+								<span class="md:hidden text-sm text-dark/50">Ch.{track.number}</span>
 								<span
-									class="font-['Baloo_2',Roboto,sans-serif] text-base font-medium line-clamp-1 {active
+									class="font-['Baloo_2',Roboto,sans-serif] text-base font-medium line-clamp-2 md:line-clamp-1 {active
 										? ''
 										: 'text-dark/80'}"
 								>
-									Chapter {track.number} - {track.title}
+									<span class="hidden md:inline">Chapter {track.number} -</span>
+									{track.title}
 								</span>
 								{#if player.failures[track.id]}
 									<span class="text-base text-accent-red">{player.failures[track.id]}</span>
