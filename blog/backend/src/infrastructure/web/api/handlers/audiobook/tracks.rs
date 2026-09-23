@@ -12,7 +12,8 @@ use axum::{
 use crate::{
     application::{
         commands::audiobook::{
-            AddTrackCommand, RemoveTrackCommand, ReorderTracksCommand, UpdateTrackCommand,
+            AddTrackCommand, RemoveTrackCommand, ReorderTracksCommand, ReplaceTrackMediumCommand,
+            UpdateTrackCommand,
         },
         services::audiobook::AudiobookService,
     },
@@ -131,6 +132,86 @@ pub async fn update_track(
             duration_seconds: payload.duration_seconds,
         })
         .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn replace_track_medium(
+    State(state): State<Arc<AppState>>,
+    Extension(claims): Extension<Claims>,
+    Path((audiobook_id, track_id)): Path<(i64, i64)>,
+    mut multipart: Multipart,
+) -> Result<StatusCode, AudiobookError> {
+    let mut opt_title: Option<String> = None;
+    let mut opt_duration: Option<i64> = None;
+    let mut opt_filename: Option<String> = None;
+    let mut opt_content_type: Option<String> = None;
+    let mut opt_bytes: Option<Bytes> = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AudiobookError::InternalError(e.to_string()))?
+    {
+        let field_name = field
+            .name()
+            .ok_or(AudiobookError::Media(MediaError::UploadFailed(
+                "Empty field detected.".to_string(),
+            )))?;
+
+        match field_name {
+            "file" => {
+                if opt_filename.is_some() {
+                    return Err(AudiobookError::Media(MediaError::UploadFailed(
+                        "Only one audio file is allowed at a time.".to_string(),
+                    )));
+                }
+                let medium = extract_medium(field).await?;
+                opt_filename = Some(medium.filename);
+                opt_content_type = Some(medium.content_type);
+                opt_bytes = Some(medium.bytes);
+            }
+            "title" => opt_title = Some(read_text(field).await?),
+            "duration_seconds" => {
+                opt_duration = read_text(field).await?.trim().parse::<i64>().ok();
+            }
+            _ => {}
+        }
+    }
+
+    let (filename, content_type, bytes) = match (opt_filename, opt_content_type, opt_bytes) {
+        (Some(filename), Some(content_type), Some(bytes)) => (filename, content_type, bytes),
+        _ => {
+            return Err(AudiobookError::Media(MediaError::UploadFailed(
+                "Missing audio file.".to_string(),
+            )));
+        }
+    };
+
+    // The track keeps its existing title unless the author sent a new one.
+    let title = opt_title
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty());
+
+    state
+        .audiobook_service
+        .replace_track_medium(
+            ReplaceTrackMediumCommand {
+                audiobook_id,
+                track_id,
+                user_id: caller_id(&claims)?,
+                is_admin: is_admin(&claims),
+                title,
+                duration_seconds: opt_duration,
+                medium: MediumDetails {
+                    filename,
+                    content_type,
+                    bytes,
+                },
+            },
+            &state.media_config,
+        )
+        .await?;
+
     Ok(StatusCode::NO_CONTENT)
 }
 

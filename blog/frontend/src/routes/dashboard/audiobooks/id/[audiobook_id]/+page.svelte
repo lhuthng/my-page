@@ -30,25 +30,43 @@
 	let deleting = $state(false);
 	let typedConfirm = $state('');
 
-	let trackDurations = $derived(audiobook?.tracks?.map((t) => t.id).join('-') ?? '');
+	// The player engine snapshots its `tracks` prop once, so the preview has to
+	// remount when the playlist's identity changes — including a track's audio
+	// being replaced, which keeps the id but swaps the media behind it.
+	let playlistKey = $derived(
+		audiobook?.tracks?.map((t) => `${t.id}:${t.short_name}`).join('-') ?? ''
+	);
 
-	async function load() {
-		loading = true;
-		error = '';
+	function seedMeta() {
+		if (!audiobook) return;
+		meta = {
+			title: audiobook.title,
+			slug: audiobook.slug,
+			description: audiobook.description ?? '',
+			translator: audiobook.translator ?? '',
+			tags: (audiobook.tags ?? []).map((tag) => tag.name).join(', ')
+		};
+	}
+
+	/**
+	 * Fetch the server copy. Track mutations pass `silent`, which keeps the
+	 * editor mounted: flipping back to the loading placeholder collapses the
+	 * page and throws the author to the top on every reorder or delete. A
+	 * silent reload also leaves the unsaved metadata draft untouched.
+	 */
+	async function load({ silent = false } = {}) {
+		if (!silent) {
+			loading = true;
+			error = '';
+		}
 		try {
 			const result = await audiobooks.details(audiobookId);
 			audiobook = result.audiobook;
-			meta = {
-				title: audiobook.title,
-				slug: audiobook.slug,
-				description: audiobook.description ?? '',
-				translator: audiobook.translator ?? '',
-				tags: (audiobook.tags ?? []).map((tag) => tag.name).join(', ')
-			};
+			if (!silent) seedMeta();
 		} catch (e) {
 			error = e?.message ?? 'Could not load this audiobook.';
 		} finally {
-			loading = false;
+			if (!silent) loading = false;
 		}
 	}
 
@@ -95,7 +113,7 @@
 			const form = new FormData();
 			form.append('file', file, file.name);
 			await audiobooks.changeCover(audiobookId, form);
-			await load();
+			await load({ silent: true });
 			flash('Cover updated.');
 		} catch (e) {
 			error = e?.message ?? 'Could not upload the cover.';
@@ -151,25 +169,40 @@
 		}
 
 		uploading = false;
-		await load();
+		await load({ silent: true });
 
 		const failed = uploads.filter((u) => u.status === 'failed').length;
 		flash(failed === 0 ? `Added ${list.length} track(s).` : `${failed} track(s) failed.`);
 	}
 
-	async function moveTrack(index, delta) {
-		const target = index + delta;
-		if (!audiobook || target < 0 || target >= audiobook.tracks.length) return;
+	/** Renumber the playlist in place so the editor mirrors the server. */
+	function resequence(tracks) {
+		tracks.forEach((track, index) => (track.number = index + 1));
+	}
 
-		const order = audiobook.tracks.map((track) => track.id);
-		[order[index], order[target]] = [order[target], order[index]];
-
+	/**
+	 * Persist a new track order. The list is already reordered locally, so a
+	 * failure just restores the server's order rather than leaving the UI lying
+	 * about what was saved — and it never blanks the page.
+	 */
+	async function persistOrder(order) {
 		try {
 			await audiobooks.reorderTracks(audiobookId, order);
-			await load();
 		} catch (e) {
 			error = e?.message ?? 'Could not reorder the tracks.';
+			await load({ silent: true });
 		}
+	}
+
+	/** Move the track at `from` so it ends up at index `to`, then persist. */
+	async function moveTrack(from, to) {
+		if (!audiobook || to < 0 || to >= audiobook.tracks.length || to === from) return;
+		const tracks = [...audiobook.tracks];
+		const [moved] = tracks.splice(from, 1);
+		tracks.splice(to, 0, moved);
+		resequence(tracks);
+		audiobook.tracks = tracks;
+		await persistOrder(tracks.map((track) => track.id));
 	}
 
 	async function renameTrack(track, title) {
@@ -178,20 +211,182 @@
 		try {
 			await audiobooks.updateTrack(audiobookId, track.id, { title: next });
 			track.title = next;
-			audiobook = audiobook;
 		} catch (e) {
 			error = e?.message ?? 'Could not rename the track.';
 		}
 	}
 
+	/**
+	 * Remove a track optimistically: the row disappears immediately and the
+	 * numbering closes up, so the list never collapses into a loading state and
+	 * the author keeps their scroll position. A failed request puts it back.
+	 */
 	async function removeTrack(track) {
+		const snapshot = [...audiobook.tracks];
+		const tracks = snapshot.filter((item) => item.id !== track.id);
+		resequence(tracks);
+		audiobook.tracks = tracks;
 		try {
 			await audiobooks.removeTrack(audiobookId, track.id);
-			await load();
 			flash('Track removed.');
 		} catch (e) {
+			resequence(snapshot);
+			audiobook.tracks = snapshot;
 			error = e?.message ?? 'Could not remove the track.';
 		}
+	}
+
+	/** Swap a track's audio file, keeping its title and playlist position. */
+	async function replaceTrack(track, file) {
+		if (!file) return;
+		replacingId = track.id;
+		error = '';
+		try {
+			// The server has no audio decoder, so the new length is probed here.
+			const duration = await probeAudioDuration(file);
+			const form = new FormData();
+			form.append('file', file, file.name);
+			if (duration) form.append('duration_seconds', String(duration));
+			await audiobooks.replaceTrack(audiobookId, track.id, form);
+			await load({ silent: true });
+			flash(`Replaced the audio for “${track.title}”.`);
+		} catch (e) {
+			error = e?.message ?? 'Could not replace the track audio.';
+		} finally {
+			replacingId = null;
+		}
+	}
+
+	// ----- Drag to reorder ---------------------------------------------------
+	// Reordering is driven by pointer events rather than native HTML5 drag and
+	// drop: the same code works for mouse, pen and touch, and it does not fight
+	// the text input that lives inside each row.
+	/** Index of the row being dragged, or `null` when idle. */
+	let dragIndex = $state(null);
+	/** Index the dragged row will land on once dropped. */
+	let dropIndex = $state(null);
+	/** Row the drop line sits above; `null` means "after the last row". */
+	let dropAnchorId = $state(null);
+	/** Pointer travel since the drag started, used to follow the cursor. */
+	let dragOffset = $state(0);
+	/** True once the pointer has moved far enough to count as a drag. */
+	let dragActive = $state(false);
+	let dragRows = [];
+	let dragStartY = 0;
+	let dragRowTop = 0;
+	let dragRowHeight = 0;
+	/** Track id under a dragged file, so its row can highlight as a drop target. */
+	let fileOverId = $state(null);
+	/** True while audio files hover the chapters panel. */
+	let fileDragActive = $state(false);
+	/** Track id whose audio is currently being swapped. */
+	let replacingId = $state(null);
+
+	function onRowPointerDown(event, index) {
+		if (event.button !== 0) return;
+		// Controls inside the row keep their own behaviour.
+		if (event.target.closest('input, button, label, a, select, textarea')) return;
+		// Touch has no hover affordance and dragging the row body would fight
+		// page scrolling, so on touch only the grip starts a drag.
+		if (event.pointerType !== 'mouse' && !event.target.closest('[data-drag-handle]')) return;
+
+		const list = event.currentTarget.closest('ol');
+		if (!list) return;
+
+		dragRows = [...list.querySelectorAll('li[data-track-row]')];
+		const rect = event.currentTarget.getBoundingClientRect();
+		dragIndex = index;
+		dropIndex = index;
+		dropAnchorId = null;
+		dragOffset = 0;
+		dragActive = false;
+		dragStartY = event.clientY;
+		// The row moves by transform, so its resting geometry is captured once.
+		dragRowTop = rect.top;
+		dragRowHeight = rect.height;
+		event.preventDefault();
+		event.currentTarget.setPointerCapture(event.pointerId);
+	}
+
+	function onRowPointerMove(event) {
+		if (dragIndex === null) return;
+		dragOffset = event.clientY - dragStartY;
+		if (!dragActive && Math.abs(dragOffset) < 4) return;
+		dragActive = true;
+
+		// Count the rows whose midpoint sits above the dragged row's centre:
+		// that count is exactly where it lands once removed and re-inserted.
+		const centre = dragRowTop + dragOffset + dragRowHeight / 2;
+		let slot = 0;
+		for (let i = 0; i < dragRows.length; i++) {
+			if (i === dragIndex) continue;
+			const rect = dragRows[i].getBoundingClientRect();
+			if (centre > rect.top + rect.height / 2) slot += 1;
+		}
+		dropIndex = slot;
+
+		// The drop line goes above whichever row will follow the dragged one.
+		const anchor = dragRows.filter((_, i) => i !== dragIndex)[slot] ?? null;
+		dropAnchorId = anchor ? Number(anchor.dataset.trackId) : null;
+	}
+
+	function onRowPointerUp(event) {
+		if (dragIndex === null) return;
+		const from = dragIndex;
+		const to = dropIndex;
+		const moved = dragActive;
+		if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+		dragIndex = null;
+		dropIndex = null;
+		dropAnchorId = null;
+		dragOffset = 0;
+		dragActive = false;
+		if (moved && to !== null && to !== from) moveTrack(from, to);
+	}
+
+	/** File drags are the only native drags left; `dataTransfer` marks them. */
+	function isFileDrag(event) {
+		const types = event.dataTransfer?.types;
+		return types ? Array.from(types).includes('Files') : false;
+	}
+
+	function onRowFileDragOver(event, track) {
+		if (!isFileDrag(event)) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'copy';
+		fileOverId = track.id;
+	}
+
+	function onRowFileDrop(event, track) {
+		if (!isFileDrag(event)) return;
+		// A file dropped on a row replaces its audio; stop it from bubbling to
+		// the panel handler, which would append it as a new chapter instead.
+		event.preventDefault();
+		event.stopPropagation();
+		fileOverId = null;
+		fileDragActive = false;
+		const file = event.dataTransfer.files?.[0];
+		if (file) replaceTrack(track, file);
+	}
+
+	function onTracksDragEnter(event) {
+		if (isFileDrag(event)) fileDragActive = true;
+	}
+
+	function onTracksDragLeave(event) {
+		if (event.currentTarget.contains(event.relatedTarget)) return;
+		fileDragActive = false;
+		fileOverId = null;
+	}
+
+	function onTracksDrop(event) {
+		if (!isFileDrag(event)) return;
+		event.preventDefault();
+		fileDragActive = false;
+		fileOverId = null;
+		uploadTracks(event.dataTransfer.files);
 	}
 
 	async function setStatus(status) {
@@ -280,11 +475,35 @@
 		</div>
 	</div>
 
-	{#if error}
-		<p class="bg-white rounded-xl p-4 text-accent-red">{error}</p>
-	{/if}
-	{#if notice}
-		<p class="bg-white rounded-xl p-4 text-accent-green-dark">{notice}</p>
+	<!-- Status toasts float above the page: a save/delete/error message must not
+	     push the editor content down and shift the author's view. -->
+	{#if error || notice}
+		<div
+			class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-[min(24rem,calc(100vw-2rem))]"
+			aria-live="polite"
+		>
+			{#if error}
+				<div
+					class="flex items-start gap-2 rounded-xl bg-white border-l-4 border-accent-red shadow-xl px-4 py-3 text-accent-red"
+				>
+					<span class="grow min-w-0">{error}</span>
+					<button
+						class="shrink-0 text-lg leading-none"
+						onclick={() => (error = '')}
+						aria-label="Dismiss error"
+					>
+						×
+					</button>
+				</div>
+			{/if}
+			{#if notice}
+				<p
+					class="rounded-xl bg-white border-l-4 border-accent-green shadow-xl px-4 py-3 text-accent-green-dark"
+				>
+					{notice}
+				</p>
+			{/if}
+		</div>
 	{/if}
 
 	{#if loading}
@@ -379,8 +598,21 @@
 			</div>
 		</form>
 
-		<!-- Tracks -->
-		<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
+		<!-- Tracks: drop audio anywhere here to add chapters, or on a row to replace -->
+		<div
+			class="bg-white rounded-xl p-4 flex flex-col gap-3 {fileDragActive
+				? 'outline-2 outline-dashed outline-primary outline-offset-2'
+				: ''}"
+			ondragenter={onTracksDragEnter}
+			ondragover={(event) => {
+				if (isFileDrag(event)) {
+					event.preventDefault();
+					event.dataTransfer.dropEffect = 'copy';
+				}
+			}}
+			ondragleave={onTracksDragLeave}
+			ondrop={onTracksDrop}
+		>
 			<div class="flex items-center justify-between gap-2 flex-wrap">
 				<h2 class="font-semibold">Chapters</h2>
 				<label
@@ -402,6 +634,11 @@
 					/>
 				</label>
 			</div>
+
+			<p class="text-xs text-dark/40">
+				Drag files in here to add chapters, or drop a file on a row to replace its audio. Drag any
+				row — or its grip — up and down to reorder.
+			</p>
 
 			{#if uploads.length}
 				<ul class="flex flex-col gap-1 text-sm">
@@ -430,55 +667,120 @@
 
 			{#if audiobook.tracks.length === 0}
 				<p class="py-6 text-center text-dark/40">
-					No chapters yet. Upload MP3, OGG, or WAV files to build the playlist.
+					No chapters yet. Upload MP3, OGG, or WAV files to build the playlist — or drag them right
+					here.
 				</p>
 			{:else}
-				<ol class="flex flex-col divide-y divide-background">
+				<ol class="flex flex-col">
 					{#each audiobook.tracks as track, index (track.id)}
-						<li class="flex items-center gap-2 py-2" in:fly={{ y: -6, duration: 150 }}>
-							<span class="w-6 text-right text-sm text-dark/40 shrink-0">{track.number}</span>
+						{#if dragActive && dropAnchorId === track.id}
+							<li class="h-1 my-1 rounded-full bg-primary" aria-hidden="true"></li>
+						{/if}
+						<li
+							data-track-row
+							data-track-id={track.id}
+							class="border-b border-background last:border-b-0 {fileOverId === track.id
+								? 'bg-primary/15 rounded-lg'
+								: ''}"
+							in:fly={{ y: -6, duration: 150 }}
+							ondragover={(event) => onRowFileDragOver(event, track)}
+							ondrop={(event) => onRowFileDrop(event, track)}
+						>
+							<div
+								class="flex items-center gap-2 py-2 {dragActive && dragIndex === index
+									? 'relative z-10 opacity-70 bg-white rounded-lg shadow-lg'
+									: ''}"
+								style={dragActive && dragIndex === index
+									? `transform: translateY(${dragOffset}px)`
+									: ''}
+								onpointerdown={(event) => onRowPointerDown(event, index)}
+								onpointermove={onRowPointerMove}
+								onpointerup={onRowPointerUp}
+								onpointercancel={onRowPointerUp}
+							>
+								<span
+									data-drag-handle
+									class="cursor-grab active:cursor-grabbing touch-none text-dark/40 hover:text-dark p-1 shrink-0"
+									title="Drag to reorder"
+									aria-hidden="true"
+								>
+									<svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
+										<circle cx="9" cy="6" r="1.6" />
+										<circle cx="15" cy="6" r="1.6" />
+										<circle cx="9" cy="12" r="1.6" />
+										<circle cx="15" cy="12" r="1.6" />
+										<circle cx="9" cy="18" r="1.6" />
+										<circle cx="15" cy="18" r="1.6" />
+									</svg>
+								</span>
 
-							<div class="flex flex-col shrink-0">
-								<button
-									class="text-dark/40 hover:text-dark disabled:opacity-20 leading-none"
-									disabled={index === 0}
-									onclick={() => moveTrack(index, -1)}
-									aria-label="Move {track.title} up"
-									title="Move up"
+								<span class="w-6 text-right text-sm text-dark/40 shrink-0">{track.number}</span>
+
+								<div class="flex flex-col shrink-0">
+									<button
+										class="text-dark/40 hover:text-dark disabled:opacity-20 leading-none"
+										disabled={index === 0}
+										onclick={() => moveTrack(index, index - 1)}
+										aria-label="Move {track.title} up"
+										title="Move up"
+									>
+										▲
+									</button>
+									<button
+										class="text-dark/40 hover:text-dark disabled:opacity-20 leading-none"
+										disabled={index === audiobook.tracks.length - 1}
+										onclick={() => moveTrack(index, index + 1)}
+										aria-label="Move {track.title} down"
+										title="Move down"
+									>
+										▼
+									</button>
+								</div>
+
+								<input
+									class="grow min-w-0 rounded-lg border-2 border-transparent hover:border-dark/10 focus:border-dark px-2 py-1 text-sm bg-transparent"
+									type="text"
+									value={track.title}
+									aria-label="Chapter title"
+									onchange={(event) => renameTrack(track, event.currentTarget.value)}
+								/>
+
+								<span class="text-xs text-dark/50 tabular-nums shrink-0 w-14 text-right">
+									{formatClock(track.duration_seconds)}
+								</span>
+
+								<label
+									class="text-sm text-dark/60 hover:text-dark shrink-0 cursor-pointer {replacingId !==
+									null
+										? 'opacity-50 pointer-events-none'
+										: ''}"
 								>
-									▲
-								</button>
+									{replacingId === track.id ? 'Replacing…' : 'Replace'}
+									<input
+										class="hidden"
+										type="file"
+										accept="audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/x-wav,.mp3,.ogg,.wav"
+										disabled={replacingId !== null}
+										onchange={(event) => {
+											const file = event.currentTarget.files?.[0];
+											event.currentTarget.value = '';
+											replaceTrack(track, file);
+										}}
+									/>
+								</label>
+
 								<button
-									class="text-dark/40 hover:text-dark disabled:opacity-20 leading-none"
-									disabled={index === audiobook.tracks.length - 1}
-									onclick={() => moveTrack(index, 1)}
-									aria-label="Move {track.title} down"
-									title="Move down"
+									class="text-accent-red text-sm hover:underline shrink-0"
+									onclick={() => removeTrack(track)}
 								>
-									▼
+									Remove
 								</button>
 							</div>
-
-							<input
-								class="grow min-w-0 rounded-lg border-2 border-transparent hover:border-dark/10 focus:border-dark px-2 py-1 text-sm bg-transparent"
-								type="text"
-								value={track.title}
-								aria-label="Chapter title"
-								onchange={(event) => renameTrack(track, event.currentTarget.value)}
-							/>
-
-							<span class="text-xs text-dark/50 tabular-nums shrink-0 w-14 text-right">
-								{formatClock(track.duration_seconds)}
-							</span>
-
-							<button
-								class="text-accent-red text-sm hover:underline shrink-0"
-								onclick={() => removeTrack(track)}
-							>
-								Remove
-							</button>
 						</li>
 					{/each}
+					{#if dragActive && dragIndex !== null && dropAnchorId === null}
+						<li class="h-1 my-1 rounded-full bg-primary" aria-hidden="true"></li>
+					{/if}
 				</ol>
 			{/if}
 		</div>
@@ -499,13 +801,14 @@
 			</p>
 
 			{#if showPreview}
-				{#key trackDurations}
+				{#key playlistKey}
 					<AudiobookPlayer
 						tracks={audiobook.tracks}
 						title={audiobook.title}
 						translator={audiobook.translator ?? ''}
 						coverUrl={audiobook.url}
 						storageKey={`preview:${audiobook.slug}`}
+						persistent={false}
 					/>
 				{/key}
 			{/if}

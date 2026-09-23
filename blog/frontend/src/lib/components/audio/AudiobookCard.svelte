@@ -13,9 +13,7 @@
 		track_count,
 		tags = [],
 		tag_slugs = [],
-		status,
-		owner_display_name,
-		owner_username
+		status
 	} = $derived(audiobook);
 
 	let expanded = $state(false);
@@ -49,6 +47,7 @@
 					>
 						<Book class="inline-block h-6 w-6" />
 						{track_count}
+						{track_count === 1 ? 'chapter' : 'chapters'}
 					</span>
 				{:else}
 					<span>...</span>
@@ -64,19 +63,11 @@
 					{/if}
 				</h1>
 			</a>
-			<div class="flex text-sm sm:text-md pr-4">
-				<span class="select-none pointer-events-auto">
-					by <a
-						class="select-text text-dark!"
-						href={owner_username ? `/profiles/${owner_username}` : undefined}
-					>
-						{owner_display_name || owner_username || 'Unknown'}
-					</a>
-					{#if translator}
-						<span class="text-dark/50">· By {translator}</span>
-					{/if}
-				</span>
-			</div>
+			{#if translator}
+				<div class="flex pr-4 text-sm sm:text-md">
+					<span class="select-none">By {translator}</span>
+				</div>
+			{/if}
 			<div class="flex text-sm sm:text-md gap-1 grow shrink mb-2">
 				{#if tags?.length > 0}
 					<span class="text-dark/50">tags:</span>

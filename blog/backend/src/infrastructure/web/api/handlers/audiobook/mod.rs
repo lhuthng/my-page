@@ -21,7 +21,7 @@ pub use response::{
     AudiobookSummaryResponse, AudiobookTagsResponse, SlugAvailabilityResponse,
     TrackCreatedResponse,
 };
-pub use tracks::{add_track, remove_track, reorder_tracks, update_track};
+pub use tracks::{add_track, remove_track, reorder_tracks, replace_track_medium, update_track};
 pub use write::{change_cover, change_status, delete_audiobook, new_audiobook, update_audiobook};
 
 // ---------------------------------------------------------------------------
@@ -54,6 +54,12 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/id/{audiobook_id}/tracks/order", put(reorder_tracks))
         .route("/id/{audiobook_id}/tracks/{track_id}", patch(update_track))
         .route("/id/{audiobook_id}/tracks/{track_id}", delete(remove_track))
+        // Replacing the audio is a multipart PUT so the file and its metadata
+        // travel together, unlike the JSON metadata PATCH above.
+        .route(
+            "/id/{audiobook_id}/tracks/{track_id}/audio",
+            put(replace_track_medium),
+        )
         .layer(middleware::from_fn(middlewares::auth::mod_check))
         .layer(middleware::from_fn_with_state(
             state.clone(),

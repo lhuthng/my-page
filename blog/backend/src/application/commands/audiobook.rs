@@ -91,6 +91,19 @@ pub struct UpdateTrackCommand {
     pub duration_seconds: Option<i64>,
 }
 
+/// Swap a track's audio for a freshly uploaded file, keeping its position in
+/// the playlist. Metadata that is not supplied is left untouched.
+pub struct ReplaceTrackMediumCommand {
+    pub audiobook_id: i64,
+    pub track_id: i64,
+    pub user_id: i64,
+    pub is_admin: bool,
+    /// `Some(_)` renames the track; `None` keeps the current title.
+    pub title: Option<String>,
+    pub duration_seconds: Option<i64>,
+    pub medium: MediumDetails,
+}
+
 pub struct RemoveTrackCommand {
     pub audiobook_id: i64,
     pub track_id: i64,

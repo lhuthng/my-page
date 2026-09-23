@@ -65,6 +65,10 @@ export const audiobooks = {
 	updateTrack: (audiobookId, trackId, payload) =>
 		api.patch(`audiobooks/id/${audiobookId}/tracks/${trackId}`, { body: payload }),
 
+	/** Replace a track's audio in place (multipart: file, optional title/duration). */
+	replaceTrack: (audiobookId, trackId, formData) =>
+		api.put(`audiobooks/id/${audiobookId}/tracks/${trackId}/audio`, { body: formData }),
+
 	removeTrack: (audiobookId, trackId) =>
 		api.delete(`audiobooks/id/${audiobookId}/tracks/${trackId}`),
 

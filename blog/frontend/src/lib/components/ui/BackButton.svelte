@@ -3,7 +3,7 @@
 </script>
 
 <a
-	class="inline-flex self-start gap-1 font-semibold bg-primary rounded-lg py-1 pl-1 pr-2 text-white"
+	class="inline-flex self-start gap-1 rounded-lg bg-dark py-1 pr-2 pl-1 font-semibold text-white transition-colors duration-150 hover:bg-primary"
 	{href}
 >
 	<svg class="inline h-6 stroke-2" viewBox="10 6 12 20">

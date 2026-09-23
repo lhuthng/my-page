@@ -10,6 +10,7 @@
 	import { el } from '$lib/dom/elements.svelte.js';
 	import { fade } from 'svelte/transition';
 	import ToTop from '$lib/components/shell/ToTop.svelte';
+	import MiniAudiobookPlayer from '$lib/components/audio/MiniAudiobookPlayer.svelte';
 	import { win } from '$lib/dom/windows.svelte.js';
 	import { canonicalUrl, SITE_NAME, SITE_ORIGIN } from '$lib/config/site.js';
 	import { innerWidth } from 'svelte/reactivity/window';
@@ -97,6 +98,8 @@
 			</div>
 		</div>
 		<ToTop {scrollTarget} />
+		<!-- Keeps a playing audiobook reachable on every page. -->
+		<MiniAudiobookPlayer />
 	</main>
 	<Footer />
 </div>

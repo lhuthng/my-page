@@ -61,7 +61,7 @@
 	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
-<article class="bg-white rounded-xl p-4 mb-2 md:mb-4 flex flex-col gap-4">
+<article class="flex flex-col gap-4 rounded-xl border border-dark/15 bg-white p-4 mb-2 md:mb-4">
 	<BackButton href="/audiobooks" text="Audiobooks" />
 
 	<h1 class="text-3xl md:text-4xl font-bold">
@@ -84,6 +84,7 @@
 					<span aria-hidden="true">-</span>
 				{/if}
 				{#if audiobook.owner_display_name || audiobook.owner_username}
+					<span>Uploaded by</span>
 					<a href="/profiles/{audiobook.owner_username}" class="text-dark/70">
 						{audiobook.owner_display_name || audiobook.owner_username}
 					</a>
@@ -96,17 +97,13 @@
 				{/if}
 			</div>
 
-			{#if audiobook.description}
-				<p class="text-base text-dark/80 whitespace-pre-line">{audiobook.description}</p>
-			{/if}
-
 			{#if audiobook.tags?.length}
 				<ul class="flex flex-wrap gap-1">
 					{#each audiobook.tags as tag (tag.id)}
 						<li>
 							<a
 								href="/audiobooks?tag={tag.slug}"
-								class="text-base bg-primary/20 px-2 py-0.5 rounded-full no-underline! text-dark hover:bg-primary/40"
+								class="rounded-full border border-dark/15 bg-dark/5 px-2 py-0.5 text-base text-dark no-underline! hover:bg-dark/10"
 							>
 								{tag.name}
 							</a>
@@ -117,6 +114,17 @@
 		</div>
 	</div>
 
+	{#if audiobook.description}
+		<section class="rounded-xl border border-dark/15 bg-dark/5 px-4 py-3 sm:px-5 sm:py-4">
+			<h2 class="mb-2 text-sm font-semibold tracking-wide text-dark/50 uppercase">
+				About this audiobook
+			</h2>
+			<p class="max-w-3xl text-base leading-7 whitespace-pre-line text-dark/75">
+				{audiobook.description}
+			</p>
+		</section>
+	{/if}
+
 	<AudiobookPlayer
 		tracks={audiobook.tracks}
 		title={audiobook.title}
@@ -124,5 +132,6 @@
 		translator={audiobook.translator ?? ''}
 		coverUrl={audiobook.url}
 		storageKey={audiobook.slug}
+		slug={audiobook.slug}
 	/>
 </article>

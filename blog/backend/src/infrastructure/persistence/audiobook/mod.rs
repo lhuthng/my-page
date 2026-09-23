@@ -102,6 +102,13 @@ impl AudiobookService for AudiobookServiceImpl {
     ) -> Result<(), errors::audiobook::AudiobookError> {
         self.update_track(cmd).await
     }
+    async fn replace_track_medium(
+        &self,
+        cmd: commands::audiobook::ReplaceTrackMediumCommand,
+        config: &MediaConfig,
+    ) -> Result<(), errors::audiobook::AudiobookError> {
+        self.replace_track_medium(cmd, config).await
+    }
     async fn remove_track(
         &self,
         cmd: commands::audiobook::RemoveTrackCommand,
