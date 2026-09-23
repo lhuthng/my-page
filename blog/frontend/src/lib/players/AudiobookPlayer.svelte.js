@@ -126,7 +126,7 @@ export class AudiobookPlayer {
 		this.#handlers = handlers;
 
 		this.#restore();
-		this.#setupMediaSession();
+		this.setupMediaSession();
 
 		window.addEventListener('pagehide', this.#onPageHide);
 		document.addEventListener('visibilitychange', this.#onPageHide);
@@ -543,7 +543,14 @@ export class AudiobookPlayer {
 	// OS media integration
 	// -----------------------------------------------------------------------
 
-	#setupMediaSession() {
+	/**
+	 * Install the OS media-session handlers for this engine.
+	 *
+	 * Public because the handlers are global per document: when another engine
+	 * attaches (the reader opened a second audiobook without playing it), the
+	 * one that is actually playing has to re-claim them.
+	 */
+	setupMediaSession() {
 		if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
 
 		const session = navigator.mediaSession;

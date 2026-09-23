@@ -2,6 +2,7 @@
 	import { fly } from 'svelte/transition';
 	import { elasticInOut, elasticOut } from 'svelte/easing';
 	import { scrollY } from 'svelte/reactivity/window';
+	import { audiobookSession } from '$lib/players/AudiobookSession.svelte.js';
 	let { scrollTarget } = $props();
 	const threshold = 300;
 	let visible = $derived(scrollY.current > threshold);
@@ -12,7 +13,9 @@
 		in:fly={{ y: 20, duration: 200, easing: elasticOut }}
 		out:fly={{ y: 20, duration: 200, easing: elasticInOut }}
 		onclick={() => scrollTarget?.scrollIntoView({ behavior: 'smooth' })}
-		class="fixed z-50 bottom-10 right-10 w-10 h-10 rounded-full bg-white shadow-dark shadow-sm font-bold"
+		class="fixed z-50 right-10 w-10 h-10 rounded-full bg-white shadow-dark shadow-sm font-bold transition-[bottom] duration-200 ease-out motion-reduce:transition-none {audiobookSession.miniVisible
+			? 'bottom-24'
+			: 'bottom-10'}"
 		title="To top"
 	>
 		<svg class="full fill-dark p-1" viewBox="0 0 24 24">

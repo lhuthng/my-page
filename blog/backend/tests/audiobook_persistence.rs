@@ -13,7 +13,8 @@ use backend::{
             AddTrackCommand, ChangeAudiobookStatusCommand, CheckAudiobookSlugCommand,
             DeleteAudiobookCommand, GetAudiobookCommand, GetAudiobooksCommand,
             GetPublicAudiobookCommand, GetPublicAudiobooksCommand, NewAudiobookCommand,
-            RemoveTrackCommand, ReorderTracksCommand, UpdateAudiobookCommand, UpdateTrackCommand,
+            RemoveTrackCommand, ReorderTracksCommand, ReplaceTrackMediumCommand,
+            UpdateAudiobookCommand, UpdateTrackCommand,
         },
         services::audiobook::AudiobookService,
     },
@@ -355,6 +356,134 @@ async fn moving_a_track_up_and_down_shifts_the_others() {
             ("C".to_string(), 3),
         ]
     );
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn replacing_a_track_swaps_its_audio_without_moving_it() {
+    let fx = fixture("replace").await;
+    let book = fx.create("replace-book", &[]).await;
+    let first = fx.add_track(book, "One", 1, None).await;
+    let _second = fx.add_track(book, "Two", 2, None).await;
+
+    let before = fx
+        .service
+        .get_audiobook(GetAudiobookCommand {
+            audiobook_id: book,
+            user_id: 1,
+            is_admin: false,
+        })
+        .await
+        .unwrap();
+    let old_short_name = before
+        .tracks
+        .iter()
+        .find(|t| t.id == first)
+        .unwrap()
+        .short_name
+        .clone();
+
+    fx.service
+        .replace_track_medium(
+            ReplaceTrackMediumCommand {
+                audiobook_id: book,
+                track_id: first,
+                user_id: 1,
+                is_admin: false,
+                title: Some("One (remastered)".to_string()),
+                duration_seconds: Some(300),
+                medium: audio("one-take-two.mp3", 33),
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap();
+
+    let after = fx
+        .service
+        .get_audiobook(GetAudiobookCommand {
+            audiobook_id: book,
+            user_id: 1,
+            is_admin: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(after.tracks.len(), 2);
+    let track = after.tracks.iter().find(|t| t.id == first).unwrap();
+    assert_eq!(track.number, 1, "replacement must not move the track");
+    assert_eq!(track.title, "One (remastered)");
+    assert_eq!(track.duration_seconds, Some(300));
+    assert_ne!(
+        track.short_name, old_short_name,
+        "the track must point at the new file"
+    );
+    assert_eq!(after.tracks[1].title, "Two", "other tracks are untouched");
+
+    // A non-audio payload is refused and leaves the current audio in place.
+    let err = fx
+        .service
+        .replace_track_medium(
+            ReplaceTrackMediumCommand {
+                audiobook_id: book,
+                track_id: first,
+                user_id: 1,
+                is_admin: false,
+                title: None,
+                duration_seconds: None,
+                medium: MediumDetails {
+                    filename: "cover.png".to_string(),
+                    content_type: "image/png".to_string(),
+                    bytes: Bytes::from_static(b"not-audio"),
+                },
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AudiobookError::Media(_)), "got {err:?}");
+
+    let unchanged = fx
+        .service
+        .get_audiobook(GetAudiobookCommand {
+            audiobook_id: book,
+            user_id: 1,
+            is_admin: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        unchanged
+            .tracks
+            .iter()
+            .find(|t| t.id == first)
+            .unwrap()
+            .short_name,
+        track.short_name,
+        "a rejected replacement must not touch the track"
+    );
+
+    // Another user may not replace audio on someone else's book.
+    let err = fx
+        .service
+        .replace_track_medium(
+            ReplaceTrackMediumCommand {
+                audiobook_id: book,
+                track_id: first,
+                user_id: 2,
+                is_admin: false,
+                title: None,
+                duration_seconds: None,
+                medium: audio("hijack.mp3", 44),
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, AudiobookError::PermissionDenied),
+        "got {err:?}"
+    );
+
     fx.cleanup().await;
 }
 

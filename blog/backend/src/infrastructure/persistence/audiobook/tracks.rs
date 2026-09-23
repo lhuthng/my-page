@@ -5,7 +5,8 @@ use sqlx::{Sqlite, Transaction};
 use tokio::fs;
 
 use crate::application::commands::audiobook::{
-    AddTrackCommand, RemoveTrackCommand, ReorderTracksCommand, UpdateTrackCommand,
+    AddTrackCommand, RemoveTrackCommand, ReorderTracksCommand, ReplaceTrackMediumCommand,
+    UpdateTrackCommand,
 };
 use crate::domain::entities::audiobook::AudiobookTrack;
 use crate::domain::entities::media::MediaType;
@@ -268,6 +269,99 @@ impl AudiobookServiceImpl {
 
             Self::resequence_tracks(&mut tx, cmd.audiobook_id).await?;
         }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// Point an existing track at a newly uploaded audio file.
+    ///
+    /// The old media row and its file are deliberately left in place: media is
+    /// content-addressed and may be shared with other tracks or owned by the
+    /// media manager, so deleting it here could pull the rug out from under a
+    /// still-playable chapter (the same rule the cover swap follows).
+    pub(super) async fn replace_track_medium(
+        &self,
+        cmd: ReplaceTrackMediumCommand,
+        config: &MediaConfig,
+    ) -> Result<(), AudiobookError> {
+        let media_type = MediaType::from_upload(&cmd.medium.content_type, &cmd.medium.filename)?;
+        if !self
+            .is_audio_supported(media_type.get_content_type(), config)
+            .await?
+        {
+            return Err(AudiobookError::Media(MediaError::InvalidFileType));
+        }
+
+        let title = match cmd.title.as_deref() {
+            Some(raw) => Some(
+                crate::helper::string::validate_text(raw, "Track title", MAX_TRACK_TITLE_CHARS)
+                    .map_err(AudiobookError::Validation)?,
+            ),
+            None => None,
+        };
+
+        let mut tx = self.pool.begin().await?;
+        Self::assert_owned(&mut tx, cmd.audiobook_id, cmd.user_id, cmd.is_admin).await?;
+
+        let exists: Option<(i64,)> =
+            sqlx::query_as("SELECT id FROM audiobook_tracks WHERE id = ? AND audiobook_id = ?")
+                .bind(cmd.track_id)
+                .bind(cmd.audiobook_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        if exists.is_none() {
+            return Err(AudiobookError::NotFound);
+        }
+
+        let mut created_path: Option<PathBuf> = None;
+        let media_id = match Self::store_medium(
+            &mut tx,
+            cmd.user_id,
+            config,
+            &cmd.medium,
+            media_type,
+            format!("abt-{}", cmd.audiobook_id),
+            &mut created_path,
+        )
+        .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                if let Some(path) = created_path {
+                    let _ = fs::remove_file(path).await;
+                }
+                return Err(e);
+            }
+        };
+
+        sqlx::query("UPDATE audiobook_tracks SET media_id = ? WHERE id = ? AND audiobook_id = ?")
+            .bind(media_id)
+            .bind(cmd.track_id)
+            .bind(cmd.audiobook_id)
+            .execute(&mut *tx)
+            .await?;
+
+        if let Some(duration) = cmd.duration_seconds {
+            sqlx::query("UPDATE audiobook_tracks SET duration_seconds = ? WHERE id = ?")
+                .bind(duration.max(0))
+                .bind(cmd.track_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        if let Some(title) = title {
+            sqlx::query("UPDATE audiobook_tracks SET title = ? WHERE id = ?")
+                .bind(title)
+                .bind(cmd.track_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        sqlx::query("UPDATE audiobooks SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .bind(cmd.audiobook_id)
+            .execute(&mut *tx)
+            .await?;
 
         tx.commit().await?;
         Ok(())
