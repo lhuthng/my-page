@@ -253,7 +253,7 @@
 	}
 </script>
 
-<section class="flex flex-col gap-4 rounded-2xl border-2 border-dark/20 bg-white p-4 text-dark">
+<section class="flex flex-col gap-4 rounded-xl bg-white p-4 text-dark">
 	{#if !persistent}
 		<audio bind:this={audioEl} preload="metadata" class="hidden"></audio>
 	{/if}
@@ -281,11 +281,13 @@
 
 		<!-- Cassette label window: a flat paper label with two reels. -->
 		<div
-			class="flex items-center gap-2 sm:gap-3 rounded-xl border border-dark/20 bg-dark/5 px-2 sm:px-3 py-2"
+			class="flex items-center gap-2 rounded-xl border border-primary/15 bg-background/25 px-2 py-2 sm:gap-3 sm:px-3"
 		>
 			{@render reel()}
-			<p class="grow min-w-0 text-center text-sm sm:text-base md:text-xl font-bold line-clamp-2">
-				Chapter {current?.number ?? 1} - {current?.title ?? ''}
+			<p
+				class="grow min-w-0 text-center text-sm font-bold break-words line-clamp-2 sm:text-base md:text-xl"
+			>
+				Chapter {current?.number ?? 1} — {current?.title ?? ''}
 			</p>
 			{@render reel()}
 		</div>
@@ -293,7 +295,7 @@
 		<!-- Resume offer -->
 		{#if player.resumeOffer}
 			<div
-				class="flex items-center gap-3 bg-white border border-dark/20 rounded-xl p-3 text-sm md:text-base"
+				class="flex flex-wrap items-center gap-3 rounded-xl border border-dark/15 bg-background/25 p-3 text-sm md:text-base"
 			>
 				<span class="text-base grow">
 					Resume from {formatClock(player.resumeOffer.time)}?
@@ -356,7 +358,7 @@
 
 		<!-- Transport: grouped on a soft panel so the controls read as a deck -->
 		<div
-			class="flex items-center justify-center gap-4 w-fit mx-auto rounded-2xl bg-dark/5 px-6 py-3"
+			class="mx-auto flex w-fit items-center justify-center gap-4 rounded-xl bg-dark/5 px-6 py-3"
 		>
 			<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="dark">
 				<button
@@ -374,7 +376,7 @@
 
 			<div
 				class="duo-btn w-fit transition-[filter] duration-300 {player.playing
-					? 'drop-shadow-[0_0_12px_#e34b4b]'
+					? 'drop-shadow-[0_0_3px_var(--color-accent-red-dark)]'
 					: ''}"
 				data-duo-shape="round"
 				data-duo-color={player.playing ? 'red' : 'green'}
@@ -555,12 +557,14 @@
 
 		<!-- Chapter list: flush with the player edges and separated by a quiet rule. -->
 		<div
-			class="flex flex-col gap-2 -mx-4 -mb-4 px-4 pt-4 pb-4 border-t border-dark/15 rounded-b-[calc(1rem-2px)] bg-dark/5 text-dark"
+			class="-mx-4 -mb-4 flex flex-col gap-2 rounded-b-xl border-t border-dark/10 bg-dark/5 px-4 pt-4 pb-4 text-dark"
 		>
 			<div class="flex items-center justify-between">
 				<h2 class="text-lg font-semibold">Chapters</h2>
 				<div class="flex items-center gap-2">
-					<span class="text-base text-dark/55">{tracks.length} tracks</span>
+					<span class="text-sm text-dark/55 sm:text-base">
+						{tracks.length} chapter{tracks.length === 1 ? '' : 's'}
+					</span>
 					<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
 						<button
 							class="p-1.5!"

@@ -23,6 +23,7 @@
 	/** Per-file upload progress, keyed by file name. */
 	let uploads = $state([]);
 	let uploading = $state(false);
+	let pendingChapterUpload = $state(null);
 	let coverBusy = $state(false);
 
 	let showPreview = $state(false);
@@ -123,6 +124,14 @@
 		}
 	}
 
+	/** Read the leading chapter number from names such as `Ch.6` or `Chapter 12`. */
+	function chapterNumberFromFilename(name) {
+		const match = name.match(/^\s*(?:ch\.?|chapter)\s*(\d+)(?=$|[\s._\-–—:])/i);
+		if (!match) return null;
+		const number = Number(match[1]);
+		return Number.isInteger(number) && number > 0 ? number : null;
+	}
+
 	/**
 	 * Strip the extension so the file name becomes a usable chapter title.
 	 * A leading chapter marker ("Ch.1", "Chapter 2", optional punctuation
@@ -136,13 +145,65 @@
 			.trim();
 	}
 
-	async function uploadTracks(files) {
+	function formatChapterNumbers(numbers) {
+		const unique = [...new Set(numbers)].sort((a, b) => a - b);
+		const visible = unique.slice(0, 12);
+		return `${visible.join(', ')}${unique.length > visible.length ? ` and ${unique.length - visible.length} more` : ''}`;
+	}
+
+	/**
+	 * Classify a panel upload before sending anything. Numbered files that
+	 * match existing tracks are never appended as duplicates: replacement-only
+	 * uploads ask for confirmation, while a mixed batch makes the author choose
+	 * between the new files and the matching files.
+	 */
+	function queueTrackUpload(files) {
 		const list = Array.from(files ?? []);
+		if (list.length === 0 || !audiobook) return;
+
+		const numbered = list.map((file) => ({
+			file,
+			number: chapterNumberFromFilename(file.name)
+		}));
+		if (numbered.every(({ number }) => number === null)) {
+			addTracks(list);
+			return;
+		}
+		if (numbered.some(({ number }) => number === null)) {
+			error =
+				'Every file in a batch must start with a chapter number (for example, Ch.6) so additions and replacements can be identified. Nothing was uploaded.';
+			return;
+		}
+
+		const tracksByNumber = new Map(audiobook.tracks.map((track) => [Number(track.number), track]));
+		const replacements = [];
+		const additions = [];
+		for (const item of numbered) {
+			const track = tracksByNumber.get(item.number);
+			if (track) replacements.push({ ...item, track });
+			else additions.push(item.file);
+		}
+
+		if (replacements.length > 0 && additions.length > 0) {
+			pendingChapterUpload = { kind: 'mixed', replacements, additions };
+		} else if (replacements.length > 0) {
+			pendingChapterUpload = { kind: 'replace', replacements, additions: [] };
+		} else {
+			addTracks(additions);
+		}
+	}
+
+	async function addTracks(list) {
 		if (list.length === 0) return;
 
 		uploading = true;
 		error = '';
-		uploads = list.map((file) => ({ name: file.name, status: 'pending', message: '' }));
+		uploads = list.map((file) => ({
+			name: file.name,
+			status: 'pending',
+			operation: 'add',
+			message: ''
+		}));
 
 		for (const [index, file] of list.entries()) {
 			uploads[index] = { ...uploads[index], status: 'probing' };
@@ -173,6 +234,56 @@
 
 		const failed = uploads.filter((u) => u.status === 'failed').length;
 		flash(failed === 0 ? `Added ${list.length} track(s).` : `${failed} track(s) failed.`);
+	}
+
+	async function replaceTracks(replacements) {
+		uploading = true;
+		error = '';
+		uploads = replacements.map(({ file }) => ({
+			name: file.name,
+			status: 'pending',
+			operation: 'replace',
+			message: ''
+		}));
+
+		for (const [index, { file, track }] of replacements.entries()) {
+			uploads[index] = { ...uploads[index], status: 'probing' };
+			const duration = await probeAudioDuration(file);
+			uploads[index] = { ...uploads[index], status: 'uploading' };
+			try {
+				const form = new FormData();
+				form.append('file', file, file.name);
+				const title = titleFromFilename(file.name);
+				if (title) form.append('title', title);
+				if (duration) form.append('duration_seconds', String(duration));
+				await audiobooks.replaceTrack(audiobookId, track.id, form);
+				uploads[index] = { ...uploads[index], status: 'done' };
+			} catch (e) {
+				uploads[index] = {
+					...uploads[index],
+					status: 'failed',
+					message: e?.message ?? 'Replacement failed.'
+				};
+			}
+		}
+
+		uploading = false;
+		await load({ silent: true });
+
+		const failed = uploads.filter((u) => u.status === 'failed').length;
+		flash(
+			failed === 0
+				? `Replaced ${replacements.length} chapter audio file(s).`
+				: `${failed} replacement(s) failed.`
+		);
+	}
+
+	function runPendingChapterUpload(action) {
+		const pending = pendingChapterUpload;
+		if (!pending) return;
+		pendingChapterUpload = null;
+		if (action === 'replace') replaceTracks(pending.replacements);
+		else addTracks(pending.additions);
 	}
 
 	/** Renumber the playlist in place so the editor mirrors the server. */
@@ -236,7 +347,7 @@
 		}
 	}
 
-	/** Swap a track's audio file, keeping its title and playlist position. */
+	/** Swap a track's audio and title while keeping its playlist position. */
 	async function replaceTrack(track, file) {
 		if (!file) return;
 		replacingId = track.id;
@@ -246,10 +357,12 @@
 			const duration = await probeAudioDuration(file);
 			const form = new FormData();
 			form.append('file', file, file.name);
+			const title = titleFromFilename(file.name);
+			if (title) form.append('title', title);
 			if (duration) form.append('duration_seconds', String(duration));
 			await audiobooks.replaceTrack(audiobookId, track.id, form);
 			await load({ silent: true });
-			flash(`Replaced the audio for “${track.title}”.`);
+			flash(`Replaced the audio and title for chapter ${track.number}.`);
 		} catch (e) {
 			error = e?.message ?? 'Could not replace the track audio.';
 		} finally {
@@ -386,7 +499,7 @@
 		event.preventDefault();
 		fileDragActive = false;
 		fileOverId = null;
-		uploadTracks(event.dataTransfer.files);
+		queueTrackUpload(event.dataTransfer.files);
 	}
 
 	async function setStatus(status) {
@@ -628,7 +741,7 @@
 						accept="audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/x-wav,.mp3,.ogg,.wav"
 						disabled={uploading}
 						onchange={(event) => {
-							uploadTracks(event.currentTarget.files);
+							queueTrackUpload(event.currentTarget.files);
 							event.currentTarget.value = '';
 						}}
 					/>
@@ -636,8 +749,9 @@
 			</div>
 
 			<p class="text-xs text-dark/40">
-				Drag files in here to add chapters, or drop a file on a row to replace its audio. Drag any
-				row — or its grip — up and down to reorder.
+				Drag files in here to add chapters, or drop a file on a row to replace its audio. Files
+				named Ch.# or Chapter # are matched to the chapter list automatically; keep additions and
+				replacements in separate batches. Drag any row — or its grip — up and down to reorder.
 			</p>
 
 			{#if uploads.length}
@@ -655,7 +769,9 @@
 							<span class="text-dark/50 shrink-0">
 								{#if item.status === 'probing'}reading length…
 								{:else if item.status === 'uploading'}uploading…
-								{:else if item.status === 'done'}added
+								{:else if item.status === 'done'}{item.operation === 'replace'
+										? 'replaced'
+										: 'added'}
 								{:else if item.status === 'failed'}
 									<span class="text-accent-red">{item.message}</span>
 								{:else}queued{/if}
@@ -815,6 +931,73 @@
 		</div>
 	{/if}
 </section>
+
+{#if pendingChapterUpload}
+	<div
+		class="fixed inset-0 z-40 flex items-center justify-center bg-dark/45 p-4"
+		role="presentation"
+	>
+		<div
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="chapter-upload-title"
+			class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+		>
+			<h3 id="chapter-upload-title" class="text-lg font-semibold text-dark">
+				{pendingChapterUpload.kind === 'mixed'
+					? 'This batch has both new and existing chapters'
+					: 'Replace existing chapter audio?'}
+			</h3>
+			<p class="mt-2 text-sm leading-relaxed text-dark/70">
+				{#if pendingChapterUpload.kind === 'mixed'}
+					Chapters {formatChapterNumbers(
+						pendingChapterUpload.replacements.map(({ number }) => number)
+					)}
+					already exist, while chapters {formatChapterNumbers(
+						pendingChapterUpload.additions.map((file) => chapterNumberFromFilename(file.name))
+					)}
+					are new. You cannot add and replace chapters in the same batch. Choose to add only the new chapters
+					or replace only the existing chapter audio.
+				{:else}
+					Chapters {formatChapterNumbers(
+						pendingChapterUpload.replacements.map(({ number }) => number)
+					)}
+					already exist. Their audio and titles will be updated from the filenames while their positions
+					stay unchanged.
+				{/if}
+			</p>
+			<div class="mt-6 flex justify-end gap-3 flex-wrap">
+				<button
+					class="rounded-full border border-dark/20 px-5 py-2 text-sm font-medium text-dark hover:bg-dark/5"
+					onclick={() => (pendingChapterUpload = null)}
+				>
+					Cancel
+				</button>
+				{#if pendingChapterUpload.kind === 'mixed'}
+					<button
+						class="rounded-full bg-dark px-5 py-2 text-sm font-medium text-white hover:bg-dark/90"
+						onclick={() => runPendingChapterUpload('replace')}
+					>
+						Replace {pendingChapterUpload.replacements.length} only
+					</button>
+					<button
+						class="rounded-full bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary/90"
+						onclick={() => runPendingChapterUpload('add')}
+					>
+						Add {pendingChapterUpload.additions.length} new only
+					</button>
+				{:else}
+					<button
+						class="rounded-full bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary/90"
+						onclick={() => runPendingChapterUpload('replace')}
+					>
+						Replace chapter audio
+					</button>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
 
 <ConfirmDialog
 	open={pendingDelete}
