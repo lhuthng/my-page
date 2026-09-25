@@ -61,65 +61,80 @@
 	{@html `<script type="application/ld+json">${jsonLd}</script>`}
 </svelte:head>
 
-<article class="flex flex-col gap-4 rounded-xl border border-dark/15 bg-white p-4 mb-2 md:mb-4">
-	<BackButton href="/audiobooks" text="Audiobooks" />
+<article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
+	<header class="flex flex-col gap-4 rounded-xl bg-white p-4">
+		<BackButton href="/audiobooks" text="Audiobooks" />
 
-	<h1 class="text-3xl md:text-4xl font-bold">
-		{audiobook.title}
-	</h1>
+		<h1 class="text-2xl break-words lg:text-4xl">
+			{audiobook.title}
+		</h1>
 
-	<div class="flex flex-col md:flex-row gap-4 items-start">
-		{#if audiobook.url}
-			<img
-				src={audiobook.url}
-				alt={`Cover of ${audiobook.title}`}
-				class="w-full aspect-[1.91/1] md:w-40 md:h-40 rounded-xl object-cover shrink-0"
-			/>
-		{/if}
+		<div class="flex flex-col items-start gap-4 md:flex-row">
+			{#if audiobook.url}
+				<div
+					class="reading-cover w-full shrink-0 overflow-hidden rounded-xl border-3 border-dark bg-white md:w-64"
+				>
+					<img
+						src={audiobook.url}
+						alt={`Cover of ${audiobook.title}`}
+						class="reading-media aspect-[1.91/1] w-full object-cover"
+					/>
+				</div>
+			{/if}
 
-		<div class="flex flex-col gap-2 min-w-0">
-			<div class="flex items-center gap-2 flex-wrap text-base text-dark/60">
-				{#if audiobook.translator}
-					<span>By {audiobook.translator}</span>
-					<span aria-hidden="true">-</span>
-				{/if}
-				{#if audiobook.owner_display_name || audiobook.owner_username}
-					<span>Uploaded by</span>
-					<a href="/profiles/{audiobook.owner_username}" class="text-dark/70">
-						{audiobook.owner_display_name || audiobook.owner_username}
-					</a>
-					<span aria-hidden="true">-</span>
-				{/if}
-				<span>{audiobook.tracks.length} chapter{audiobook.tracks.length === 1 ? '' : 's'}</span>
-				{#if durationLabel}
-					<span aria-hidden="true">-</span>
-					<span>{durationLabel}</span>
+			<div class="flex min-w-0 flex-1 flex-col gap-3">
+				<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-base text-dark/60">
+					{#if audiobook.translator}
+						<span>Author: {audiobook.translator}</span>
+						<span class="text-dark/25" aria-hidden="true">•</span>
+					{/if}
+					{#if audiobook.owner_display_name || audiobook.owner_username}
+						<span>Uploaded by</span>
+						<a
+							href="/profiles/{audiobook.owner_username}"
+							class="text-accent-blue-dark hover:text-accent-blue"
+						>
+							{audiobook.owner_display_name || audiobook.owner_username}
+						</a>
+						<span class="text-dark/25" aria-hidden="true">•</span>
+					{/if}
+					<span>{audiobook.tracks.length} chapter{audiobook.tracks.length === 1 ? '' : 's'}</span>
+					{#if durationLabel}
+						<span class="text-dark/25" aria-hidden="true">•</span>
+						<span>{durationLabel}</span>
+					{/if}
+				</div>
+
+				{#if audiobook.tags?.length}
+					<div class="inline gap-2 text-dark/60">
+						<ul class="inline text-dark *:inline space-x-1" aria-label="Audiobook tags">
+							{#each audiobook.tags as tag (tag.id)}
+								<li
+									class="rounded-full border-2 border-primary px-1 *:no-underline! has-hover:bg-primary duration-100 transition-colors"
+								>
+									<a
+										class="inline-block text-primary duration-100 transition-colors hover:text-white hover:*:text-white"
+										href="/audiobooks?tag={tag.slug}"
+									>
+										<span class="text-gray-300">#</span>
+										{tag.name}
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</div>
 				{/if}
 			</div>
-
-			{#if audiobook.tags?.length}
-				<ul class="flex flex-wrap gap-1">
-					{#each audiobook.tags as tag (tag.id)}
-						<li>
-							<a
-								href="/audiobooks?tag={tag.slug}"
-								class="rounded-full border border-dark/15 bg-dark/5 px-2 py-0.5 text-base text-dark no-underline! hover:bg-dark/10"
-							>
-								{tag.name}
-							</a>
-						</li>
-					{/each}
-				</ul>
-			{/if}
 		</div>
-	</div>
+	</header>
 
 	{#if audiobook.description}
-		<section class="rounded-xl border border-dark/15 bg-dark/5 px-4 py-3 sm:px-5 sm:py-4">
-			<h2 class="mb-2 text-sm font-semibold tracking-wide text-dark/50 uppercase">
-				About this audiobook
-			</h2>
-			<p class="max-w-3xl text-base leading-7 whitespace-pre-line text-dark/75">
+		<section class="rounded-xl bg-white p-4">
+			<div class="flex items-center gap-3 mb-3">
+				<h2 class="text-xl lg:text-2xl">Description</h2>
+				<hr class="grow border" />
+			</div>
+			<p class="text-base leading-7 break-words whitespace-pre-line text-dark/75">
 				{audiobook.description}
 			</p>
 		</section>
