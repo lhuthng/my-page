@@ -9,12 +9,15 @@
 </script>
 
 {#if visible}
+	<!-- While the mini player shows, the button rides on the card instead of
+	     floating above it: pinned to straddle the card's top edge (the card is
+	     bottom-4 + ~110px tall, so ~100px centers the circle on the corner). -->
 	<button
 		in:fly={{ y: 20, duration: 200, easing: elasticOut }}
 		out:fly={{ y: 20, duration: 200, easing: elasticInOut }}
 		onclick={() => scrollTarget?.scrollIntoView({ behavior: 'smooth' })}
 		class="fixed z-50 right-10 w-10 h-10 rounded-full bg-white shadow-dark shadow-sm font-bold transition-[bottom] duration-200 ease-out motion-reduce:transition-none {audiobookSession.miniVisible
-			? 'bottom-24'
+			? 'bottom-[100px]'
 			: 'bottom-10'}"
 		title="To top"
 	>

@@ -89,10 +89,10 @@
 </script>
 
 {#if visible && engine && book}
-	<!-- Pinned to the bottom corner, below the "to top" button: the button
-	     yields the space instead (it moves up while this card is showing).
-	     Deliberately under it in the stack too (z-40 vs z-50), so the button and
-	     its shadow stay crisp instead of sitting under this card's shadow.
+	<!-- Pinned to the bottom corner. The "to top" button rides on this card's
+	     top edge while it shows (ToTop coordinates via session.miniVisible) and
+	     stays above it in the stack (z-50 vs z-40), so the button and its shadow
+	     stay crisp instead of sitting under this card's shadow.
 	     Styled as one of the site's white cards so it reads as part of the page
 	     instead of blending into dark sections. -->
 	<aside
