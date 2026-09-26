@@ -1,13 +1,36 @@
 <script>
 	import AudiobookPlayer from '$lib/components/audio/AudiobookPlayer.svelte';
+	import VietnameseFlagBadge from '$lib/components/audio/VietnameseFlagBadge.svelte';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
 	import { absoluteSiteUrl, SITE_NAME, safeJsonLd } from '$lib/config/site.js';
 	import { formatDurationLabel } from '$lib/utils/duration.js';
+	import { isVietnameseTranslation } from '$lib/utils/audiobook-tags.js';
 
 	let { data } = $props();
 
 	const audiobook = $derived(data.audiobook);
-	const durationLabel = $derived(formatDurationLabel(audiobook.total_duration_seconds));
+	const vietnamese = $derived(isVietnameseTranslation(audiobook));
+	const durationLabel = $derived(
+		formatDurationLabel(audiobook.total_duration_seconds, vietnamese ? 'vi' : 'en')
+	);
+
+	// A Vietnamese-translated book is presented to Vietnamese readers, so the
+	// detail labels render in Vietnamese; everything else stays in English.
+	const t = $derived(
+		vietnamese
+			? {
+					author: 'Tác giả:',
+					uploadedBy: 'Đăng tải bởi',
+					chapters: (n) => `${n} chương`,
+					description: 'Mô tả'
+				}
+			: {
+					author: 'Author:',
+					uploadedBy: 'Uploaded by',
+					chapters: (n) => `${n} chapter${n === 1 ? '' : 's'}`,
+					description: 'Description'
+				}
+	);
 
 	// Structured data so search engines can surface the audiobook and its
 	// chapter list rather than treating the page as a generic article.
@@ -17,7 +40,7 @@
 			'@type': 'Audiobook',
 			name: audiobook.title,
 			description: audiobook.description || undefined,
-			inLanguage: 'en',
+			inLanguage: vietnamese ? 'vi' : 'en',
 			image: absoluteSiteUrl(audiobook.url ?? '/thinkcats.jpg'),
 			url: absoluteSiteUrl(`/audiobooks/${audiobook.slug}`),
 			publisher: { '@type': 'Organization', name: SITE_NAME },
@@ -72,24 +95,30 @@
 		<div class="flex flex-col items-start gap-4 md:flex-row">
 			{#if audiobook.url}
 				<div
-					class="reading-cover w-full shrink-0 overflow-hidden rounded-xl border-3 border-dark bg-white md:w-64"
+					class="reading-cover relative w-full shrink-0 overflow-hidden rounded-xl border-3 border-dark bg-white md:w-64"
 				>
 					<img
 						src={audiobook.url}
 						alt={`Cover of ${audiobook.title}`}
 						class="reading-media aspect-[1.91/1] w-full object-cover"
 					/>
+					{#if vietnamese}
+						<VietnameseFlagBadge class="right-2 bottom-2" />
+					{/if}
 				</div>
 			{/if}
 
 			<div class="flex min-w-0 flex-1 flex-col gap-3">
-				<div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-base text-dark/60">
+				<div
+					class="flex flex-wrap items-center gap-x-2 gap-y-1 text-base text-dark/60"
+					lang={vietnamese ? 'vi' : undefined}
+				>
 					{#if audiobook.translator}
-						<span>Author: {audiobook.translator}</span>
+						<span>{t.author} {audiobook.translator}</span>
 						<span class="text-dark/25" aria-hidden="true">•</span>
 					{/if}
 					{#if audiobook.owner_display_name || audiobook.owner_username}
-						<span>Uploaded by</span>
+						<span>{t.uploadedBy}</span>
 						<a
 							href="/profiles/{audiobook.owner_username}"
 							class="text-accent-blue-dark hover:text-accent-blue"
@@ -98,7 +127,7 @@
 						</a>
 						<span class="text-dark/25" aria-hidden="true">•</span>
 					{/if}
-					<span>{audiobook.tracks.length} chapter{audiobook.tracks.length === 1 ? '' : 's'}</span>
+					<span>{t.chapters(audiobook.tracks.length)}</span>
 					{#if durationLabel}
 						<span class="text-dark/25" aria-hidden="true">•</span>
 						<span>{durationLabel}</span>
@@ -129,9 +158,9 @@
 	</header>
 
 	{#if audiobook.description}
-		<section class="rounded-xl bg-white p-4">
+		<section class="rounded-xl bg-white p-4" lang={vietnamese ? 'vi' : undefined}>
 			<div class="flex items-center gap-3 mb-3">
-				<h2 class="text-xl lg:text-2xl">Description</h2>
+				<h2 class="text-xl lg:text-2xl">{t.description}</h2>
 				<hr class="grow border" />
 			</div>
 			<p class="text-base leading-7 break-words whitespace-pre-line text-dark/75">
@@ -148,5 +177,6 @@
 		coverUrl={audiobook.url}
 		storageKey={audiobook.slug}
 		slug={audiobook.slug}
+		{vietnamese}
 	/>
 </article>

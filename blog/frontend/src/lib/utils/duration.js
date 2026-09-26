@@ -28,19 +28,26 @@ export function formatClock(seconds) {
 
 /**
  * Format a duration for display next to a total, e.g. "3 hr 42 min" or
- * "18 min". Returns an empty string for unknown or zero durations so callers
- * can render nothing rather than a misleading "0 min".
+ * "18 min". Pass `lang = 'vi'` for Vietnamese wording ("3 tiếng 42 phút").
+ * Returns an empty string for unknown or zero durations so callers can render
+ * nothing rather than a misleading "0 min".
  */
-export function formatDurationLabel(seconds) {
+export function formatDurationLabel(seconds, lang = 'en') {
 	if (!Number.isFinite(seconds) || seconds <= 0) return '';
 
 	// Check the raw value, not the rounded minutes: rounding 30s would produce
 	// "1 min", and "under a minute" should mean exactly that.
-	if (seconds < 60) return 'under a minute';
+	if (seconds < 60) return lang === 'vi' ? 'dưới một phút' : 'under a minute';
 
 	const totalMinutes = Math.round(seconds / 60);
 	const hours = Math.floor(totalMinutes / 60);
 	const minutes = totalMinutes % 60;
+
+	if (lang === 'vi') {
+		if (hours === 0) return `${minutes} phút`;
+		if (minutes === 0) return `${hours} tiếng`;
+		return `${hours} tiếng ${minutes} phút`;
+	}
 
 	if (hours === 0) return `${minutes} min`;
 	if (minutes === 0) return `${hours} hr`;

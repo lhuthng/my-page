@@ -13,12 +13,116 @@
 		storageKey = 'default',
 		slug = null,
 		/**
+		 * Vietnamese-translated books present their player in Vietnamese too, so
+		 * the whole listening experience matches the book's language.
+		 */
+		vietnamese = false,
+		/**
 		 * Public pages hand the book to the site-wide session, so playback (and the
 		 * mini player) survives navigating away. The dashboard preview stays local
 		 * to the page: an unpublished draft must not take over the listener.
 		 */
 		persistent = true
 	} = $props();
+
+	// The player UI follows the book's language; every user-facing string in
+	// this component (and the mini player's, via the claimed book) comes from
+	// here so the two languages cannot drift apart.
+	const t = $derived(
+		vietnamese
+			? {
+					noTracks: 'Cuốn sách nói này chưa có chương nào.',
+					chapter: 'Chương',
+					resumeFrom: (time) => `Tiếp tục từ ${time}?`,
+					resume: 'Tiếp tục',
+					startOver: 'Nghe lại từ đầu',
+					blocked: 'Trình duyệt đã chặn tự động phát. Nhấn phát để bắt đầu nghe.',
+					seek: 'Tua trong chương',
+					previous: 'Chương trước',
+					previousTitle: 'Chương trước (p)',
+					play: 'Phát',
+					pause: 'Tạm dừng',
+					playTitle: 'Phát (Space)',
+					pauseTitle: 'Tạm dừng (Space)',
+					next: 'Chương sau',
+					nextTitle: 'Chương sau (n)',
+					mute: 'Tắt tiếng',
+					unmute: 'Bật tiếng',
+					volume: 'Âm lượng',
+					sleepChapter: 'Hẹn giờ: hết chương',
+					sleepRemaining: (clock) => `Hẹn giờ: ${clock}`,
+					sleepTimer: 'Hẹn giờ tắt',
+					sleepMinutes: (minutes) => `${minutes} phút`,
+					sleepEndOfChapter: 'Hết chương',
+					sleepCancel: 'Hủy hẹn giờ',
+					restart: 'Nghe lại',
+					playlist: 'Chương',
+					chapterCount: (n) => `${n} chương`,
+					sortToHigh: 'Sắp xếp chương từ thấp lên cao',
+					sortToLow: 'Sắp xếp chương từ cao xuống thấp',
+					sortToHighTitle: 'Thấp lên cao',
+					sortToLowTitle: 'Cao xuống thấp',
+					searchLabel: 'Tìm chương',
+					searchPlaceholder: 'Tìm theo tên hoặc số chương',
+					searchAria: 'Tìm chương theo tên hoặc số',
+					noMatch: 'Không có chương nào khớp tìm kiếm.',
+					playing: 'Đang phát',
+					paused: 'Tạm dừng',
+					trackError: {
+						aborted: 'Phát bị hủy bỏ.',
+						network: 'Lỗi mạng khi tải chương này.',
+						decode: 'Không thể giải mã chương này.',
+						unsupported: 'Định dạng âm thanh này không được hỗ trợ.',
+						generic: 'Không thể phát chương này.'
+					}
+				}
+			: {
+					noTracks: 'This audiobook has no tracks yet.',
+					chapter: 'Chapter',
+					resumeFrom: (time) => `Resume from ${time}?`,
+					resume: 'Resume',
+					startOver: 'Start over',
+					blocked: 'Playback was blocked by the browser. Press play to start listening.',
+					seek: 'Seek within chapter',
+					previous: 'Previous chapter',
+					previousTitle: 'Previous chapter (p)',
+					play: 'Play',
+					pause: 'Pause',
+					playTitle: 'Play (Space)',
+					pauseTitle: 'Pause (Space)',
+					next: 'Next chapter',
+					nextTitle: 'Next chapter (n)',
+					mute: 'Mute',
+					unmute: 'Unmute',
+					volume: 'Volume',
+					sleepChapter: 'Sleep: chapter',
+					sleepRemaining: (clock) => `Sleep: ${clock}`,
+					sleepTimer: 'Sleep timer',
+					sleepMinutes: (minutes) => `${minutes} minutes`,
+					sleepEndOfChapter: 'End of chapter',
+					sleepCancel: 'Cancel timer',
+					restart: 'Restart',
+					playlist: 'Chapters',
+					chapterCount: (n) => `${n} chapter${n === 1 ? '' : 's'}`,
+					sortToHigh: 'Sort chapters low to high',
+					sortToLow: 'Sort chapters high to low',
+					sortToHighTitle: 'Low to high',
+					sortToLowTitle: 'High to low',
+					searchLabel: 'Search chapters',
+					searchPlaceholder: 'Search by title or chapter number',
+					searchAria: 'Search chapters by title or number',
+					noMatch: 'No chapters match your search.',
+					playing: 'Playing',
+					paused: 'Paused',
+					trackError: {
+						aborted: 'Playback aborted.',
+						network: 'Network error while loading this track.',
+						decode: 'This track could not be decoded.',
+						unsupported: 'This audio format is not supported.',
+						generic: 'This track could not be played.'
+					}
+				}
+	);
 
 	// Built from a deliberate one-time read of the props: the engine owns the
 	// playlist, so re-creating it whenever a prop reference changed would reset
@@ -30,7 +134,10 @@
 		author,
 		translator,
 		coverUrl,
-		tracks
+		tracks,
+		// Carried on the book so the mini player, which renders the claimed book
+		// on other pages, can match this language.
+		vietnamese
 	}));
 	const player = untrack(() =>
 		persistent ? audiobookSession.engineFor(book) : new AudiobookPlayer(tracks, { storageKey })
@@ -253,13 +360,16 @@
 	}
 </script>
 
-<section class="flex flex-col gap-4 rounded-xl bg-white p-4 text-dark">
+<section
+	class="flex flex-col gap-4 rounded-xl bg-white p-4 text-dark"
+	lang={vietnamese ? 'vi' : undefined}
+>
 	{#if !persistent}
 		<audio bind:this={audioEl} preload="metadata" class="hidden"></audio>
 	{/if}
 
 	{#if tracks.length === 0}
-		<p class="py-8 text-center text-base text-dark/50">This audiobook has no tracks yet.</p>
+		<p class="py-8 text-center text-base text-dark/50">{t.noTracks}</p>
 	{:else}
 		<!-- One cassette reel: a spoked hub that turns while a chapter plays. -->
 		{#snippet reel()}
@@ -287,7 +397,8 @@
 			<p
 				class="grow min-w-0 text-center text-sm font-bold break-words line-clamp-2 sm:text-base md:text-xl"
 			>
-				Chapter {current?.number ?? 1} — {current?.title ?? ''}
+				{t.chapter}
+				{current?.number ?? 1} — {current?.title ?? ''}
 			</p>
 			{@render reel()}
 		</div>
@@ -298,20 +409,20 @@
 				class="flex flex-wrap items-center gap-3 rounded-xl border border-dark/15 bg-background/25 p-3 text-sm md:text-base"
 			>
 				<span class="text-base grow">
-					Resume from {formatClock(player.resumeOffer.time)}?
+					{t.resumeFrom(formatClock(player.resumeOffer.time))}
 				</span>
 				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="primary">
-					<button onclick={() => player.acceptResume()}>Resume</button>
+					<button onclick={() => player.acceptResume()}>{t.resume}</button>
 				</div>
 				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="dark">
-					<button onclick={() => player.dismissResume()}>Start over</button>
+					<button onclick={() => player.dismissResume()}>{t.startOver}</button>
 				</div>
 			</div>
 		{/if}
 
 		{#if player.interrupted}
 			<p class="text-sm md:text-base text-accent-red">
-				Playback was blocked by the browser. Press play to start listening.
+				{t.blocked}
 			</p>
 		{/if}
 
@@ -347,7 +458,7 @@
 					max="1000"
 					step="1"
 					class="absolute inset-0 w-full opacity-0 pointer-events-none"
-					aria-label="Seek within chapter"
+					aria-label={t.seek}
 					value={Math.round(playedPercent * 10)}
 					oninput={(event) => (scrub = (Number(event.currentTarget.value) / 1000) * duration)}
 					onchange={commitSeek}
@@ -365,8 +476,8 @@
 					class="p-2!"
 					disabled={!player.hasPrevious}
 					onclick={() => player.previous()}
-					aria-label="Previous chapter"
-					title="Previous chapter (p)"
+					aria-label={t.previous}
+					title={t.previousTitle}
 				>
 					<svg class="w-6 h-6 fill-white" viewBox="0 0 24 24">
 						<path d="M7 6h2v12H7zm3 6l9 6V6z" />
@@ -384,8 +495,8 @@
 				<button
 					class="p-4!"
 					onclick={() => player.toggle()}
-					aria-label={player.playing ? 'Pause' : 'Play'}
-					title={player.playing ? 'Pause (Space)' : 'Play (Space)'}
+					aria-label={player.playing ? t.pause : t.play}
+					title={player.playing ? t.pauseTitle : t.playTitle}
 				>
 					{#if player.playing}
 						<svg class="w-10 h-10 fill-white" viewBox="0 0 24 24">
@@ -404,8 +515,8 @@
 					class="p-2!"
 					disabled={!player.hasNext}
 					onclick={() => player.next()}
-					aria-label="Next chapter"
-					title="Next chapter (n)"
+					aria-label={t.next}
+					title={t.nextTitle}
 				>
 					<svg class="w-6 h-6 fill-white" viewBox="0 0 24 24">
 						<path d="M15 6h2v12h-2zM5 6l9 6-9 6z" />
@@ -421,7 +532,7 @@
 					<button
 						class="p-1.5!"
 						onclick={() => player.toggleMute()}
-						aria-label={player.muted ? 'Unmute' : 'Mute'}
+						aria-label={player.muted ? t.unmute : t.mute}
 					>
 						<svg class="w-5 h-5 fill-dark" viewBox="0 0 24 24">
 							{#if player.muted || player.volume === 0}
@@ -460,7 +571,7 @@
 						max="1"
 						step="0.05"
 						class="absolute inset-0 w-full opacity-0 pointer-events-none"
-						aria-label="Volume"
+						aria-label={t.volume}
 						value={player.volume}
 						oninput={(event) => player.setVolume(Number(event.currentTarget.value))}
 					/>
@@ -499,11 +610,11 @@
 				<details class="relative">
 					<summary class="list-none cursor-pointer">
 						{#if player.sleepMode === 'chapter'}
-							Sleep: chapter
+							{t.sleepChapter}
 						{:else if player.sleepMode}
-							Sleep: {formatClock(player.sleepRemaining)}
+							{t.sleepRemaining(formatClock(player.sleepRemaining))}
 						{:else}
-							Sleep timer
+							{t.sleepTimer}
 						{/if}
 					</summary>
 					<ul
@@ -518,7 +629,7 @@
 										event.currentTarget.closest('details')?.removeAttribute('open');
 									}}
 								>
-									{minutes} minutes
+									{t.sleepMinutes(minutes)}
 								</button>
 							</li>
 						{/each}
@@ -530,7 +641,7 @@
 									event.currentTarget.closest('details')?.removeAttribute('open');
 								}}
 							>
-								End of chapter
+								{t.sleepEndOfChapter}
 							</button>
 						</li>
 						{#if player.sleepMode}
@@ -542,7 +653,7 @@
 										event.currentTarget.closest('details')?.removeAttribute('open');
 									}}
 								>
-									Cancel timer
+									{t.sleepCancel}
 								</button>
 							</li>
 						{/if}
@@ -551,7 +662,7 @@
 			</div>
 
 			<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
-				<button onclick={() => player.clearSaved()}>Restart</button>
+				<button onclick={() => player.clearSaved()}>{t.restart}</button>
 			</div>
 		</div>
 
@@ -560,17 +671,17 @@
 			class="-mx-4 -mb-4 flex flex-col gap-2 rounded-b-xl border-t border-dark/10 bg-dark/5 px-4 pt-4 pb-4 text-dark"
 		>
 			<div class="flex items-center justify-between">
-				<h2 class="text-lg font-semibold">Chapters</h2>
+				<h2 class="text-lg font-semibold">{t.playlist}</h2>
 				<div class="flex items-center gap-2">
 					<span class="text-sm text-dark/55 sm:text-base">
-						{tracks.length} chapter{tracks.length === 1 ? '' : 's'}
+						{t.chapterCount(tracks.length)}
 					</span>
 					<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
 						<button
 							class="p-1.5!"
 							onclick={toggleSort}
-							aria-label={sortAsc ? 'Sort chapters high to low' : 'Sort chapters low to high'}
-							title={sortAsc ? 'High to low' : 'Low to high'}
+							aria-label={sortAsc ? t.sortToLow : t.sortToHigh}
+							title={sortAsc ? t.sortToLowTitle : t.sortToHighTitle}
 						>
 							<svg
 								class="w-5 h-5 fill-dark transition-transform {sortAsc ? '' : 'rotate-180'}"
@@ -584,7 +695,7 @@
 			</div>
 
 			<label class="relative block">
-				<span class="sr-only">Search chapters</span>
+				<span class="sr-only">{t.searchLabel}</span>
 				<svg
 					class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 fill-dark/40"
 					viewBox="0 0 24 24"
@@ -598,14 +709,14 @@
 					type="search"
 					value={chapterQuery}
 					oninput={(event) => (chapterQuery = event.currentTarget.value)}
-					placeholder="Search by title or chapter number"
-					aria-label="Search chapters by title or number"
+					placeholder={t.searchPlaceholder}
+					aria-label={t.searchAria}
 					class="w-full rounded-lg border-2 border-dark/15 bg-white py-2 pr-3 pl-9 text-sm text-dark outline-none placeholder:text-dark/40 focus:border-primary"
 				/>
 			</label>
 
 			{#if displayTracks.length === 0}
-				<p class="py-6 text-center text-sm text-dark/55">No chapters match your search.</p>
+				<p class="py-6 text-center text-sm text-dark/55">{t.noMatch}</p>
 			{:else}
 				<ol
 					bind:this={playlistEl}
@@ -630,11 +741,13 @@
 											? 'text-dark'
 											: 'text-dark/70'}"
 									>
-										<span class="hidden md:inline">Chapter {track.number} -</span>
+										<span class="hidden md:inline">{t.chapter} {track.number} -</span>
 										{track.title}
 									</span>
 									{#if player.failures[track.id]}
-										<span class="text-base text-accent-red">{player.failures[track.id]}</span>
+										<span class="text-base text-accent-red">
+											{t.trackError[player.failures[track.id]] ?? t.trackError.generic}
+										</span>
 									{/if}
 								</span>
 
@@ -649,7 +762,7 @@
 		</div>
 
 		<p class="sr-only" aria-live="polite">
-			{player.playing ? 'Playing' : 'Paused'}
+			{player.playing ? t.playing : t.paused}
 			{current?.title ?? ''}
 		</p>
 	{/if}

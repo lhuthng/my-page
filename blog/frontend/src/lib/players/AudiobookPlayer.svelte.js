@@ -32,7 +32,7 @@ export class AudiobookPlayer {
 	volume = $state(1);
 	muted = $state(false);
 	skipSeconds = $state(15);
-	/** trackId -> error message, for tracks the browser could not load. */
+	/** trackId -> stable error key (`trackError` in the component localizes it). */
 	failures = $state({});
 	/** null | minutes (number) | 'chapter' */
 	sleepMode = $state(null);
@@ -410,18 +410,20 @@ export class AudiobookPlayer {
 		if (!audio || !track) return;
 
 		const code = audio.error?.code;
-		const message =
+		// Stable keys rather than prose: the rendering component picks the
+		// message matching the book's language.
+		const key =
 			code === 1
-				? 'Playback aborted.'
+				? 'aborted'
 				: code === 2
-					? 'Network error while loading this track.'
+					? 'network'
 					: code === 3
-						? 'This track could not be decoded.'
+						? 'decode'
 						: code === 4
-							? 'This audio format is not supported.'
-							: 'This track could not be played.';
+							? 'unsupported'
+							: 'generic';
 
-		this.failures = { ...this.failures, [track.id]: message };
+		this.failures = { ...this.failures, [track.id]: key };
 
 		// One unplayable file must not stall the whole book: move on if there is
 		// somewhere to go, otherwise stop.

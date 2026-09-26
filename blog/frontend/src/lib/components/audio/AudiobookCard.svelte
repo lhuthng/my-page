@@ -1,6 +1,8 @@
 <script>
 	import GridExpander from '../shell/GridExpander.svelte';
 	import Book from '../svgs/Book.svelte';
+	import VietnameseFlagBadge from './VietnameseFlagBadge.svelte';
+	import { isVietnameseTranslation } from '$lib/utils/audiobook-tags.js';
 
 	let { audiobook } = $props();
 
@@ -20,6 +22,7 @@
 
 	const link = $derived(`/audiobooks/${slug}`);
 	const coverSrc = $derived(url ?? '/missing.png');
+	const vietnameseTranslated = $derived(isVietnameseTranslation(audiobook));
 </script>
 
 <div class="bg-white rounded-lg drop-shadow-sm h-full">
@@ -53,6 +56,9 @@
 					<span>...</span>
 				{/if}
 			</div>
+			{#if vietnameseTranslated}
+				<VietnameseFlagBadge class="right-1.5 bottom-1.5" />
+			{/if}
 		</a>
 		<div class="relative z-10 w-full px-3 pb-2 min-w-0">
 			<a class="w-fit" href={link}>

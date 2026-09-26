@@ -40,6 +40,15 @@ test('formatDurationLabel summarizes totals', () => {
 	assert.equal(formatDurationLabel(3 * 3600 + 42 * 60), '3 hr 42 min');
 });
 
+test('formatDurationLabel localizes to Vietnamese', () => {
+	assert.equal(formatDurationLabel(0, 'vi'), '');
+	assert.equal(formatDurationLabel(NaN, 'vi'), '');
+	assert.equal(formatDurationLabel(30, 'vi'), 'dưới một phút');
+	assert.equal(formatDurationLabel(18 * 60, 'vi'), '18 phút');
+	assert.equal(formatDurationLabel(3600, 'vi'), '1 tiếng');
+	assert.equal(formatDurationLabel(3 * 3600 + 42 * 60, 'vi'), '3 tiếng 42 phút');
+});
+
 test('percentOf clamps and guards against a zero total', () => {
 	assert.equal(percentOf(0, 100), 0);
 	assert.equal(percentOf(50, 100), 50);
