@@ -92,11 +92,7 @@
 
 	{#if series.length === 0}
 		<div class="bg-white rounded-xl p-4">
-			<EmptyState
-				message="No series yet."
-				hint="Create a series from the post editor."
-				mascot
-			/>
+			<EmptyState message="No series yet." hint="Create a series from the post editor." mascot />
 		</div>
 	{:else}
 		<ul class="flex flex-col gap-3">
@@ -153,7 +149,7 @@
 							{:else if seriesPosts[s.id]?.items.length === 0}
 								<p class="py-4 text-center text-dark/40">No posts in this series yet.</p>
 							{:else}
-								<ul class="flex flex-col divide-y divide-background">
+								<ul class="flex flex-col">
 									{#each seriesPosts[s.id].items as post (post.post_id)}
 										<li class="flex items-center gap-3 py-2" out:fade={{ duration: 150 }}>
 											<span class="text-dark/40 text-sm w-6 text-right shrink-0">

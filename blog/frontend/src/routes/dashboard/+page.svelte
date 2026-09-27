@@ -83,8 +83,8 @@
 	{:else if overview}
 		<!-- ── Stat cards ─────────────────────────────── -->
 		<div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
-			{#each [['Published Posts', overview.totalPublished, 'border-accent-green'], ['Drafts', overview.totalDrafts, 'border-accent-yellow'], ['Registered Users', overview.totalUsers, 'border-accent-blue'], ['Comments', overview.totalComments, 'border-primary']] as [label, value, accent]}
-				<div class="bg-white rounded-xl p-4 border-l-4 {accent}">
+			{#each [['Published Posts', overview.totalPublished], ['Drafts', overview.totalDrafts], ['Registered Users', overview.totalUsers], ['Comments', overview.totalComments]] as [label, value]}
+				<div class="bg-white rounded-xl p-4">
 					<p class="text-3xl font-bold text-dark">{value}</p>
 					<p class="text-base text-dark/60 mt-1">{label}</p>
 				</div>
@@ -111,24 +111,24 @@
 					</div>
 				</div>
 				{#if topPosts?.length}
-					<ol class="flex flex-col divide-y divide-background">
+					<ol class="flex flex-col">
 						{#each topPosts as post, i}
 							<li
-								class="flex items-center gap-3 py-2 first:pt-0 last:pb-0 hover:bg-background/20 transition-colors rounded-lg px-2 -mx-2"
+								class="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-3 py-2 first:pt-0 last:pb-0 hover:bg-background/20 transition-colors rounded-lg px-2 -mx-2"
 							>
-								<span class="text-dark/30 font-bold text-base w-6 text-center shrink-0">
+								<span class="text-center text-base font-bold leading-6 text-dark/30 tabular-nums">
 									{i + 1}
 								</span>
-								<div class="flex-1 min-w-0">
+								<div class="min-w-0">
 									<a
 										href="/posts/{post.slug}"
-										class="font-medium text-base truncate block hover:text-primary"
+										class="block truncate text-base font-medium leading-6 hover:text-primary"
 									>
 										{post.title}
 									</a>
 									<span class="text-sm text-dark/50">by {post.authorName}</span>
 								</div>
-								<span class="text-base font-semibold text-primary shrink-0">
+								<span class="text-base font-semibold leading-6 text-primary tabular-nums">
 									{activeTopTab === 'views'
 										? post.views
 										: activeTopTab === 'likes'
@@ -273,7 +273,7 @@
 					<a href="/dashboard/posts" class="text-base text-primary hover:underline">View all →</a>
 				</div>
 				{#if overview.recentPosts?.length}
-					<ul class="flex flex-col divide-y divide-background">
+					<ul class="flex flex-col">
 						{#each overview.recentPosts as post}
 							<li class="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
 								{#if post.coverUrl}
@@ -318,7 +318,7 @@
 					<a href="/dashboard/users" class="text-base text-primary hover:underline">View all →</a>
 				</div>
 				{#if overview.recentUsers?.length}
-					<ul class="flex flex-col divide-y divide-background">
+					<ul class="flex flex-col">
 						{#each overview.recentUsers as u}
 							<li class="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
 								{#if u.avatarUrl}

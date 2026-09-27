@@ -209,15 +209,18 @@
 			<h2 class="text-2xl font-semibold text-dark">Add to Highlight Posts</h2>
 
 			<!-- Search input field -->
-			<SearchInput placeholder="Search published posts..." bind:value={search} onsearch={handleSearchInput} onclear={() => (searchResults = [])} />
+			<SearchInput
+				placeholder="Search published posts..."
+				bind:value={search}
+				onsearch={handleSearchInput}
+				onclear={() => (searchResults = [])}
+			/>
 
 			{#if actionError}
 				<p class="text-accent-red text-sm">Error: {actionError}</p>
 			{/if}
 			{#if searchLoading}
-				<div class="flex justify-center items-center py-16 text-dark/40" in:fade>
-					Searching...
-				</div>
+				<div class="flex justify-center items-center py-16 text-dark/40" in:fade>Searching...</div>
 			{:else if searchError}
 				<p class="text-accent-red text-sm py-4" in:fade>Error: {searchError}</p>
 			{:else if search.trim() && searchResults.length === 0}
@@ -230,82 +233,82 @@
 					hint="Type in the search box to find posts and highlight/recommend them on the homepage."
 				/>
 			{:else}
-					<ul class="flex flex-col gap-3" in:fade>
-						{#each searchResults as post (post.id)}
-							{@const isFeatured = featuredIds.has(post.id)}
-							{@const isDraft = post.status === 'draft'}
+				<ul class="flex flex-col gap-3" in:fade>
+					{#each searchResults as post (post.id)}
+						{@const isFeatured = featuredIds.has(post.id)}
+						{@const isDraft = post.status === 'draft'}
 
-							<li
-								class="flex items-center gap-3 p-3 border-2 border-dark/10 rounded-xl hover:bg-background/40 transition-colors"
-							>
-								{#if post.url}
-									{#if post.cover_media_type?.startsWith('video/')}
-										<video
-											src={post.url}
-											poster={post.url}
-											class="w-12 h-12 rounded-lg object-cover shrink-0"
-											muted
-											loop
-											playsinline
-											autoplay
-											preload="auto"
-										></video>
-									{:else}
-										<img src={post.url} alt="" class="w-12 h-12 rounded-lg object-cover shrink-0" />
-									{/if}
+						<li
+							class="flex items-center gap-3 p-3 border-2 border-dark/10 rounded-xl hover:bg-background/40 transition-colors"
+						>
+							{#if post.url}
+								{#if post.cover_media_type?.startsWith('video/')}
+									<video
+										src={post.url}
+										poster={post.url}
+										class="w-12 h-12 rounded-lg object-cover shrink-0"
+										muted
+										loop
+										playsinline
+										autoplay
+										preload="auto"
+									></video>
 								{:else}
-									<div
-										class="w-12 h-12 rounded-lg bg-background/40 shrink-0 flex items-center justify-center text-dark/30 text-xs font-semibold"
+									<img src={post.url} alt="" class="w-12 h-12 rounded-lg object-cover shrink-0" />
+								{/if}
+							{:else}
+								<div
+									class="w-12 h-12 rounded-lg bg-background/40 shrink-0 flex items-center justify-center text-dark/30 text-xs font-semibold"
+								>
+									No Cover
+								</div>
+							{/if}
+
+							<div class="flex-1 min-w-0">
+								<span class="font-bold text-base text-dark truncate block leading-tight">
+									{post.title}
+								</span>
+								<div class="flex items-center gap-2 mt-1 text-xs">
+									<span
+										class="px-1.5 py-0.5 rounded-full {isDraft
+											? 'bg-accent-yellow/20 text-dark/70'
+											: 'bg-accent-green/20 text-accent-green'} font-semibold"
 									>
-										No Cover
+										{post.status}
+									</span>
+									{#if isDraft}
+										<span class="text-accent-red font-medium">
+											Draft (Will not display on homepage)
+										</span>
+									{/if}
+								</div>
+							</div>
+
+							<div class="shrink-0">
+								{#if isFeatured}
+									<div class="duo-btn" data-duo-color="red">
+										<button
+											onclick={() => toggleHighlight(post, true)}
+											class="px-2.5 py-1.5 text-xs font-bold"
+										>
+											Remove
+										</button>
+									</div>
+								{:else}
+									<div class="duo-btn" data-duo-color="green">
+										<button
+											onclick={() => toggleHighlight(post, false)}
+											class="px-2.5 py-1.5 text-xs font-bold"
+										>
+											Highlight
+										</button>
 									</div>
 								{/if}
-
-								<div class="flex-1 min-w-0">
-									<span class="font-bold text-base text-dark truncate block leading-tight">
-										{post.title}
-									</span>
-									<div class="flex items-center gap-2 mt-1 text-xs">
-										<span
-											class="px-1.5 py-0.5 rounded-full {isDraft
-												? 'bg-accent-yellow/20 text-dark/70'
-												: 'bg-accent-green/20 text-accent-green'} font-semibold"
-										>
-											{post.status}
-										</span>
-										{#if isDraft}
-											<span class="text-accent-red font-medium">
-												Draft (Will not display on homepage)
-											</span>
-										{/if}
-									</div>
-								</div>
-
-								<div class="shrink-0">
-									{#if isFeatured}
-										<div class="duo-btn" data-duo-color="red">
-											<button
-												onclick={() => toggleHighlight(post, true)}
-												class="px-2.5 py-1.5 text-xs font-bold"
-											>
-												Remove
-											</button>
-										</div>
-									{:else}
-										<div class="duo-btn" data-duo-color="green">
-											<button
-												onclick={() => toggleHighlight(post, false)}
-												class="px-2.5 py-1.5 text-xs font-bold"
-											>
-												Highlight
-											</button>
-										</div>
-									{/if}
-								</div>
-							</li>
-						{/each}
-					</ul>
-				{/if}
+							</div>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		</div>
 	</div>
 </div>

@@ -303,15 +303,16 @@
 				placeholder="Detail (optional)"
 				class="rounded-lg border border-dark/20 px-3 py-1 text-sm"
 			/>
-			<button
-				onclick={() => {
-					forceNeeded = false;
-					showDelete = true;
-				}}
-				class="rounded-full bg-accent-red px-4 py-2 text-sm font-medium text-white"
-			>
-				Delete game
-			</button>
+			<div class="w-fit duo-btn" data-duo-color="red">
+				<button
+					onclick={() => {
+						forceNeeded = false;
+						showDelete = true;
+					}}
+				>
+					Delete game
+				</button>
+			</div>
 		</div>
 	</section>
 	<ConfirmDialog

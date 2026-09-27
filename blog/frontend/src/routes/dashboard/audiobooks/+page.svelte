@@ -180,12 +180,11 @@
 			Audiobooks
 			<span class="text-dark/40 text-lg font-normal">({items.length})</span>
 		</h1>
-		<button
-			class="rounded-full bg-dark text-white px-4 py-1.5 text-sm font-medium hover:bg-dark/90"
-			onclick={() => (showForm = !showForm)}
-		>
-			{showForm ? 'Cancel' : 'New audiobook'}
-		</button>
+		<div class="w-fit duo-btn" data-duo-color={showForm ? 'light' : 'green'}>
+			<button onclick={() => (showForm = !showForm)}>
+				{showForm ? 'Cancel' : 'New audiobook'}
+			</button>
+		</div>
 	</div>
 
 	{#if showForm}
@@ -282,13 +281,9 @@
 				<p class="text-sm text-accent-red">{formError}</p>
 			{/if}
 
-			<button
-				class="self-end rounded-full bg-dark text-white px-5 py-2 text-sm font-medium hover:bg-dark/90 disabled:opacity-50"
-				type="submit"
-				disabled={saving}
-			>
-				{saving ? 'Creating…' : 'Create'}
-			</button>
+			<div class="self-end w-fit duo-btn" data-duo-color="green">
+				<button type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create'}</button>
+			</div>
 		</form>
 	{/if}
 
@@ -367,35 +362,23 @@
 					</div>
 
 					<div class="flex flex-col gap-2 shrink-0 not-lg:flex-row not-lg:flex-wrap">
-						<a
-							href="/dashboard/audiobooks/id/{audiobook.id}"
-							class="rounded-full bg-primary text-white px-4 py-1.5 text-sm font-medium text-center no-underline! hover:bg-primary/90"
-						>
-							Manage
-						</a>
+						<div class="w-fit duo-btn" data-duo-color="dark">
+							<a href="/dashboard/audiobooks/id/{audiobook.id}">Manage</a>
+						</div>
 
 						{#if audiobook.status === 'published'}
-							<button
-								class="rounded-full border border-dark/20 px-4 py-1.5 text-sm hover:bg-dark/5"
-								onclick={() => setStatus(audiobook, 'draft')}
-							>
-								Unpublish
-							</button>
+							<div class="w-fit duo-btn" data-duo-color="light">
+								<button onclick={() => setStatus(audiobook, 'draft')}>Unpublish</button>
+							</div>
 						{:else}
-							<button
-								class="rounded-full border border-accent-green text-accent-green-dark px-4 py-1.5 text-sm hover:bg-accent-green/10"
-								onclick={() => setStatus(audiobook, 'published')}
-							>
-								Publish
-							</button>
+							<div class="w-fit duo-btn" data-duo-color="green">
+								<button onclick={() => setStatus(audiobook, 'published')}>Publish</button>
+							</div>
 						{/if}
 
-						<button
-							class="rounded-full border border-accent-red text-accent-red px-4 py-1.5 text-sm hover:bg-accent-red/10"
-							onclick={() => askDelete(audiobook)}
-						>
-							Delete
-						</button>
+						<div class="w-fit duo-btn" data-duo-color="red">
+							<button onclick={() => askDelete(audiobook)}>Delete</button>
+						</div>
 					</div>
 				</li>
 			{/each}

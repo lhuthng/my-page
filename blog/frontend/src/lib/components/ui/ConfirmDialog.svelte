@@ -13,9 +13,7 @@
 		oncancel
 	} = $props();
 
-	let canConfirm = $derived(
-		!requireTyping || typedValue.trim() === requireTyping
-	);
+	let canConfirm = $derived(!requireTyping || typedValue.trim() === requireTyping);
 
 	function handleBackdrop(e) {
 		if (e.target === e.currentTarget && !busy) oncancel?.();
@@ -40,7 +38,8 @@
 			{/if}
 			{#if requireTyping}
 				<p class="mt-4 text-sm text-dark/70">
-					Type <span class="font-mono font-semibold text-dark">{requireTyping}</span> to confirm.
+					Type <span class="font-mono font-semibold text-dark">{requireTyping}</span>
+					to confirm.
 				</p>
 				<input
 					type="text"
@@ -51,21 +50,14 @@
 				/>
 			{/if}
 			<div class="mt-6 flex justify-end gap-3">
-				<button
-					onclick={oncancel}
-					disabled={busy}
-					class="rounded-full border border-dark/20 px-5 py-2 text-sm font-medium text-dark hover:bg-dark/5 disabled:opacity-50"
-				>
-					{cancelLabel}
-				</button>
-				<button
-					onclick={onconfirm}
-					disabled={busy || !canConfirm}
-					class="rounded-full px-5 py-2 text-sm font-medium text-white disabled:opacity-50
-						{confirmColor === 'red' ? 'bg-accent-red hover:bg-accent-red/90' : 'bg-dark hover:bg-dark/90'}"
-				>
-					{busy ? 'Deleting…' : confirmLabel}
-				</button>
+				<div class="w-fit duo-btn" data-duo-color="light">
+					<button onclick={oncancel} disabled={busy}>{cancelLabel}</button>
+				</div>
+				<div class="w-fit duo-btn" data-duo-color={confirmColor === 'red' ? 'red' : 'dark'}>
+					<button onclick={onconfirm} disabled={busy || !canConfirm}>
+						{busy ? 'Deleting…' : confirmLabel}
+					</button>
+				</div>
 			</div>
 		</div>
 	</div>

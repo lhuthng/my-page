@@ -79,7 +79,12 @@
 			{/snippet}
 		</PageHeader>
 
-		<SearchInput placeholder="Search by title or slug…" bind:value={search} onsearch={onSearchInput} onclear={() => fetchProjects(true)} />
+		<SearchInput
+			placeholder="Search by title or slug…"
+			bind:value={search}
+			onsearch={onSearchInput}
+			onclear={() => fetchProjects(true)}
+		/>
 
 		<!-- Content -->
 		{#if loading}

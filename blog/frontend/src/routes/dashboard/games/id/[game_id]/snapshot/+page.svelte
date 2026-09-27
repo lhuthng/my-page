@@ -264,23 +264,26 @@
 
 		<div class="mt-3 flex flex-wrap items-center gap-2">
 			<span class="text-sm font-medium">Capture:</span>
-			{#each targets as entry (entry.index)}
-				{@const entryStatus = snapshots.find((s) => s.variant_index === entry.index)}
-				<button
-					class="rounded-full border px-3 py-1 text-sm disabled:opacity-50 {target === entry.index
-						? 'border-dark bg-dark text-white'
-						: 'border-dark/15'}"
-					disabled={busy}
-					onclick={() => selectTarget(entry.index)}
-				>
-					{entry.label}
-					{#if entryStatus?.stale}
-						<span class="ml-1 text-accent-yellow-dark">• stale</span>
-					{:else if entryStatus}
-						<span class="ml-1 text-emerald-500">•</span>
-					{/if}
-				</button>
-			{/each}
+			<div class="flex flex-wrap gap-1 bg-background/40 rounded-lg p-1">
+				{#each targets as entry (entry.index)}
+					{@const entryStatus = snapshots.find((s) => s.variant_index === entry.index)}
+					<button
+						class="px-3 py-1 rounded-md text-sm transition-colors cursor-pointer {target ===
+						entry.index
+							? 'bg-white font-semibold shadow-sm text-dark'
+							: 'text-dark/60 hover:text-dark'}"
+						disabled={busy}
+						onclick={() => selectTarget(entry.index)}
+					>
+						{entry.label}
+						{#if entryStatus?.stale}
+							<span class="ml-1 text-accent-yellow-dark">• stale</span>
+						{:else if entryStatus}
+							<span class="ml-1 text-accent-green">•</span>
+						{/if}
+					</button>
+				{/each}
+			</div>
 		</div>
 
 		<p class="mt-3 rounded-lg bg-dark/5 p-3 text-sm text-dark/70">
@@ -300,61 +303,49 @@
 
 	<div class="rounded-xl bg-white p-4 drop-shadow-xl space-y-3">
 		<div class="flex flex-wrap items-center gap-2">
-			<button
-				class="rounded-lg bg-dark px-3 py-2 text-sm text-white disabled:opacity-50"
-				disabled={!player.running || busy}
-				onclick={() => (player.paused ? player.resume() : player.pause())}
-			>
-				{player.paused ? 'Resume' : 'Pause'}
-			</button>
-			<button
-				class="rounded-lg bg-dark px-3 py-2 text-sm text-white disabled:opacity-50"
-				disabled={!player.running || busy || testing}
-				onclick={capture}
-			>
-				Capture state
-			</button>
-			<button
-				class="rounded-lg border border-dark/15 px-3 py-2 text-sm disabled:opacity-50"
-				disabled={!captured || busy}
-				onclick={testBoot}
-			>
-				Test boot
-			</button>
-			<button
-				class="rounded-lg border border-dark/15 px-3 py-2 text-sm disabled:opacity-50"
-				disabled={busy}
-				onclick={async () => {
-					busy = true;
-					await bootForTarget();
-					busy = false;
-				}}
-			>
-				Restart clean
-			</button>
+			<div class="w-fit duo-btn" data-duo-color="dark">
+				<button
+					disabled={!player.running || busy}
+					onclick={() => (player.paused ? player.resume() : player.pause())}
+				>
+					{player.paused ? 'Resume' : 'Pause'}
+				</button>
+			</div>
+			<div class="w-fit duo-btn" data-duo-color="dark">
+				<button disabled={!player.running || busy || testing} onclick={capture}>
+					Capture state
+				</button>
+			</div>
+			<div class="w-fit duo-btn" data-duo-color="light">
+				<button disabled={!captured || busy} onclick={testBoot}>Test boot</button>
+			</div>
+			<div class="w-fit duo-btn" data-duo-color="light">
+				<button
+					disabled={busy}
+					onclick={async () => {
+						busy = true;
+						await bootForTarget();
+						busy = false;
+					}}
+				>
+					Restart clean
+				</button>
+			</div>
 
 			<span class="mx-1 h-6 w-px bg-dark/10"></span>
 
-			<button
-				class="rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-50"
-				disabled={!captured || busy}
-				onclick={upload}
-			>
-				Compress &amp; publish
-			</button>
+			<div class="w-fit duo-btn" data-duo-color="green">
+				<button disabled={!captured || busy} onclick={upload}>Compress &amp; publish</button>
+			</div>
 
 			{#if current}
 				<span class="text-sm text-dark/60">
 					published {formatBytes(current.size_bytes)}
 					{#if current.stale}<span class="text-accent-yellow-dark">· stale, recapture</span>{/if}
 				</span>
-				<button
-					class="rounded-lg border border-red-200 px-3 py-1 text-sm text-red-700 disabled:opacity-50"
-					disabled={busy}
-					onclick={removeSnapshot}
-				>
-					Delete
-				</button>
+				<div class="w-fit duo-btn" data-duo-color="red">
+					<button disabled={busy} onclick={removeSnapshot}>Delete</button>
+				</div>
 			{/if}
 		</div>
 

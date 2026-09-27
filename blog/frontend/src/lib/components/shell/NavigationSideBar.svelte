@@ -1,6 +1,7 @@
 <script>
 	import { authState } from '$lib/auth/user.svelte.js';
 	import { env as publicEnv } from '$env/dynamic/public';
+	import SideBarItem from './SideBarItem.svelte';
 	import AboutButton from './buttons/AboutButton.svelte';
 	import AudiobookButton from './buttons/AudiobookButton.svelte';
 	import BlogButton from './buttons/BlogButton.svelte';
@@ -31,12 +32,7 @@
 	<ul class="space-y-2 bg-white p-2 rounded-xl" id="side-bar">
 		{#each routes as [Icon, text, path, routeName, secret], index}
 			{#if !secret || authState.isMod}
-				<li class={routeName === route ? 'selected' : undefined}>
-					<a href={path}>
-						<Icon class="w-8 transition-all duration-100" />
-						<span class="not-lg:hidden">{text}</span>
-					</a>
-				</li>
+				<SideBarItem icon={Icon} label={text} href={path} active={routeName === route} />
 			{/if}
 		{/each}
 	</ul>
@@ -70,19 +66,8 @@
 <style lang="postcss">
 	@reference "../../../app.css";
 
-	#side-bar {
-		& > li {
-			@apply w-full rounded-lg bg-background/40 text-dark transition-colors duration-50 hover:bg-background/60;
-
-			& > a {
-				@apply flex w-full items-center gap-1 px-1 py-1 lg:px-2 [&>button]:fill-dark [&>button]:stroke-dark;
-			}
-		}
-		& > li.selected {
-			@apply bg-dark text-white hover:bg-dark/90 [&>a>button]:fill-white [&>a>button]:stroke-white;
-		}
-	}
-
+	/* Item styling lives in SideBarItem so both rails stay identical; this
+	   only keeps the card's non-item links (connect, more) underline-free. */
 	a {
 		@apply no-underline!;
 	}

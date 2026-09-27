@@ -1,6 +1,11 @@
 <script>
-	let { placeholder = 'Search…', value = $bindable(''), onsearch, onclear, class: klass = '' } =
-		$props();
+	let {
+		placeholder = 'Search…',
+		value = $bindable(''),
+		onsearch,
+		onclear,
+		class: klass = ''
+	} = $props();
 </script>
 
 <div

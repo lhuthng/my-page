@@ -25,6 +25,8 @@
 	let uploading = $state(false);
 	let pendingChapterUpload = $state(null);
 	let coverBusy = $state(false);
+	/** Hidden file input behind the "Add audio tracks" duo button. */
+	let trackFileInput = $state(null);
 
 	let showPreview = $state(false);
 	let pendingDelete = $state(false);
@@ -556,35 +558,27 @@
 
 		<div class="flex items-center gap-2 flex-wrap">
 			{#if audiobook?.status === 'published'}
-				<a
-					href="/audiobooks/{audiobook.slug}"
-					class="rounded-full border border-dark/20 px-4 py-1.5 text-sm no-underline! text-dark hover:bg-dark/5"
-				>
-					View public page
-				</a>
-				<button
-					class="rounded-full border border-dark/20 px-4 py-1.5 text-sm hover:bg-dark/5"
-					onclick={() => setStatus('draft')}
-				>
-					Unpublish
-				</button>
+				<div class="w-fit duo-btn" data-duo-color="light">
+					<a href="/audiobooks/{audiobook.slug}">View public page</a>
+				</div>
+				<div class="w-fit duo-btn" data-duo-color="light">
+					<button onclick={() => setStatus('draft')}>Unpublish</button>
+				</div>
 			{:else}
-				<button
-					class="rounded-full bg-accent-green text-white px-4 py-1.5 text-sm font-medium hover:bg-accent-green/90"
-					onclick={() => setStatus('published')}
-				>
-					Publish
-				</button>
+				<div class="w-fit duo-btn" data-duo-color="green">
+					<button onclick={() => setStatus('published')}>Publish</button>
+				</div>
 			{/if}
-			<button
-				class="rounded-full border border-accent-red text-accent-red px-4 py-1.5 text-sm hover:bg-accent-red/10"
-				onclick={() => {
-					typedConfirm = '';
-					pendingDelete = true;
-				}}
-			>
-				Delete
-			</button>
+			<div class="w-fit duo-btn" data-duo-color="red">
+				<button
+					onclick={() => {
+						typedConfirm = '';
+						pendingDelete = true;
+					}}
+				>
+					Delete
+				</button>
+			</div>
 		</div>
 	</div>
 
@@ -596,9 +590,7 @@
 			aria-live="polite"
 		>
 			{#if error}
-				<div
-					class="flex items-start gap-2 rounded-xl bg-white border-l-4 border-accent-red shadow-xl px-4 py-3 text-accent-red"
-				>
+				<div class="flex items-start gap-2 rounded-xl bg-white shadow-xl px-4 py-3 text-accent-red">
 					<span class="grow min-w-0">{error}</span>
 					<button
 						class="shrink-0 text-lg leading-none"
@@ -610,9 +602,7 @@
 				</div>
 			{/if}
 			{#if notice}
-				<p
-					class="rounded-xl bg-white border-l-4 border-accent-green shadow-xl px-4 py-3 text-accent-green-dark"
-				>
+				<p class="rounded-xl bg-white shadow-xl px-4 py-3 text-accent-green-dark">
 					{notice}
 				</p>
 			{/if}
@@ -687,13 +677,11 @@
 			</div>
 
 			<div class="flex items-center gap-4 flex-wrap">
-				<button
-					class="rounded-full bg-dark text-white px-5 py-2 text-sm font-medium hover:bg-dark/90 disabled:opacity-50"
-					type="submit"
-					disabled={savingMeta}
-				>
-					{savingMeta ? 'Saving…' : 'Save details'}
-				</button>
+				<div class="w-fit duo-btn" data-duo-color="green">
+					<button type="submit" disabled={savingMeta}>
+						{savingMeta ? 'Saving…' : 'Save details'}
+					</button>
+				</div>
 
 				<label class="flex items-center gap-2 text-sm text-dark/60">
 					Cover
@@ -728,24 +716,26 @@
 		>
 			<div class="flex items-center justify-between gap-2 flex-wrap">
 				<h2 class="font-semibold">Chapters</h2>
-				<label
-					class="rounded-full bg-primary text-white px-4 py-1.5 text-sm font-medium cursor-pointer hover:bg-primary/90 {uploading
-						? 'opacity-50 pointer-events-none'
-						: ''}"
+				<div
+					class="w-fit duo-btn {uploading ? 'opacity-50 pointer-events-none' : ''}"
+					data-duo-color="green"
 				>
-					{uploading ? 'Uploading…' : 'Add audio tracks'}
-					<input
-						class="hidden"
-						type="file"
-						multiple
-						accept="audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/x-wav,.mp3,.ogg,.wav"
-						disabled={uploading}
-						onchange={(event) => {
-							queueTrackUpload(event.currentTarget.files);
-							event.currentTarget.value = '';
-						}}
-					/>
-				</label>
+					<button type="button" disabled={uploading} onclick={() => trackFileInput.click()}>
+						{uploading ? 'Uploading…' : 'Add audio tracks'}
+					</button>
+				</div>
+				<input
+					bind:this={trackFileInput}
+					class="hidden"
+					type="file"
+					multiple
+					accept="audio/mpeg,audio/mp3,audio/ogg,audio/wav,audio/x-wav,.mp3,.ogg,.wav"
+					disabled={uploading}
+					onchange={(event) => {
+						queueTrackUpload(event.currentTarget.files);
+						event.currentTarget.value = '';
+					}}
+				/>
 			</div>
 
 			<p class="text-xs text-dark/40">
@@ -795,9 +785,7 @@
 						<li
 							data-track-row
 							data-track-id={track.id}
-							class="border-b border-background last:border-b-0 {fileOverId === track.id
-								? 'bg-primary/15 rounded-lg'
-								: ''}"
+							class={fileOverId === track.id ? 'bg-primary/15 rounded-lg' : ''}
 							in:fly={{ y: -6, duration: 150 }}
 							ondragover={(event) => onRowFileDragOver(event, track)}
 							ondrop={(event) => onRowFileDrop(event, track)}
@@ -967,32 +955,26 @@
 				{/if}
 			</p>
 			<div class="mt-6 flex justify-end gap-3 flex-wrap">
-				<button
-					class="rounded-full border border-dark/20 px-5 py-2 text-sm font-medium text-dark hover:bg-dark/5"
-					onclick={() => (pendingChapterUpload = null)}
-				>
-					Cancel
-				</button>
+				<div class="w-fit duo-btn" data-duo-color="light">
+					<button onclick={() => (pendingChapterUpload = null)}>Cancel</button>
+				</div>
 				{#if pendingChapterUpload.kind === 'mixed'}
-					<button
-						class="rounded-full bg-dark px-5 py-2 text-sm font-medium text-white hover:bg-dark/90"
-						onclick={() => runPendingChapterUpload('replace')}
-					>
-						Replace {pendingChapterUpload.replacements.length} only
-					</button>
-					<button
-						class="rounded-full bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary/90"
-						onclick={() => runPendingChapterUpload('add')}
-					>
-						Add {pendingChapterUpload.additions.length} new only
-					</button>
+					<div class="w-fit duo-btn" data-duo-color="dark">
+						<button onclick={() => runPendingChapterUpload('replace')}>
+							Replace {pendingChapterUpload.replacements.length} only
+						</button>
+					</div>
+					<div class="w-fit duo-btn" data-duo-color="green">
+						<button onclick={() => runPendingChapterUpload('add')}>
+							Add {pendingChapterUpload.additions.length} new only
+						</button>
+					</div>
 				{:else}
-					<button
-						class="rounded-full bg-primary px-5 py-2 text-sm font-medium text-white hover:bg-primary/90"
-						onclick={() => runPendingChapterUpload('replace')}
-					>
-						Replace chapter audio
-					</button>
+					<div class="w-fit duo-btn" data-duo-color="dark">
+						<button onclick={() => runPendingChapterUpload('replace')}>
+							Replace chapter audio
+						</button>
+					</div>
 				{/if}
 			</div>
 		</div>

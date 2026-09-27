@@ -84,7 +84,11 @@
 	</p>
 	{#if error}<p class="text-sm text-accent-red">{error}</p>{/if}
 	{#if items.length === 0}
-		<EmptyState message="Trash is empty." hint="Deleted posts, projects, and games rest here for 7 days." mascot />
+		<EmptyState
+			message="Trash is empty."
+			hint="Deleted posts, projects, and games rest here for 7 days."
+			mascot
+		/>
 	{:else}
 		<ul class="flex flex-col gap-2">
 			{#each items as item (item.post_id)}
@@ -95,32 +99,26 @@
 						<span class="font-medium flex items-center gap-2 flex-wrap">
 							{item.title}
 							<span class="text-xs text-dark/40 font-mono">/{item.slug}</span>
-							<span
-								class="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-dark/60 uppercase"
-							>
+							<span class="rounded-full bg-primary/20 px-2 py-0.5 text-xs text-dark/60 uppercase">
 								{item.content_kind}
 							</span>
 						</span>
 						<span class="text-xs text-dark/50">
-							{item.deletion_reason ?? 'user_request'} · {daysLeft(item.scheduled_purge_at)} ·
-							deleted {item.deleted_at}
+							{item.deletion_reason ?? 'user_request'} · {daysLeft(item.scheduled_purge_at)} · deleted
+							{item.deleted_at}
 						</span>
 					</div>
 					<div class="flex gap-2 shrink-0">
-						<button
-							disabled={busyId === item.post_id}
-							onclick={() => restore(item)}
-							class="rounded-full border-2 border-accent-green text-accent-green bg-accent-green-light-2/50 px-4 py-1.5 text-sm font-medium hover:bg-accent-green hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
-						>
-							Restore
-						</button>
-						<button
-							disabled={busyId === item.post_id}
-							onclick={() => askPurge(item)}
-							class="rounded-full border-2 border-accent-red text-accent-red bg-accent-red-light-2/50 px-4 py-1.5 text-sm font-medium hover:bg-accent-red hover:text-white transition-colors disabled:opacity-50 cursor-pointer"
-						>
-							Delete now
-						</button>
+						<div class="w-fit duo-btn" data-duo-color="green">
+							<button disabled={busyId === item.post_id} onclick={() => restore(item)}>
+								Restore
+							</button>
+						</div>
+						<div class="w-fit duo-btn" data-duo-color="red">
+							<button disabled={busyId === item.post_id} onclick={() => askPurge(item)}>
+								Delete now
+							</button>
+						</div>
 					</div>
 				</li>
 			{/each}

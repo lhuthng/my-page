@@ -242,12 +242,9 @@
 						placeholder="Search…"
 						class="border-2 border-dark/10 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-dark w-44 transition-colors"
 					/>
-					<button
-						type="submit"
-						class="px-3 py-1.5 bg-dark text-white rounded-lg text-sm hover:bg-dark/80 transition-colors"
-					>
-						Search
-					</button>
+					<div class="w-fit duo-btn" data-duo-color="dark">
+						<button type="submit">Search</button>
+					</div>
 				</form>
 			{/if}
 			{#if table === 'posts'}
@@ -508,48 +505,49 @@
 											{#if isAdmin}
 												{#if editingTagId === row.id}
 													<div class="flex items-center gap-2">
-														<button
-															onclick={() => saveTag(row)}
-															disabled={savingTagId === row.id}
-															class="rounded-lg bg-dark px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-dark/85 disabled:opacity-50"
-														>
-															{savingTagId === row.id ? 'Saving...' : 'Save'}
-														</button>
-														<button
-															onclick={cancelTagEdit}
-															disabled={savingTagId === row.id || deletingTagId === row.id}
-															class="rounded-lg border-2 border-dark/10 px-3 py-1.5 text-sm text-dark/65 transition-colors hover:bg-background/60 disabled:opacity-50"
-														>
-															Cancel
-														</button>
-														<button
-															onclick={() => promptDeleteTag(row)}
-															disabled={row.postCount > 0 ||
-																savingTagId === row.id ||
-																deletingTagId === row.id}
-															class="rounded-lg border-2 border-accent-red/30 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
-														>
-															{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
-														</button>
+														<div class="w-fit duo-btn" data-duo-color="green">
+															<button
+																onclick={() => saveTag(row)}
+																disabled={savingTagId === row.id}
+															>
+																{savingTagId === row.id ? 'Saving...' : 'Save'}
+															</button>
+														</div>
+														<div class="w-fit duo-btn" data-duo-color="light">
+															<button
+																onclick={cancelTagEdit}
+																disabled={savingTagId === row.id || deletingTagId === row.id}
+															>
+																Cancel
+															</button>
+														</div>
+														<div class="w-fit duo-btn" data-duo-color="red">
+															<button
+																onclick={() => promptDeleteTag(row)}
+																disabled={row.postCount > 0 ||
+																	savingTagId === row.id ||
+																	deletingTagId === row.id}
+															>
+																{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
+															</button>
+														</div>
 													</div>
 												{:else}
 													<div class="flex items-center gap-2">
-														<button
-															onclick={() => startTagEdit(row)}
-															class="rounded-lg border-2 border-dark/10 px-3 py-1.5 text-sm text-dark/70 transition-colors hover:bg-background/60"
-														>
-															Edit
-														</button>
-														<button
-															onclick={() => promptDeleteTag(row)}
-															disabled={row.postCount > 0 || deletingTagId === row.id}
-															class="rounded-lg border-2 border-accent-red/30 px-3 py-1.5 text-sm text-accent-red transition-colors hover:bg-accent-red/8 disabled:cursor-not-allowed disabled:opacity-40"
-															title={row.postCount > 0
-																? 'Only unused tags can be deleted.'
-																: 'Delete this unused tag'}
-														>
-															{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
-														</button>
+														<div class="w-fit duo-btn" data-duo-color="light">
+															<button onclick={() => startTagEdit(row)}>Edit</button>
+														</div>
+														<div class="w-fit duo-btn" data-duo-color="red">
+															<button
+																onclick={() => promptDeleteTag(row)}
+																disabled={row.postCount > 0 || deletingTagId === row.id}
+																title={row.postCount > 0
+																	? 'Only unused tags can be deleted.'
+																	: 'Delete this unused tag'}
+															>
+																{deletingTagId === row.id ? 'Deleting...' : 'Delete'}
+															</button>
+														</div>
 													</div>
 												{/if}
 											{:else}
@@ -581,24 +579,24 @@
 			</div>
 
 			{#if totalPages > 1}
-				<div
-					class="px-4 py-3 border-t-2 border-dark/10 flex items-center justify-between gap-4"
-				>
-					<button
-						onclick={() => navigate({ page: currentPage - 1 })}
-						disabled={currentPage <= 1 || loading}
-						class="px-3 py-1.5 rounded-lg text-sm border-2 border-dark/10 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors"
-					>
-						← Prev
-					</button>
+				<div class="px-4 py-3 border-t-2 border-dark/10 flex items-center justify-between gap-4">
+					<div class="w-fit duo-btn" data-duo-color="light">
+						<button
+							onclick={() => navigate({ page: currentPage - 1 })}
+							disabled={currentPage <= 1 || loading}
+						>
+							← Prev
+						</button>
+					</div>
 					<span class="text-sm text-dark/55 tabular-nums">Page {currentPage} of {totalPages}</span>
-					<button
-						onclick={() => navigate({ page: currentPage + 1 })}
-						disabled={currentPage >= totalPages || loading}
-						class="px-3 py-1.5 rounded-lg text-sm border-2 border-dark/10 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-background/60 transition-colors"
-					>
-						Next →
-					</button>
+					<div class="w-fit duo-btn" data-duo-color="light">
+						<button
+							onclick={() => navigate({ page: currentPage + 1 })}
+							disabled={currentPage >= totalPages || loading}
+						>
+							Next →
+						</button>
+					</div>
 				</div>
 			{/if}
 		</div>
@@ -625,20 +623,19 @@
 					<p class="rounded-lg bg-accent-red/10 px-3 py-2 text-sm text-accent-red">{tagError}</p>
 				{/if}
 				<div class="flex items-center justify-end gap-2">
-					<button
-						onclick={closeDeletePrompt}
-						disabled={deletingTagId === tagToDelete.id}
-						class="rounded-lg border-2 border-dark/10 px-4 py-2 text-sm text-dark/70 transition-colors hover:bg-background/60 disabled:opacity-50"
-					>
-						Cancel
-					</button>
-					<button
-						onclick={() => deleteTag(tagToDelete)}
-						disabled={deletingTagId === tagToDelete.id}
-						class="rounded-lg bg-accent-red px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-					>
-						{deletingTagId === tagToDelete.id ? 'Deleting...' : 'Delete tag'}
-					</button>
+					<div class="w-fit duo-btn" data-duo-color="light">
+						<button onclick={closeDeletePrompt} disabled={deletingTagId === tagToDelete.id}>
+							Cancel
+						</button>
+					</div>
+					<div class="w-fit duo-btn" data-duo-color="red">
+						<button
+							onclick={() => deleteTag(tagToDelete)}
+							disabled={deletingTagId === tagToDelete.id}
+						>
+							{deletingTagId === tagToDelete.id ? 'Deleting...' : 'Delete tag'}
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

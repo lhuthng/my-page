@@ -110,11 +110,11 @@
 <div class="bg-white rounded-xl p-4 max-w-2xl">
 	<h2 class="text-2xl font-semibold mb-2">Sync Keys</h2>
 	<p class="text-dark/60 text-sm mb-6">
-		Issue a short-lived key that authorizes pulling this environment's data
-		(database, media, demos, game artifacts) into a development machine with
-		<code class="bg-dark/5 px-1 rounded">sync-pull</code>. A key grants full read
-		access to everything — treat it like a password. Keys are shown once and can
-		be revoked at any time.
+		Issue a short-lived key that authorizes pulling this environment's data (database, media, demos,
+		game artifacts) into a development machine with
+		<code class="bg-dark/5 px-1 rounded">sync-pull</code>
+		. A key grants full read access to everything — treat it like a password. Keys are shown once and
+		can be revoked at any time.
 	</p>
 
 	<div class="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end mb-2">
@@ -129,7 +129,10 @@
 		</label>
 		<label class="block">
 			<span class="text-sm text-dark/60">Valid for</span>
-			<select class="mt-1 w-full rounded-lg border border-dark/15 px-3 py-2 text-sm" bind:value={ttlHours}>
+			<select
+				class="mt-1 w-full rounded-lg border border-dark/15 px-3 py-2 text-sm"
+				bind:value={ttlHours}
+			>
 				{#each TTL_OPTIONS as option}
 					<option value={option.value}>{option.label}</option>
 				{/each}
@@ -201,8 +204,8 @@
 		>
 			<h3 id="sync-key-title" class="text-lg font-semibold mb-1">Your sync key</h3>
 			<p class="text-sm text-dark/60 mb-4">
-				Copy or download it now — it is <strong>shown only once</strong> and cannot
-				be recovered. It expires {formatDate(createdKey.expires_at)}.
+				Copy or download it now — it is <strong>shown only once</strong>
+				and cannot be recovered. It expires {formatDate(createdKey.expires_at)}.
 			</p>
 			<code
 				class="block break-all rounded-lg bg-dark/5 px-3 py-2 text-sm select-all"
@@ -235,8 +238,8 @@
 			<h3 class="text-lg font-semibold mb-1">Revoke sync key?</h3>
 			<p class="text-sm text-dark/60 mb-4">
 				{keyToRevoke.label || 'This key'}
-				will stop working immediately. Machines using it will get an
-				authorization error on their next request.
+				will stop working immediately. Machines using it will get an authorization error on their next
+				request.
 			</p>
 			<div class="flex gap-2">
 				<div class="w-fit duo-btn" data-duo-color="dark">

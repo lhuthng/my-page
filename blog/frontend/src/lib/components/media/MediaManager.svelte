@@ -24,23 +24,17 @@
 					placeholder="Search keywords"
 					bind:value={keyword}
 				/>
-				<button
-					disabled={editMode !== true}
-					class="rounded-xl border-2 border-dark/10 px-3 text-sm font-medium hover:bg-background/60 disabled:opacity-40 cursor-pointer"
-					type="button"
-				>
-					Search
-				</button>
+				<div class="w-fit duo-btn" data-duo-color="dark">
+					<button disabled={editMode !== true} type="button">Search</button>
+				</div>
 			</div>
 
 			<div class="flex gap-2">
-				<button
-					type="button"
-					class="lg:hidden rounded-xl border-2 border-dark/10 px-3 py-1.5 text-sm font-medium hover:bg-background/60 cursor-pointer"
-					onclick={() => (tab = tab === 1 ? 0 : 1)}
-				>
-					{tab === 1 ? 'Hide details' : 'Details'}
-				</button>
+				<div class="w-fit duo-btn lg:hidden" data-duo-color="light">
+					<button type="button" onclick={() => (tab = tab === 1 ? 0 : 1)}>
+						{tab === 1 ? 'Hide details' : 'Details'}
+					</button>
+				</div>
 				<div class="w-fit duo-btn" data-duo-color="primary">
 					<button type="button" onclick={() => changeMode?.()}>
 						{editMode ? 'Upload' : 'Edit'}

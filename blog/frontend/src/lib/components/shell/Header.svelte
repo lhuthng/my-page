@@ -20,6 +20,7 @@
 	import SeriesButton from './buttons/SeriesButton.svelte';
 	import { widthThreshold } from '$lib/utils';
 	import { win } from '$lib/dom/windows.svelte.js';
+	import { dashboardNavGroups } from '$lib/components/dashboard/navigation.js';
 	const { lg } = widthThreshold;
 
 	let displayName = $derived(authState.user?.displayName);
@@ -367,7 +368,7 @@
 		<div
 			in:fly={{ y: -10, duration: 100 }}
 			id="mobile-menu"
-			class="z-9 absolute flex flex-col gap-4 items-center w-cap bg-white py-4 rounded-b-lg shadow-lg"
+			class="z-9 absolute flex flex-col gap-4 items-center w-cap bg-white py-4 rounded-b-lg shadow-lg max-h-[calc(100dvh-3.5rem)] overflow-y-auto custom-scrollbar"
 		>
 			{#if displayName && username}
 				<div class="flex not-sm:flex-col items-center gap-2">
@@ -515,6 +516,27 @@
 					</div>
 				</div>
 			</div>
+			{#if authState.isMod}
+				<!-- The dashboard's sections, for phones where the lg+ rail does not
+				     exist. Same plain text label + list pattern as "Connect with me
+				     on:", and identical item style to the menu above. Gated on the
+				     client auth state so unauthorized visitors are never sent these
+				     items at all; /dashboard itself is server-guarded. -->
+				<div class="w-full">
+					<span>Dashboard</span>
+					<ul class="mt-2 space-y-2 bg-white p-2 rounded-xl">
+						{#each dashboardNavGroups(authState.user?.role).flatMap((group) => group.items) as tab (tab.path)}
+							{@const Icon = tab.icon}
+							<li>
+								<a class="flex items-center gap-2 stroke-dark fill-dark" href={tab.path}>
+									<Icon class="w-6 transition-all duration-100" />
+									<span>{tab.label}</span>
+								</a>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </header>

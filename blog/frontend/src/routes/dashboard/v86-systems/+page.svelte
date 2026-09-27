@@ -400,12 +400,9 @@
 			class="flex flex-col items-start justify-between gap-3 border-t border-dark/15 pt-3 lg:col-span-2 sm:flex-row sm:items-center"
 		>
 			<p class:text-accent-red={critical} class="min-h-5 text-sm">{status}</p>
-			<button
-				class="rounded-lg bg-dark px-4 py-2 font-semibold text-white shadow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-				disabled={busy}
-			>
-				{busy ? 'Working…' : 'Upload image'}
-			</button>
+			<div class="w-fit duo-btn" data-duo-color="green">
+				<button disabled={busy}>{busy ? 'Working…' : 'Upload image'}</button>
+			</div>
 		</div>
 	</form>
 
@@ -428,65 +425,66 @@
 					</p>
 				</div>
 				<div class="flex flex-wrap gap-2">
-					<button
-						class="rounded-lg border-2 border-dark/30 px-3 py-1.5 text-sm font-semibold transition hover:bg-dark hover:text-white"
-						onclick={() => {
-							const next = prompt(
-								"Guest memory in MB (32-1024). Raising it stales this system's snapshots.",
-								String(system.memory_size_mb)
-							);
-							const mb = Number(next);
-							if (Number.isInteger(mb) && mb !== system.memory_size_mb) {
-								updateSystem(system, { memory_size_mb: mb });
-							}
-						}}
-					>
-						{system.memory_size_mb} MB
-					</button>
-					<button
-						class="rounded-lg border-2 border-dark/30 px-3 py-1.5 text-sm font-semibold transition hover:bg-dark hover:text-white"
-						onclick={() => {
-							const next = prompt('System display name', system.name);
-							if (next && next.trim() !== system.name) updateSystem(system, { name: next.trim() });
-						}}
-					>
-						Rename
-					</button>
-					<button
-						class="rounded-lg border-2 border-dark/30 px-3 py-1.5 text-sm font-semibold transition hover:bg-dark hover:text-white"
-						onclick={() => updateSystem(system, { is_active: !system.is_active })}
-					>
-						{system.is_active ? 'Deactivate' : 'Activate'}
-					</button>
-					<button
-						class="rounded-lg border-2 border-dark/30 px-3 py-1.5 text-sm font-semibold transition hover:bg-dark hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-						disabled={system.is_default}
-						onclick={() => updateSystem(system, { is_default: true })}
-					>
-						{system.is_default ? 'Default' : 'Make default'}
-					</button>
-					<button
-						class="rounded-lg border-2 border-accent-red/40 px-3 py-1.5 text-sm font-semibold text-accent-red transition hover:bg-accent-red hover:text-white"
-						onclick={() => deleteSystem(system)}
-					>
-						Delete system
-					</button>
+					<div class="w-fit duo-btn" data-duo-color="light">
+						<button
+							onclick={() => {
+								const next = prompt(
+									"Guest memory in MB (32-1024). Raising it stales this system's snapshots.",
+									String(system.memory_size_mb)
+								);
+								const mb = Number(next);
+								if (Number.isInteger(mb) && mb !== system.memory_size_mb) {
+									updateSystem(system, { memory_size_mb: mb });
+								}
+							}}
+						>
+							{system.memory_size_mb} MB
+						</button>
+					</div>
+					<div class="w-fit duo-btn" data-duo-color="light">
+						<button
+							onclick={() => {
+								const next = prompt('System display name', system.name);
+								if (next && next.trim() !== system.name)
+									updateSystem(system, { name: next.trim() });
+							}}
+						>
+							Rename
+						</button>
+					</div>
+					<div class="w-fit duo-btn" data-duo-color="light">
+						<button onclick={() => updateSystem(system, { is_active: !system.is_active })}>
+							{system.is_active ? 'Deactivate' : 'Activate'}
+						</button>
+					</div>
+					<div class="w-fit duo-btn" data-duo-color="light">
+						<button
+							disabled={system.is_default}
+							onclick={() => updateSystem(system, { is_default: true })}
+						>
+							{system.is_default ? 'Default' : 'Make default'}
+						</button>
+					</div>
+					<div class="w-fit duo-btn" data-duo-color="red">
+						<button onclick={() => deleteSystem(system)}>Delete system</button>
+					</div>
 				</div>
 			</div>
-			<ul class="divide-y">
+			<ul>
 				{#each system.versions as version}
 					<li class="flex flex-wrap items-center justify-between gap-2 py-2">
 						<span>
 							v{version.version_number} · {version.original_file_name} ·
 							{(version.size_bytes / 1024 / 1024).toFixed(1)} MiB · {version.chunk_count} chunks
 						</span>
-						<button
-							class="rounded-lg border-2 border-accent-red/40 px-3 py-1.5 text-sm font-semibold text-accent-red transition hover:bg-accent-red hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-							disabled={version.version_number === system.current_version}
-							onclick={() => deleteVersion(system, version)}
-						>
-							Delete
-						</button>
+						<div class="w-fit duo-btn" data-duo-color="red">
+							<button
+								disabled={version.version_number === system.current_version}
+								onclick={() => deleteVersion(system, version)}
+							>
+								Delete
+							</button>
+						</div>
 					</li>
 				{/each}
 			</ul>

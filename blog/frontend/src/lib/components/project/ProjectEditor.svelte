@@ -224,14 +224,18 @@
 {#if mode === 'edit' && isOwner}
 	<section class="rounded-xl border border-accent-red/30 bg-accent-red-light-4 p-4">
 		<h3 class="font-semibold text-accent-red">Danger zone</h3>
-		<p class="mt-1 text-sm text-dark/60">Delete this project. It will be moved to trash for 7 days and can be restored.</p>
+		<p class="mt-1 text-sm text-dark/60">
+			Delete this project. It will be moved to trash for 7 days and can be restored.
+		</p>
 		<div class="mt-3 flex gap-2">
 			<select bind:value={deleteReason} class="rounded-lg border border-dark/20 px-3 py-1 text-sm">
 				<option value="user_request">User request</option>
 				<option value="replaced">Replaced</option>
 				<option value="other">Other</option>
 			</select>
-			<button onclick={() => (showDelete = true)} class="rounded-full bg-accent-red px-4 py-2 text-sm font-medium text-white">Delete project</button>
+			<div class="w-fit duo-btn" data-duo-color="red">
+				<button onclick={() => (showDelete = true)}>Delete project</button>
+			</div>
 		</div>
 	</section>
 	<ConfirmDialog

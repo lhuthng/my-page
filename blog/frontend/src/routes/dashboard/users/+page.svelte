@@ -109,8 +109,8 @@
 <section class="flex flex-col gap-4 *:bg-white *:rounded-xl *:p-4 pb-8">
 	<!-- Role summary cards - override *: so individual cards style themselves -->
 	<div class="grid grid-cols-3 gap-4 bg-transparent! p-0!">
-		{#each [['Admins', userData.role_counts.admin, Heart, 'fill-accent-red', 'border-accent-red'], ['Moderators', userData.role_counts.moderator, Diamond, 'fill-accent-blue', 'border-accent-blue'], ['Users', userData.role_counts.user, Club, 'fill-dark/60', 'border-dark/30']] as [label, count, Icon, iconClass, borderClass]}
-			<div class="bg-white rounded-xl p-4 flex items-center gap-3 border-l-4 {borderClass}">
+		{#each [['Admins', userData.role_counts.admin, Heart, 'fill-accent-red'], ['Moderators', userData.role_counts.moderator, Diamond, 'fill-accent-blue'], ['Users', userData.role_counts.user, Club, 'fill-dark/60']] as [label, count, Icon, iconClass]}
+			<div class="bg-white rounded-xl p-4 flex items-center gap-3">
 				<Icon class="w-8 shrink-0 {iconClass}" />
 				<div>
 					<p class="text-2xl font-bold">{count}</p>
@@ -158,7 +158,7 @@
 				hint={search || roleFilter ? 'Try a different name or role filter.' : ''}
 			/>
 		{:else}
-			<ul class="flex flex-col divide-y divide-background">
+			<ul class="flex flex-col">
 				{#each userData.users as u, i (u.username)}
 					<li
 						class="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:bg-background/20 transition-colors rounded-lg px-2 -mx-2"
