@@ -1,0 +1,5 @@
+# One human, one GitHub identity. Without this, the same person shows up as
+# several contributors because GitHub keys off the commit email.
+Thang <lhuthng@gmail.com> <thang@Mac-mini-von-Thang.local>
+Thang <lhuthng@gmail.com> Huu Thang, Le <lhuthng@gmail.com>
+Thang <lhuthng@gmail.com> Huu Thang, Le <62278351+lhuthng@users.noreply.github.com>
