@@ -246,7 +246,7 @@ final class PagerModel: ObservableObject {
             let under = scrollView(under: event)
             // The list is only a target when the press is really inside it: its
             // hit region reports as reachable from the artwork above.
-            let target: NSScrollView?
+            var target: NSScrollView?
             if inList {
                 target = list
             } else if let under, under !== list {
@@ -254,6 +254,12 @@ final class PagerModel: ObservableObject {
             } else {
                 target = nil
             }
+            // A view with nothing to scroll is not a target. The router claims the
+            // press and swallows the drag, so without this a short catalogue eats
+            // every drag on the header drawer above it — and eats only the events
+            // it fails to apply, which is what made the drawer jump between its
+            // two resting heights mid-pull.
+            if let claimed = target, !scrollsVertically(claimed) { target = nil }
             pressScrollView = target
             pressInList = inList
             pressInScrollable = target != nil
@@ -400,6 +406,13 @@ final class PagerModel: ObservableObject {
     }
 
     private func listScrollView() -> NSScrollView? { listReference }
+
+    /// Whether the view can move vertically at all. A list shorter than its
+    /// viewport goes nowhere, however it is dragged.
+    private func scrollsVertically(_ scrollView: NSScrollView) -> Bool {
+        let clip = scrollView.contentView
+        return (clip.documentView?.bounds.height ?? 0) > clip.bounds.height + 1
+    }
 
     /// Log what the chapter list can scroll — document height against viewport —
     /// without needing a drag.
