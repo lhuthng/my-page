@@ -256,7 +256,10 @@ struct FivePointStar: Shape {
         let outer = min(rect.width, rect.height) / 2
         let inner = outer * 0.382
         for index in 0..<10 {
-            let angle = (Double(index) * .pi / 5) - .pi / 2
+            // CGFloat throughout: cos/sin have CGFloat and Double overloads, so
+            // mixing a Double angle with a CGFloat radius leaves the call
+            // ambiguous on some SDKs.
+            let angle = (CGFloat(index) * .pi / 5) - .pi / 2
             let radius = index % 2 == 0 ? outer : inner
             let point = CGPoint(
                 x: center.x + cos(angle) * radius,
