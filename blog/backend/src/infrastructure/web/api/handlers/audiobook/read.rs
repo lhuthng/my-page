@@ -34,7 +34,7 @@ pub async fn get_audiobooks(
 ) -> Result<impl IntoResponse, AudiobookError> {
     let (limit, offset) = page_window(query.limit, query.offset, 50);
 
-    let audiobooks = state
+    let page = state
         .audiobook_service
         .get_audiobooks(GetAudiobooksCommand {
             user_id: caller_id(&claims)?,
@@ -46,7 +46,8 @@ pub async fn get_audiobooks(
         .await?;
 
     Ok(Json(AudiobookListResponse {
-        audiobooks: audiobooks.into_iter().map(Into::into).collect(),
+        audiobooks: page.audiobooks.into_iter().map(Into::into).collect(),
+        has_more: page.has_more,
     }))
 }
 
@@ -107,7 +108,7 @@ pub async fn get_public_audiobooks(
 ) -> Result<impl IntoResponse, AudiobookError> {
     let (limit, offset) = page_window(query.limit, query.offset, 24);
 
-    let audiobooks = state
+    let page = state
         .audiobook_service
         .get_public_audiobooks(GetPublicAudiobooksCommand {
             term: query.term,
@@ -118,7 +119,8 @@ pub async fn get_public_audiobooks(
         .await?;
 
     Ok(Json(AudiobookListResponse {
-        audiobooks: audiobooks.into_iter().map(Into::into).collect(),
+        audiobooks: page.audiobooks.into_iter().map(Into::into).collect(),
+        has_more: page.has_more,
     }))
 }
 

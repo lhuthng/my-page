@@ -11,13 +11,13 @@ pub trait AudiobookService {
     async fn get_audiobooks(
         &self,
         cmd: commands::audiobook::GetAudiobooksCommand,
-    ) -> Result<Vec<entities::audiobook::AudiobookSnapshot>, errors::audiobook::AudiobookError>;
+    ) -> Result<entities::audiobook::AudiobookSnapshotPage, errors::audiobook::AudiobookError>;
 
     /// Public catalogue: published audiobooks only.
     async fn get_public_audiobooks(
         &self,
         cmd: commands::audiobook::GetPublicAudiobooksCommand,
-    ) -> Result<Vec<entities::audiobook::AudiobookSnapshot>, errors::audiobook::AudiobookError>;
+    ) -> Result<entities::audiobook::AudiobookSnapshotPage, errors::audiobook::AudiobookError>;
 
     /// Full details including ordered tracks, for the dashboard editor.
     async fn get_audiobook(

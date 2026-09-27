@@ -62,7 +62,7 @@
 			const params = new URLSearchParams();
 			if (data.tag) params.set('tag', data.tag);
 			if (data.term) params.set('term', data.term);
-			params.set('limit', String(limit + 1));
+			params.set('limit', String(limit));
 			params.set('offset', String(audiobooks.length));
 
 			const payload = await api.get(`audiobooks/public/all?${params}`, {
@@ -71,17 +71,14 @@
 
 			batchId += 1;
 
-			const rows = payload.audiobooks ?? [];
-			const more = rows.length > limit;
-
-			const newAudiobooks = rows.slice(0, limit).map((audiobook, index) => ({
+			const newAudiobooks = (payload.audiobooks ?? []).map((audiobook, index) => ({
 				...audiobook,
 				_batchId: batchId,
 				_introDelay: index * itemDelay
 			}));
 
 			audiobooks = [...audiobooks, ...newAudiobooks];
-			hasMore = more;
+			hasMore = Boolean(payload.has_more);
 		} catch {
 			loadError = 'Could not load more audiobooks right now.';
 		} finally {

@@ -50,6 +50,8 @@ impl From<AudiobookSnapshot> for AudiobookSummaryResponse {
 #[derive(Serialize, Deserialize)]
 pub struct AudiobookListResponse {
     pub audiobooks: Vec<AudiobookSummaryResponse>,
+    /// More pages exist after this one.
+    pub has_more: bool,
 }
 
 #[derive(Serialize)]

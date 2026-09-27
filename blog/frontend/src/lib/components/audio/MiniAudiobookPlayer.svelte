@@ -2,6 +2,7 @@
 	import { fly } from 'svelte/transition';
 	import { audiobookSession } from '$lib/players/AudiobookSession.svelte.js';
 	import { formatClock, percentOf } from '$lib/utils/duration.js';
+	import MarqueeLine from './MarqueeLine.svelte';
 
 	const session = audiobookSession;
 
@@ -79,13 +80,6 @@
 	// Hidden while the reader is on this book's page: the full player is already
 	// there, so a second set of controls would just be noise.
 	const visible = $derived(session.miniVisible);
-
-	// Marquee: the chapter line only scrolls when it actually overflows, and the
-	// duration grows with the distance so the speed stays readable either way.
-	let lineWidth = $state(0);
-	let textWidth = $state(0);
-	const overflow = $derived(Math.max(0, textWidth - lineWidth));
-	const marqueeSeconds = $derived(Math.round(6 + overflow / 25));
 </script>
 
 {#if visible && engine && book}
@@ -113,10 +107,9 @@
 			></span>
 		{/if}
 
-		<!-- Timeline: the same pointer-driven scrubber as the full player,
-		     compressed to a thin strip that doubles as the card's top rule. -->
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (because of reasons) -->
 		<div
-			class="relative z-10 h-4 flex items-center cursor-pointer touch-none"
+			class="relative z-10 mx-3 mt-1.5 flex h-4 cursor-pointer touch-none items-center"
 			onpointerdown={(event) => {
 				event.currentTarget.setPointerCapture(event.pointerId);
 				previewScrub(event);
@@ -127,17 +120,17 @@
 			onpointerup={commitSeek}
 			onpointercancel={cancelSeek}
 		>
-			<div class="absolute inset-x-0 h-1.5 rounded-full bg-dark/15 overflow-hidden">
+			<div class="absolute inset-x-0 h-2 overflow-hidden rounded-full bg-dark/15">
 				<div class="h-full bg-dark/25" style:width={`${bufferedPercent}%`}></div>
 			</div>
 			<div
-				class="absolute left-0 h-1.5 rounded-full bg-primary pointer-events-none"
-				style:width={`${percent}%`}
-			></div>
-			<div
-				class="absolute h-3.5 w-3.5 rounded-full bg-white border-2 border-primary shadow pointer-events-none"
-				style:left={`calc(${percent}% - 7px)`}
-			></div>
+				class="pointer-events-none absolute left-0 h-2 rounded-full bg-primary/60"
+				style:right={`${100 - percent}%`}
+			>
+				<div
+					class="absolute top-0 right-0 h-2 w-2 rounded-full bg-white border-primary border-2"
+				></div>
+			</div>
 			<input
 				type="range"
 				min="0"
@@ -157,30 +150,20 @@
 				{#if href}
 					<a
 						{href}
-						class="block truncate text-sm font-semibold text-dark md:text-base"
+						class="block text-sm font-semibold text-dark md:text-base"
 						title={t.open(book.title)}
 					>
-						{book.title}
+						<MarqueeLine>{book.title}</MarqueeLine>
 					</a>
 				{:else}
-					<p class="truncate text-sm font-semibold md:text-base">{book.title}</p>
+					<MarqueeLine class="text-sm font-semibold md:text-base">{book.title}</MarqueeLine>
 				{/if}
 				<!-- Only the number and the title: the card is too narrow to spend
-				     characters on the word "Chapter". Long titles drift left and
+				     characters on the word "Chapter". Long lines drift left and
 				     right instead of being cut off. -->
-				<p
-					class="overflow-hidden text-xs whitespace-nowrap text-dark/80 md:text-sm"
-					bind:clientWidth={lineWidth}
-				>
-					<span
-						class="inline-block whitespace-nowrap motion-reduce:animate-none"
-						class:animate-marquee={overflow > 1}
-						style="--marquee-shift: -{overflow}px; --marquee-duration: {marqueeSeconds}s"
-						bind:clientWidth={textWidth}
-					>
-						{track?.number ?? 1} - {track?.title ?? ''}
-					</span>
-				</p>
+				<MarqueeLine class="text-xs text-dark/80 md:text-sm">
+					{track?.number ?? 1} - {track?.title ?? ''}
+				</MarqueeLine>
 				<p class="text-xs tabular-nums text-dark/50 md:text-sm">
 					{formatClock(engine.time)} / {formatClock(engine.displayDuration)}
 				</p>

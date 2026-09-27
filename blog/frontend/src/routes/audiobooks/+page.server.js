@@ -8,9 +8,7 @@ export async function load({ fetch, url, setHeaders }) {
 	const params = new URLSearchParams();
 	if (tag) params.set('tag', tag);
 	if (term) params.set('term', term);
-	// Ask for one extra so `has_more` can be derived client-side like
-	// /projects (backend has no has_more for audiobooks).
-	params.set('limit', String(firstOffset + 1));
+	params.set('limit', String(firstOffset));
 	params.set('offset', '0');
 
 	const res = await fetch(route(`audiobooks/public/all?${params}`));
@@ -24,7 +22,7 @@ export async function load({ fetch, url, setHeaders }) {
 		'cache-control': 'public, max-age=60, s-maxage=60'
 	});
 
-	const { audiobooks: rows } = await res.json();
+	const { audiobooks: rows, has_more } = await res.json();
 
 	// Re-root cover URLs so the browser can fetch media straight from the
 	// backend origin (or the /api proxy) instead of this SvelteKit server.
@@ -32,13 +30,11 @@ export async function load({ fetch, url, setHeaders }) {
 		audiobook.url = fixClientRoute(audiobook.url);
 	}
 
-	const has_more = rows.length > firstOffset;
-
 	return {
 		status: 'success',
 		firstOffset,
-		audiobooks: rows.slice(0, firstOffset),
-		has_more,
+		audiobooks: rows,
+		has_more: Boolean(has_more),
 		tag: tag ?? null,
 		term: term ?? null
 	};

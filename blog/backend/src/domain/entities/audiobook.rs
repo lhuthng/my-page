@@ -23,6 +23,13 @@ pub struct AudiobookSnapshot {
     pub published_at: Option<String>,
 }
 
+/// One page of summary rows for the catalogue and dashboard lists.
+#[derive(Debug, Clone)]
+pub struct AudiobookSnapshotPage {
+    pub audiobooks: Vec<AudiobookSnapshot>,
+    pub has_more: bool,
+}
+
 /// An audiobook-scoped tag. Deliberately separate from the global `tags`
 /// vocabulary so audiobook taxonomy never leaks into post/project listings.
 #[derive(Debug, Clone, Serialize)]

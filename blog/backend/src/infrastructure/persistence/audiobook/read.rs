@@ -4,7 +4,9 @@ use crate::application::commands::audiobook::{
     GetAudiobookCommand, GetAudiobooksCommand, GetPublicAudiobookCommand,
     GetPublicAudiobooksCommand,
 };
-use crate::domain::entities::audiobook::{AudiobookDetails, AudiobookSnapshot};
+use crate::domain::entities::audiobook::{
+    AudiobookDetails, AudiobookSnapshot, AudiobookSnapshotPage,
+};
 use crate::domain::errors::audiobook::AudiobookError;
 
 use super::AudiobookServiceImpl;
@@ -14,7 +16,7 @@ impl AudiobookServiceImpl {
     pub(super) async fn get_audiobooks(
         &self,
         cmd: GetAudiobooksCommand,
-    ) -> Result<Vec<AudiobookSnapshot>, AudiobookError> {
+    ) -> Result<AudiobookSnapshotPage, AudiobookError> {
         let term = cmd
             .term
             .as_ref()
@@ -47,7 +49,7 @@ impl AudiobookServiceImpl {
             );
             sqlx::query_as::<_, SnapshotRow>(&sql)
                 .bind(&term)
-                .bind(cmd.limit)
+                .bind(cmd.limit + 1)
                 .bind(cmd.offset)
                 .fetch_all(&self.pool)
                 .await?
@@ -62,7 +64,7 @@ impl AudiobookServiceImpl {
             sqlx::query_as::<_, SnapshotRow>(&sql)
                 .bind(&term)
                 .bind(cmd.user_id)
-                .bind(cmd.limit)
+                .bind(cmd.limit + 1)
                 .bind(cmd.offset)
                 .fetch_all(&self.pool)
                 .await?
@@ -105,15 +107,23 @@ impl AudiobookServiceImpl {
             )
             .collect();
 
+        let has_more = snapshots.len() as i64 > cmd.limit;
+        if has_more {
+            snapshots.truncate(cmd.limit as usize);
+        }
+
         Self::attach_snapshot_tags(&self.pool, &mut snapshots).await?;
 
-        Ok(snapshots)
+        Ok(AudiobookSnapshotPage {
+            audiobooks: snapshots,
+            has_more,
+        })
     }
 
     pub(super) async fn get_public_audiobooks(
         &self,
         cmd: GetPublicAudiobooksCommand,
-    ) -> Result<Vec<AudiobookSnapshot>, AudiobookError> {
+    ) -> Result<AudiobookSnapshotPage, AudiobookError> {
         let term = cmd
             .term
             .as_ref()
@@ -151,7 +161,7 @@ impl AudiobookServiceImpl {
         )
         .bind(&term)
         .bind(&tag)
-        .bind(cmd.limit)
+        .bind(cmd.limit + 1)
         .bind(cmd.offset)
         .fetch_all(&self.pool)
         .await?;
@@ -193,9 +203,17 @@ impl AudiobookServiceImpl {
             )
             .collect();
 
+        let has_more = snapshots.len() as i64 > cmd.limit;
+        if has_more {
+            snapshots.truncate(cmd.limit as usize);
+        }
+
         Self::attach_snapshot_tags(&self.pool, &mut snapshots).await?;
 
-        Ok(snapshots)
+        Ok(AudiobookSnapshotPage {
+            audiobooks: snapshots,
+            has_more,
+        })
     }
 
     pub(super) async fn get_audiobook(

@@ -18,7 +18,7 @@
 		out:fly={{ y: 20, duration: 200, easing: elasticInOut }}
 		onclick={() => scrollTarget?.scrollIntoView({ behavior: 'smooth' })}
 		class="fixed z-50 right-10 w-10 h-10 rounded-full bg-white shadow-dark shadow-sm font-bold transition-[bottom] duration-200 ease-out motion-reduce:transition-none {audiobookSession.miniVisible
-			? 'bottom-[80px]'
+			? 'bottom-35'
 			: 'bottom-10'}"
 		title="To top"
 	>
