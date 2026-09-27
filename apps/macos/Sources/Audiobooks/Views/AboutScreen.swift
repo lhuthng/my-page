@@ -6,18 +6,69 @@ struct AboutScreen: View {
     /// Back to the library; also Esc.
     let onBack: () -> Void
 
+    @EnvironmentObject private var updater: Updater
+
     var body: some View {
         VStack(spacing: 0) {
             titleBar
             Divider().overlay(Theme.dark.opacity(0.15))
 
             ScrollView(.vertical, showsIndicators: false) {
-                AboutCard()
-                    .padding(12)
+                VStack(spacing: 12) {
+                    AboutCard()
+                    updateRow
+                }
+                .padding(12)
             }
         }
         .background(Theme.page)
         .onExitCommand { onBack() }
+    }
+
+    // MARK: - Updates
+
+    /// The build's version, whether it is current, and the way to change that.
+    private var updateRow: some View {
+        VStack(spacing: 8) {
+            if case .available(let release) = updater.state {
+                Text("Version \(release.version) is available")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.dark)
+            } else {
+                Text(statusLine)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.dark.opacity(0.7))
+            }
+
+            if case .available(let release) = updater.state {
+                Button("Install and restart") { updater.install(release) }
+                    .buttonStyle(.borderedProminent)
+            } else if !updater.state.isBusy {
+                Button("Check for updates") { updater.checkInteractively() }
+                    .buttonStyle(.bordered)
+            }
+
+            if case .failed(let message) = updater.state {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(Theme.dark.opacity(0.6))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var statusLine: String {
+        switch updater.state {
+        case .checking: "Checking…"
+        case .upToDate: "Audiobooks \(AppInfo.version) is up to date"
+        case .installing, .downloading: "Installing…"
+        default: "Audiobooks \(AppInfo.version)"
+        }
     }
 
     // MARK: - Header

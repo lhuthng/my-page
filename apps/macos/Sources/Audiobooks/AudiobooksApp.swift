@@ -4,6 +4,7 @@ import SwiftUI
 struct AudiobooksApp: App {
     @StateObject private var library = Library(api: .shared)
     @StateObject private var player = PlayerModel(api: .shared)
+    @StateObject private var updater = Updater()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -11,6 +12,7 @@ struct AudiobooksApp: App {
             RootPager()
                 .environmentObject(library)
                 .environmentObject(player)
+                .environmentObject(updater)
                 // No focus rings: the window opens with a control focused, which
                 // drew a stray ring. Text fields keep their normal behaviour.
                 .focusEffectDisabled()

@@ -6,6 +6,7 @@ import SwiftUI
 /// why the paging state and the event routing live in `PagerModel`.
 struct RootPager: View {
     @EnvironmentObject private var player: PlayerModel
+    @EnvironmentObject private var updater: Updater
     @StateObject private var pager = PagerModel()
 
     /// The boundary drawn between two screens; it travels with the strip, so
@@ -53,6 +54,26 @@ struct RootPager: View {
             }
             .onDisappear { pager.stopWatchingEvents() }
         }
+        .environmentObject(updater)
+        .onAppear { updater.checkSilently() }
+        .alert("Update available", isPresented: $updater.shouldOffer) {
+            if case .available(let release) = updater.state {
+                Button("Install and restart") { updater.install(release) }
+                Button("Later") { updater.shouldOffer = false }
+            } else {
+                Button("OK") { updater.shouldOffer = false }
+            }
+        } message: {
+            // Always a concrete Text, from a String: a message builder that can
+            // come out empty makes the alert render "the data couldn't be read",
+            // and a LocalizedStringKey here fails to resolve on top of that.
+            Text(offerMessage)
+        }
+    }
+
+    private var offerMessage: String {
+        guard case .available(let release) = updater.state else { return "" }
+        return "Audiobooks \(release.version) is available. You have \(AppInfo.version)."
     }
 
     private var boundary: some View {
