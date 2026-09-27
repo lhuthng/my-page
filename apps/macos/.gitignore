@@ -2,3 +2,6 @@
 build/
 .swiftpm/
 .DS_Store
+
+# Release artifacts from Scripts/bundle.sh
+*.app.zip

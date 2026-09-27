@@ -25,6 +25,12 @@ jobs:
     # ships an Xcode toolchain, so Scripts/toolchain-env.sh takes its Xcode
     # path and no SDK pinning is needed here.
     runs-on: macos-15
+    # The package lives in apps/macos, and the repo root has an unrelated
+    # Scripts/emergency directory, so every run step is pinned to the app
+    # directory instead of relying on the default working directory.
+    defaults:
+      run:
+        working-directory: apps/macos
     steps:
       - uses: actions/checkout@v5
 
@@ -67,11 +73,14 @@ jobs:
       - name: Package
         id: package
         run: |
+          # Zip from inside build/ so the archive holds Audiobooks.app at its
+          # root. Zipping the build/ path instead would nest it as
+          # build/Audiobooks.app, which is what a recipient sees on extract.
           cd build
-          # -y so the symlinks inside the bundle stay symlinks in the zip.
+          # -y keeps symlinks inside the bundle as symlinks in the zip.
           zip -qry "../Audiobooks-${{ steps.version.outputs.version }}.app.zip" Audiobooks.app
           cd ..
-          echo "asset=Audiobooks-${{ steps.version.outputs.version }}.app.zip" >> "$GITHUB_OUTPUT"
+          echo "asset=apps/macos/Audiobooks-${{ steps.version.outputs.version }}.app.zip" >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
