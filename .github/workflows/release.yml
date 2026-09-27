@@ -1,0 +1,82 @@
+name: Release Audiobooks
+
+# Tags of the form v1.2.3 build the macOS app and attach the zipped .app to a
+# GitHub Release. The blog deploy pipeline (deploy.yml) is unrelated and does
+# not cover apps/macos.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build a release for (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # macos-15 matches LSMinimumSystemVersion 15.0 in Scripts/bundle.sh and
+    # ships an Xcode toolchain, so Scripts/toolchain-env.sh takes its Xcode
+    # path and no SDK pinning is needed here.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      # The tag drives the bundle version so the shipped CFBundleShortVersionString
+      # matches the release. workflow_dispatch builds the tag named in the input.
+      - name: Resolve version
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          case "$TAG" in
+            v[0-9]*) ;;
+            *) echo "::error::tag '$TAG' must look like v1.2.3"; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Show the toolchain
+        run: |
+          # No xcode-select needed: runners already point DEVELOPER_DIR at the
+          # default Xcode, which is the path Scripts/toolchain-env.sh prefers.
+          xcodebuild -version
+          swift --version
+
+      - name: Build the app bundle
+        env:
+          AUDIOBOOKS_VERSION: ${{ steps.version.outputs.version }}
+        run: ./Scripts/toolchain-env.sh ./Scripts/bundle.sh
+
+      # Ad-hoc signing means Gatekeeper will quarantine the download, so the
+      # zip is the honest artifact: recipients right-click Open on first launch.
+      # Notarization needs an Apple Developer ID and is deliberately out of
+      # scope here.
+      - name: Verify the bundle
+        run: |
+          APP="build/Audiobooks.app"
+          test -x "$APP/Contents/MacOS/Audiobooks"
+          codesign --verify --deep --strict "$APP"
+          plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist"
+
+      - name: Package
+        id: package
+        run: |
+          cd build
+          # -y so the symlinks inside the bundle stay symlinks in the zip.
+          zip -qry "../Audiobooks-${{ steps.version.outputs.version }}.app.zip" Audiobooks.app
+          cd ..
+          echo "asset=Audiobooks-${{ steps.version.outputs.version }}.app.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Audiobooks ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: ${{ steps.package.outputs.asset }}
