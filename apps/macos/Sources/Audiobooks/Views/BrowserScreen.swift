@@ -1,9 +1,8 @@
 import SwiftUI
 
 /// Screen 1: the catalogue, with the mini player pinned to the bottom while a
-/// book is loaded. The header (title, search, tags) is a pull-down drawer: tucked
-/// above the top edge, pulled in by its grip — its own bottom edge — and toggled
-/// by a click.
+/// book is loaded. The header (title, search, tags) is a drawer: tucked above
+/// the top edge and toggled by a click on its grip.
 struct BrowserScreen: View {
     @EnvironmentObject private var library: Library
     @EnvironmentObject private var player: PlayerModel
@@ -11,15 +10,11 @@ struct BrowserScreen: View {
     @EnvironmentObject private var pager: PagerModel
 
     /// How far the drawer stands open in points; `headerHeight` is measured off
-    /// the header itself, so the reveal can be driven as a height.
+    /// the header itself, so the reveal is driven as a height.
     @State private var reveal: CGFloat = 0
     @State private var headerHeight: CGFloat = 0
-    /// Where the current pull began, so the drawer tracks the pointer 1:1.
-    @State private var pullFrom: CGFloat?
 
-    /// How far past fully open a pull may tug the drawer before it resists, and
-    /// the height of the always-visible grip tab.
-    private let stretch: CGFloat = 26
+    /// The height of the always-visible grip tab.
     private let grab: CGFloat = 18
 
     var body: some View {
@@ -55,7 +50,7 @@ struct BrowserScreen: View {
     }
 
     /// The drawer's grip tab, hanging off its bottom edge. Always visible, so the
-    /// header is not an affordance you have to know about.
+    /// header is not an affordance you have to know about. A click toggles it.
     private var headerGrip: some View {
         Capsule()
             .fill(Theme.dark.opacity(0.28))
@@ -64,35 +59,10 @@ struct BrowserScreen: View {
             .frame(height: grab)
             .contentShape(Rectangle())
             .onTapGesture { settle(open: !drawerOpen) }
-            .gesture(pullGesture)
-            .help(drawerOpen ? "Drag up to hide search and tags" : "Drag down for search and tags")
+            .help(drawerOpen ? "Click to hide search and tags" : "Click for search and tags")
     }
 
     private var drawerOpen: Bool { headerHeight > 0 && reveal > headerHeight / 2 }
-
-    private var pullGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
-            .onChanged { gesture in
-                let origin = pullFrom ?? reveal
-                pullFrom = origin
-                reveal = resisted(origin + gesture.translation.height)
-            }
-            .onEnded { gesture in
-                pullFrom = nil
-                // A flick counts even from a short pull.
-                let landing = reveal + gesture.predictedEndTranslation.height * 0.25
-                settle(open: landing > headerHeight * 0.5)
-            }
-    }
-
-    /// Rubber band: the drawer tracks the pointer exactly between tucked and
-    /// open, and gives only a fraction beyond.
-    private func resisted(_ raw: CGFloat) -> CGFloat {
-        guard raw > 0 else { return 0 }
-        let open = max(headerHeight, 1)
-        guard raw > open else { return raw }
-        return open + min((raw - open) * 0.3, stretch)
-    }
 
     /// Settle the drawer on one of its two resting positions, open or tucked.
     private func settle(open: Bool) {
@@ -120,10 +90,8 @@ struct BrowserScreen: View {
                     .help("About this app")
                 }
             }
-            // The title row can be pulled too; a click has no travel, so it never
-            // starts a drag.
+            // A click on the title row does nothing; the grip is the only control.
             .contentShape(Rectangle())
-            .gesture(pullGesture)
 
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
