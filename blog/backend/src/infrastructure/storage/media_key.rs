@@ -9,7 +9,7 @@
 //! have a key and nothing else — see [`audio_object_key`], which returns `None`
 //! for them.
 //!
-//! Four layouts exist, all content-addressed:
+//! Five layouts exist, all content-addressed:
 //!
 //! | Row | `hash` | `key` |
 //! | --- | --- | --- |
@@ -17,6 +17,12 @@
 //! | post cover | `.post.<post_id>.<sha256>` | `post/<uploader_id>/<sha256><ext>` |
 //! | avatar | `.avt.<user_id>.<sha256>` | `avt/<uploader_id>/<sha256><ext>` |
 //! | series cover | `.srs.<user_id>.<sha256>` | `srs/<uploader_id>/<sha256><ext>` |
+//! | audiobook cover | `.abc.<user_id>.<sha256>` | `abc/<uploader_id>/<sha256><ext>` |
+//!
+//! Every row above corresponds to a writer that emits that `hash` — see
+//! `every_special_layout_a_writer_emits_resolves`. A layout that is produced but
+//! not listed here is not merely unservable: it answers 400 with its files
+//! sitting on disk, which is how the audiobook covers went missing once.
 //!
 //! For the three special layouts the id embedded in the hash is the post or
 //! user the file is *named* after, while the directory is the *uploader* id.
@@ -57,7 +63,16 @@ pub struct MediaKey {
 pub fn media_key(hash: &str, file_type: &str, uploader_id: i64) -> Option<MediaKey> {
     let extension = MediaType::from_str(file_type).ok()?.get_extension();
 
-    if hash.starts_with(".post.") || hash.starts_with(".avt.") || hash.starts_with(".srs.") {
+    // The set is explicit rather than "anything with a leading dot" so an
+    // unrecognized prefix cannot name a directory of its own. The cost is that
+    // a writer adding a layout must add it here too, which is what
+    // `every_special_layout_a_writer_emits_resolves` fails on. `.abc.` was the
+    // one that got away: audiobook covers answered 400 in production while the
+    // bytes were on disk the whole time.
+    if [".post.", ".avt.", ".srs.", ".abc."]
+        .iter()
+        .any(|prefix| hash.starts_with(prefix))
+    {
         // ".<type>.<id>.<sha256>" — splitn(4, '.') yields ["", type, id, sha].
         // The sha256 tail holds no dots, so it survives in one piece.
         let mut parts = hash.splitn(4, '.');
@@ -164,6 +179,36 @@ mod tests {
                 .key,
             format!("srs/4/{SHA}.jpeg")
         );
+    }
+
+    #[test]
+    fn an_audiobook_cover_resolves_under_its_own_directory() {
+        // `audiobook/write.rs` stores the cover as `.abc.<user_id>.<sha256>`
+        // under `abc/<user_id>/`, so it resolves exactly like a series cover.
+        let key = media_key(&format!(".abc.2.{SHA}"), "image/webp", 2).expect("key");
+        assert_eq!(key.key, format!("abc/2/{SHA}.webp"));
+        assert_eq!(key.sha256, SHA);
+    }
+
+    #[test]
+    fn every_special_layout_a_writer_emits_resolves() {
+        // One row per `.X.` layout a write path actually produces:
+        // `media/covers.rs`, `media/avatar.rs`, `series/write.rs`,
+        // `audiobook/write.rs`. Adding a writer without teaching `media_key`
+        // about its layout fails here, instead of 400ing that whole family of
+        // media once it is deployed.
+        for (prefix, directory) in [
+            (".post.", "post"),
+            (".avt.", "avt"),
+            (".srs.", "srs"),
+            (".abc.", "abc"),
+        ] {
+            let hash = format!("{prefix}9.{SHA}");
+            let key = media_key(&hash, "image/webp", 7)
+                .unwrap_or_else(|| panic!("`{prefix}` is written by a write path, so it must resolve"));
+            assert_eq!(key.key, format!("{directory}/7/{SHA}.webp"), "{prefix}");
+            assert_eq!(key.sha256, SHA, "{prefix}");
+        }
     }
 
     #[test]
