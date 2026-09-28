@@ -1,3 +1,7 @@
+<script>
+	import { PERSONAS } from '$lib/config/personas.js';
+</script>
+
 <div class="w-full bg-black text-background text-lg space-y-4 rounded-xl p-2">
 	<div class="relative flex not-sm:flex-col">
 		<div
@@ -21,7 +25,7 @@
 				</span>
 			</h2>
 			<p>
-				I'm <a href="/profiles/thnglhu">Thắng</a>
+				I'm <a href="/profiles/lhuthng">Thắng</a>
 				, and this is my digital garden. This site serves as a personal archive where I document my work
 				experiences, my evolving hobbies, and the various experiments I run in my spare time.
 			</p>
@@ -34,51 +38,39 @@
 			</p>
 		</div>
 	</div>
-	<div class="flex flex-col w-full max-w-200 mx-auto px-2 gap-10 text-white text-base lg:text-lg">
+	<div class="flex flex-col w-full max-w-200 mx-auto px-2 gap-6 text-white text-base lg:text-lg">
 		<p class="md:w-3/5">
-			To navigate the diversity of these projects and keep the content organized for different
-			interests, I've categorized my contributions under <span class="text-red-400">
-				three distinct personas
-			</span>
-			:
-		</p>
-		<div class="flex flex-col gap-4 relative">
-			<img class="mx-auto w-180 py-2" src="/thinkcats.jpg" alt="roles" />
-			<ul
-				class="full md:left-1/2 md:-translate-x-1/2 block md:absolute md:top-0 *:block md:*:absolute not-md:*:w-full not-md:space-y-2 text-shadow-lg"
+			One person writes all of this: to keep the archive navigable, I publish under <span
+				class="text-red-400"
 			>
-				<li class="left-3/5 w-2/5">
-					<span class="inline-block md:text-right">
-						<a class="bg-red-500 text-white rounded-full py-1 px-2" href="/profiles/admin">
-							The Architect
+				three accounts
+			</span>
+			. The byline on any post or project tells you which kind of thing it is.
+		</p>
+
+		<div class="flex flex-col gap-4">
+			<img class="mx-auto w-180 py-2" src="/thinkcats.jpg" alt="The three persona cats" />
+
+			<ul class="grid grid-cols-1 md:grid-cols-3 gap-3">
+				{#each PERSONAS as persona}
+					<li
+						class="border-role-border flex flex-col gap-1 rounded-lg border-3 bg-white/5 p-3"
+						data-role={persona.role}
+					>
+						<a class="w-fit font-semibold text-role-on-dark" href={`/profiles/${persona.slug}`}>
+							{persona.name}
 						</a>
-						: Focused on the system's structure, the "how-to," and overall management of the platform.
-					</span>
-				</li>
-				<li class="left-0 bottom-20 w-2/7">
-					<span>
-						<a class="bg-red-500 text-white rounded-full py-1 px-2" href="/profiles/lhuthng">
-							Thắng
-						</a>
-						: My personal account for sharing direct experiences, unfiltered thoughts, and hands-on experiments.
-					</span>
-				</li>
-				<li class="right-0 bottom-20 w-2/7">
-					<span class="inline-block md:text-right">
-						<a class="bg-red-500 text-white rounded-full py-1 px-2" href="/profiles/memo-fie">
-							Memory Field
-						</a>
-						: A dedicated space for my creative works, artistic side projects, and the "juice" that makes
-						the work feel alive.
-					</span>
-				</li>
+						<p class="w-auto text-sm leading-5 opacity-90">{persona.blurb}</p>
+					</li>
+				{/each}
 			</ul>
 		</div>
+
 		<div class="flex justify-between w-full *:inline-block">
 			<span>
 				<a class="text-accent-blue" href="/about">read more</a>
 			</span>
-			<span aria-hidden="true" class="opacity-60 text-sm self-center whitespace-normal">
+			<span aria-hidden="true" class="opacity-60 self-center text-sm whitespace-normal">
 				_(:3 」∠)_
 			</span>
 			<span>

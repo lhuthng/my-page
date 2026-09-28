@@ -67,6 +67,117 @@ body {
 	--color-accent-orange-light-4: rgb(255, 244, 235); /* #fff4eb */
 
 	--breakpoint-xxs: 500px;
+
+	/* ── Persona roles ───────────────────────────────────────────────────────
+	   A card, panel, or section that belongs to one of the three publishing
+	   accounts carries `data-role`. These are the neutral values every surface
+	   gets, and the `[data-role]` rules below swap in that persona's ramp. They
+	   live in `@theme` rather than in a stylesheet of hand-written rules so the
+	   whole palette stays available as normal colour utilities: `bg-role-surface`,
+	   `hover:bg-role-surface-hover`, `text-role-text`, `fill-role-accent`, and
+	   so on. Components only ever say *which* role they are, never which colour,
+	   so retuning a persona is a one-line change here and nowhere else.
+
+   One trap: an opacity modifier on a role colour (`fill-role-accent/20`) is
+   resolved by Tailwind against the *neutral* default, because it cannot see
+   the per-role overrides, and the triangle would stay the site lavender on a
+   tinted card. Reach for `opacity-20` next to a solid role colour instead.
+
+   Panels -- the persona cards on the black homepage panel, the post-page author
+   panel, the profile header -- draw their edge with `border-role-border` at
+   `border-3`. Post and project cards do not: they are defined by the drop
+   shadow and the thumbnail frame, and an outline around the body sat right
+   under that frame as a second, competing edge. Keep the two cases apart --
+   that difference is deliberate, not drift. */
+	--color-role-surface: color-mix(in srgb, var(--color-secondary) 45%, white);
+	--color-role-surface-hover: color-mix(in srgb, var(--color-secondary) 70%, white);
+	--color-role-border: var(--color-dark);
+	--color-role-text: var(--color-dark);
+	--color-role-muted: color-mix(in srgb, var(--color-primary) 75%, black);
+	--color-role-accent: var(--color-primary);
+	/* For the black panels: the homepage intro and the About sections, where
+	   the light end of the ramp is the only legible one. */
+	--color-role-on-dark: var(--color-background);
+}
+
+[data-role='systems'] {
+	--color-role-surface: var(--color-accent-blue-light-3);
+	--color-role-surface-hover: var(--color-accent-blue-light-2);
+	--color-role-border: var(--color-accent-blue-light-1);
+	--color-role-text: color-mix(in srgb, var(--color-accent-blue-dark) 82%, black);
+	--color-role-muted: var(--color-accent-blue-dark);
+	--color-role-accent: var(--color-accent-blue);
+	--color-role-on-dark: var(--color-accent-blue-light-1);
+}
+
+/* Green rather than red: creative is orange, and red beside orange is two
+   warm hues at full saturation fighting each other. Blue, green, and orange
+   stay far enough apart to tell apart at a glance and none of them clash. The
+   cost is that green is also a reading-time tier, so on a green card the
+   reading bar and the card share a hue -- the bar still reports length, and
+   `role-outline` keeps the frame in the role colour so the two never merge
+   into one shape. */
+[data-role='personal'] {
+	--color-role-surface: var(--color-accent-green-light-3);
+	--color-role-surface-hover: var(--color-accent-green-light-2);
+	--color-role-border: var(--color-accent-green-light-1);
+	--color-role-text: color-mix(in srgb, var(--color-accent-green-dark) 82%, black);
+	--color-role-muted: var(--color-accent-green-dark);
+	--color-role-accent: var(--color-accent-green);
+	--color-role-on-dark: var(--color-accent-green-light-1);
+}
+
+[data-role='creative'] {
+	--color-role-surface: var(--color-accent-orange-light-3);
+	--color-role-surface-hover: var(--color-accent-orange-light-2);
+	--color-role-border: var(--color-accent-orange-light-1);
+	--color-role-text: color-mix(in srgb, var(--color-accent-orange-dark) 82%, black);
+	--color-role-muted: var(--color-accent-orange-dark);
+	--color-role-accent: var(--color-accent-orange);
+	--color-role-on-dark: var(--color-accent-orange-light-1);
+}
+
+/* The excerpt panel that flips out of a card scrolls, and the generic
+   `.custom-scrollbar` is site navy, which reads as "not themed" against a
+   tinted card. Scope it to the role instead -- and keep these rules to plain
+   `var()`: a `color-mix()` written here gets resolved at build time against the
+   neutral default, which is the same trap as an opacity modifier. */
+[data-role] .custom-scrollbar {
+	scrollbar-color: var(--color-role-accent) transparent;
+}
+
+[data-role] .custom-scrollbar::-webkit-scrollbar-thumb {
+	background-color: var(--color-role-border);
+}
+
+[data-role] .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+	background-color: var(--color-role-accent);
+}
+
+/* The frame around a thumbnail and the reading bar that sits on it both belong
+   to the card, not to the reading time. Left alone, `.reading-media` and
+   `.reading-bar` paint themselves with the awareness tier, so a card in one hue
+   ended up wearing another and the bar read as a different author's.
+
+   The bar's job is to report length, and it still does -- the minutes are
+   printed on it. What it no longer does is encode length as a hue, which is
+   the part that was competing with the persona: green is the personal ramp and
+   also the shortest tier, so a short post by Thắng was indistinguishable from a
+   card merely being green. Length stays legible as a number; colour is spent
+   entirely on who wrote it.
+
+   Solid role colours rather than the tier's `color-mix(... , transparent)`: a
+   `color-mix()` written in a rule like this is resolved at build time against
+   the neutral default, not the per-role override. The bar also sits directly on
+   a photograph, so an opaque fill is easier to read than a tint. */
+.role-outline .reading-media {
+	border-color: var(--color-role-muted);
+}
+
+.role-outline .reading-bar {
+	border-color: var(--color-role-muted);
+	background-color: var(--color-role-surface);
+	color: var(--color-role-text);
 }
 
 @utility animate-fade-in {

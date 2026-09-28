@@ -12,6 +12,7 @@
 	import X from '../svgs/X.svelte';
 	import Linkedin from '../svgs/Linkedin.svelte';
 	import { canonicalUrl } from '$lib/config/site.js';
+	import { personaFor } from '$lib/config/personas.js';
 
 	let {
 		id,
@@ -27,6 +28,9 @@
 		relatedPosts = [],
 		hideBackButton = false
 	} = $props();
+
+	// Which of the three publishing accounts wrote this post, if any.
+	let persona = $derived(personaFor(author?.username ?? null));
 
 	let copyDone = $state(false);
 	let shareUrl = $derived(canonicalUrl(page.url.pathname));
@@ -283,9 +287,13 @@
 			</div>
 			{#if author}
 				<span class="inline-block pl-4 pt-4">Written by:</span>
-				<div class="flex flex-col gap-2 p-4 pt-2 text-dark">
-					<div class="flex items-center gap-2 bg-secondary/60 p-2 rounded-lg">
-						<div class="w-fit h-fit bg-radial from-white to-secondary rounded-full overflow-hidden">
+				<div class="text-role-text flex flex-col gap-2 p-4 pt-2" data-role={persona?.role}>
+					<div
+						class="bg-role-surface border-role-border flex items-center gap-2 border-3 p-2 rounded-lg"
+					>
+						<div
+							class="w-fit h-fit bg-radial from-white to-role-border rounded-full overflow-hidden"
+						>
 							<img
 								class="min-w-16 w-16 h-16 object-contain"
 								src={author.avatarUrl ?? '/missing.png'}
@@ -296,12 +304,12 @@
 						</div>
 						<div class="flex flex-col">
 							<a
-								class="font-semibold text-dark/80 text-nowrap"
+								class="font-semibold text-role-text text-nowrap"
 								href={`/profiles/${author.username}`}
 							>
 								{author.displayName}
 							</a>
-							<span>{author.username}</span>
+							<span class="text-role-muted">{author.username}</span>
 						</div>
 					</div>
 				</div>

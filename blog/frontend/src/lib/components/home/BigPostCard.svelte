@@ -2,6 +2,7 @@
 	import CommentButton from '../shell/buttons/CommentButton.svelte';
 	import GridExpander from '../shell/GridExpander.svelte';
 	import { lazyVideo } from '$lib/actions/lazyVideo.js';
+	import { personaFor } from '$lib/config/personas.js';
 
 	let {
 		src,
@@ -22,6 +23,10 @@
 		coverMediaType = '',
 		readingTime = 0
 	} = $props();
+
+	// Which of the three publishing accounts this byline belongs to, if any.
+	let persona = $derived(personaFor(author?.slug ?? null));
+
 	let expanded = $state(false);
 
 	let link = $derived(dashboardMode ? `${dashboardPrefix}/${id}` : `${routePrefix}/${slug}`);
@@ -42,13 +47,13 @@
 	);
 </script>
 
-<div class="bg-white rounded-lg drop-shadow-sm h-full">
+<div class="bg-white rounded-lg drop-shadow-sm h-full" data-role={persona?.role}>
 	<div
-		class="relative flex flex-col gap-2 bg-background/40 hover:bg-background/60 transition-colors duration-50 rounded-lg h-full"
+		class="bg-role-surface hover:bg-role-surface-hover relative flex flex-col gap-2 transition-colors duration-50 rounded-lg h-full"
 	>
 		{#if !dashboardMode}
 			<a
-				class="reading-cover relative block z-10 w-full aspect-[1.91/1] cursor-pointer rounded-t-lg origin-center hover:scale-102 transition-[scale,border-radius] duration-100 overflow-hidden hover:rounded-b-lg hover:[&>.reading-bar]:rounded-b-lg"
+				class="role-outline reading-cover relative block z-10 w-full aspect-[1.91/1] cursor-pointer rounded-t-lg origin-center hover:scale-102 transition-[scale,border-radius] duration-100 overflow-hidden hover:rounded-b-lg hover:[&>.reading-bar]:rounded-b-lg"
 				href={status === 'draft' ? `${dashboardPrefix}/${id}` : link}
 				data-awareness={readingTier ?? 'none'}
 			>
@@ -98,7 +103,7 @@
 			<button class="relative block z-10 w-full aspect-[1.91/1]" {onclick}>
 				{#if coverMediaType?.startsWith('video/')}
 					<video
-						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
+						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-role-border hover:rounded-b-lg"
 						data-src={coverSrc}
 						poster={`${coverSrc}.thumbnail`}
 						muted
@@ -109,7 +114,7 @@
 					></video>
 				{:else}
 					<img
-						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-dark hover:rounded-b-lg"
+						class="absolute z-10 left-0 top-0 w-full h-full object-cover rounded-t-lg origin-center transition-[scale,border-radius] duration-100 cursor-pointer hover:scale-102 bg-white border-3 border-role-border hover:rounded-b-lg"
 						src={coverSrc}
 						alt="post-cover"
 						loading="lazy"
@@ -126,7 +131,7 @@
 				class="w-fit"
 				href={status === 'draft' ? `${dashboardPrefix}/${id}` : !dashboardMode ? link : undefined}
 			>
-				<h1 class="text-md md:text-lg line-clamp-2 leading-6">
+				<h1 class="text-md md:text-lg line-clamp-2 leading-6 text-role-text">
 					{title}
 					{#if status === 'draft'}
 						<i class="text-accent-red">(draft)</i>
@@ -136,31 +141,31 @@
 				</h1>
 			</a>
 			<div class="flex text-sm sm:text-md pr-4">
-				<span class="select-none pointer-events-auto">
+				<span class="text-role-muted select-none pointer-events-auto">
 					by <a
-						class="select-text text-dark!"
+						class="select-text text-role-text"
 						href={!dashboardMode ? `/profiles/${author.slug}` : undefined}
 					>
 						{author.name}
 					</a>
 				</span>
 				{#if series !== undefined}
-					<div class="flex grow shrink gap-2 text-dark/50">
+					<div class="text-role-muted flex grow shrink gap-2">
 						<span>;</span>
 						<span class="pointer-events-auto">
 							<span>::{series.order}</span>
 							from
-							<a class="text-dark!" href={`/series/${series.slug}`}>{series.name}</a>
+							<a class="text-role-muted" href={`/series/${series.slug}`}>{series.name}</a>
 						</span>
 					</div>
 				{/if}
 			</div>
 			<div class="flex text-sm sm:text-md gap-1 grow shrink mb-2">
 				{#if tags?.length > 0}
-					<span class="text-dark/50">tags:</span>
+					<span class="text-role-muted">tags:</span>
 				{/if}
 				<ul
-					class="pointer-events-none [&>li]:h-4 flex flex-wrap h-fit gap-y-2 sm:gap-y-0.5 gap-x-1 pr-2"
+					class="text-role-muted pointer-events-none [&>li]:h-4 flex flex-wrap h-fit gap-y-2 sm:gap-y-0.5 gap-x-1 pr-2"
 				>
 					{#each tags as tag}
 						<li>
@@ -176,11 +181,11 @@
 						class:opacity-100={expanded}
 						class:opacity-0={!expanded}
 					>
-						<p>{excerpt}</p>
+						<p class="text-role-muted">{excerpt}</p>
 					</div>
 				</GridExpander>
 				<svg
-					class="expand-btn h-6 w-12 transition-transform duration-200 block mx-auto fill-primary/20 has-hover:fill-dark/60 z-9"
+					class="expand-btn h-6 w-12 transition-transform duration-200 block mx-auto fill-role-accent opacity-20 has-hover:opacity-60 z-9"
 					class:-rotate-180={expanded}
 					class:translate-y-2={expanded}
 					xmlns="http://www.w3.org/2000/svg"

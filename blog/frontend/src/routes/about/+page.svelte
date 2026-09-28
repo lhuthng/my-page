@@ -2,6 +2,7 @@
 	import BackButton from '$lib/components/ui/BackButton.svelte';
 	import { absoluteSiteUrl, SITE_AUTHOR, safeJsonLd, SITE_ORIGIN } from '$lib/config/site.js';
 	import { isPointInTriangle, preventDefault } from '$lib/utils';
+	import { roleFor } from '$lib/config/personas.js';
 	import { fly } from 'svelte/transition';
 
 	let portionSelection = $state(-1);
@@ -137,7 +138,8 @@
 		</p>
 		<p>
 			I wanted a central place to capture the process, rather than just the finished result. To keep
-			these diverse interests organized, I have categorized my work under three distinct personas:
+			these diverse interests organized, I have categorized my work under three distinct accounts
+			(all me); the byline tells you which kind of thing you are reading:
 		</p>
 	</div>
 	<div class="flex flex-col xl:flex-row justify-center bg-black w-full">
@@ -166,9 +168,10 @@
 			<div
 				in:fly={{ x: 10, duration: 200 }}
 				class="flex flex-col mt-2 xl:max-w-120 text-justify gap-2 text-white p-4"
+				data-role={roleFor('memo-fie')}
 			>
 				<a class="not-xl:mx-auto" href="/profiles/memo-fie">
-					<h2 class="w-fit font-semibold px-2 py-1 bg-red-500 rounded-full">Memory Field</h2>
+					<h2 class="w-fit font-semibold text-role-on-dark">Memory Field</h2>
 				</a>
 				<p>
 					The Memory "Field" is a dedicated space for all my pure creative works and artistic side
@@ -205,9 +208,10 @@
 			<div
 				in:fly={{ x: 10, duration: 200 }}
 				class="flex flex-col mt-2 xl:max-w-120 text-justify gap-2 text-white p-4"
+				data-role={roleFor('lhuthng')}
 			>
 				<a class="not-xl:mx-auto" href="/profiles/lhuthng">
-					<h2 class="w-fit font-semibold px-2 py-1 bg-red-500 rounded-full">
+					<h2 class="w-fit font-semibold text-role-on-dark">
 						Thắng <span aria-hidden="true" class="whitespace-nowrap font-normal text-sm opacity-80">
 							ヾ(^∇^)
 						</span>
@@ -285,9 +289,10 @@
 			<div
 				in:fly={{ x: 10, duration: 200 }}
 				class="flex flex-col mt-2 xl:max-w-120 text-justify gap-2 text-white p-4"
+				data-role={roleFor('admin')}
 			>
 				<a class="not-xl:mx-auto" href="/profiles/admin">
-					<h2 class="w-fit font-semibold px-2 py-1 bg-red-500 rounded-full">The Architect</h2>
+					<h2 class="w-fit font-semibold text-role-on-dark">The Architect</h2>
 				</a>
 				<p>
 					The Architect is the persona responsible for system architecture, technical

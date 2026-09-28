@@ -17,6 +17,7 @@
 	import PBody from '$lib/components/shell/PBody.svelte';
 	import Comment from '$lib/components/post/Comment.svelte';
 	import { preventDefault } from '$lib/utils';
+	import { personaFor } from '$lib/config/personas.js';
 	import { canonicalUrl, safeJsonLd, SITE_AUTHOR, SITE_ORIGIN } from '$lib/config/site.js';
 
 	const { data } = $props();
@@ -26,6 +27,8 @@
 	let response = $derived(data.response);
 	let username = $derived(response.username);
 	let role = $derived(response.role);
+	// Which of the three publishing accounts this profile belongs to, if any.
+	let persona = $derived(personaFor(username));
 	let displayName = $state('');
 	let bio = $state('');
 	let postContainer = $state();
@@ -285,7 +288,7 @@
 				</div>
 			</div>
 		</div>
-		<div class="w-full">
+		<div class="bg-role-surface! border-role-border w-full border-3" data-role={persona?.role}>
 			<div class="flex items-end">
 				{#if editor.isEditing}
 					<input
@@ -296,7 +299,7 @@
 						bind:value={editor.displayName}
 					/>
 				{:else}
-					<h2 class="inline font-bold text-3xl">{displayName}</h2>
+					<h2 class="text-role-text inline font-bold text-3xl">{displayName}</h2>
 				{/if}
 				<span
 					class="*:w-10 hover:*:translate-x-1 *:transition-all *:duration-200 tooltip-container"
@@ -331,7 +334,7 @@
 					</div>
 				{/if}
 			</div>
-			<span class="italic text-primary/80 *:select-none">
+			<span class="text-role-muted italic *:select-none">
 				<span>./</span>
 				{username}
 				<span>/</span>

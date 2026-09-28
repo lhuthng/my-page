@@ -1,6 +1,7 @@
 <script>
 	import CommentButton from '../shell/buttons/CommentButton.svelte';
 	import { lazyVideo } from '$lib/actions/lazyVideo.js';
+	import { personaFor } from '$lib/config/personas.js';
 
 	let {
 		src,
@@ -22,6 +23,9 @@
 		readingTime = 0
 	} = $props();
 
+	// Which of the three publishing accounts this byline belongs to, if any.
+	let persona = $derived(personaFor(author?.slug ?? null));
+
 	let toggled = $state(false);
 
 	let link = $derived(dashboardMode ? `${dashboardPrefix}/${id}` : `${routePrefix}/${slug}`);
@@ -42,13 +46,13 @@
 	);
 </script>
 
-<div class="bg-white rounded-lg drop-shadow-sm">
+<div class="bg-white rounded-lg drop-shadow-sm" data-role={persona?.role}>
 	<div
-		class="relative flex gap-4 bg-background/40 hover:bg-background/60 transition-colors duration-50 rounded-lg"
+		class="bg-role-surface hover:bg-role-surface-hover relative flex gap-4 transition-colors duration-50 rounded-lg"
 	>
 		{#if !dashboardMode}
 			<a
-				class="reading-cover relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34 cursor-pointer rounded-lg origin-center hover:scale-105 transition-transform duration-100 overflow-hidden"
+				class="role-outline reading-cover relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34 cursor-pointer rounded-lg origin-center hover:scale-105 transition-transform duration-100 overflow-hidden"
 				href={status === 'draft' ? `${dashboardPrefix}/${id}` : link}
 				data-awareness={readingTier ?? 'none'}
 			>
@@ -96,7 +100,7 @@
 			<button class="relative block z-10 min-w-26 min-h-26 md:min-w-34 md:min-h-34" {onclick}>
 				{#if coverMediaType?.startsWith('video/')}
 					<video
-						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105 bg-white border-3 border-dark"
+						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105 bg-white border-3 border-role-border"
 						data-src={coverSrc}
 						poster={`${coverSrc}.thumbnail`}
 						muted
@@ -107,7 +111,7 @@
 					></video>
 				{:else}
 					<img
-						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105 bg-white border-3 border-dark"
+						class="absolute z-10 left-0 top-0 w-26 h-26 md:w-34 md:h-34 object-cover rounded-lg origin-center transition-transform duration-100 cursor-pointer hover:scale-105 bg-white border-3 border-role-border"
 						src={coverSrc}
 						alt="post-cover"
 						loading="lazy"
@@ -134,7 +138,7 @@
 									? link
 									: undefined}
 						>
-							<h1 class="text-md md:text-lg line-clamp-2 leading-6">
+							<h1 class="text-md md:text-lg line-clamp-2 leading-6 text-role-text">
 								{title}
 								{#if status === 'draft'}
 									<i class="text-accent-red">(draft)</i>
@@ -144,9 +148,9 @@
 							</h1>
 						</a>
 						<div class="flex text-sm sm:text-md pr-4">
-							<span class="select-none pointer-events-auto">
+							<span class="text-role-muted select-none pointer-events-auto">
 								by <a
-									class="select-text text-dark!"
+									class="select-text text-role-text"
 									href={!dashboardMode ? `/profiles/${author.slug}` : undefined}
 								>
 									{author.name}
@@ -158,16 +162,18 @@
 									<span class="pointer-events-auto">
 										<span>::{series.order}</span>
 										from
-										<a class="text-dark!" href={`/series/${series.slug}`}>{series.name}</a>
+										<a class="text-role-muted" href={`/series/${series.slug}`}>{series.name}</a>
 									</span>
 								</div>
 							{/if}
 						</div>
 						<div class="flex text-sm sm:text-md gap-1 grow shrink mb-2">
 							{#if tags?.length > 0}
-								<span>tags:</span>
+								<span class="text-role-muted">tags:</span>
 							{/if}
-							<ul class="tag-container flex flex-wrap h-fit gap-y-2 sm:gap-y-0.5 gap-x-1 pr-2">
+							<ul
+								class="tag-container text-role-muted flex flex-wrap h-fit gap-y-2 sm:gap-y-0.5 gap-x-1 pr-2"
+							>
 								{#each tags as tag}
 									<li>
 										<a href={`/tags/${tag.replace(' ', '-')}`}>#{tag}</a>
@@ -181,7 +187,7 @@
 					<div
 						class="full p-2 pointer-events-auto text-sm sm:text-base overscroll-contain custom-scrollbar overflow-y-scroll"
 					>
-						<p>{excerpt}</p>
+						<p class="text-role-muted">{excerpt}</p>
 						<a
 							class="block text-right"
 							href={status === 'draft'
@@ -196,7 +202,7 @@
 					</div>
 				</div>
 				<svg
-					class="card-btn absolute top-0 left-1/2 h-full -translate-x-2/5 has-hover:-translate-x-1/2 has-hover:fill-primary/60 fill-primary/20 transition-all duration-200 z-9"
+					class="card-btn absolute top-0 left-1/2 h-full -translate-x-2/5 has-hover:-translate-x-1/2 fill-role-accent opacity-20 has-hover:opacity-60 transition-all duration-200 z-9"
 					class:toggled
 					xmlns="http://www.w3.org/2000/svg"
 					viewBox="0 0 32 32"
