@@ -131,11 +131,9 @@ pub struct CheckAudiobookSlugCommand {
     pub slug: String,
 }
 
-/// A chapter play report from the public player. `listener` is a salted,
-/// truncated hash of the client identity — the raw address is never stored.
+/// A chapter play report from the public player, sent once per ten seconds of
+/// real playback. It carries nothing but the chapter: the caller's identity is
+/// used only as an in-memory rate-limit key in the handler, never stored.
 pub struct RecordTrackPlayCommand {
     pub track_id: i64,
-    pub listener: String,
-    /// UTC day (YYYY-MM-DD) the play was reported on.
-    pub day: String,
 }

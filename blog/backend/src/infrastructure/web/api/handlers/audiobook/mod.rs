@@ -19,8 +19,8 @@ pub use read::{
 };
 pub use response::{
     AudiobookCreatedResponse, AudiobookDetailsResponse, AudiobookListResponse,
-    AudiobookSummaryResponse, AudiobookTagsResponse, SlugAvailabilityResponse,
-    TrackCreatedResponse,
+    AudiobookSummaryResponse, AudiobookTagsResponse, SlugAvailabilityResponse, TrackCreatedResponse,
+    TrackPlayResponse,
 };
 pub use plays::record_track_play;
 pub use tracks::{add_track, remove_track, reorder_tracks, replace_track_medium, update_track};
@@ -76,7 +76,7 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .route("/public/all", get(get_public_audiobooks))
                 .route("/public/s/{slug}", get(get_public_audiobook))
                 // The play beacon is public and unauthenticated by design; the
-                // handler and persistence layer carry the anti-spam rules.
+                // handler carries the rate limit and the published-only guard.
                 .route(
                     "/id/{audiobook_id}/tracks/{track_id}/play",
                     post(record_track_play),

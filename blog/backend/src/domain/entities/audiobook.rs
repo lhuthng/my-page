@@ -52,8 +52,10 @@ pub struct AudiobookTrack {
     pub title: String,
     pub number: i64,
     pub duration_seconds: Option<i64>,
-    /// How many times listeners have actually played this chapter: at most one
-    /// play per listener per UTC day, counted only while the book is published.
+    /// Plays recorded for this chapter, counted only while the book is
+    /// published. The metric measures listening time: the player reports once
+    /// per ten seconds of real playback, so the figure keeps rising for as long
+    /// as anyone listens.
     pub play_count: i64,
     pub short_name: String,
     pub url: String,

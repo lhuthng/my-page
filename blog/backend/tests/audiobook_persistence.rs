@@ -13,8 +13,8 @@ use backend::{
             AddTrackCommand, ChangeAudiobookStatusCommand, CheckAudiobookSlugCommand,
             DeleteAudiobookCommand, GetAudiobookCommand, GetAudiobooksCommand,
             GetPublicAudiobookCommand, GetPublicAudiobooksCommand, NewAudiobookCommand,
-            RemoveTrackCommand, ReorderTracksCommand, ReplaceTrackMediumCommand,
-            UpdateAudiobookCommand, UpdateTrackCommand,
+            RecordTrackPlayCommand, RemoveTrackCommand, ReorderTracksCommand,
+            ReplaceTrackMediumCommand, UpdateAudiobookCommand, UpdateTrackCommand,
         },
         services::audiobook::AudiobookService,
     },
@@ -605,7 +605,7 @@ async fn publishing_requires_a_track_and_gates_the_public_feed() {
         })
         .await
         .unwrap();
-    assert!(public.is_empty());
+    assert!(public.audiobooks.is_empty());
 
     fx.service
         .change_audiobook_status(ChangeAudiobookStatusCommand {
@@ -627,14 +627,14 @@ async fn publishing_requires_a_track_and_gates_the_public_feed() {
         })
         .await
         .unwrap();
-    assert_eq!(public.len(), 1);
-    assert_eq!(public[0].slug, "publish-book");
-    assert_eq!(public[0].track_count, 1);
-    assert_eq!(public[0].total_duration_seconds, 120);
-    assert_eq!(public[0].translator.as_deref(), Some("Tran Slator"));
-    assert_eq!(public[0].tags, vec!["Fiction".to_string()]);
+    assert_eq!(public.audiobooks.len(), 1);
+    assert_eq!(public.audiobooks[0].slug, "publish-book");
+    assert_eq!(public.audiobooks[0].track_count, 1);
+    assert_eq!(public.audiobooks[0].total_duration_seconds, 120);
+    assert_eq!(public.audiobooks[0].translator.as_deref(), Some("Tran Slator"));
+    assert_eq!(public.audiobooks[0].tags, vec!["Fiction".to_string()]);
     // The cover-less audiobook has no media URL to render.
-    assert!(public[0].url.is_none());
+    assert!(public.audiobooks[0].url.is_none());
 
     // The tag filter matches the dedicated tag slug.
     let filtered = fx
@@ -647,7 +647,7 @@ async fn publishing_requires_a_track_and_gates_the_public_feed() {
         })
         .await
         .unwrap();
-    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered.audiobooks.len(), 1);
 
     let no_match = fx
         .service
@@ -659,7 +659,7 @@ async fn publishing_requires_a_track_and_gates_the_public_feed() {
         })
         .await
         .unwrap();
-    assert!(no_match.is_empty());
+    assert!(no_match.audiobooks.is_empty());
 
     // The public detail feed resolves by slug and exposes playable track URLs.
     let details = fx
@@ -1011,8 +1011,8 @@ async fn dashboard_listing_is_scoped_to_the_caller() {
         })
         .await
         .unwrap();
-    assert_eq!(alice.len(), 2);
-    assert!(alice.iter().all(|a| a.slug.starts_with("alice")));
+    assert_eq!(alice.audiobooks.len(), 2);
+    assert!(alice.audiobooks.iter().all(|a| a.slug.starts_with("alice")));
 
     let admin = fx
         .service
@@ -1025,7 +1025,7 @@ async fn dashboard_listing_is_scoped_to_the_caller() {
         })
         .await
         .unwrap();
-    assert_eq!(admin.len(), 3);
+    assert_eq!(admin.audiobooks.len(), 3);
 
     // Search narrows by title.
     let searched = fx
@@ -1039,8 +1039,8 @@ async fn dashboard_listing_is_scoped_to_the_caller() {
         })
         .await
         .unwrap();
-    assert_eq!(searched.len(), 1);
-    assert_eq!(searched[0].slug, "bob-one");
+    assert_eq!(searched.audiobooks.len(), 1);
+    assert_eq!(searched.audiobooks[0].slug, "bob-one");
 
     fx.cleanup().await;
 }
@@ -1098,6 +1098,67 @@ async fn duplicate_audio_bytes_share_one_file_on_disk() {
         })
         .count();
     assert_eq!(files, 1, "identical audio must be stored once");
+
+    fx.cleanup().await;
+}
+
+/// The chapter counter measures listening time, so every report counts and
+/// nothing caps it: this is the regression test for the rule. A per-listener or
+/// per-day dedup would fail it at the second report, which is exactly the
+/// behaviour it exists to prevent from coming back.
+#[tokio::test]
+async fn play_reports_accumulate_without_a_cap() {
+    let fx = fixture("plays").await;
+    let book = fx.create("plays-book", &[]).await;
+    let track = fx.add_track(book, "Chapter One", 1, None).await;
+
+    // A draft is not counted, and the beacon stays a silent no-op rather than
+    // erroring — it must not be usable to probe which tracks exist.
+    assert_eq!(
+        fx.service
+            .record_track_play(RecordTrackPlayCommand { track_id: track })
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        fx.service
+            .record_track_play(RecordTrackPlayCommand { track_id: 999_999 })
+            .await
+            .unwrap(),
+        None
+    );
+
+    fx.service
+        .change_audiobook_status(ChangeAudiobookStatusCommand {
+            audiobook_id: book,
+            user_id: 1,
+            is_admin: false,
+            status: "published".to_string(),
+        })
+        .await
+        .unwrap();
+
+    // Ten reports are ten plays — a listener who stays in a chapter for a
+    // hundred seconds. Each answer carries the new total, which is what the
+    // player renders instead of assuming its own report moved the counter.
+    for expected in 1..=10 {
+        let counted = fx
+            .service
+            .record_track_play(RecordTrackPlayCommand { track_id: track })
+            .await
+            .unwrap();
+        assert_eq!(counted, Some(expected), "report {expected} must count");
+    }
+
+    let details = fx
+        .service
+        .get_public_audiobook(GetPublicAudiobookCommand {
+            slug: "plays-book".to_string(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(details.tracks[0].play_count, 10);
 
     fx.cleanup().await;
 }

@@ -1,24 +1,28 @@
 // Chapter play beacon: a public, fire-and-forget counter bump.
 //
-// Anti-spam layering (the storage half lives in
-// `persistence::audiobook::plays`):
-//   1. the player only reports after ~10 s of real playback;
-//   2. this handler sheds bursts with an in-memory per-listener+track window;
-//   3. the database counts at most one play per listener per track per day.
-// The listener identity is a salted, truncated SHA-256 of the best-effort
-// client address, so the database never stores a raw IP.
+// The counter measures listening time, so the player reports once per ten
+// seconds of real playback and every report that arrives is counted — there is
+// no per-listener or per-day cap any more. Anti-spam is therefore just that
+// cadence plus the in-memory window below, which is deliberately the same ten
+// seconds: a scripted client can do no better than an honest listener.
 //
-// Residual risk, stated honestly: a client rotating its source address still
-// lands in a new dedup bucket each time. Layer 3 caps what one identity can
-// inflate; capping a distributed flood would need heavier machinery than a
-// personal blog's play counter justifies.
+// The listener identity is a salted, truncated SHA-256 of the best-effort
+// client address, and it is used for nothing but the rate-limit key. It is
+// never written down — not raw, not hashed.
+//
+// Residual risk, stated honestly: the window is per process, so it resets on
+// restart, and a client that rotates its source address gets a fresh window.
+// Capping that would need heavier machinery than a listening-time counter on a
+// personal blog justifies.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use axum::{
+    Json,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
 };
 use sha2::{Digest, Sha256};
 
@@ -28,22 +32,28 @@ use crate::{
         services::audiobook::AudiobookService,
     },
     domain::errors::audiobook::AudiobookError,
-    infrastructure::web::server::AppState,
+    infrastructure::web::{
+        api::handlers::audiobook::response::TrackPlayResponse, server::AppState,
+    },
 };
 
-/// Mixed into the listener hash. Rotating this value invalidates every stored
-/// dedup key at once — and with it, re-opens one free play per listener.
+/// Mixed into the listener hash. Rotating this value invalidates every key in
+/// the in-memory window at once — and with it, every client's current rate
+/// allowance.
 const LISTENER_SALT: &str = "audiobook-play-listener-v1";
 
-/// Minimum spacing between reports from one listener for one track. Legitimate
-/// reports are already spaced out by the player's listening threshold; this
-/// only stops a scripted client from hammering the endpoint.
+/// Minimum spacing between reports from one listener for one track. The player
+/// reports every ten seconds of *real* time — its counter is driven by the
+/// listener's clock, not by the audio, so playback speed does not change the
+/// cadence — which makes this exactly the honest rate at every speed. Anything
+/// closer together than an honest player can manage is a script, not a
+/// listener.
 const REPORT_MIN_INTERVAL_MS: i64 = 10_000;
 
-/// Best-effort client identity for dedup: Cloudflare's real-client header when
-/// present, else the first forwarded address, else one shared bucket. Direct,
-/// un-proxied clients all share the fallback, which the per-day dedup makes
-/// harmless for ordinary traffic.
+/// Best-effort client identity for the rate-limit key: Cloudflare's real-client
+/// header when present, else the first forwarded address, else one shared
+/// bucket. Direct, un-proxied clients all share the fallback, which throttles
+/// them collectively rather than letting them through — the safe direction.
 fn listener_identity(headers: &HeaderMap) -> String {
     if let Some(ip) = headers.get("cf-connecting-ip").and_then(|v| v.to_str().ok()) {
         return ip.trim().to_string();
@@ -59,8 +69,8 @@ fn listener_identity(headers: &HeaderMap) -> String {
     "unknown".to_string()
 }
 
-/// 128 bits of the salted digest: enough to dedup on, without storing
-/// addresses or making the stored key directly reversible.
+/// 128 bits of the salted digest: enough to key on, without keeping the address
+/// around in any form.
 fn listener_hash(identity: &str) -> String {
     let digest = Sha256::digest(format!("{LISTENER_SALT}|{identity}").as_bytes());
     hex::encode(&digest[..16])
@@ -86,28 +96,31 @@ pub async fn record_track_play(
     State(state): State<Arc<AppState>>,
     Path((audiobook_id, track_id_str)): Path<(String, String)>,
     headers: HeaderMap,
-) -> Result<StatusCode, AudiobookError> {
+) -> Result<Response, AudiobookError> {
     // The book id is route sugar (the player already knows both); the track id
     // alone identifies what was played. Malformed ids are a silent no-op.
     let _ = audiobook_id;
     let Ok(track_id) = track_id_str.parse::<i64>() else {
-        return Ok(StatusCode::NO_CONTENT);
+        return Ok(StatusCode::NO_CONTENT.into_response());
     };
 
     let listener = listener_hash(&listener_identity(&headers));
     if report_limited(&format!("{listener}:{track_id}")) {
-        return Ok(StatusCode::NO_CONTENT);
+        return Ok(StatusCode::NO_CONTENT.into_response());
     }
-    let day = chrono::Utc::now().date_naive().to_string();
 
-    state
+    // A counted report answers with the new total, so the player renders what
+    // the server counted rather than its own assumption. An uncounted one
+    // (unknown track, or a book that is not published) says nothing, and the
+    // caller must leave its counter alone.
+    match state
         .audiobook_service
-        .record_track_play(RecordTrackPlayCommand {
-            track_id,
-            listener,
-            day,
-        })
-        .await?;
-
-    Ok(StatusCode::NO_CONTENT)
+        .record_track_play(RecordTrackPlayCommand { track_id })
+        .await?
+    {
+        Some(play_count) => {
+            Ok((StatusCode::OK, Json(TrackPlayResponse { play_count })).into_response())
+        }
+        None => Ok(StatusCode::NO_CONTENT.into_response()),
+    }
 }

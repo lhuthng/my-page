@@ -153,17 +153,20 @@
 	);
 	// The play beacon rides on the engine's meta so it keeps firing while the
 	// mini player continues playback on other pages, long after this page is
-	// gone. Fire-and-forget: counting must never disturb listening. When the
-	// server accepts the play, the chapter's counter is bumped here so the
-	// list pops without a reload — a local map, because page data is not a
-	// reactive proxy and mutating it would not re-render the row.
+	// gone. Fire-and-forget: counting must never disturb listening. The server
+	// answers with the chapter's new total, which is rendered from here — a
+	// local map, because page data is not a reactive proxy and mutating it
+	// would not re-render the row.
 	let acceptedPlays = $state({});
 	const onTrackPlayed = audiobookId
 		? (trackId) => {
 				audiobooks
 					.recordTrackPlay(audiobookId, trackId)
-					.then(() => {
-						acceptedPlays[trackId] = (acceptedPlays[trackId] ?? 0) + 1;
+					.then((result) => {
+						// A `null` body is a 204: the report was shed as a burst
+						// (or the book is not published), so the counter did not
+						// move and the row must not pretend it did.
+						if (result) acceptedPlays[trackId] = result.play_count;
 					})
 					.catch(() => {});
 			}
@@ -790,7 +793,7 @@
 										<svg class="w-3.5 h-3.5 fill-dark/40" viewBox="0 0 24 24" aria-hidden="true">
 											<path d="M8 5l11 7-11 7z" />
 										</svg>
-										{(track.play_count ?? 0) + (acceptedPlays[track.id] ?? 0)}
+										{acceptedPlays[track.id] ?? track.play_count ?? 0}
 									</span>
 									{formatClock(track.duration_seconds)}
 								</span>

@@ -96,12 +96,14 @@ pub trait AudiobookService {
         cmd: commands::audiobook::CheckAudiobookSlugCommand,
     ) -> Result<bool, errors::audiobook::AudiobookError>;
 
-    /// Record a chapter play reported by the public player. At most one play
-    /// per listener per track per UTC day is counted, and only for published
-    /// books; anything else is a silent no-op so the beacon stays
-    /// fire-and-forget and cannot probe which tracks exist.
+    /// Record a chapter play reported by the public player. The counter measures
+    /// listening time — one report per ten seconds of real playback — so every
+    /// report that reaches here increments the chapter, with no cap. Unknown
+    /// tracks and unpublished books are a silent no-op (`None`) so the beacon
+    /// cannot probe which tracks exist; a counted report returns the chapter's
+    /// new total so the caller can show it instead of guessing at it.
     async fn record_track_play(
         &self,
         cmd: commands::audiobook::RecordTrackPlayCommand,
-    ) -> Result<(), errors::audiobook::AudiobookError>;
+    ) -> Result<Option<i64>, errors::audiobook::AudiobookError>;
 }

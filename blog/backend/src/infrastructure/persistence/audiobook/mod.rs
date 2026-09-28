@@ -137,7 +137,7 @@ impl AudiobookService for AudiobookServiceImpl {
     async fn record_track_play(
         &self,
         cmd: commands::audiobook::RecordTrackPlayCommand,
-    ) -> Result<(), errors::audiobook::AudiobookError> {
+    ) -> Result<Option<i64>, errors::audiobook::AudiobookError> {
         self.record_track_play(cmd).await
     }
 }

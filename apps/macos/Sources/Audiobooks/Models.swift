@@ -40,9 +40,10 @@ struct AudiobookTrack: Identifiable, Codable, Hashable {
     let number: Int64
     /// May be null, in which case the asset's own duration is used once loaded.
     let durationSeconds: Int64?
-    /// How many times listeners have actually played this chapter. Absent on
-    /// older backends; PlayerModel bumps it locally when the server accepts a
-    /// play beacon, so the list updates without a reload.
+    /// How many times listeners have actually played this chapter, one per ten
+    /// seconds of real listening. Absent on older backends; PlayerModel writes
+    /// the server's own total back here, so the list updates without a reload
+    /// and never drifts from what the server counted.
     var playCount: Int?
     let shortName: String
     /// Backend-relative stream path, served with HTTP Range support.
@@ -64,7 +65,7 @@ struct AudiobookDetails: Codable, Identifiable, Hashable {
     let ownerUsername: String
     let ownerDisplayName: String
     let tags: [AudiobookTag]
-    /// `var` so an accepted play beacon can bump a chapter's count in place.
+    /// `var` so an accepted play beacon can write the server's count in place.
     var tracks: [AudiobookTrack]
     let createdAt: String
     let publishedAt: String?
@@ -91,4 +92,10 @@ struct AudiobookListPage: Codable {
 
 struct AudiobookDetailEnvelope: Codable {
     let audiobook: AudiobookDetails
+}
+
+/// Body of a play beacon the server actually counted: the chapter's new total.
+/// A 204 carries no body at all and means the report was not counted.
+struct TrackPlayResponse: Codable {
+    let playCount: Int64
 }

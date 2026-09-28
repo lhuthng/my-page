@@ -79,3 +79,12 @@ pub struct SlugAvailabilityResponse {
     /// `true` when the slug is free to use.
     pub available: bool,
 }
+
+/// Answer to a chapter play beacon. Only sent when the report was counted:
+/// an ignored report is a `204` with no body, so the caller can tell the two
+/// apart instead of assuming its own report moved the counter.
+#[derive(Serialize, Deserialize)]
+pub struct TrackPlayResponse {
+    /// The chapter's total, after this report.
+    pub play_count: i64,
+}

@@ -81,9 +81,12 @@ export const audiobooks = {
 		api.get(`audiobooks/check?slug=${encodeURIComponent(slug)}`, { auth: false }),
 
 	/**
-	 * Fire-and-forget play beacon: the player calls this once a chapter has
-	 * been genuinely listened to. The server dedups per listener per day, so
-	 * duplicates and failures are harmless — but callers should still catch.
+	 * Fire-and-forget play beacon: the player calls this once per ten seconds of
+	 * genuine listening, for as long as the listener keeps going. Resolves to the
+	 * chapter's new total, or `null` when the server did not count the report (it
+	 * was shed as a burst, or the book is not published) — a caller must leave
+	 * its counter alone on a `null`. Failures are harmless, but callers should
+	 * still catch.
 	 */
 	recordTrackPlay: (audiobookId, trackId) =>
 		api.post(`audiobooks/id/${audiobookId}/tracks/${trackId}/play`, { auth: false })

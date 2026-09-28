@@ -48,23 +48,38 @@ struct AudiobookAPI {
         return envelope.audiobook
     }
 
-    /// Fire-and-forget play beacon for a chapter. The server counts at most
-    /// one play per listener per day and answers 204; the caller decides what
-    /// an error means (PlayerModel treats it as "not counted").
-    func recordPlay(audiobookId: Int64, trackId: Int64) async throws {
+    /// Fire-and-forget play beacon for a chapter. The server counts one play per
+    /// ten seconds of listening, per chapter, with no cap, and answers with the
+    /// chapter's new total. It answers 204 when it did not count — the report
+    /// landed inside its own ten-second window, or the book is not published —
+    /// so a `nil` return means the counter did not move and the caller must not
+    /// invent a play locally.
+    ///
+    /// The request carries no listener identity: the server measures listening
+    /// time, not unique listeners, and keeps no per-listener record.
+    func recordPlay(audiobookId: Int64, trackId: Int64) async throws -> Int64? {
         var request = URLRequest(
             url: base.appendingPathComponent(
                 "audiobooks/id/\(audiobookId)/tracks/\(trackId)/play"
             )
         )
         request.httpMethod = "POST"
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw APIError(message: "Invalid response from server")
         }
+        if http.statusCode == 204 { return nil }
         guard (200..<300).contains(http.statusCode) else {
             throw APIError(message: "Server returned \(http.statusCode)")
         }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard let body = try? decoder.decode(TrackPlayResponse.self, from: data) else {
+            // A 200 we cannot read says nothing about the counter, so treat it
+            // as "not counted" rather than guess a number.
+            return nil
+        }
+        return body.playCount
     }
 
     private func get<T: Decodable>(_ url: URL) async throws -> T {

@@ -16,8 +16,13 @@ const STORAGE_PREFIX = 'audiobook-player:';
 const PERSIST_INTERVAL_MS = 4000;
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
 const SLEEP_PRESETS_MINUTES = [15, 30, 45, 60];
-/** Playback seconds within one chapter before it counts as played. */
-const PLAY_THRESHOLD_SECONDS = 10;
+/**
+ * Real seconds of listening per recorded play. The counter measures the time a
+ * listener actually spends listening — ten seconds is ten seconds whether the
+ * book is playing at 0.75x or 2x — so a chapter gains a play for every one of
+ * these blocks and keeps gaining them for as long as the listener keeps going.
+ */
+const PLAY_REPORT_INTERVAL_SECONDS = 10;
 
 export class AudiobookPlayer {
 	/** @type {Array<object>} ordered playlist */
@@ -51,12 +56,10 @@ export class AudiobookPlayer {
 	#pendingSeek = 0;
 	#handlers = null;
 	#detached = false;
-	/** Playback seconds accumulated for the current chapter. */
+	/** Real seconds of listening accumulated for the current chapter. */
 	#playSeconds = 0;
 	/** The element's currentTime at the previous timeupdate, for deltas. */
 	#lastAudioTime = 0;
-	/** Chapters already reported as played in this engine's session. */
-	#countedTracks = new Set();
 
 	constructor(tracks, { storageKey = 'default', skipSeconds = 15 } = {}) {
 		this.tracks = tracks ?? [];
@@ -360,12 +363,18 @@ export class AudiobookPlayer {
 	#onTimeUpdate() {
 		const audio = this.#audio;
 		if (!audio) return;
-		// Advance the play counter by real elapsed audio time: only while
+		// Advance the play counter by real elapsed listening: only while
 		// actually playing (a paused seek fires timeupdate too), and only for
 		// small deltas — a large jump is a seek, not listening.
+		//
+		// Audio time is converted to the listener's own seconds by dividing by
+		// the playback rate, because the counter measures how long somebody
+		// listened, not how much of the book went past: at 2x a chapter reaches
+		// its next play in ten real seconds, not five.
 		const delta = audio.currentTime - this.#lastAudioTime;
 		this.#lastAudioTime = audio.currentTime;
-		if (this.playing && delta > 0 && delta < 5) this.#accumulatePlay(delta);
+		const listened = delta / this.rate;
+		if (this.playing && listened > 0 && listened < 5) this.#accumulatePlay(listened);
 		this.time = audio.currentTime;
 		this.#onProgress();
 		this.#persist(false);
@@ -373,24 +382,26 @@ export class AudiobookPlayer {
 	}
 
 	/**
-	 * Count the chapter as played once the listener has genuinely listened to
-	 * PLAY_THRESHOLD_SECONDS of it. Fires at most once per chapter per engine
-	 * session, mirroring the server's once-per-listener-per-day dedup, and via
-	 * the engine's meta so it keeps working while the mini player continues
-	 * playback on pages whose full player is long gone.
+	 * Report a play for every PLAY_REPORT_INTERVAL_SECONDS of genuine listening.
+	 *
+	 * There is no once-per-chapter cap: the figure is a measure of time
+	 * listened, so a listener who stays in a chapter for an hour reports 360
+	 * times. The remainder is carried over rather than discarded, which keeps
+	 * the cadence honest instead of letting it drift late. Fires through the
+	 * engine's meta so it keeps working while the mini player continues playback
+	 * on pages whose full player is long gone.
 	 */
 	#accumulatePlay(delta) {
 		const track = this.current;
-		if (!track || this.#countedTracks.has(track.id)) return;
+		if (!track) return;
 		this.#playSeconds += delta;
-		if (this.#playSeconds < PLAY_THRESHOLD_SECONDS) return;
-
-		this.#countedTracks.add(track.id);
-		this.#playSeconds = 0;
-		try {
-			this.#meta.onTrackPlayed?.(track.id);
-		} catch {
-			// A failing beacon must never take playback down with it.
+		while (this.#playSeconds >= PLAY_REPORT_INTERVAL_SECONDS) {
+			this.#playSeconds -= PLAY_REPORT_INTERVAL_SECONDS;
+			try {
+				this.#meta.onTrackPlayed?.(track.id);
+			} catch {
+				// A failing beacon must never take playback down with it.
+			}
 		}
 	}
 

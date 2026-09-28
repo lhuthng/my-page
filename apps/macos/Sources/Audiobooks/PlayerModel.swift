@@ -72,17 +72,23 @@ final class PlayerModel: NSObject, ObservableObject {
     /// the seek lands, so ticks are ignored.
     private var pendingSeekTarget: Double?
     private var pendingSummary: AudiobookSummary?
-    /// Listening seconds accumulated on the current chapter.
+    /// Listening seconds accumulated on the current chapter since the last
+    /// report. Carries the remainder across a report rather than being zeroed,
+    /// so the cadence does not drift with the tick boundaries.
     private var playedSeconds: Double = 0
     /// The playhead at the previous tick, so only real elapsed audio time counts.
     private var lastTickSeconds: Double = 0
-    /// Chapters already beaconed during this app session.
-    private var countedTrackIds = Set<Int64>()
     private var playReportTask: Task<Void, Never>?
 
-    /// Playback seconds within one chapter before it counts as played; mirrors
-    /// the web player's threshold so both surfaces measure the same way.
-    private static let playThresholdSeconds: Double = 10
+    /// Real seconds of listening per reported play; mirrors the web player's
+    /// interval so both surfaces measure the same way.
+    ///
+    /// Deliberately listener time, not audio time: `tick(at:)` divides the
+    /// playhead advance by the playback rate, so ten seconds is ten seconds at
+    /// 0.75x and at 2x. There is no once-per-chapter cap — a chapter played for
+    /// an hour reports 360 times, because the number measures how long somebody
+    /// listened, not how many people opened it.
+    private static let playReportIntervalSeconds: Double = 10
 
     init(api: AudiobookAPI) {
         self.api = api
@@ -316,6 +322,8 @@ final class PlayerModel: NSObject, ObservableObject {
         pendingSeekTarget = nil
         displayTime = 0
         lastSavedTime = 0
+        // The listening clock is per chapter, so a partial interval is dropped
+        // at the boundary — the same as the web player's `load`.
         playedSeconds = 0
         lastTickSeconds = 0
 
@@ -377,11 +385,16 @@ final class PlayerModel: NSObject, ObservableObject {
         // Measure real listening: only advance while actually playing, and let
         // the delta guard absorb the jump a seek produces (a paused seek also
         // moves the playhead, which is not listening).
+        //
+        // The playhead advances at `rate` audio seconds per wall-clock second,
+        // so dividing gives the listener's own seconds — the report cadence is
+        // then the same at every speed. A rate of 0 is harmless: the quotient is
+        // infinite and fails the guard below.
         let delta = seconds - lastTickSeconds
         lastTickSeconds = seconds
-        if isPlaying, pendingSeekTarget == nil, delta > 0, delta < 5 {
-            playedSeconds += delta
-            countPlayIfThresholdReached()
+        let listened = delta / rate
+        if isPlaying, pendingSeekTarget == nil, listened > 0, listened < 5 {
+            accumulatePlay(listened)
         }
         if abs(seconds - lastSavedTime) >= 4 {
             lastSavedTime = seconds
@@ -389,32 +402,39 @@ final class PlayerModel: NSObject, ObservableObject {
         }
     }
 
-    /// One report per chapter per app session: after the listening threshold,
-    /// fire the beacon and pop the chapter's counter when the server accepts
-    /// it. The server itself dedups to one play per listener per day, so this
-    /// session cap matches rather than fights the measurement.
-    private func countPlayIfThresholdReached() {
-        guard let book, let track = currentTrack else { return }
-        guard playedSeconds >= Self.playThresholdSeconds else { return }
-        guard !countedTrackIds.contains(track.id) else { return }
-        countedTrackIds.insert(track.id)
-        playedSeconds = 0
+    /// Add a stretch of genuine listening, reporting once per whole interval.
+    ///
+    /// Uncapped: the loop keeps firing for as long as the listener keeps going.
+    /// The remainder is subtracted rather than zeroed so the next report lands a
+    /// full interval later, not at the next tick after a rounded-up one.
+    private func accumulatePlay(_ listened: Double) {
+        playedSeconds += listened
+        while playedSeconds >= Self.playReportIntervalSeconds {
+            playedSeconds -= Self.playReportIntervalSeconds
+            reportPlay()
+        }
+    }
 
+    /// Fire one play beacon for the current chapter.
+    ///
+    /// The server owns the count. It answers with the chapter's new total, or
+    /// 204 when it did not count (the report landed inside its own ten-second
+    /// window, the chapter is unknown, or the book is not published) — in which
+    /// case the row must be left alone rather than incremented, or the list
+    /// would show a play that never happened.
+    private func reportPlay() {
+        guard let book, let track = currentTrack else { return }
         let bookId = book.id
         let trackId = track.id
         playReportTask?.cancel()
         playReportTask = Task { [weak self] in
             guard let self else { return }
-            do {
-                try await self.api.recordPlay(audiobookId: bookId, trackId: trackId)
-            } catch {
-                // The server did not record the play; the list must not lie.
-                return
-            }
+            guard let total = try? await self.api.recordPlay(audiobookId: bookId, trackId: trackId)
+            else { return }
             guard !Task.isCancelled, self.book?.id == bookId,
                 let index = self.book?.tracks.firstIndex(where: { $0.id == trackId })
             else { return }
-            self.book?.tracks[index].playCount = (self.book?.tracks[index].playCount ?? 0) + 1
+            self.book?.tracks[index].playCount = Int(total)
         }
     }
 
