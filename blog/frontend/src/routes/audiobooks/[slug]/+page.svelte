@@ -177,6 +177,7 @@
 		coverUrl={audiobook.url}
 		storageKey={audiobook.slug}
 		slug={audiobook.slug}
+		audiobookId={audiobook.id}
 		{vietnamese}
 	/>
 </article>

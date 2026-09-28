@@ -49,7 +49,7 @@ impl AudiobookServiceImpl {
     ) -> Result<Vec<AudiobookTrack>, AudiobookError> {
         let rows: Vec<TrackRow> = sqlx::query_as(
             r#"
-            SELECT t.id, t.title, t.number, t.duration_seconds,
+            SELECT t.id, t.title, t.number, t.duration_seconds, t.play_count,
                    m.short_name, m.file_type
             FROM audiobook_tracks t
             LEFT JOIN media m ON m.id = t.media_id
@@ -64,7 +64,7 @@ impl AudiobookServiceImpl {
         Ok(rows
             .into_iter()
             .filter_map(
-                |(id, title, number, duration_seconds, short_name, file_type)| {
+                |(id, title, number, duration_seconds, play_count, short_name, file_type)| {
                     // A track whose media row vanished is not playable; skip it
                     // rather than emitting an entry the player cannot load.
                     let short_name = short_name?;
@@ -73,6 +73,7 @@ impl AudiobookServiceImpl {
                         title,
                         number,
                         duration_seconds,
+                        play_count,
                         url: format!("media/i/{}", short_name),
                         short_name,
                         file_type: file_type.unwrap_or_else(|| "audio/mpeg".to_string()),

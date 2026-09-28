@@ -36,6 +36,7 @@ pub(super) type TrackRow = (
     String,
     i64,
     Option<i64>,
+    i64,
     Option<String>,
     Option<String>,
 );

@@ -52,6 +52,9 @@ pub struct AudiobookTrack {
     pub title: String,
     pub number: i64,
     pub duration_seconds: Option<i64>,
+    /// How many times listeners have actually played this chapter: at most one
+    /// play per listener per UTC day, counted only while the book is published.
+    pub play_count: i64,
     pub short_name: String,
     pub url: String,
     pub file_type: String,

@@ -16,6 +16,8 @@ const STORAGE_PREFIX = 'audiobook-player:';
 const PERSIST_INTERVAL_MS = 4000;
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
 const SLEEP_PRESETS_MINUTES = [15, 30, 45, 60];
+/** Playback seconds within one chapter before it counts as played. */
+const PLAY_THRESHOLD_SECONDS = 10;
 
 export class AudiobookPlayer {
 	/** @type {Array<object>} ordered playlist */
@@ -49,6 +51,12 @@ export class AudiobookPlayer {
 	#pendingSeek = 0;
 	#handlers = null;
 	#detached = false;
+	/** Playback seconds accumulated for the current chapter. */
+	#playSeconds = 0;
+	/** The element's currentTime at the previous timeupdate, for deltas. */
+	#lastAudioTime = 0;
+	/** Chapters already reported as played in this engine's session. */
+	#countedTracks = new Set();
 
 	constructor(tracks, { storageKey = 'default', skipSeconds = 15 } = {}) {
 		this.tracks = tracks ?? [];
@@ -156,6 +164,7 @@ export class AudiobookPlayer {
 	/**
 	 * Move to a track. Playback only starts when `play` is true, so a restore
 	 * or a manual track pick never fights the browser's autoplay policy.
+	 * Picking any chapter is also an answer to the resume offer: it goes away.
 	 */
 	load(index, { play = false, seek = 0 } = {}) {
 		const audio = this.#audio;
@@ -166,6 +175,9 @@ export class AudiobookPlayer {
 		this.time = 0;
 		this.duration = 0;
 		this.buffered = 0;
+		this.resumeOffer = null;
+		this.#playSeconds = 0;
+		this.#lastAudioTime = 0;
 		this.#pendingSeek = seek > 0 ? seek : 0;
 
 		// Assigning `src` (rather than fetching) hands streaming to the browser:
@@ -348,10 +360,38 @@ export class AudiobookPlayer {
 	#onTimeUpdate() {
 		const audio = this.#audio;
 		if (!audio) return;
+		// Advance the play counter by real elapsed audio time: only while
+		// actually playing (a paused seek fires timeupdate too), and only for
+		// small deltas — a large jump is a seek, not listening.
+		const delta = audio.currentTime - this.#lastAudioTime;
+		this.#lastAudioTime = audio.currentTime;
+		if (this.playing && delta > 0 && delta < 5) this.#accumulatePlay(delta);
 		this.time = audio.currentTime;
 		this.#onProgress();
 		this.#persist(false);
 		this.#updateMediaPosition();
+	}
+
+	/**
+	 * Count the chapter as played once the listener has genuinely listened to
+	 * PLAY_THRESHOLD_SECONDS of it. Fires at most once per chapter per engine
+	 * session, mirroring the server's once-per-listener-per-day dedup, and via
+	 * the engine's meta so it keeps working while the mini player continues
+	 * playback on pages whose full player is long gone.
+	 */
+	#accumulatePlay(delta) {
+		const track = this.current;
+		if (!track || this.#countedTracks.has(track.id)) return;
+		this.#playSeconds += delta;
+		if (this.#playSeconds < PLAY_THRESHOLD_SECONDS) return;
+
+		this.#countedTracks.add(track.id);
+		this.#playSeconds = 0;
+		try {
+			this.#meta.onTrackPlayed?.(track.id);
+		} catch {
+			// A failing beacon must never take playback down with it.
+		}
 	}
 
 	#onLoadedMetadata() {

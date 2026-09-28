@@ -77,7 +77,16 @@ export const audiobooks = {
 		api.put(`audiobooks/id/${audiobookId}/tracks/order`, { body: { order } }),
 
 	/** Slug availability; `available: true` means the slug is free. */
-	checkSlug: (slug) => api.get(`audiobooks/check?slug=${encodeURIComponent(slug)}`, { auth: false })
+	checkSlug: (slug) =>
+		api.get(`audiobooks/check?slug=${encodeURIComponent(slug)}`, { auth: false }),
+
+	/**
+	 * Fire-and-forget play beacon: the player calls this once a chapter has
+	 * been genuinely listened to. The server dedups per listener per day, so
+	 * duplicates and failures are harmless — but callers should still catch.
+	 */
+	recordTrackPlay: (audiobookId, trackId) =>
+		api.post(`audiobooks/id/${audiobookId}/tracks/${trackId}/play`, { auth: false })
 };
 
 /**

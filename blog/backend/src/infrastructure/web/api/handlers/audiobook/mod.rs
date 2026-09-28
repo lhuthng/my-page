@@ -2,6 +2,7 @@
 // public surface: route handlers for the router plus the wire types their
 // signatures use.
 mod dto;
+mod plays;
 mod read;
 mod response;
 mod shared;
@@ -21,6 +22,7 @@ pub use response::{
     AudiobookSummaryResponse, AudiobookTagsResponse, SlugAvailabilityResponse,
     TrackCreatedResponse,
 };
+pub use plays::record_track_play;
 pub use tracks::{add_track, remove_track, reorder_tracks, replace_track_medium, update_track};
 pub use write::{change_cover, change_status, delete_audiobook, new_audiobook, update_audiobook};
 
@@ -72,6 +74,12 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             Router::new()
                 .route("/check", get(check_slug))
                 .route("/public/all", get(get_public_audiobooks))
-                .route("/public/s/{slug}", get(get_public_audiobook)),
+                .route("/public/s/{slug}", get(get_public_audiobook))
+                // The play beacon is public and unauthenticated by design; the
+                // handler and persistence layer carry the anti-spam rules.
+                .route(
+                    "/id/{audiobook_id}/tracks/{track_id}/play",
+                    post(record_track_play),
+                ),
         )
 }

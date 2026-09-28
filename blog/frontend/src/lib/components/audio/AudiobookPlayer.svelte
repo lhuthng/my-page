@@ -2,6 +2,7 @@
 	import { onMount, untrack, flushSync } from 'svelte';
 	import { AudiobookPlayer } from '$lib/players/AudiobookPlayer.svelte.js';
 	import { audiobookSession } from '$lib/players/AudiobookSession.svelte.js';
+	import { audiobooks } from '$lib/api/audiobooks.js';
 	import { formatClock, percentOf } from '$lib/utils/duration.js';
 
 	let {
@@ -12,6 +13,12 @@
 		coverUrl = null,
 		storageKey = 'default',
 		slug = null,
+		/**
+		 * Numeric audiobook id. The public page passes it so genuine listening
+		 * is counted server-side; the dashboard preview deliberately omits it,
+		 * so previewing a book never counts as plays.
+		 */
+		audiobookId = null,
 		/**
 		 * Vietnamese-translated books present their player in Vietnamese too, so
 		 * the whole listening experience matches the book's language.
@@ -58,6 +65,7 @@
 					restart: 'Nghe lại',
 					playlist: 'Chương',
 					chapterCount: (n) => `${n} chương`,
+					plays: 'Lượt nghe',
 					sortToHigh: 'Sắp xếp chương từ thấp lên cao',
 					sortToLow: 'Sắp xếp chương từ cao xuống thấp',
 					sortToHighTitle: 'Thấp lên cao',
@@ -104,6 +112,7 @@
 					restart: 'Restart',
 					playlist: 'Chapters',
 					chapterCount: (n) => `${n} chapter${n === 1 ? '' : 's'}`,
+					plays: 'Plays',
 					sortToHigh: 'Sort chapters low to high',
 					sortToLow: 'Sort chapters high to low',
 					sortToHighTitle: 'Low to high',
@@ -142,7 +151,32 @@
 	const player = untrack(() =>
 		persistent ? audiobookSession.engineFor(book) : new AudiobookPlayer(tracks, { storageKey })
 	);
-	untrack(() => player.setMeta({ title, author, translator, coverUrl }));
+	// The play beacon rides on the engine's meta so it keeps firing while the
+	// mini player continues playback on other pages, long after this page is
+	// gone. Fire-and-forget: counting must never disturb listening. When the
+	// server accepts the play, the chapter's counter is bumped here so the
+	// list pops without a reload — a local map, because page data is not a
+	// reactive proxy and mutating it would not re-render the row.
+	let acceptedPlays = $state({});
+	const onTrackPlayed = audiobookId
+		? (trackId) => {
+				audiobooks
+					.recordTrackPlay(audiobookId, trackId)
+					.then(() => {
+						acceptedPlays[trackId] = (acceptedPlays[trackId] ?? 0) + 1;
+					})
+					.catch(() => {});
+			}
+		: null;
+	untrack(() =>
+		player.setMeta({
+			title,
+			author,
+			translator,
+			coverUrl,
+			onTrackPlayed
+		})
+	);
 
 	let audioEl = $state(null);
 	/** Value shown while the listener drags the scrubber. */
@@ -403,23 +437,6 @@
 			{@render reel()}
 		</div>
 
-		<!-- Resume offer -->
-		{#if player.resumeOffer}
-			<div
-				class="flex flex-wrap items-center gap-3 rounded-xl border border-dark/15 bg-background/25 p-3 text-sm md:text-base"
-			>
-				<span class="text-base grow">
-					{t.resumeFrom(formatClock(player.resumeOffer.time))}
-				</span>
-				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="primary">
-					<button onclick={() => player.acceptResume()}>{t.resume}</button>
-				</div>
-				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="dark">
-					<button onclick={() => player.dismissResume()}>{t.startOver}</button>
-				</div>
-			</div>
-		{/if}
-
 		{#if player.interrupted}
 			<p class="text-sm md:text-base text-accent-red">
 				{t.blocked}
@@ -666,6 +683,23 @@
 			</div>
 		</div>
 
+		<!-- Resume offer: a status line under the player, not a banner over it. -->
+		{#if player.resumeOffer}
+			<div
+				class="flex flex-wrap items-center gap-3 rounded-xl border border-dark/15 bg-background/25 p-3 text-sm md:text-base"
+			>
+				<span class="text-base grow">
+					{t.resumeFrom(formatClock(player.resumeOffer.time))}
+				</span>
+				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="primary">
+					<button onclick={() => player.acceptResume()}>{t.resume}</button>
+				</div>
+				<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="dark">
+					<button onclick={() => player.dismissResume()}>{t.startOver}</button>
+				</div>
+			</div>
+		{/if}
+
 		<!-- Chapter list: flush with the player edges and separated by a quiet rule. -->
 		<div
 			class="-mx-4 -mb-4 flex flex-col gap-2 rounded-b-xl border-t border-dark/10 bg-dark/5 px-4 pt-4 pb-4 text-dark"
@@ -751,7 +785,13 @@
 									{/if}
 								</span>
 
-								<span class="text-base text-dark/55 tabular-nums shrink-0">
+								<span class="flex items-center gap-2 shrink-0 text-base text-dark/55 tabular-nums">
+									<span class="flex items-center gap-1" title={t.plays}>
+										<svg class="w-3.5 h-3.5 fill-dark/40" viewBox="0 0 24 24" aria-hidden="true">
+											<path d="M8 5l11 7-11 7z" />
+										</svg>
+										{(track.play_count ?? 0) + (acceptedPlays[track.id] ?? 0)}
+									</span>
 									{formatClock(track.duration_seconds)}
 								</span>
 							</button>

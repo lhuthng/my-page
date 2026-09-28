@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 
 mod mapping;
 mod medium;
+mod plays;
 mod read;
 mod rows;
 mod tags;
@@ -132,5 +133,11 @@ impl AudiobookService for AudiobookServiceImpl {
         cmd: commands::audiobook::CheckAudiobookSlugCommand,
     ) -> Result<bool, errors::audiobook::AudiobookError> {
         self.check_audiobook_slug(cmd).await
+    }
+    async fn record_track_play(
+        &self,
+        cmd: commands::audiobook::RecordTrackPlayCommand,
+    ) -> Result<(), errors::audiobook::AudiobookError> {
+        self.record_track_play(cmd).await
     }
 }

@@ -95,4 +95,13 @@ pub trait AudiobookService {
         &self,
         cmd: commands::audiobook::CheckAudiobookSlugCommand,
     ) -> Result<bool, errors::audiobook::AudiobookError>;
+
+    /// Record a chapter play reported by the public player. At most one play
+    /// per listener per track per UTC day is counted, and only for published
+    /// books; anything else is a silent no-op so the beacon stays
+    /// fire-and-forget and cannot probe which tracks exist.
+    async fn record_track_play(
+        &self,
+        cmd: commands::audiobook::RecordTrackPlayCommand,
+    ) -> Result<(), errors::audiobook::AudiobookError>;
 }
