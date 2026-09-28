@@ -40,6 +40,10 @@ struct AudiobookTrack: Identifiable, Codable, Hashable {
     let number: Int64
     /// May be null, in which case the asset's own duration is used once loaded.
     let durationSeconds: Int64?
+    /// How many times listeners have actually played this chapter. Absent on
+    /// older backends; PlayerModel bumps it locally when the server accepts a
+    /// play beacon, so the list updates without a reload.
+    var playCount: Int?
     let shortName: String
     /// Backend-relative stream path, served with HTTP Range support.
     let url: String
@@ -60,7 +64,8 @@ struct AudiobookDetails: Codable, Identifiable, Hashable {
     let ownerUsername: String
     let ownerDisplayName: String
     let tags: [AudiobookTag]
-    let tracks: [AudiobookTrack]
+    /// `var` so an accepted play beacon can bump a chapter's count in place.
+    var tracks: [AudiobookTrack]
     let createdAt: String
     let publishedAt: String?
 

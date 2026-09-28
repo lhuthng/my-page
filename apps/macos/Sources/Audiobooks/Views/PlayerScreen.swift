@@ -312,6 +312,17 @@ struct PlayerScreen: View {
                 .foregroundStyle(isCurrent ? Theme.primary : Theme.dark)
                 .lineLimit(1)
             Spacer()
+            // Play count, matching the web playlist's icon + figure. Hidden
+            // entirely on older backends that do not report the field.
+            if let playCount = track.playCount {
+                HStack(spacing: 2) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 7, weight: .bold))
+                    Text("\(playCount)")
+                        .font(.caption.monospacedDigit())
+                }
+                .foregroundStyle(Theme.dark.opacity(0.55))
+            }
             if let seconds = track.durationSeconds {
                 Text(clock(Double(seconds)))
                     .font(.caption.monospacedDigit())

@@ -72,6 +72,17 @@ final class PlayerModel: NSObject, ObservableObject {
     /// the seek lands, so ticks are ignored.
     private var pendingSeekTarget: Double?
     private var pendingSummary: AudiobookSummary?
+    /// Listening seconds accumulated on the current chapter.
+    private var playedSeconds: Double = 0
+    /// The playhead at the previous tick, so only real elapsed audio time counts.
+    private var lastTickSeconds: Double = 0
+    /// Chapters already beaconed during this app session.
+    private var countedTrackIds = Set<Int64>()
+    private var playReportTask: Task<Void, Never>?
+
+    /// Playback seconds within one chapter before it counts as played; mirrors
+    /// the web player's threshold so both surfaces measure the same way.
+    private static let playThresholdSeconds: Double = 10
 
     init(api: AudiobookAPI) {
         self.api = api
@@ -117,6 +128,7 @@ final class PlayerModel: NSObject, ObservableObject {
         if let timeObserver { player.removeTimeObserver(timeObserver) }
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         if let terminateObserver { NotificationCenter.default.removeObserver(terminateObserver) }
+        playReportTask?.cancel()
     }
 
     // MARK: - Opening books
@@ -304,6 +316,8 @@ final class PlayerModel: NSObject, ObservableObject {
         pendingSeekTarget = nil
         displayTime = 0
         lastSavedTime = 0
+        playedSeconds = 0
+        lastTickSeconds = 0
 
         if let reported = track.durationSeconds, reported > 0 {
             duration = Double(reported)
@@ -360,9 +374,47 @@ final class PlayerModel: NSObject, ObservableObject {
         if !isScrubbing, pendingSeekTarget == nil {
             displayTime = seconds
         }
+        // Measure real listening: only advance while actually playing, and let
+        // the delta guard absorb the jump a seek produces (a paused seek also
+        // moves the playhead, which is not listening).
+        let delta = seconds - lastTickSeconds
+        lastTickSeconds = seconds
+        if isPlaying, pendingSeekTarget == nil, delta > 0, delta < 5 {
+            playedSeconds += delta
+            countPlayIfThresholdReached()
+        }
         if abs(seconds - lastSavedTime) >= 4 {
             lastSavedTime = seconds
             saveProgress()
+        }
+    }
+
+    /// One report per chapter per app session: after the listening threshold,
+    /// fire the beacon and pop the chapter's counter when the server accepts
+    /// it. The server itself dedups to one play per listener per day, so this
+    /// session cap matches rather than fights the measurement.
+    private func countPlayIfThresholdReached() {
+        guard let book, let track = currentTrack else { return }
+        guard playedSeconds >= Self.playThresholdSeconds else { return }
+        guard !countedTrackIds.contains(track.id) else { return }
+        countedTrackIds.insert(track.id)
+        playedSeconds = 0
+
+        let bookId = book.id
+        let trackId = track.id
+        playReportTask?.cancel()
+        playReportTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.api.recordPlay(audiobookId: bookId, trackId: trackId)
+            } catch {
+                // The server did not record the play; the list must not lie.
+                return
+            }
+            guard !Task.isCancelled, self.book?.id == bookId,
+                let index = self.book?.tracks.firstIndex(where: { $0.id == trackId })
+            else { return }
+            self.book?.tracks[index].playCount = (self.book?.tracks[index].playCount ?? 0) + 1
         }
     }
 

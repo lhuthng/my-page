@@ -48,6 +48,25 @@ struct AudiobookAPI {
         return envelope.audiobook
     }
 
+    /// Fire-and-forget play beacon for a chapter. The server counts at most
+    /// one play per listener per day and answers 204; the caller decides what
+    /// an error means (PlayerModel treats it as "not counted").
+    func recordPlay(audiobookId: Int64, trackId: Int64) async throws {
+        var request = URLRequest(
+            url: base.appendingPathComponent(
+                "audiobooks/id/\(audiobookId)/tracks/\(trackId)/play"
+            )
+        )
+        request.httpMethod = "POST"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError(message: "Invalid response from server")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw APIError(message: "Server returned \(http.statusCode)")
+        }
+    }
+
     private func get<T: Decodable>(_ url: URL) async throws -> T {
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let http = response as? HTTPURLResponse else {
