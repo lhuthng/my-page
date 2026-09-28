@@ -7,7 +7,7 @@ use crate::domain::entities::auth::AuthConfig;
 use crate::infrastructure::{persistence, storage::ObjectStore};
 
 pub use super::config::mail::{MailConfig, MailTransportConfig};
-pub use super::config::media::MediaConfig;
+pub use super::config::media::{AudioReadMode, AudioStore, MediaConfig};
 pub use super::config::project_demo::ProjectDemoConfig;
 
 pub struct AppConfig {

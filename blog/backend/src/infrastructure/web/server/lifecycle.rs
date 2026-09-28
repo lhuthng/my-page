@@ -71,6 +71,11 @@ impl<'a> HTTPServer<'a> {
         let project_demo_config = ProjectDemoConfig::from_env();
         let storage = ObjectStore::from_env(&project_demo_config.dir)
             .map_err(|message| Error::new(ErrorKind::InvalidData, message))?;
+        // Fails startup on a half-configured audio bucket — AUDIO_BACKEND=r2
+        // with an incomplete R2_* set or no R2_PUBLIC_URL — rather than at the
+        // first upload.
+        let media_config = MediaConfig::from_env()
+            .map_err(|message| Error::new(ErrorKind::InvalidData, message))?;
         cleanup_orphaned_uploads(&pool, &storage, &project_demo_config.dir).await?;
         purge_expired_trash(&pool, &storage, &project_demo_config.dir).await?;
         // spawn periodic purge every hour
@@ -87,7 +92,7 @@ impl<'a> HTTPServer<'a> {
         let graphql_schema = crate::infrastructure::web::graphql::build_schema(pool.clone());
         let state = std::sync::Arc::new(AppState {
             config: AppConfig::from_env(),
-            media_config: MediaConfig::from_env(),
+            media_config,
             project_demo_config,
             storage,
             analytics_service: persistence::analytics::AnalyticsServiceImpl::new(pool.clone()),

@@ -1,11 +1,10 @@
 // Post-import database fix pass: rewrites stored URLs and paths to the
 // target environment's layout.
 use std::path::Path;
-use std::str::FromStr;
 
 use serde::Serialize;
 
-use crate::domain::entities::media::MediaType;
+use crate::infrastructure::storage::media_key;
 
 #[derive(Debug, Default, Serialize)]
 pub struct FixSummary {
@@ -14,38 +13,17 @@ pub struct FixSummary {
     pub game_demo_urls_fixed: u64,
 }
 
-/// Reconstructs the canonical `media.url` value for a row, mirroring
-/// `media_path_from_link`'s hash-first layout under the dev media root.
-/// Returns None for rows whose file_type cannot be parsed (leave them alone).
+/// Reconstructs the canonical `media.url` value for a row: the store-relative
+/// key from [`media_key`] joined onto the target media root. Returns None for
+/// rows whose file_type cannot be parsed (leave them alone).
 pub fn canonical_media_url(
     hash: &str,
     file_type: &str,
     uploader_id: i64,
     media_dir: &Path,
 ) -> Option<String> {
-    let extension = MediaType::from_str(file_type).ok()?.get_extension();
-    let path =
-        if hash.starts_with(".post.") || hash.starts_with(".avt.") || hash.starts_with(".srs.") {
-            // ".<type>.<id>.<sha256>" — splitn(4, '.') yields ["", type, id, sha].
-            // The id part is NOT the on-disk directory; the uploader id is.
-            let mut parts = hash.splitn(4, '.');
-            let _empty = parts.next()?;
-            let type_dir = parts.next()?;
-            let _id = parts.next()?;
-            let sha = parts.next()?;
-            media_dir
-                .join(type_dir)
-                .join(uploader_id.to_string())
-                .join(format!("{sha}{extension}"))
-        } else if hash.len() >= 4 && hash.bytes().all(|b| b.is_ascii_hexdigit()) {
-            media_dir
-                .join(&hash[0..2])
-                .join(&hash[2..4])
-                .join(format!("{hash}{extension}"))
-        } else {
-            return None;
-        };
-    Some(path.to_string_lossy().to_string())
+    let key = media_key(hash, file_type, uploader_id)?;
+    Some(media_dir.join(&key.key).to_string_lossy().to_string())
 }
 
 /// Rewrites path-valued columns of an imported prod database so they resolve

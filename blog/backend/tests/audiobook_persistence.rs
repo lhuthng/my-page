@@ -87,6 +87,7 @@ fn config(fx: &Fixture) -> MediaConfig {
         allowed_avatar_types: vec![MediaType::ImagePng],
         allowed_cover_types: vec![MediaType::ImagePng, MediaType::ImageJpeg],
         allowed_audio_types: vec![MediaType::AudioMp3, MediaType::AudioOgg],
+        audio_bucket: None,
     }
 }
 

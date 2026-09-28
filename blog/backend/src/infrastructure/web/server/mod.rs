@@ -8,6 +8,6 @@ pub mod state;
 
 pub use lifecycle::HTTPServer;
 pub use state::{
-    AppConfig, AppState, DatabaseSource, MailConfig, MailTransportConfig, MediaConfig,
-    ProjectDemoConfig,
+    AppConfig, AppState, AudioReadMode, AudioStore, DatabaseSource, MailConfig,
+    MailTransportConfig, MediaConfig, ProjectDemoConfig,
 };

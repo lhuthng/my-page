@@ -1,12 +1,13 @@
 // Media serving: short-link resolution and streaming with HTTP Range
-// support, including the thumbnail fallback and path re-rooting rules.
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+// support, including the thumbnail fallback, the audio-bucket branch, and the
+// path re-rooting rules.
+use std::sync::Arc;
 
 use axum::{
     Json,
     body::Body,
     extract::{Path, Query, State},
-    http::{HeaderMap, header},
+    http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
 use http::Response;
@@ -21,13 +22,13 @@ use crate::{
         commands::media::{GetLinkCommand, SearchMediaCommand},
         services::media::MediaService,
     },
-    domain::{
-        entities::media::{LinkResult, MediaType},
-        errors::media::MediaError,
-    },
-    infrastructure::web::{
-        api::handlers::media::dto::{GetLinkResponse, MediaQuery, SearchResponse},
-        server::AppState,
+    domain::{entities::media::LinkResult, errors::media::MediaError},
+    infrastructure::{
+        storage::{MEDIA_CACHE_CONTROL, MediaKey, StorageError, audio_object_key, media_key},
+        web::{
+            api::handlers::media::dto::{GetLinkResponse, MediaQuery, SearchResponse},
+            server::{AppState, AudioReadMode, AudioStore},
+        },
     },
 };
 
@@ -66,12 +67,18 @@ pub async fn get_link(
 ) -> Result<impl IntoResponse, MediaError> {
     let link = state
         .media_service
-        .get_link(GetLinkCommand { short_name })
+        .get_link(GetLinkCommand {
+            short_name: short_name.clone(),
+        })
         .await?;
 
     Ok(Json(GetLinkResponse {
         short_name: link.short_name,
-        url: link.url,
+        // The stored `url` column is a disk path, which stops being the
+        // address of the bytes as soon as they live in the bucket. The
+        // short-name route resolves through whichever store actually holds
+        // them, so it is the only URL worth handing out.
+        url: format!("media/i/{short_name}"),
         file_type: link.file_type,
     }))
 }
@@ -108,10 +115,11 @@ pub async fn get_media(
         }
     };
 
-    let opened = open_media_link(&link, &state.media_config.dir).await;
-    let (file, content_hash, file_type) = match opened {
-        Ok(result) => result,
-        Err(e) => {
+    // Bytes first, then the fallback link — the same order as before, except
+    // that the audio bucket now gets a chance before the disk does.
+    match serve_media(&state, &link, &headers).await {
+        Ok(response) => Ok(response),
+        Err(error) => {
             if !used_fallback && let Some(fallback_short_name) = thumbnail_fallback {
                 let fallback_link = state
                     .media_service
@@ -119,13 +127,60 @@ pub async fn get_media(
                         short_name: fallback_short_name,
                     })
                     .await?;
-                open_media_link(&fallback_link, &state.media_config.dir).await?
+                serve_media(&state, &fallback_link, &headers).await
             } else {
-                return Err(e);
+                Err(error)
             }
         }
+    }
+}
+
+/// Serves one media row.
+///
+/// The audio bucket answers first when it is configured and actually holds the
+/// object; otherwise the disk copy does, which is what every deployment did
+/// before the bucket existed and is still the only store for a row that has not
+/// been backfilled yet. That ordering is what makes the migration per-file
+/// rather than all-or-nothing.
+///
+/// Nothing but audio ever reaches the bucket. `audio_object_key` returns `None`
+/// for every other type, so an image, a cover, an avatar, a video or a model
+/// falls straight through to the disk — the scope is structural rather than a
+/// check this function has to remember to make.
+async fn serve_media(
+    state: &AppState,
+    link: &LinkResult,
+    headers: &HeaderMap,
+) -> Result<Response<Body>, MediaError> {
+    let Some(key) = media_key(&link.hash, &link.file_type, link.uploader_id) else {
+        return Err(MediaError::FileNotFound);
     };
 
+    if let Some(bucket) = &state.media_config.audio_bucket
+        && let Some(object) = audio_object_key(&key.key, &link.file_type)
+    {
+        // The disk path is `MEDIA_PATH.join(key)` and the object is that same
+        // key with a prefix, so the two stores hold the same bytes under the
+        // same name and the backfill is a plain copy.
+        if let Some(size) = bucket
+            .client
+            .object_size(&object)
+            .await
+            .map_err(internal_error)?
+        {
+            return bucket_media_response(
+                bucket,
+                &object,
+                &key.sha256,
+                size,
+                &link.file_type,
+                headers,
+            )
+            .await;
+        }
+    }
+
+    let file = open_media_file(&key, link, &state.media_config.dir).await?;
     let size = file
         .metadata()
         .await
@@ -133,8 +188,8 @@ pub async fn get_media(
         .len();
 
     // Use the plain SHA-256 as the ETag - stable content identifier
-    // regardless of the storage layout.
-    let etag = format!("\"{}\"", content_hash);
+    // regardless of which store answered the request.
+    let etag = format!("\"{}\"", key.sha256);
 
     // Single byte-range support so <video>/<audio> can seek without
     // re-downloading the whole file. A partial answer is only safe when
@@ -159,8 +214,8 @@ pub async fn get_media(
 
         return Response::builder()
             .status(206)
-            .header(header::CONTENT_TYPE, file_type)
-            .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+            .header(header::CONTENT_TYPE, link.file_type.clone())
+            .header(header::CACHE_CONTROL, MEDIA_CACHE_CONTROL)
             .header(header::ETAG, etag)
             .header(header::ACCEPT_RANGES, "bytes")
             .header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{size}"))
@@ -171,12 +226,100 @@ pub async fn get_media(
 
     Response::builder()
         .status(200)
-        .header(header::CONTENT_TYPE, file_type)
-        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+        .header(header::CONTENT_TYPE, link.file_type.clone())
+        .header(header::CACHE_CONTROL, MEDIA_CACHE_CONTROL)
         .header(header::ETAG, etag)
         .header(header::ACCEPT_RANGES, "bytes")
         .body(Body::from_stream(ReaderStream::new(file)))
         .map_err(|e| MediaError::InternalError(e.to_string()))
+}
+
+/// Answers a request whose bytes are in the audio bucket, either by pointing
+/// the client at the object's public URL or by streaming it through here.
+///
+/// Nothing is signed: the bucket has a public domain, so the URL is the same
+/// for every client and every request.
+async fn bucket_media_response(
+    bucket: &AudioStore,
+    object: &str,
+    sha256: &str,
+    size: u64,
+    file_type: &str,
+    headers: &HeaderMap,
+) -> Result<Response<Body>, MediaError> {
+    match bucket.read_mode {
+        AudioReadMode::Redirect => {
+            let location = bucket.public_url(object);
+
+            Response::builder()
+                .status(StatusCode::FOUND)
+                .header(header::LOCATION, location)
+                // Deliberately not cacheable, though the target is immutable.
+                // The object's identity is fixed, but the URL it is served from
+                // is configuration (`R2_PUBLIC_URL`), so a cached redirect
+                // would pin a client to a domain that a later deploy may have
+                // moved off — for as long as the cache lives. The object
+                // carries the immutable Cache-Control instead, and this costs
+                // one round trip per cache miss: a player follows the redirect
+                // once and then ranges against the public URL directly.
+                .header(header::CACHE_CONTROL, "no-store")
+                .header(header::CONTENT_TYPE, file_type)
+                .body(Body::empty())
+                .map_err(|e| MediaError::InternalError(e.to_string()))
+        }
+        AudioReadMode::Proxy => {
+            let etag = format!("\"{sha256}\"");
+            let range = headers
+                .get(header::RANGE)
+                .and_then(|value| value.to_str().ok());
+            let if_range_matches = headers
+                .get(header::IF_RANGE)
+                .and_then(|value| value.to_str().ok())
+                .map(|value| value == etag)
+                .unwrap_or(true);
+
+            if if_range_matches
+                && let Some((start, end)) = range.and_then(|r| parse_byte_range(r, size))
+            {
+                let bytes = bucket
+                    .client
+                    .get_object_range(object, start, end)
+                    .await
+                    .map_err(internal_error)?;
+                let length = bytes.len() as u64;
+
+                return Response::builder()
+                    .status(206)
+                    .header(header::CONTENT_TYPE, file_type)
+                    .header(header::CACHE_CONTROL, MEDIA_CACHE_CONTROL)
+                    .header(header::ETAG, etag)
+                    .header(header::ACCEPT_RANGES, "bytes")
+                    .header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{size}"))
+                    .header(header::CONTENT_LENGTH, length)
+                    .body(Body::from(bytes))
+                    .map_err(|e| MediaError::InternalError(e.to_string()));
+            }
+
+            let reader = bucket
+                .client
+                .get_object_reader(object)
+                .await
+                .map_err(internal_error)?;
+
+            Response::builder()
+                .status(200)
+                .header(header::CONTENT_TYPE, file_type)
+                .header(header::CACHE_CONTROL, MEDIA_CACHE_CONTROL)
+                .header(header::ETAG, etag)
+                .header(header::ACCEPT_RANGES, "bytes")
+                .body(Body::from_stream(ReaderStream::new(reader)))
+                .map_err(|e| MediaError::InternalError(e.to_string()))
+        }
+    }
+}
+
+fn internal_error(error: StorageError) -> MediaError {
+    MediaError::InternalError(error.to_string())
 }
 
 /// Parses a single-range `bytes=start-end` header into an inclusive
@@ -225,84 +368,28 @@ fn post_thumbnail_fallback_short_name(short_name: &str) -> Option<String> {
     Some(format!(".post.{}", post_id))
 }
 
-fn media_path_from_link(
+/// Opens the disk copy of a row. The hash-derived path is the primary one; a
+/// row whose file is not there (a cover written under a mismatched type
+/// prefix, for instance) falls back to re-rooting the stored `url` under the
+/// current media directory.
+async fn open_media_file(
+    key: &MediaKey,
     link: &LinkResult,
     media_dir: &std::path::Path,
-) -> Result<(PathBuf, String), MediaError> {
-    // Decode the storage layout from the hash field. Three layouts exist:
-    //
-    //  Regular media  hash = "<sha256>"
-    //                 file = <media_dir>/<sha256[0..2]>/<sha256[2..4]>/<sha256><ext>
-    //
-    //  Post cover     hash = ".post.<post_id>.<sha256>"
-    //                 file = <media_dir>/post/<uploader_id>/<sha256><ext>
-    //                 NOTE: hash encodes post_id but the dir uses uploader_id!
-    //
-    //  User avatar    hash = ".avt.<user_id>.<sha256>"
-    //                 file = <media_dir>/avt/<uploader_id>/<sha256><ext>
-    //
-    //  Series cover   hash = ".srs.<user_id>.<sha256>"  (fixed)
-    //                 file = <media_dir>/srs/<uploader_id>/<sha256><ext>
-    //
-    // Hash-based reconstruction is the primary path. If the file is missing,
-    // open_media_link() falls back to reroot_path() using the stored `url`.
-    let extension = MediaType::from_str(&link.file_type)?.get_extension();
-    let (file_path, content_hash) = if link.hash.starts_with('.') {
-        // Special layout: ".<type>.<id>.<sha256>"
-        // splitn(4, '.') keeps the sha256 tail (which has no dots) in one piece:
-        // ["", "<type>", "<id>", "<sha256>"]
-        //
-        // IMPORTANT: parts[2] is the post_id for ".post.*" entries, NOT the
-        // user_id used as the on-disk subdirectory.  Always use uploader_id
-        // (fetched from the DB) as the directory name - it is the user_id for
-        // post covers, avatars, and series covers.
-        let parts: Vec<&str> = link.hash.splitn(4, '.').collect();
-        if parts.len() < 4 {
-            return Err(MediaError::FileNotFound);
-        }
-        let type_dir = parts[1]; // "post", "avt", or "srs"
-        let sha256 = parts[3]; // plain SHA-256 hex
-        let path = media_dir
-            .join(type_dir)
-            .join(link.uploader_id.to_string()) // user_id used at upload time
-            .join(format!("{}{}", sha256, extension));
-        (path, sha256.to_string())
-    } else {
-        // Regular layout: hash is a plain SHA-256 hex string.
-        let path = media_dir
-            .join(&link.hash[0..2])
-            .join(&link.hash[2..4])
-            .join(format!("{}{}", link.hash, extension));
-        (path, link.hash.clone())
-    };
-
-    Ok((file_path, content_hash))
-}
-
-async fn open_media_link(
-    link: &LinkResult,
-    media_dir: &std::path::Path,
-) -> Result<(fs::File, String, String), MediaError> {
-    let (file_path, content_hash) = media_path_from_link(link, media_dir)?;
-
+) -> Result<fs::File, MediaError> {
     // Open the file for streaming - avoids loading the entire file into RAM,
     // which previously caused OOM kills on the 256 MB machine when many
     // images were requested concurrently.
-    //
-    // If the hash-derived path doesn't exist (e.g. a series cover whose hash
-    // was written with the wrong ".avt." prefix), fall back to reconstructing
-    // the path from the stored `url` column via reroot_path().
-    let file = match fs::File::open(&file_path).await {
-        Ok(f) => f,
+    let file_path = media_dir.join(&key.key);
+    match fs::File::open(&file_path).await {
+        Ok(file) => Ok(file),
         Err(_) => {
             let fallback = reroot_path(&link.url, media_dir).ok_or(MediaError::FileNotFound)?;
             fs::File::open(&fallback)
                 .await
-                .map_err(|_| MediaError::FileNotFound)?
+                .map_err(|_| MediaError::FileNotFound)
         }
-    };
-
-    Ok((file, content_hash, link.file_type.clone()))
+    }
 }
 
 /// Re-root a stored file path under a new media directory.
@@ -330,5 +417,125 @@ fn reroot_path(stored_url: &str, media_dir: &std::path::Path) -> Option<std::pat
         Some(media_dir.join(after))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::infrastructure::storage::{S3Settings, r2::R2Client};
+
+    const SHA: &str = "b4c0ffee1234567890abcdef1234567890abcdef1234567890abcdef12345678";
+    const PUBLIC_BASE: &str = "https://disk.huuthangle.site";
+
+    fn audio_store(read_mode: AudioReadMode) -> AudioStore {
+        AudioStore {
+            client: R2Client::from_settings(S3Settings {
+                endpoint: "https://account123.r2.cloudflarestorage.com".to_string(),
+                region: "auto".to_string(),
+                bucket: "retro-games".to_string(),
+                access_key: "access".to_string(),
+                secret_key: "secret".to_string(),
+            }),
+            public_base_url: PUBLIC_BASE.to_string(),
+            read_mode,
+        }
+    }
+
+    /// Runs one redirect for a content type and hands back its status, target
+    /// and cache policy. `None` when the type has no object key at all, which
+    /// is the answer for everything that is not audio.
+    async fn redirect_for(content_type: &str) -> Option<(StatusCode, String, String)> {
+        let store = audio_store(AudioReadMode::Redirect);
+        let key = media_key(SHA, content_type, 1).expect("key");
+        let object = audio_object_key(&key.key, content_type)?;
+
+        let response = bucket_media_response(
+            &store,
+            &object,
+            &key.sha256,
+            1234,
+            content_type,
+            &HeaderMap::new(),
+        )
+        .await
+        .expect("response");
+
+        let header_value = |name: &header::HeaderName| {
+            response
+                .headers()
+                .get(name)
+                .unwrap_or_else(|| panic!("missing {name}"))
+                .to_str()
+                .expect("ascii")
+                .to_string()
+        };
+
+        Some((
+            response.status(),
+            header_value(&header::LOCATION),
+            header_value(&header::CACHE_CONTROL),
+        ))
+    }
+
+    #[tokio::test]
+    async fn audio_redirects_into_its_own_prefix() {
+        let (status, location, cache) = redirect_for("audio/mpeg").await.expect("audio redirects");
+
+        assert_eq!(status, StatusCode::FOUND);
+        assert_eq!(
+            location,
+            format!("{PUBLIC_BASE}/audio/b4/c0/{SHA}.mp3"),
+            "audio must be under audio/ so it can carry its own lifecycle rule"
+        );
+        // Not cacheable: the target is immutable but the domain is
+        // configuration, and a cached redirect would outlive a move of it.
+        assert_eq!(cache, "no-store");
+    }
+
+    #[tokio::test]
+    async fn nothing_but_audio_is_ever_asked_of_the_bucket() {
+        // The scope of the migration, asserted at the read path: these types
+        // have no object key, so `serve_media` cannot reach the bucket for
+        // them and they are served from the disk exactly as before.
+        for content_type in [
+            "image/png",
+            "image/webp",
+            "image/gif",
+            "image/jpeg",
+            "video/mp4",
+            "video/webm",
+            "model/gltf-binary",
+            "application/vnd.lottie+zip",
+        ] {
+            assert_eq!(
+                redirect_for(content_type).await,
+                None,
+                "{content_type} must never resolve to a bucket object"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_redirect_is_unsigned_and_stable() {
+        // Nothing is signed and nothing expires, so the same request always
+        // produces the same target — unlike a presigned URL, which changes on
+        // every call. That is what lets the object be cached for a year.
+        let (_, first, _) = redirect_for("audio/mpeg").await.expect("audio redirects");
+        let (_, second, _) = redirect_for("audio/mpeg").await.expect("audio redirects");
+
+        assert_eq!(first, second);
+        assert!(
+            !first.contains("X-Amz-Signature") && !first.contains("X-Amz-Expires"),
+            "the bucket is public, so nothing should be signed: {first}"
+        );
+    }
+
+    #[tokio::test]
+    async fn proxy_mode_keeps_the_sha256_as_the_etag() {
+        // The disk and bucket branches must agree on the ETag, or a client
+        // switching between them would see a spurious change.
+        let key = media_key(SHA, "audio/mpeg", 1).expect("key");
+        assert_eq!(format!("\"{}\"", key.sha256), format!("\"{SHA}\""));
     }
 }

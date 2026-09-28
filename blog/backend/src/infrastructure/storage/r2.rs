@@ -1,4 +1,4 @@
-use std::{env, path::Path};
+use std::path::Path;
 
 use aws_sdk_s3::{
     Client,
@@ -9,12 +9,13 @@ use aws_sdk_s3::{
 };
 use tokio::io::AsyncWriteExt;
 
-use super::StorageError;
+use super::{S3Settings, StorageError};
 
-/// Cloudflare R2 storage backed by the S3 API — the `R2` variant of
-/// [`ObjectStore`](super::ObjectStore). When selected, all v86 artifacts live
-/// in the bucket and the VM only keeps transient local files while
-/// compressing/building.
+/// S3-compatible storage backed by the S3 API — the `R2` variant of
+/// [`ObjectStore`](super::ObjectStore). One bucket holds the v86 artifacts and
+/// the audiobook audio, separated by their key prefixes (`v86/`, `audio/`); two
+/// clients exist only because `STORAGE_BACKEND` and `AUDIO_BACKEND` are
+/// independent switches.
 #[derive(Clone)]
 pub struct R2Client {
     client: Client,
@@ -22,29 +23,35 @@ pub struct R2Client {
 }
 
 impl R2Client {
-    /// Builds the client from R2_* environment variables. Returns None when no
-    /// R2 account is configured (e.g. local tests without a .env).
+    /// Builds the artifact client from R2_* environment variables. Returns
+    /// None when no R2 account is configured (e.g. local tests without a
+    /// .env).
     pub fn from_env() -> Option<Self> {
-        let account_id = env::var("R2_ACCOUNT_ID").ok()?;
-        let access_key = env::var("R2_ACCESS_KEY_ID").ok()?;
-        let secret_key = env::var("R2_SECRET_ACCESS_KEY").ok()?;
-        let bucket = env::var("R2_BUCKET").ok()?;
+        S3Settings::from_r2_env().map(Self::from_settings)
+    }
 
-        let endpoint = env::var("R2_ENDPOINT")
-            .unwrap_or_else(|_| format!("https://{account_id}.r2.cloudflarestorage.com"));
-        let credentials = Credentials::new(access_key, secret_key, None, None, "backend");
+    /// Builds a client for one bucket from explicit settings, so the artifact
+    /// store and the audio store can be configured independently.
+    pub fn from_settings(settings: S3Settings) -> Self {
+        let credentials = Credentials::new(
+            settings.access_key,
+            settings.secret_key,
+            None,
+            None,
+            "backend",
+        );
         let config = aws_sdk_s3::config::Builder::new()
             .behavior_version(BehaviorVersion::latest())
-            .region(Region::new("auto"))
-            .endpoint_url(endpoint)
+            .region(Region::new(settings.region))
+            .endpoint_url(settings.endpoint)
             .force_path_style(true)
             .credentials_provider(credentials)
             .build();
 
-        Some(Self {
+        Self {
             client: Client::from_conf(config),
-            bucket,
-        })
+            bucket: settings.bucket,
+        }
     }
 
     pub async fn create_multipart(
@@ -142,6 +149,37 @@ impl R2Client {
             .send()
             .await
             .map_err(|e| StorageError(format!("put_object_from_file {key}: {e}")))?;
+        Ok(())
+    }
+
+    /// Uploads a local file together with the metadata the object must carry.
+    ///
+    /// Both arguments matter for media: audio served as
+    /// `application/octet-stream` is refused by Safari and AVPlayer, and the
+    /// `Cache-Control` set here is what the client caches on once it is
+    /// fetching from the bucket directly rather than from this backend.
+    pub async fn put_file_with_metadata(
+        &self,
+        key: &str,
+        path: &Path,
+        content_type: &str,
+        cache_control: &str,
+    ) -> Result<(), StorageError> {
+        self.client
+            .put_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .content_type(content_type)
+            .cache_control(cache_control)
+            .body(ByteStream::from_path(path).await.map_err(|e| {
+                StorageError(format!(
+                    "put_file_with_metadata {key}: could not open {}: {e}",
+                    path.display()
+                ))
+            })?)
+            .send()
+            .await
+            .map_err(|e| StorageError(format!("put_file_with_metadata {key}: {e}")))?;
         Ok(())
     }
 

@@ -12,11 +12,13 @@ mod files;
 mod hashing;
 mod rows;
 mod search;
+mod store;
 mod upload;
 mod validation;
 
 pub use files::clean_up_files;
 pub use hashing::{HashData, hash_bytes};
+pub use store::mirror_audio_to_bucket;
 
 pub struct MediaServiceImpl {
     pub pool: SqlitePool,

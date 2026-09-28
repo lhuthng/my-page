@@ -10,12 +10,17 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --bin backend
+RUN cargo build --release --bin backend --bin backfill-audio
 
 FROM alpine:3.21 AS runtime
 WORKDIR /app
 RUN apk add --no-cache ffmpeg xorriso mtools ca-certificates
 COPY --from=builder /app/target/release/backend /usr/local/bin/backend
+# The audio backfill runs on the VM, which has no Rust toolchain and no R2 CLI,
+# so it ships in the image rather than being installed there. Built here, in CI,
+# never on the VM:
+#   cd ~/MyPage/blog/backend && ./backfill-audio.sh --upload
+COPY --from=builder /app/target/release/backfill-audio /usr/local/bin/backfill-audio
 COPY --from=builder /app/assets /app/assets
 ENV PROJECT_V86_ASSETS_DIR=/app/assets
 EXPOSE 3000

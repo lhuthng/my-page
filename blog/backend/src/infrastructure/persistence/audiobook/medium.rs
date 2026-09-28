@@ -6,7 +6,7 @@ use tokio::fs;
 
 use crate::domain::entities::media::MediaType;
 use crate::domain::errors::audiobook::AudiobookError;
-use crate::infrastructure::persistence::media::{HashData, hash_bytes};
+use crate::infrastructure::persistence::media::{HashData, hash_bytes, mirror_audio_to_bucket};
 use crate::infrastructure::web::server::MediaConfig;
 
 use super::AudiobookServiceImpl;
@@ -42,7 +42,8 @@ impl AudiobookServiceImpl {
 
         // Content-addressed storage dedupes identical uploads: two tracks with
         // the same audio share one file on disk.
-        if !fs::try_exists(&file_path).await? {
+        let wrote_file = !fs::try_exists(&file_path).await?;
+        if wrote_file {
             fs::create_dir_all(&dir_path).await?;
             fs::write(&file_path, &medium.bytes).await?;
             *created_path = Some(file_path.clone());
@@ -77,6 +78,20 @@ impl AudiobookServiceImpl {
         .bind(uploader_id)
         .fetch_one(&mut **tx)
         .await?;
+
+        // After the row exists, so a failed insert cannot leave an object
+        // behind that nothing points at. Both callers of `store_medium` are
+        // track-audio writes, so this is what puts "audiobook audio" in the
+        // bucket — nothing else in the codebase calls the mirror.
+        mirror_audio_to_bucket(
+            config,
+            &hash,
+            &content_type,
+            uploader_id,
+            &file_path,
+            wrote_file,
+        )
+        .await;
 
         Ok(media_id)
     }

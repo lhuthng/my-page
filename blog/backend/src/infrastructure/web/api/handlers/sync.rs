@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::{
     domain::{entities::secret::Claims, errors::sync::SyncError},
     infrastructure::{
+        storage::{audio_object_key, media_key},
         sync::{
             artifact_key_exists, build_manifest, canonical_media_url, generate_sync_key,
             hash_sync_key,
@@ -208,6 +209,37 @@ pub async fn get_media_by_hash(
     .ok_or(SyncError::NotFound)?;
     let file_type: String = row.get("file_type");
     let uploader_id: i64 = row.get("uploader_id");
+
+    // The dev pull downloads every media file through this endpoint, so it has
+    // to follow the bytes: once the disk copy is gone this is the only thing
+    // that can still serve them, and a failure here is silent (sync-pull
+    // reports the file as missing on the source rather than erroring).
+    //
+    // The bucket is addressed by the object key — the disk key with the
+    // `audio/` prefix — derived in one place so this cannot drift from the
+    // write path. Only audio has one; a non-audio row skips the bucket
+    // entirely and is streamed from the disk below, which is where it lives.
+    if let Some(bucket) = &state.media_config.audio_bucket
+        && let Some(key) = media_key(&hash, &file_type, uploader_id)
+        && let Some(object) = audio_object_key(&key.key, &file_type)
+        && let Some(size) = bucket
+            .client
+            .object_size(&object)
+            .await
+            .map_err(|e| SyncError::InternalError(e.to_string()))?
+    {
+        let reader = bucket
+            .client
+            .get_object_reader(&object)
+            .await
+            .map_err(|e| SyncError::InternalError(e.to_string()))?;
+        return Ok(streamed_response(
+            Body::from_stream(ReaderStream::new(reader)),
+            size,
+            "application/octet-stream",
+        ));
+    }
+
     let canonical = canonical_media_url(&hash, &file_type, uploader_id, &state.media_config.dir)
         .ok_or(SyncError::NotFound)?;
     let file = tokio::fs::File::open(PathBuf::from(&canonical))
