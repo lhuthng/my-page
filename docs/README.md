@@ -6,6 +6,29 @@ proposals are separate: [blog/docs/README.md](../blog/docs/README.md).
 Start here if you are new: [architecture/overview.md](architecture/overview.md)
 → [guides/setup.md](guides/setup.md) → [guides/development.md](guides/development.md).
 
+```text
+new here?
+  |
+  v
+architecture/overview.md    what the system is
+  |
+  v
+guides/setup.md             get it running on your machine
+  |
+  v
+guides/development.md       the commands you type every day
+  |
+  +-- changing the backend?   -> architecture/backend.md
+  +-- changing the frontend?  -> architecture/frontend.md
+  +-- touching the schema?    -> architecture/data-model.md
+  +-- shipping a change?      -> guides/deployment.md
+  +-- something looks broken? -> guides/troubleshooting.md
+  `-- just need a fact?       -> reference/ (routes, env vars, errors, auth)
+```
+
+The four sections below are ordered by how often you will want them: how the
+system works, how to do a thing, what a thing is, and why it is that way.
+
 ## Architecture
 
 | Document | Contents |

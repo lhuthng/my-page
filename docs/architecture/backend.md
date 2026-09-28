@@ -17,6 +17,17 @@ src/
 `-- infrastructure/  # Axum handlers, SQLite adapters, storage, mail, sync, GraphQL
 ```
 
+Dependencies only ever point one way — inward, toward the domain:
+
+```text
+infrastructure   ---->   application   ---->   domain
+axum, sqlx,              command structs,      entities, value objects,
+storage, mail            port traits           per-aggregate errors
+
+web::server sits above all three: it is the composition root that builds
+AppState and decides which implementation each port gets.
+```
+
 | Module | May depend on | Must never depend on |
 | --- | --- | --- |
 | `domain` | `std`, `serde`, `chrono`, `validator`, `uuid` | `application`, `infrastructure`, `sqlx`, `axum` |

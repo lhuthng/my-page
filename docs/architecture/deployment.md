@@ -5,6 +5,26 @@ change to nginx, DNS, TLS, or the container topology.
 
 ## Topology
 
+The shape of it, before the details:
+
+```text
+internet
+  |
+  v
+Cloudflare DNS
+  |
+  v
+Oracle Cloud VM
+  |
+  |-- nginx .................... TLS, and the only public entry point
+  |     |
+  |     |-- 127.0.0.1:3001 ----> backend container   (Rust/Axum)
+  |     `-- 127.0.0.1:5000 ----> frontend container  (SvelteKit/Bun)
+  |
+  |-- ~/MyPage/blog ............ the docker compose project
+  `-- /etc/letsencrypt ......... certbot's; this repo does not manage it
+```
+
 - One Oracle Cloud VM runs Docker Compose with two services:
   `backend` (Rust/Axum, internal 3000, bound to `127.0.0.1:3001`) and
   `frontend` (SvelteKit/Bun, internal 8080, bound to `127.0.0.1:5000`).
@@ -39,6 +59,27 @@ Pushes to `master` trigger `.github/workflows/deploy.yml` for changes under
 (`ghcr.io/lhuthng/blog-backend:latest`, `ghcr.io/lhuthng/blog-frontend:latest`),
 then SSHes to the VM: `docker compose pull && up -d --remove-orphans`, prune,
 print backend logs, verify containers.
+
+```text
+push to master (blog/**, ops/**, .github/workflows/**)
+  |
+  v
+filter                 "[manual deploy]" in the commit message skips the rest
+  |
+  +--> build-push-backend  --> ghcr.io/lhuthng/blog-backend:latest
+  |
+  +--> build-push-frontend --> ghcr.io/lhuthng/blog-frontend:latest
+  |
+  v
+deploy-blog            over SSH, in order
+  1. docker login ghcr.io on the VM
+  2. scp docker-compose.yml and ops/nginx/* (nginx reloads only when changed)
+  3. docker compose pull
+  4. docker compose up -d --remove-orphans, then prune
+  5. docker compose up -d --wait --wait-timeout 180   unhealthy => deploy fails
+  6. print logs, then probe /health on 3001 and 5000
+  7. write the run summary
+```
 
 Details and the manual emergency path: [../../.github/README.md](../../.github/README.md)
 and [../guides/deployment.md](../guides/deployment.md).

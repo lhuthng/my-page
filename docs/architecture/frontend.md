@@ -20,20 +20,23 @@ production it is containerized (`FROM oven/bun:1`) behind nginx.
 ## Request flow
 
 ```text
-1. Server-side data fetching (hooks.server.js, +page.server.js)
-   └── route() in $lib/server/proxy.js
-         └── prepends API_URL → http://backend:3000 (Docker internal, never public)
+1. server-side data fetching
+     hooks.server.js, +page.server.js
+       `-- route() in $lib/server/proxy.js
+             `-- prepends API_URL -> http://backend:3000
+                 (Docker-internal, never public)
 
-2. Browser API calls
-   └── fetch('/api/<path>')
-         └── src/routes/api/[...path]/+server.js
-               └── proxyFallback() → API_URL (backend)
+2. browser API calls
+     fetch('/api/<path>')
+       `-- src/routes/api/[...path]/+server.js
+             `-- proxyFallback() -> API_URL (the backend)
 
-3. Media files
-   └── fixClientRoute() in $lib/server/proxy.js
-         ├── BACKEND_ORIGIN set → direct browser fetch from that origin
-         │     (nginx routes /media/* straight to the backend, skipping SvelteKit)
-         └── BACKEND_ORIGIN unset → /api/media/... (proxy fallback)
+3. media files
+     fixClientRoute() in $lib/server/proxy.js
+       |-- BACKEND_ORIGIN set   -> the browser fetches that origin directly
+       |                           (nginx routes /media/* straight to the
+       |                            backend, skipping SvelteKit)
+       `-- BACKEND_ORIGIN unset -> /api/media/... (proxy fallback)
 ```
 
 The media split keeps one network hop off the frontend container and lets the

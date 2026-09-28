@@ -6,11 +6,21 @@ nginx.
 
 ## Architecture
 
+Two containers, one nginx, and a single rule for who serves what:
+
 ```text
-Browser
-  ├── /media/*        → nginx → localhost:3001 → Rust backend   (bypasses SvelteKit)
-  └── everything else → nginx → localhost:5000 → SvelteKit
-                                                      └── server-side calls → http://backend:3000 (Docker internal)
+browser
+  |
+  v
+nginx  (TLS, routes by path)
+  |
+  +-- /media/* ---------> backend   (Rust/Axum)     127.0.0.1:3001 -> :3000
+  |                                                  bypasses SvelteKit
+  |
+  `-- everything else --> frontend  (SvelteKit/Bun) 127.0.0.1:5000 -> :8080
+                            |
+                            `-- server-side calls -> http://backend:3000
+                                                     (Docker-internal hostname)
 ```
 
 The full request-flow explanation, nginx topology, and rate limiting:

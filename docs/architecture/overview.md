@@ -26,14 +26,22 @@ Cloudflare Pages, independent of the blog runtime.
 Production traffic flows through Cloudflare DNS to the VM:
 
 ```text
-Browser
-  -> Cloudflare DNS
-     -> huuthangle.site            (blog.huuthangle.site 301s here)
-        -> Oracle Cloud VM
-           -> nginx
-              -> /media/*        -> backend container via 127.0.0.1:3001
-              -> everything else -> frontend container via 127.0.0.1:5000
-                                      -> server-side API calls -> http://backend:3000
+browser
+  |
+  v
+Cloudflare DNS          huuthangle.site is the apex; blog.huuthangle.site 301s here
+  |
+  v
+Oracle Cloud VM
+  |
+  v
+nginx  (TLS termination)
+  |
+  +-- /media/* ---------> backend container   127.0.0.1:3001 -> :3000
+  |
+  `-- everything else --> frontend container  127.0.0.1:5000 -> :8080
+                            |
+                            `-- server-side API calls -> http://backend:3000
 ```
 
 The backend container listens on `3000` inside Docker and is bound to
@@ -52,13 +60,19 @@ The frontend uses three request paths:
 
 ## State
 
-Persistent state lives in mounted directories that must survive deploys:
+Persistent state lives in mounted directories that must survive deploys. The
+containers are disposable; these directories are not:
 
-- `blog/backend/data` — SQLite database.
-- `blog/backend/media` — uploaded images, videos, audio, models, Lottie
-  files, covers, avatars.
-- `blog/backend/project-demos` — uploaded/extracted project demo assets and
-  (in `fs` storage mode) v86 game artifacts.
+```text
+blog/backend/data            --->    the SQLite database
+blog/backend/media           --->    uploaded images, videos, audio, models,
+                                     Lottie files, covers, avatars
+blog/backend/project-demos   --->    uploaded/extracted demo assets and, in
+                                     `fs` storage mode, v86 game artifacts
+```
+
+A deploy replaces the containers and leaves these three directories exactly
+where they are.
 
 ## Where to go deeper
 

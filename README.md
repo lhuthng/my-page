@@ -5,6 +5,34 @@ Personal platform for [Huu Thang](https://github.com/lhuthang): the blog at
 backend, Docker Compose on one VM behind nginx) and a separate static
 [portfolio](portfolio/) site on Cloudflare Pages.
 
+Everything else in this repository either builds that, documents it, or gets
+it onto the VM.
+
+## How it fits together
+
+One request in, one response out. The slow version of this picture is in
+[docs/architecture/overview.md](docs/architecture/overview.md):
+
+```text
+visitor
+  |
+  | https
+  v
+Cloudflare DNS
+  |
+  v
+Oracle Cloud VM -- nginx (TLS, routes by path)
+  |
+  +-- /media/* ---------> backend container    Rust/Axum: API, media, artifacts
+  |
+  `-- everything else --> frontend container   SvelteKit: pages, API proxy
+                            |
+                            `-- server-side API calls --> backend
+```
+
+The containers are disposable; the SQLite database, uploaded media, and project
+demos are mounted from the VM so they outlive every deploy.
+
 ## Repo layout
 
 ```text
