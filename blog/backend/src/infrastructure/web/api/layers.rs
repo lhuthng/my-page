@@ -18,7 +18,9 @@ pub fn cors() -> CorsLayer {
         .or_else(|_| std::env::var("ALLOWED_ORIGIN"))
         .unwrap_or_else(|_| {
             if cfg!(debug_assertions) {
-                "http://localhost:3004,http://localhost:5000,http://localhost:3000,https://portfolio.huuthangle.site".to_string()
+                // Dev origins: this repo's frontend dev server (5175), the
+                // dockerized one (5000), and the portfolio's (3004).
+                "http://localhost:3004,http://localhost:5000,http://localhost:5175,https://portfolio.huuthangle.site".to_string()
             } else {
                 "https://portfolio.huuthangle.site".to_string()
             }

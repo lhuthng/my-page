@@ -22,6 +22,10 @@ services:
       - "127.0.0.1:3001:3000"
     env_file:
       - ./backend/.env
+    environment:
+      # Pinned so the container's port does not follow a local .env: the port
+      # mapping and the health check below are both written for 3000.
+      - PORT=3000
     logging: *default-logging
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]

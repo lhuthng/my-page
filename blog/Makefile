@@ -9,7 +9,8 @@ MINIO_ROOT_USER := minioadmin
 MINIO_ROOT_PASSWORD := minioadmin
 MINIO_BUCKET := dev-bucket
 
-## Run the backend server locally (reads backend/.env, auto-runs migrations on startup)
+## Run the backend server locally (reads backend/.env — PORT, default 5174 — and
+## auto-runs migrations on startup)
 backend:
 	cd $(BACKEND_DIR) && cargo run --bin backend
 
@@ -43,6 +44,9 @@ backend-local-storage: minio-up
 
 ## Run the backend (auto-migrates on startup) + frontend dev servers together.
 ## Ctrl-C stops both. The backend takes a few seconds to compile first.
+## Ports come from the two .env files: backend PORT (default 5174) and the
+## frontend's dev server (default 5175, PORT overrides) — move a value there and
+## keep frontend API_URL naming whichever port the backend ends up on.
 dev:
 	@trap 'kill 0' EXIT INT TERM; \
 	$(MAKE) backend & \

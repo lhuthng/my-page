@@ -59,7 +59,10 @@ function trustedOrigins(event) {
 		SITE_ORIGIN,
 		event.url.origin,
 		'https://portfolio.huuthangle.site',
-		'http://localhost:3000',
+		// Dev: this repo's frontend dev server (5175) and backend (5174), the
+		// dockerized frontend (5000), and the portfolio's dev server (3004).
+		'http://localhost:5175',
+		'http://localhost:5174',
 		'http://localhost:3004',
 		'http://localhost:5000',
 		...commaSeparated(env.TRUSTED_ORIGINS)

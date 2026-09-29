@@ -24,8 +24,13 @@ Documented once in [../../docs/guides/configuration.md](../../docs/guides/config
 
 ```bash
 bun install
-bun dev      # backend must be running at http://localhost:3000
+bun dev      # backend must be running at http://localhost:5174
 ```
+
+The dev server is at `http://localhost:5175` and the backend on `5174` — the
+pair `example.env` and `backend/example.env` are written for. `PORT` moves the
+dev server (`vite.config.js`) and the backend (`backend/src/main.rs`) alike, so
+both sides can be moved together when a port is taken.
 
 Or the full stack with Docker Compose from `blog/`:
 `docker compose up -d --build` — frontend at `http://localhost:5000`.

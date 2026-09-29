@@ -14,6 +14,43 @@ pub struct HTTPServer<'a> {
 }
 
 impl<'a> HTTPServer<'a> {
+    /// The port the server binds when `PORT` says nothing usable.
+    ///
+    /// This is the local-development port, not the container's: Docker runs the
+    /// same binary with `PORT` set explicitly, because its port mapping and
+    /// health check are written against the container's own port.
+    pub const DEFAULT_PORT: &'static str = "5174";
+
+    /// The port to bind, read from `PORT`.
+    ///
+    /// Only a real TCP port counts. Anything else falls back to
+    /// [`Self::DEFAULT_PORT`] instead of failing the bind, because an unusable
+    /// `PORT` is usually stray environment rather than intent — and one value
+    /// is actively misleading: `PORT=0` tells the OS to pick any free port, so
+    /// a shell or dev tool exporting it would silently move the server off the
+    /// port the frontend's `API_URL` points at.
+    pub fn port_from_env() -> String {
+        match std::env::var("PORT") {
+            Ok(raw) => {
+                let port = Self::resolve_port(&raw);
+                if port != raw {
+                    println!("PORT=\"{}\" is not a usable TCP port; using {}", raw, port);
+                }
+                port
+            }
+            Err(_) => Self::DEFAULT_PORT.to_string(),
+        }
+    }
+
+    /// The pure half of [`Self::port_from_env`], so the fallback rules can be
+    /// tested without touching the process environment.
+    fn resolve_port(raw: &str) -> String {
+        match raw.trim().parse::<u16>() {
+            Ok(port) if port > 0 => port.to_string(),
+            _ => Self::DEFAULT_PORT.to_string(),
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             addr: None,
@@ -111,7 +148,7 @@ impl<'a> HTTPServer<'a> {
         let router = api::router::build_router(state);
 
         let addr = self.addr.unwrap_or("127.0.0.1");
-        let port = self.port.unwrap_or("3000");
+        let port = self.port.unwrap_or(Self::DEFAULT_PORT);
 
         let addr = format!("{}:{}", addr, port);
         println!("Starting {}", addr);
@@ -119,6 +156,35 @@ impl<'a> HTTPServer<'a> {
         axum::serve(listener, router).await.unwrap();
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_port_accepts_real_ports() {
+        assert_eq!(HTTPServer::resolve_port("5174"), "5174");
+        assert_eq!(HTTPServer::resolve_port(" 6200 "), "6200");
+        assert_eq!(HTTPServer::resolve_port("1"), "1");
+        assert_eq!(HTTPServer::resolve_port("65535"), "65535");
+    }
+
+    #[test]
+    fn resolve_port_falls_back_on_unusable_values() {
+        // `0` would make the OS pick a random free port — never what a
+        // `.env`-driven dev setup means by port zero.
+        assert_eq!(HTTPServer::resolve_port("0"), HTTPServer::DEFAULT_PORT);
+        assert_eq!(HTTPServer::resolve_port(""), HTTPServer::DEFAULT_PORT);
+        assert_eq!(HTTPServer::resolve_port("   "), HTTPServer::DEFAULT_PORT);
+        assert_eq!(
+            HTTPServer::resolve_port("http://localhost:5174"),
+            HTTPServer::DEFAULT_PORT
+        );
+        assert_eq!(HTTPServer::resolve_port("70000"), HTTPServer::DEFAULT_PORT);
+        assert_eq!(HTTPServer::resolve_port("-1"), HTTPServer::DEFAULT_PORT);
+        assert_eq!(HTTPServer::resolve_port("5174x"), HTTPServer::DEFAULT_PORT);
     }
 }
 

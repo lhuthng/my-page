@@ -1,6 +1,6 @@
 # Blog Backend
 
-Rust 2024 edition · Axum 0.8 · SQLite via sqlx 0.8 · Port 3000
+Rust 2024 edition · Axum 0.8 · SQLite via sqlx 0.8 · Port 5174 (`PORT`)
 
 ## What this is
 
@@ -15,6 +15,10 @@ module map, dependency contract, and file budget live in
 cp example.env .env    # then fill in values
 make backend           # from blog/, or: cargo run --bin backend
 ```
+
+The dev server listens on 5174 (`PORT` in `.env` moves it; the frontend's dev
+server pairs with it on 5175). Docker sets `PORT` itself, so the container stays
+on its own port whatever the local `.env` says.
 
 Migrations run automatically on startup. Manual management:
 

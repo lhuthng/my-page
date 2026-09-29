@@ -16,10 +16,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    // Which port dev listens on is a setting, not a constant: `PORT` wins when
+    // it names a real port, and the default is what a bare `cargo run` gets.
+    // Docker sets `PORT` itself (see docker-compose.yml), so the container
+    // stays put whatever a local `.env` says.
+    let port = HTTPServer::port_from_env();
 
     let mut server = HTTPServer::new();
     server.set_addr("0.0.0.0");
-    server.set_port("3000");
+    server.set_port(&port);
     server.set_db(&db_url);
     server.start().await?;
     Ok(())
