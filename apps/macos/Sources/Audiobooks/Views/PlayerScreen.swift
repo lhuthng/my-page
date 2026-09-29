@@ -234,13 +234,13 @@ struct PlayerScreen: View {
             // Chapter list: always open, scrolling inside a clipped viewport that
             // stops short of the card's bottom, so rows never run past the corner.
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    ForEach(Array(book.tracks.enumerated()), id: \.element.id) { index, track in
-                        chapterRow(
-                            index: index,
-                            track: track,
-                            isLast: index == book.tracks.count - 1
-                        )
+                // Lazy, because the book is the unit here and a long one has
+                // hundreds of chapters: only the slots near the viewport are
+                // built, and building one is what asks for its window.
+                LazyVStack(spacing: 0) {
+                    ForEach(0..<chapterCount, id: \.self) { index in
+                        chapterSlot(index: index, isLast: index == chapterCount - 1)
+                            .onAppear { player.windowNeeded(at: index) }
                     }
                 }
                 // A little inset so a row's highlight never runs into the
@@ -273,7 +273,7 @@ struct PlayerScreen: View {
             Text("Chapters")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Theme.dark)
-            Text("\(book.tracks.count)")
+            Text("\(chapterCount)")
                 .font(.caption)
                 .monospacedDigit()
                 .foregroundStyle(Theme.dark.opacity(0.65))
@@ -281,6 +281,48 @@ struct PlayerScreen: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+
+    /// Chapters in the loaded book, whether or not their windows have arrived.
+    private var chapterCount: Int {
+        player.chapters?.total ?? player.book?.totalTracks ?? 0
+    }
+
+    /// One slot of the chapter list: the chapter when its window has arrived,
+    /// and the row's own shape in grey blocks while it is on its way.
+    @ViewBuilder
+    private func chapterSlot(index: Int, isLast: Bool) -> some View {
+        if let track = player.chapters?.track(at: index) {
+            chapterRow(index: index, track: track, isLast: isLast)
+        } else {
+            chapterSkeleton(index: index, isLast: isLast)
+        }
+    }
+
+    /// What a chapter row looks like before the chapter does: the same layout in
+    /// blocks, so a window that is still arriving keeps the list's rhythm and
+    /// the numbers stay lined up with the rows around it.
+    private func chapterSkeleton(index: Int, isLast: Bool) -> some View {
+        HStack(spacing: 8) {
+            Rectangle()
+                .fill(Color.clear)
+                .frame(width: 2)
+            SkeletonBar(width: 18, height: 9)
+            SkeletonBar(width: index.isMultiple(of: 2) ? 132 : 168, height: 9)
+            Spacer(minLength: 0)
+            SkeletonBar(width: 26, height: 9)
+        }
+        .padding(.trailing, 10)
+        .padding(.vertical, 7)
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Rectangle()
+                    .fill(Theme.dark.opacity(0.1))
+                    .frame(height: 1)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityLabel("Loading chapters")
     }
 
     /// One chapter: a tinted row with a primary rule while playing, and a

@@ -76,7 +76,16 @@ pub struct AudiobookDetails {
     pub owner_username: String,
     pub owner_display_name: String,
     pub tags: Vec<AudiobookTag>,
+    /// The window of chapters this answer carries, in play order. The editor
+    /// gets all of them; the public feed gets the window it asked for.
     pub tracks: Vec<AudiobookTrack>,
+    /// Every playable chapter in the book, not just the ones in `tracks`. The
+    /// player renders a row per chapter and needs the total to know where the
+    /// list ends before the later windows have arrived.
+    pub track_count: i64,
+    /// More playable chapters follow this window. Always false for a read that
+    /// asked for no window at all.
+    pub has_more_tracks: bool,
     pub created_at: String,
     pub published_at: Option<String>,
 }

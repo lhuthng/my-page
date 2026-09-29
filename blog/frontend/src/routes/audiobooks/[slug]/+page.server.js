@@ -1,8 +1,18 @@
 import { fixClientRoute, route } from '$lib/server/proxy.js';
+import { CHAPTER_WINDOW } from '$lib/players/chapter-windows.js';
 import { error } from '@sveltejs/kit';
 
 export async function load({ fetch, params, setHeaders }) {
-	const res = await fetch(route(`audiobooks/public/s/${encodeURIComponent(params.slug)}`));
+	// One window of chapters, not the whole book. The player asks for the rest
+	// as the reader reaches them — and for the window a saved position sits in —
+	// so this page stays cheap however long the book is. `track_count` comes
+	// back with the answer and is what the chapter list counts.
+	const res = await fetch(
+		route(
+			`audiobooks/public/s/${encodeURIComponent(params.slug)}` +
+				`?tracks_offset=0&tracks_limit=${CHAPTER_WINDOW}`
+		)
+	);
 
 	if (res.status === 404) {
 		error(404, 'Audiobook not found.');

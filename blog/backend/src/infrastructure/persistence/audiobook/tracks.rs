@@ -40,12 +40,27 @@ impl AudiobookServiceImpl {
         Ok(())
     }
 
-    /// Replace an audiobook's tag links with exactly `names`, creating any tag
-    /// rows that do not exist yet. Tag identity is the slug, so "Sci-Fi" and
-    /// "sci fi" collapse onto one row instead of duplicating.
+    /// Every chapter of a book, in play order.
+    ///
+    /// The dashboard editor reorders and edits against the whole playlist, so it
+    /// reads it in one go; the public player asks for a window instead.
     pub(super) async fn load_tracks(
         tx: &mut Transaction<'_, Sqlite>,
         audiobook_id: i64,
+    ) -> Result<Vec<AudiobookTrack>, AudiobookError> {
+        Self::load_track_window(tx, audiobook_id, 0, None).await
+    }
+
+    /// One window of a book's chapters, in play order.
+    ///
+    /// `limit` is `None` for "everything from `offset` on", which SQLite spells
+    /// `LIMIT -1`. The window is taken in chapter order rather than by id, so a
+    /// reordered book still pages in the order the player renders it in.
+    pub(super) async fn load_track_window(
+        tx: &mut Transaction<'_, Sqlite>,
+        audiobook_id: i64,
+        offset: i64,
+        limit: Option<i64>,
     ) -> Result<Vec<AudiobookTrack>, AudiobookError> {
         let rows: Vec<TrackRow> = sqlx::query_as(
             r#"
@@ -55,33 +70,64 @@ impl AudiobookServiceImpl {
             LEFT JOIN media m ON m.id = t.media_id
             WHERE t.audiobook_id = ?
             ORDER BY t.number ASC
+            LIMIT ? OFFSET ?
             "#,
         )
         .bind(audiobook_id)
+        .bind(limit.unwrap_or(-1))
+        .bind(offset)
         .fetch_all(&mut **tx)
         .await?;
 
-        Ok(rows
-            .into_iter()
-            .filter_map(
-                |(id, title, number, duration_seconds, play_count, short_name, file_type)| {
-                    // A track whose media row vanished is not playable; skip it
-                    // rather than emitting an entry the player cannot load.
-                    let short_name = short_name?;
-                    Some(AudiobookTrack {
-                        id,
-                        title,
-                        number,
-                        duration_seconds,
-                        play_count,
-                        url: format!("media/i/{}", short_name),
-                        short_name,
-                        file_type: file_type.unwrap_or_else(|| "audio/mpeg".to_string()),
-                    })
-                },
-            )
-            .collect())
+        Ok(playable_tracks(rows))
     }
+
+    /// Playable chapters in a book.
+    ///
+    /// Counted through the same join the window filters on: the window drops
+    /// chapters whose media row is gone, so a count that included them would
+    /// promise the player a row no window could ever fill.
+    pub(super) async fn count_playable_tracks(
+        tx: &mut Transaction<'_, Sqlite>,
+        audiobook_id: i64,
+    ) -> Result<i64, AudiobookError> {
+        let count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM audiobook_tracks t
+            INNER JOIN media m ON m.id = t.media_id
+            WHERE t.audiobook_id = ?
+            "#,
+        )
+        .bind(audiobook_id)
+        .fetch_one(&mut **tx)
+        .await?;
+
+        Ok(count)
+    }
+}
+
+/// Drop the chapters a player could not load: a track whose media row vanished
+/// has no URL to stream, so as far as the player is concerned it is not a
+/// chapter at all.
+fn playable_tracks(rows: Vec<TrackRow>) -> Vec<AudiobookTrack> {
+    rows.into_iter()
+        .filter_map(
+            |(id, title, number, duration_seconds, play_count, short_name, file_type)| {
+                let short_name = short_name?;
+                Some(AudiobookTrack {
+                    id,
+                    title,
+                    number,
+                    duration_seconds,
+                    play_count,
+                    url: format!("media/i/{}", short_name),
+                    short_name,
+                    file_type: file_type.unwrap_or_else(|| "audio/mpeg".to_string()),
+                })
+            },
+        )
+        .collect()
 }
 
 impl AudiobookServiceImpl {

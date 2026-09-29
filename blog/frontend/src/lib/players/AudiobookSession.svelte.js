@@ -85,7 +85,13 @@ class AudiobookSession {
 	}
 
 	#build(book) {
-		const engine = new AudiobookPlayer(book.tracks, { storageKey: book.id });
+		// A book whose chapters arrive a window at a time hands the engine its
+		// source too, so playback keeps fetching chapters long after the page
+		// that started it is gone.
+		const engine = new AudiobookPlayer(book.tracks, {
+			storageKey: book.id,
+			chapters: book.chapters ?? null
+		});
 		if (browser) {
 			const audio = document.createElement('audio');
 			audio.preload = 'metadata';

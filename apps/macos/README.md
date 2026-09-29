@@ -12,8 +12,9 @@ dependencies, built with SwiftPM.
 - **Player** — picking a book slides the whole screen to the right. Extended
   player: large cover fading into the chapter list under a gradient veil, the
   mini player's green/red transport language, rate menu, and a labelled
-  scrubber above the always-open chapter list. Swipe back (or `Esc`, or the
-  back chevron) returns to the browser.
+  scrubber above the always-open chapter list, which fills in a window of
+  chapters at a time. Swipe back (or `Esc`, or the back chevron) returns to the
+  browser.
 - **About** — one page to the right of the browser (the header's ⓘ button, or a
   swipe): a branded card — the site's logo mark redrawn as vectors in white on
   the app's primary ramp, the name and version, what the app is, the blog's own
@@ -91,17 +92,35 @@ Defaults to production (`https://api.huuthangle.site`). For local development
 against the Axum backend:
 
 ```sh
-AUDIOBOOKS_API_BASE=http://127.0.0.1:3000 make run
+AUDIOBOOKS_API_BASE=http://127.0.0.1:5174 make run
 ```
 
 Used endpoints (all public, unauthenticated): `GET /audiobooks/public/all`
-(`term`, `tag`, `limit`, `offset`, `has_more`), `GET /audiobooks/public/s/{slug}`,
-and `GET /media/i/{short_name}` for streaming (HTTP Range). The bundle's
-Info.plist allows plain HTTP to `localhost`/`127.0.0.1` so the dev backend
-works from the bundled app too.
+(`term`, `tag`, `limit`, `offset`, `has_more`), `GET /audiobooks/public/s/{slug}`
+(`tracks_offset`, `tracks_limit`, answered with `track_count` and
+`has_more_tracks`), and `GET /media/i/{short_name}` for streaming (HTTP Range).
+The bundle's Info.plist allows plain HTTP to `localhost`/`127.0.0.1` so the dev
+backend works from the bundled app too.
 
 ## Behavior notes
 
+- Chapters are fetched a **window at a time** rather than with the book: the
+  detail request asks for `tracks_limit` chapters from `tracks_offset` and the
+  answer's `track_count` says how many the book really has, so the list can be
+  drawn in full before the chapters are all here. `ChapterWindow` holds that
+  arithmetic (20 per window, 3 ahead prefetched), and `ChapterStore` holds the
+  chapters themselves. A book opened at chapter 300 therefore loads like one
+  opened at chapter 1: the window holding the saved chapter is fetched on
+  demand, and the transport waits for it instead of finding nothing to play.
+- The chapter list renders a **slot per chapter** — a row where the chapter has
+  arrived, that row's own shape in grey blocks where it has not. Slots are built
+  lazily, and building one is what asks for its window, so scrolling is what
+  loads the next window: a 2000-chapter book paints the rows near the viewport
+  rather than all of them. The playhead keeps the next few chapters in hand, so
+  a chapter boundary is not where the network shows up.
+- Play counts coming back from a beacon are written into whichever chapter
+  holds them — the loaded window on screen — rather than into the book's opening
+  window, which is all `AudiobookDetails.tracks` holds for a windowed book.
 - Progress (chapter, position, rate) is stored per book on device in
   `~/Library/Application Support/Audiobooks/progress.json`, mirroring the web
   player's localStorage payload. Reopening a book opens it **paused** at the point

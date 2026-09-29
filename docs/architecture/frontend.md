@@ -95,6 +95,26 @@ length would be indistinguishable from the author.
 The media split keeps one network hop off the frontend container and lets the
 backend's `Cache-Control` headers reach the browser unmodified.
 
+## Audiobook chapters
+
+The player never receives a book's whole chapter list. The detail load asks for
+one window (`?tracks_offset=0&tracks_limit=20`) and gets `track_count` and
+`has_more_tracks` back alongside it; the browser fetches later windows through
+the same path as the reader reaches them — including, for a book left
+mid-way through, the window the saved position sits in.
+`src/lib/players/chapter-windows.js` holds the window arithmetic and
+`AudiobookChapters.svelte.js` the fetching and the slot plan the list renders.
+That plan is chapters plus placeholders: one row per window still missing, which
+is the row that scrolls into view and fetches its own window. The placeholders
+have to stay in the list in every order — filter them out and the book is
+silently truncated at whatever the first fetch returned, with nothing left to
+reach the rest. Searching and the reversed chapter order are the two cases that
+ask for every remaining window at once, because both are browsing the book as a
+whole.
+
+The macOS player (`apps/macos`) uses the same window and the same arithmetic, so
+both clients ask the backend for the same amount per request.
+
 ## Environment
 
 See [../guides/configuration.md](../guides/configuration.md) for `API_URL`,

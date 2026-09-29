@@ -16,6 +16,12 @@ final class PlayerModel: NSObject, ObservableObject {
 
     @Published private(set) var phase: Phase = .empty
     @Published private(set) var book: AudiobookDetails?
+    /// The book's chapters, fetched a window at a time, so a long book opens
+    /// on its first window and the rest arrive as they are reached.
+    @Published private(set) var chapters: ChapterStore?
+    /// The chapter waiting on a window, or nil. The list renders that row as a
+    /// skeleton until it lands.
+    @Published private(set) var pendingChapterIndex: Int?
     @Published private(set) var trackIndex = 0
     @Published private(set) var isPlaying = false
     @Published var displayTime: Double = 0
@@ -48,13 +54,14 @@ final class PlayerModel: NSObject, ObservableObject {
     }
 
     var hasNext: Bool {
-        guard let book else { return false }
-        return trackIndex < book.tracks.count - 1
+        guard book != nil else { return false }
+        return trackIndex < chapterCount - 1
     }
-    var currentTrack: AudiobookTrack? {
-        guard let book, book.tracks.indices.contains(trackIndex) else { return nil }
-        return book.tracks[trackIndex]
-    }
+
+    /// Chapters in the loaded book, whether or not their windows have arrived.
+    var chapterCount: Int { chapters?.total ?? book?.tracks.count ?? 0 }
+
+    var currentTrack: AudiobookTrack? { chapters?.track(at: trackIndex) }
     var remainingTime: Double { max(0, duration - displayTime) }
 
     private let api: AudiobookAPI
@@ -178,23 +185,38 @@ final class PlayerModel: NSObject, ObservableObject {
         book = details
         phase = .ready
 
+        // The details carry the opening window; the store fetches the rest.
+        let chapters = ChapterStore(slug: details.slug, total: details.totalTracks, api: api)
+        chapters.seed(details.tracks)
+        self.chapters = chapters
+
         var index = 0
         var resumeAt: Double?
-        if let saved = progressStore.progress(for: details.slug),
-           let savedIndex = details.tracks.firstIndex(where: { $0.id == saved.trackId }) {
-            index = savedIndex
+        if let saved = progressStore.progress(for: details.slug) {
+            // The track id is the reliable match, but the saved chapter may sit
+            // in a window that has not arrived — its index is then what finds
+            // it, and `loadCurrent` waits for that window.
+            if let savedIndex = details.tracks.firstIndex(where: { $0.id == saved.trackId }) {
+                index = savedIndex
+            } else if chapters.total > 0 {
+                index = min(max(0, saved.trackIndex), chapters.total - 1)
+            }
             resumeAt = saved.time > 3 ? saved.time : nil
             if saved.rate > 0 { rate = saved.rate }
         }
         trackIndex = index
         // Held, not played: the page comes up on the saved position, silent.
         loadCurrent(autoplay: false, resumeAt: resumeAt)
-        if let resumeAt, details.tracks.indices.contains(index) {
-            resumePrompt = ResumePrompt(
-                time: resumeAt,
-                chapter: Int(details.tracks[index].number)
-            )
+        if let resumeAt {
+            resumePrompt = ResumePrompt(time: resumeAt, chapter: chapterNumber(at: index))
         }
+    }
+
+    /// A chapter's own number, or its place in the book while the window that
+    /// would say is still on its way — chapters are numbered from one.
+    private func chapterNumber(at index: Int) -> Int {
+        if let number = chapters?.track(at: index)?.number { return Int(number) }
+        return index + 1
     }
 
     // MARK: - The saved position
@@ -221,9 +243,23 @@ final class PlayerModel: NSObject, ObservableObject {
         resumePrompt = nil
     }
 
+    /// Ask for the window holding `index`.
+    ///
+    /// The chapter list calls this as rows scroll into view, which is what
+    /// turns scrolling into loading; playback asks through `loadCurrent`. A
+    /// window already loaded answers immediately, so firing this per row is
+    /// cheap.
+    func windowNeeded(at index: Int) {
+        guard let chapters, index >= 0, index < chapters.total else { return }
+        Task { await chapters.ensure(index) }
+    }
+
     /// Start a specific chapter from its beginning.
+    ///
+    /// The pick counts whether or not the chapter's window has arrived:
+    /// `loadCurrent` waits for it rather than letting the press do nothing.
     func playTrack(at index: Int) {
-        guard let book, book.tracks.indices.contains(index) else { return }
+        guard book != nil, index >= 0, index < chapterCount else { return }
         trackIndex = index
         loadCurrent(autoplay: true)
     }
@@ -311,9 +347,27 @@ final class PlayerModel: NSObject, ObservableObject {
         // Playing another chapter answers the question too.
         if autoplay { clearResumePrompt() }
         guard let track = currentTrack, let url = track.streamURL else {
-            player.replaceCurrentItem(with: nil)
+            // Nothing to play yet. When the chapter exists but its window has
+            // not arrived, wait for it and come back: a book opened at chapter
+            // 300 then loads exactly like one opened at chapter 1. `track`
+            // itself gates the retry, so a chapter that never arrives leaves
+            // the player on the one it had rather than looping.
+            if let chapters, trackIndex < chapters.total, chapters.track(at: trackIndex) == nil {
+                pendingChapterIndex = trackIndex
+                let wanted = trackIndex
+                Task { [weak self] in
+                    guard let self else { return }
+                    let ready = await chapters.ensure(wanted)
+                    guard !Task.isCancelled, self.trackIndex == wanted else { return }
+                    self.pendingChapterIndex = nil
+                    if ready { self.loadCurrent(autoplay: autoplay, resumeAt: resumeAt) }
+                }
+            } else {
+                player.replaceCurrentItem(with: nil)
+            }
             return
         }
+        pendingChapterIndex = nil
         durationTask?.cancel()
         artworkTask?.cancel()
 
@@ -360,6 +414,9 @@ final class PlayerModel: NSObject, ObservableObject {
         } else if autoplay {
             player.playImmediately(atRate: Float(rate))
         }
+        // Keep the chapters just ahead in hand, so the seam between two
+        // chapters is not where the network shows up.
+        chapters?.prefetch(trackIndex)
         updateNowPlaying()
         loadArtwork()
         saveProgress()
@@ -431,10 +488,10 @@ final class PlayerModel: NSObject, ObservableObject {
             guard let self else { return }
             guard let total = try? await self.api.recordPlay(audiobookId: bookId, trackId: trackId)
             else { return }
-            guard !Task.isCancelled, self.book?.id == bookId,
-                let index = self.book?.tracks.firstIndex(where: { $0.id == trackId })
-            else { return }
-            self.book?.tracks[index].playCount = Int(total)
+            guard !Task.isCancelled, self.book?.id == bookId else { return }
+            // Written back wherever the chapter actually lives: `book.tracks`
+            // holds only the window the book opened with.
+            self.chapters?.setPlayCount(Int(total), trackId: trackId)
         }
     }
 

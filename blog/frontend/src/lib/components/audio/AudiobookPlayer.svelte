@@ -7,6 +7,17 @@
 
 	let {
 		tracks = [],
+		/**
+		 * Windowed chapter source, for a public book whose chapters arrive a
+		 * window at a time. Absent for the dashboard preview, which is handed
+		 * the editor's whole playlist instead.
+		 */
+		chapters = null,
+		/**
+		 * How many chapters the book has. `tracks` holds only what has arrived,
+		 * so the count has to come from the book itself.
+		 */
+		trackCount = null,
 		title = 'Audiobook',
 		author = '',
 		translator = '',
@@ -65,6 +76,7 @@
 					restart: 'Nghe lại',
 					playlist: 'Chương',
 					chapterCount: (n) => `${n} chương`,
+					loadingChapters: (from, to) => `Đang tải chương ${from}–${to}…`,
 					plays: 'Lượt nghe',
 					sortToHigh: 'Sắp xếp chương từ thấp lên cao',
 					sortToLow: 'Sắp xếp chương từ cao xuống thấp',
@@ -112,6 +124,7 @@
 					restart: 'Restart',
 					playlist: 'Chapters',
 					chapterCount: (n) => `${n} chapter${n === 1 ? '' : 's'}`,
+					loadingChapters: (from, to) => `Loading chapters ${from}–${to}…`,
 					plays: 'Plays',
 					sortToHigh: 'Sort chapters low to high',
 					sortToLow: 'Sort chapters high to low',
@@ -144,13 +157,23 @@
 		translator,
 		coverUrl,
 		tracks,
+		// The chapter source travels with the book, so playback keeps fetching
+		// windows long after the page that started it has been torn down.
+		chapters,
 		// Carried on the book so the mini player, which renders the claimed book
 		// on other pages, can match this language.
 		vietnamese
 	}));
 	const player = untrack(() =>
-		persistent ? audiobookSession.engineFor(book) : new AudiobookPlayer(tracks, { storageKey })
+		persistent
+			? audiobookSession.engineFor(book)
+			: new AudiobookPlayer(tracks, { storageKey, chapters })
 	);
+	// Read once: which source a book uses never changes after it is built, and a
+	// listener returning to a book is handed the live engine — with the windows
+	// it has already fetched — rather than this page's copy of them.
+	const chapterSource = untrack(() => player.chapters ?? chapters ?? null);
+	const totalChapters = $derived(chapterSource?.total || trackCount || tracks.length);
 	// The play beacon rides on the engine's meta so it keeps firing while the
 	// mini player continues playback on other pages, long after this page is
 	// gone. Fire-and-forget: counting must never disturb listening. The server
@@ -192,6 +215,33 @@
 	const playedPercent = $derived(percentOf(position, duration));
 	const bufferedPercent = $derived(percentOf(player.buffered, duration));
 	const isCurrent = (track) => track.id === current?.id;
+
+	/**
+	 * Fetch a window once the row standing in for it scrolls into view.
+	 *
+	 * The list shows one reachable row per unloaded stretch, so this is what
+	 * turns "scroll down the chapter list" into "load the next window" — without
+	 * ever painting a row per chapter of a long book.
+	 */
+	function windowRow(node, start) {
+		let observer = null;
+
+		const watch = (value) => {
+			observer?.disconnect();
+			observer = null;
+			if (value == null) return;
+			observer = new IntersectionObserver(
+				(entries) => {
+					if (entries.some((entry) => entry.isIntersecting)) chapterSource?.ensure(value);
+				},
+				{ root: node.closest('ol'), rootMargin: '160px 0px' }
+			);
+			observer.observe(node);
+		};
+
+		watch(start);
+		return { update: watch, destroy: () => observer?.disconnect() };
+	}
 
 	$effect(() => {
 		// A persistent engine is attached once by the session, to an element it
@@ -376,6 +426,76 @@
 			.map((result) => result.track);
 	});
 
+	/**
+	 * Whether the reader is browsing the book as a whole — a search, or the
+	 * reversed order. Both are deliberate "show me the list" acts, so they ask
+	 * the source for every remaining window rather than filtering the chapters
+	 * that happen to have arrived.
+	 */
+	const browsingWholeBook = $derived(
+		Boolean(chapterSource) && (!sortAsc || chapterQuery.trim() !== '')
+	);
+
+	$effect(() => {
+		if (browsingWholeBook) chapterSource?.ensureAll();
+	});
+
+	/** A rendered chapter: its slot in the book, and the chapter itself. */
+	const chapterRow = (row) => ({
+		kind: 'chapter',
+		index: row.index,
+		track: chapterSource.trackAt(row.index)
+	});
+
+	/**
+	 * The rows the list renders: one per chapter, plus a skeleton row for a
+	 * window in flight and a single reachable row for each stretch of chapters
+	 * nobody has asked for yet. A chapter still on its way keeps its place, so
+	 * the numbers never shift under the reader.
+	 */
+	const playlistRows = $derived.by(() => {
+		if (!chapterSource) {
+			return displayTracks.map((track) => ({
+				kind: 'chapter',
+				index: tracks.indexOf(track),
+				track
+			}));
+		}
+
+		// Ascending is the source's own order, so its rows come through as they
+		// are — the waiting ones included. Those rows are the handles that fetch
+		// the rest of the book, so dropping them would leave the list showing
+		// whatever the page happened to load first, with no way to reach the
+		// chapters behind it.
+		if (!browsingWholeBook) {
+			return chapterSource.rows.map((row) => (row.kind === 'chapter' ? chapterRow(row) : row));
+		}
+
+		// Whole-book mode reads the source too, not the playlist the page was
+		// rendered with: a chapter that arrived in a later window is just as
+		// much a chapter of this book, and its slot is the source's to name.
+		// Descending reverses the waiting rows as well, because the chapters
+		// they stand for are the ones the top of that list is waiting for.
+		const arrived = chapterSource.rows.filter((row) => row.kind === 'chapter').map(chapterRow);
+		const ordered = sortAsc ? arrived : arrived.reverse();
+
+		// A search is answered from the chapters that are here — it does not wait
+		// on the rest, so it gets no waiting rows and no false "no match" — and
+		// still asks for the whole book, so browsing is never partial.
+		if (chapterQuery.trim()) {
+			const query = normalizeSearchText(chapterQuery);
+			return ordered
+				.filter((row) => row.track)
+				.map((row, order) => ({ row, order, score: chapterSearchScore(row.track, query) }))
+				.filter(({ score }) => score !== null)
+				.sort((a, b) => a.score - b.score || a.order - b.order)
+				.map(({ row }) => row);
+		}
+
+		const waiting = chapterSource.rows.filter((row) => row.kind !== 'chapter');
+		return sortAsc ? [...ordered, ...waiting] : [...waiting.reverse(), ...ordered];
+	});
+
 	// FLIP: measure before the reorder, flush the DOM, then play from old → new.
 	function toggleSort() {
 		const first = playlistEl
@@ -405,7 +525,7 @@
 		<audio bind:this={audioEl} preload="metadata" class="hidden"></audio>
 	{/if}
 
-	{#if tracks.length === 0}
+	{#if totalChapters === 0}
 		<p class="py-8 text-center text-base text-dark/50">{t.noTracks}</p>
 	{:else}
 		<!-- One cassette reel: a spoked hub that turns while a chapter plays. -->
@@ -711,7 +831,7 @@
 				<h2 class="text-lg font-semibold">{t.playlist}</h2>
 				<div class="flex items-center gap-2">
 					<span class="text-sm text-dark/55 sm:text-base">
-						{t.chapterCount(tracks.length)}
+						{t.chapterCount(totalChapters)}
 					</span>
 					<div class="duo-btn w-fit" data-duo-shape="round" data-duo-color="white">
 						<button
@@ -752,53 +872,84 @@
 				/>
 			</label>
 
-			{#if displayTracks.length === 0}
+			{#if playlistRows.length === 0}
 				<p class="py-6 text-center text-sm text-dark/55">{t.noMatch}</p>
 			{:else}
 				<ol
 					bind:this={playlistEl}
 					class="custom-scrollbar flex flex-col max-h-96 overflow-y-auto divide-y divide-dark/10"
 				>
-					{#each displayTracks as track (track.id)}
-						{@const index = tracks.indexOf(track)}
-						{@const active = isCurrent(track)}
-						<li data-track-index={index} data-track-id={track.id}>
-							<button
-								class="flex w-full items-center gap-3 border-l-2 px-2 py-2 text-left transition-colors {active
-									? 'border-primary bg-primary/10'
-									: 'border-transparent hover:bg-dark/5'}"
-								onclick={() => player.load(index, { play: true })}
-								aria-current={active ? 'true' : undefined}
-							>
-								<span class="grow min-w-0 flex flex-col">
-									<!-- Mobile: number on its own line so the title can wrap -->
-									<span class="md:hidden text-sm text-dark/50">Ch.{track.number}</span>
+					{#each playlistRows as row (row.kind === 'chapter' ? `chapter-${row.index}` : `waiting-${row.start ?? 'rest'}`)}
+						{#if row.kind === 'chapter' && row.track}
+							{@const index = row.index}
+							{@const track = row.track}
+							{@const active = isCurrent(track)}
+							<li data-track-index={index} data-track-id={track.id}>
+								<button
+									class="flex w-full items-center gap-3 border-l-2 px-2 py-2 text-left transition-colors {active
+										? 'border-primary bg-primary/10'
+										: 'border-transparent hover:bg-dark/5'}"
+									onclick={() => player.load(index, { play: true })}
+									aria-current={active ? 'true' : undefined}
+									aria-busy={player.pendingIndex === index ? 'true' : undefined}
+								>
 									<span
-										class="font-['Baloo_2',Roboto,sans-serif] text-base font-medium line-clamp-2 md:line-clamp-1 {active
-											? 'text-dark'
-											: 'text-dark/70'}"
+										class="grow min-w-0 flex flex-col {player.pendingIndex === index
+											? 'animate-pulse motion-reduce:animate-none'
+											: ''}"
 									>
-										<span class="hidden md:inline">{t.chapter} {track.number} -</span>
-										{track.title}
-									</span>
-									{#if player.failures[track.id]}
-										<span class="text-base text-accent-red">
-											{t.trackError[player.failures[track.id]] ?? t.trackError.generic}
+										<!-- Mobile: number on its own line so the title can wrap -->
+										<span class="md:hidden text-sm text-dark/50">Ch.{track.number}</span>
+										<span
+											class="font-['Baloo_2',Roboto,sans-serif] text-base font-medium line-clamp-2 md:line-clamp-1 {active
+												? 'text-dark'
+												: 'text-dark/70'}"
+										>
+											<span class="hidden md:inline">{t.chapter} {track.number} -</span>
+											{track.title}
 										</span>
-									{/if}
-								</span>
-
-								<span class="flex items-center gap-2 shrink-0 text-base text-dark/55 tabular-nums">
-									<span class="flex items-center gap-1" title={t.plays}>
-										<svg class="w-3.5 h-3.5 fill-dark/40" viewBox="0 0 24 24" aria-hidden="true">
-											<path d="M8 5l11 7-11 7z" />
-										</svg>
-										{acceptedPlays[track.id] ?? track.play_count ?? 0}
+										{#if player.failures[track.id]}
+											<span class="text-base text-accent-red">
+												{t.trackError[player.failures[track.id]] ?? t.trackError.generic}
+											</span>
+										{/if}
 									</span>
-									{formatClock(track.duration_seconds)}
+
+									<span
+										class="flex items-center gap-2 shrink-0 text-base text-dark/55 tabular-nums"
+									>
+										<span class="flex items-center gap-1" title={t.plays}>
+											<svg class="w-3.5 h-3.5 fill-dark/40" viewBox="0 0 24 24" aria-hidden="true">
+												<path d="M8 5l11 7-11 7z" />
+											</svg>
+											{acceptedPlays[track.id] ?? track.play_count ?? 0}
+										</span>
+										{formatClock(track.duration_seconds)}
+									</span>
+								</button>
+							</li>
+						{:else}
+							<!-- A window in flight, or a stretch of chapters nobody has
+							     fetched: the row is the handle that fetches it, and it turns
+							     into chapters as they arrive. -->
+							<li
+								class="flex w-full items-center gap-3 px-2 py-2"
+								use:windowRow={row.start ?? row.index}
+							>
+								<span
+									class="grow min-w-0 flex flex-col gap-1.5 animate-pulse motion-reduce:animate-none"
+									aria-hidden="true"
+								>
+									<span class="h-4 w-3/5 rounded-full bg-dark/10"></span>
+									<span class="h-3 w-1/3 rounded-full bg-dark/10 md:hidden"></span>
 								</span>
-							</button>
-						</li>
+								{#if row.kind === 'gap' && row.start != null}
+									<span class="shrink-0 text-sm text-dark/45 tabular-nums">
+										{t.loadingChapters(row.start + 1, row.start + row.count)}
+									</span>
+								{/if}
+							</li>
+						{/if}
 					{/each}
 				</ol>
 			{/if}

@@ -16,8 +16,9 @@ use crate::{
         services::audiobook::AudiobookService,
     },
     domain::{entities::secret::Claims, errors::audiobook::AudiobookError},
+    helper::string::{clamp_offset, clamp_page_size},
     infrastructure::web::{
-        api::handlers::audiobook::dto::{ListQuery, SlugQuery},
+        api::handlers::audiobook::dto::{ListQuery, SlugQuery, TrackWindowQuery},
         api::handlers::audiobook::response::{
             AudiobookDetailsResponse, AudiobookListResponse, AudiobookTagsResponse,
             SlugAvailabilityResponse,
@@ -26,6 +27,16 @@ use crate::{
         server::AppState,
     },
 };
+
+/// Chapters in a window when the caller asks for one but does not size it.
+///
+/// Sized for a screen or two of chapter list: big enough that a reader scrolling
+/// through a normal book rarely waits, small enough that the request stays
+/// cheap next to the cover and the book's own metadata.
+const TRACK_WINDOW_DEFAULT: i64 = 20;
+/// Ceiling on a requested window, so no single request can pull a whole long
+/// book down at once.
+const TRACK_WINDOW_MAX: i64 = 200;
 
 pub async fn get_audiobooks(
     State(state): State<Arc<AppState>>,
@@ -124,13 +135,30 @@ pub async fn get_public_audiobooks(
     }))
 }
 
+/// The public detail feed, optionally windowed by chapter.
+///
+/// The players send `tracks_offset`/`tracks_limit` and render skeleton rows for
+/// the chapters they have not asked for yet. `has_more_tracks` and
+/// `track_count` come back on every answer, so a caller that asked for no
+/// window can still tell a truncated list from a short one.
 pub async fn get_public_audiobook(
     State(state): State<Arc<AppState>>,
     Path(slug): Path<String>,
+    Query(query): Query<TrackWindowQuery>,
 ) -> Result<impl IntoResponse, AudiobookError> {
+    // A limit is what makes this a windowed read. Without one the answer is the
+    // whole chapter list — an offset alone still moves the window's start.
+    let tracks_limit = query.tracks_limit.map(|limit| {
+        clamp_page_size(Some(limit), TRACK_WINDOW_DEFAULT, TRACK_WINDOW_MAX)
+    });
+
     let audiobook = state
         .audiobook_service
-        .get_public_audiobook(GetPublicAudiobookCommand { slug })
+        .get_public_audiobook(GetPublicAudiobookCommand {
+            slug,
+            tracks_offset: clamp_offset(query.tracks_offset),
+            tracks_limit,
+        })
         .await?;
 
     Ok(Json(AudiobookDetailsResponse { audiobook }))

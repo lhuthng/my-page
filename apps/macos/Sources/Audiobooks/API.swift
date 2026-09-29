@@ -41,10 +41,27 @@ struct AudiobookAPI {
         return try await get(components.url!)
     }
 
-    func details(slug: String) async throws -> AudiobookDetails {
-        let envelope: AudiobookDetailEnvelope = try await get(
-            base.appendingPathComponent("audiobooks/public/s/\(slug)")
-        )
+    /// A book's details plus one window of its chapters.
+    ///
+    /// The window is what keeps a long book cheap to open: the answer carries
+    /// `track_count` and `has_more_tracks` alongside the chapters it holds, so
+    /// the player knows how many there are without pulling them all. The rest
+    /// are fetched by `ChapterStore` as they are reached.
+    func details(
+        slug: String,
+        tracksOffset: Int = 0,
+        tracksLimit: Int = ChapterWindow.size
+    ) async throws -> AudiobookDetails {
+        var components = URLComponents(
+            url: base.appendingPathComponent("audiobooks/public/s/\(slug)"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "tracks_offset", value: String(tracksOffset)),
+            URLQueryItem(name: "tracks_limit", value: String(tracksLimit)),
+        ]
+
+        let envelope: AudiobookDetailEnvelope = try await get(components.url!)
         return envelope.audiobook
     }
 

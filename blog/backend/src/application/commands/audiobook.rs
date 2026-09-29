@@ -23,6 +23,13 @@ pub struct GetAudiobookCommand {
 
 pub struct GetPublicAudiobookCommand {
     pub slug: String,
+    /// Index of the first chapter to return, counting from the top of the
+    /// chapter order.
+    pub tracks_offset: i64,
+    /// How many chapters to return. `None` means every remaining chapter, which
+    /// is the whole list — the answer callers that predate windowed loading
+    /// still get, and the one the dashboard editor relies on.
+    pub tracks_limit: Option<i64>,
 }
 
 pub struct NewAudiobookCommand {

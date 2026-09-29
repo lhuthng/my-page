@@ -1,7 +1,9 @@
 <script>
+	import { untrack } from 'svelte';
 	import AudiobookPlayer from '$lib/components/audio/AudiobookPlayer.svelte';
 	import VietnameseFlagBadge from '$lib/components/audio/VietnameseFlagBadge.svelte';
 	import BackButton from '$lib/components/ui/BackButton.svelte';
+	import { AudiobookChapters } from '$lib/players/AudiobookChapters.svelte.js';
 	import { absoluteSiteUrl, SITE_NAME, safeJsonLd } from '$lib/config/site.js';
 	import { formatDurationLabel } from '$lib/utils/duration.js';
 	import { isVietnameseTranslation } from '$lib/utils/audiobook-tags.js';
@@ -9,6 +11,19 @@
 	let { data } = $props();
 
 	const audiobook = $derived(data.audiobook);
+	// The book's own chapter count, not the length of the window the page
+	// carries: `tracks` is the first fetch, and the rest arrive as they are
+	// reached.
+	const totalChapters = $derived(audiobook.track_count ?? audiobook.tracks.length);
+
+	// Built once. The loader already fetched the opening window, so the source
+	// starts from it and reaches for the rest — including, on a book that was
+	// left mid-way through, the window the saved position sits in.
+	const chapters = untrack(() => {
+		const source = new AudiobookChapters({ slug: audiobook.slug, total: totalChapters });
+		source.seed(0, audiobook.tracks);
+		return source;
+	});
 	const vietnamese = $derived(isVietnameseTranslation(audiobook));
 	const durationLabel = $derived(
 		formatDurationLabel(audiobook.total_duration_seconds, vietnamese ? 'vi' : 'en')
@@ -51,7 +66,10 @@
 				? { '@type': 'Person', name: audiobook.translator }
 				: undefined,
 			keywords: audiobook.tags?.join(', ') || undefined,
-			numTracks: audiobook.tracks.length,
+			numTracks: totalChapters,
+			// Only the opening window is in hand at render time; listing its
+			// chapters is still better structured data than none, and the count
+			// above tells a crawler how many there really are.
 			track: audiobook.tracks.map((track, index) => ({
 				'@type': 'MusicRecording',
 				name: track.title,
@@ -67,7 +85,7 @@
 	<meta
 		name="description"
 		content={audiobook.description ||
-			`${audiobook.title} — an audiobook with ${audiobook.tracks.length} chapters.`}
+			`${audiobook.title} — an audiobook with ${totalChapters} chapters.`}
 	/>
 	<link rel="canonical" href={absoluteSiteUrl(`/audiobooks/${audiobook.slug}`)} />
 	<meta property="og:title" content={audiobook.title} />
@@ -127,7 +145,7 @@
 						</a>
 						<span class="text-dark/25" aria-hidden="true">•</span>
 					{/if}
-					<span>{t.chapters(audiobook.tracks.length)}</span>
+					<span>{t.chapters(totalChapters)}</span>
 					{#if durationLabel}
 						<span class="text-dark/25" aria-hidden="true">•</span>
 						<span>{durationLabel}</span>
@@ -171,6 +189,8 @@
 
 	<AudiobookPlayer
 		tracks={audiobook.tracks}
+		{chapters}
+		trackCount={totalChapters}
 		title={audiobook.title}
 		author={audiobook.owner_display_name || audiobook.owner_username}
 		translator={audiobook.translator ?? ''}

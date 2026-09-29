@@ -9,6 +9,11 @@
  * at a blob or a fetched ArrayBuffer. The browser therefore issues ordinary
  * HTTP requests, using Range requests to buffer ahead and to seek, so a
  * multi-hour file is never held in memory. Only one track is ever loading.
+ *
+ * The chapter list itself may also arrive a window at a time (`chapters`),
+ * which is why `load` can be handed a chapter that has not been fetched yet:
+ * it asks for that window and re-enters once it lands, and keeps the few
+ * chapters ahead of the playhead in hand so the boundary is never a stall.
  */
 
 const STORAGE_PREFIX = 'audiobook-player:';
@@ -47,6 +52,11 @@ export class AudiobookPlayer {
 	sleepRemaining = $state(0);
 	/** A saved position was found and is offered as a resume. */
 	resumeOffer = $state(null);
+	/**
+	 * The chapter waiting on a window fetch, or null. The list renders that row
+	 * as loading, so a chapter still on its way never looks like a broken one.
+	 */
+	pendingIndex = $state(null);
 
 	#audio = null;
 	#storageKey = null;
@@ -61,18 +71,33 @@ export class AudiobookPlayer {
 	/** The element's currentTime at the previous timeupdate, for deltas. */
 	#lastAudioTime = 0;
 
-	constructor(tracks, { storageKey = 'default', skipSeconds = 15 } = {}) {
-		this.tracks = tracks ?? [];
+	constructor(tracks, { storageKey = 'default', skipSeconds = 15, chapters = null } = {}) {
+		// A windowed book's playlist belongs to its source, which grows it one
+		// window at a time; the array handed in here is only the first of those
+		// windows, so taking it would freeze the playlist at whatever had arrived
+		// by the time the player was built.
+		this.chapters = chapters;
+		this.tracks = chapters ? chapters.tracks : (tracks ?? []);
 		this.#storageKey = STORAGE_PREFIX + storageKey;
 		this.skipSeconds = skipSeconds;
 	}
 
 	get current() {
-		return this.tracks[this.index] ?? null;
+		return this.trackAt(this.index);
+	}
+
+	/** Chapters in the book, fetched or not. */
+	get length() {
+		return this.chapters ? this.chapters.total : this.tracks.length;
+	}
+
+	/** The chapter at `index`, or null while its window is still on its way. */
+	trackAt(index) {
+		return this.tracks[index] ?? null;
 	}
 
 	get hasNext() {
-		return this.index < this.tracks.length - 1;
+		return this.index < this.length - 1;
 	}
 
 	get hasPrevious() {
@@ -169,19 +194,36 @@ export class AudiobookPlayer {
 	 * or a manual track pick never fights the browser's autoplay policy.
 	 * Picking any chapter is also an answer to the resume offer: it goes away.
 	 */
-	load(index, { play = false, seek = 0 } = {}) {
+	load(index, { play = false, seek = 0, keepResumeOffer = false } = {}) {
 		const audio = this.#audio;
-		if (!audio || index < 0 || index >= this.tracks.length) return;
+		if (!audio || index < 0 || index >= this.length) return;
 
-		const track = this.tracks[index];
+		const track = this.trackAt(index);
+		if (!track) {
+			// The chapter sits in a window this page has not fetched. Ask for it
+			// and re-enter once it lands, so every caller — a row tap, `next()`,
+			// a restored position — waits the same way instead of stumbling on a
+			// chapter that is merely on its way.
+			this.pendingIndex = index;
+			this.#awaitChapter(index, () => this.load(index, { play, seek, keepResumeOffer: true }));
+			return;
+		}
+
+		this.pendingIndex = null;
 		this.index = index;
 		this.time = 0;
 		this.duration = 0;
 		this.buffered = 0;
-		this.resumeOffer = null;
+		// Picking a chapter answers the resume offer; re-entering after a window
+		// arrives does not, so the offer has to survive the wait.
+		if (!keepResumeOffer) this.resumeOffer = null;
 		this.#playSeconds = 0;
 		this.#lastAudioTime = 0;
 		this.#pendingSeek = seek > 0 ? seek : 0;
+		// The chapters just ahead are what `next()` and the auto-advance want
+		// next, so keeping them in hand costs nothing now and saves a stall at
+		// the chapter boundary.
+		this.chapters?.prefetch(index);
 
 		// Assigning `src` (rather than fetching) hands streaming to the browser:
 		// it will Range-request the file and buffer incrementally.
@@ -196,6 +238,31 @@ export class AudiobookPlayer {
 		} else {
 			this.playing = false;
 		}
+	}
+
+	/**
+	 * Wait for the window holding `index`, then run `next`.
+	 *
+	 * A window that never arrives clears the loading marker and leaves the
+	 * engine where it was: the listener keeps the chapter they were on rather
+	 * than a player stuck mid-load. `ensure` resolves rather than rejecting, so
+	 * there is nothing to catch here.
+	 */
+	#awaitChapter(index, next) {
+		const chapters = this.chapters;
+		if (!chapters) {
+			this.pendingIndex = null;
+			return;
+		}
+
+		chapters.ensure(index).then((ready) => {
+			if (this.#detached) return;
+			if (!ready || !this.trackAt(index)) {
+				if (this.pendingIndex === index) this.pendingIndex = null;
+				return;
+			}
+			next();
+		});
 	}
 
 	play() {
@@ -544,15 +611,17 @@ export class AudiobookPlayer {
 		}
 
 		// Prefer the track id: the playlist may have been reordered or had
-		// tracks inserted since the position was saved.
-		let index = this.tracks.findIndex((t) => t.id === saved.trackId);
+		// tracks inserted since the position was saved. Windowed chapters add a
+		// second reason to keep the saved index — the track itself may simply
+		// not have arrived yet, and `load` fetches the window it sits in.
+		let index = this.tracks.findIndex((t) => t?.id === saved.trackId);
 		if (index < 0) {
 			index = Number.isInteger(saved.index) ? saved.index : 0;
 		}
-		if (index < 0 || index >= this.tracks.length) index = 0;
+		if (index < 0 || index >= this.length) index = 0;
 
 		const time = Number.isFinite(saved.time) && saved.time > 0 ? saved.time : 0;
-		const track = this.tracks[index];
+		const track = this.trackAt(index);
 		const nearEnd = track?.duration_seconds ? time > track.duration_seconds - 5 : false;
 
 		// Load the saved track so the metadata and duration are ready, but do not

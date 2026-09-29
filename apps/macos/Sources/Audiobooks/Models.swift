@@ -66,11 +66,27 @@ struct AudiobookDetails: Codable, Identifiable, Hashable {
     let ownerDisplayName: String
     let tags: [AudiobookTag]
     /// `var` so an accepted play beacon can write the server's count in place.
+    ///
+    /// The public feed answers with one window of chapters rather than the
+    /// whole list, so this is the window that arrived — `ChapterStore` fetches
+    /// the rest.
     var tracks: [AudiobookTrack]
+    /// Every chapter in the book, whether or not it is in `tracks`. Absent on
+    /// backends that predate windowed chapters, in which case the tracks that
+    /// arrived are all there is.
+    let trackCount: Int64?
+    /// More chapters follow this window.
+    let hasMoreTracks: Bool?
     let createdAt: String
     let publishedAt: String?
 
     var coverURL: URL? { AudiobookAPI.mediaURL(url) }
+
+    /// The book's chapter count, windowed or whole.
+    var totalTracks: Int { Int(trackCount ?? Int64(tracks.count)) }
+
+    /// Whether chapters beyond this window still have to be fetched.
+    var hasMoreChapters: Bool { hasMoreTracks ?? false }
 }
 
 struct AudiobookListPage: Codable {

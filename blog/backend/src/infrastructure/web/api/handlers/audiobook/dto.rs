@@ -14,6 +14,18 @@ pub struct SlugQuery {
     pub slug: String,
 }
 
+/// Window selector for the public detail feed.
+///
+/// Both fields are optional on purpose: a caller that sends neither keeps the
+/// old whole-list answer, while the players send both so a 2000-chapter book
+/// arrives a window at a time. `tracks_offset` on its own is meaningful too —
+/// it is how the players ask for the window a saved position sits in.
+#[derive(Deserialize)]
+pub struct TrackWindowQuery {
+    pub tracks_offset: Option<i64>,
+    pub tracks_limit: Option<i64>,
+}
+
 #[derive(Deserialize)]
 pub struct UpdateAudiobookPayload {
     pub title: Option<String>,

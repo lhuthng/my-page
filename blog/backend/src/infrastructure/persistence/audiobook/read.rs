@@ -270,6 +270,10 @@ impl AudiobookServiceImpl {
         let tracks = Self::load_tracks(&mut tx, row.0).await?;
         tx.commit().await?;
 
+        // The editor's read is never windowed, so the playlist it just loaded
+        // is the whole book and nothing is left over.
+        let track_count = tracks.len() as i64;
+
         Ok(AudiobookDetails {
             id: row.0,
             title: row.1,
@@ -283,6 +287,8 @@ impl AudiobookServiceImpl {
             owner_display_name: row.9,
             tags,
             tracks,
+            track_count,
+            has_more_tracks: false,
             created_at: row.10,
             published_at: row.11,
         })
@@ -315,8 +321,15 @@ impl AudiobookServiceImpl {
 
         let row = row.ok_or(AudiobookError::NotFound)?;
         let tags = Self::load_tags(&mut tx, row.0).await?;
-        let tracks = Self::load_tracks(&mut tx, row.0).await?;
+        // The total and the window are read in one transaction, so a chapter
+        // added between them cannot make the player render a row that never
+        // fills in — the two answers describe the same book at the same moment.
+        let track_count = Self::count_playable_tracks(&mut tx, row.0).await?;
+        let tracks =
+            Self::load_track_window(&mut tx, row.0, cmd.tracks_offset, cmd.tracks_limit).await?;
         tx.commit().await?;
+
+        let has_more_tracks = cmd.tracks_offset + (tracks.len() as i64) < track_count;
 
         Ok(AudiobookDetails {
             id: row.0,
@@ -331,6 +344,8 @@ impl AudiobookServiceImpl {
             owner_display_name: row.9,
             tags,
             tracks,
+            track_count,
+            has_more_tracks,
             created_at: row.10,
             published_at: row.11,
         })
