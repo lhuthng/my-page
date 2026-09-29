@@ -33,10 +33,9 @@ struct PlayerScreen: View {
                         .font(.callout)
                         .foregroundStyle(Theme.dark.opacity(0.7))
                         .multilineTextAlignment(.center)
-                    Button("Try again") {
+                    PillButton(title: "Try again") {
                         Task { await player.retry() }
                     }
-                    .buttonStyle(.bordered)
                 }
                 .padding(30)
             case .ready:

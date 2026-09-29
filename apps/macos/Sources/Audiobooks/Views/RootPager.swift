@@ -56,24 +56,34 @@ struct RootPager: View {
         }
         .environmentObject(updater)
         .onAppear { updater.checkSilently() }
-        .alert("Update available", isPresented: $updater.shouldOffer) {
-            if case .available(let release) = updater.state {
-                Button("Install and restart") { updater.install(release) }
-                Button("Later") { updater.shouldOffer = false }
-            } else {
-                Button("OK") { updater.shouldOffer = false }
-            }
-        } message: {
-            // Always a concrete Text, from a String: a message builder that can
-            // come out empty makes the alert render "the data couldn't be read",
-            // and a LocalizedStringKey here fails to resolve on top of that.
-            Text(offerMessage)
+        // The prompt is a SwiftUI panel rather than a native alert: this window
+        // does not paint AppKit-backed control content, and an alert is gone the
+        // moment its button is tapped, so it could not report the download that
+        // button started. See `UpdatePanel`.
+        .overlay { updatePanel }
+        .animation(.easeOut(duration: 0.18), value: updater.shouldOffer)
+    }
+
+    /// The update prompt, over whichever page is showing. The launch check can
+    /// find an update while the library is on screen, and the download it starts
+    /// has to be watchable from there.
+    @ViewBuilder
+    private var updatePanel: some View {
+        if showsUpdatePanel {
+            UpdatePanel { updater.shouldOffer = false }
         }
     }
 
-    private var offerMessage: String {
-        guard case .available(let release) = updater.state else { return "" }
-        return "Audiobooks \(release.version) is available. You have \(AppInfo.version)."
+    /// True for the whole run — the offer, the download, the install, and a
+    /// failure left on screen to be acknowledged. A failure that came out of a
+    /// check rather than an install never raises the panel; that one belongs to
+    /// the About row that asked for it.
+    private var showsUpdatePanel: Bool {
+        guard updater.shouldOffer else { return false }
+        switch updater.state {
+        case .available, .downloading, .installing, .failed: return true
+        default: return false
+        }
     }
 
     private var boundary: some View {
