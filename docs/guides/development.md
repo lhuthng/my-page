@@ -12,6 +12,9 @@ Run from `blog/`.
 | `make setup` | Creates the data directory and copies missing example env files. |
 | `make backend` | Runs the Rust backend locally with Cargo. |
 | `make frontend` | Runs the SvelteKit dev server with Bun. |
+| `make dev` | Runs both, and Ctrl-C stops both. Ports come from the two `.env` files: `5174` backend, `5175` frontend. |
+| `make backend-local-storage` | Runs the backend against a local MinIO bucket instead of R2, stopping MinIO on exit. |
+| `make minio-up` / `make minio-down` | Starts/stops that MinIO container (data persists in `backend/.minio-data`). |
 | `make migrate` | Runs sqlx migrations manually. |
 | `make docker-up` | Starts Docker Compose services in the background. |
 | `make docker-down` | Stops Docker Compose services. |

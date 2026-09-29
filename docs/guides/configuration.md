@@ -18,6 +18,7 @@ variables in `blog/frontend/.env`.
 | `APP_BASE_URL` | Public app URL used by auth email flows. | `http://localhost:5000` |
 | `MEDIA_PATH` | Directory for uploaded media. | `./media` |
 | `PROJECT_DEMOS_PATH` | Directory for uploaded/extracted project demos and (in `fs` mode) v86 artifacts. | `./project-demos` |
+| `PORT` | Port the backend binds. Unusable values (empty, non-numeric, or `0`, which the OS reads as *any free port*) fall back to the default rather than failing the bind. | `5174` |
 
 ## Backend — demo and v86 limits
 
@@ -101,9 +102,14 @@ variables are configured.
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `API_URL` | Backend URL for server-side SvelteKit requests. Docker: `http://backend:3000`; standalone: `http://localhost:3000`. Never exposed to the browser. | — |
+| `API_URL` | Backend URL for server-side SvelteKit requests. Docker: `http://backend:3000`; standalone: `http://localhost:5174`. Never exposed to the browser. | — |
 | `BACKEND_ORIGIN` | Public backend origin for direct browser media URLs (e.g. `https://api.huuthangle.site`). Omit to fall back to the `/api/media/...` proxy. | — |
 | `ALLOWED_HOSTS` | Comma-separated extra hostnames accepted by the production frontend. Canonical blog host, localhost, and the Fly hostname are always accepted. | — |
 | `TRUSTED_ORIGINS` | Comma-separated extra browser origins allowed to make state-changing requests. Blog, portfolio, and local dev origins are included by default. | — |
-| `PORT` | Port for the built SvelteKit server. | Docker sets `8080` |
+| `PORT` | Port for the dev server (`vite.config.js`) and for the built SvelteKit server. | `5175` dev; Docker sets `8080` |
 | `BODY_SIZE_LIMIT` | Request body limit for the SvelteKit server. | Docker sets `100M` |
+
+Local development pairs the backend on `5174` with the frontend dev server on
+`5175`, which is the pair both `example.env` files are written for; `make dev`
+starts the two together. `PORT` moves either side, and Docker pins its own ports
+(`3000` for the backend container, `8080` for the frontend).

@@ -63,8 +63,17 @@ cd blog
 make frontend       # bun run dev from blog/frontend
 ```
 
-For standalone frontend development set `API_URL=http://localhost:3000` in
-`blog/frontend/.env` (the backend must be running separately).
+Or both at once, with Ctrl-C stopping them together:
+
+```bash
+cd blog
+make dev
+```
+
+Standalone puts the backend on `5174` (`PORT` in `blog/backend/.env`) and the
+frontend dev server on `5175`, so set `API_URL=http://localhost:5174` in
+`blog/frontend/.env` to match. Moving either side is a matter of `PORT` — the
+pair and the Docker ports are in [configuration.md](configuration.md).
 
 Every environment variable is listed in
 [configuration.md](configuration.md); daily commands are in

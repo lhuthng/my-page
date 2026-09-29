@@ -97,23 +97,45 @@ backend's `Cache-Control` headers reach the browser unmodified.
 
 ## Audiobook chapters
 
-The player never receives a book's whole chapter list. The detail load asks for
-one window (`?tracks_offset=0&tracks_limit=20`) and gets `track_count` and
+The player never receives a book's whole chapter list. The detail load
+(`src/routes/audiobooks/[slug]/+page.server.js`) asks for one window,
+`?tracks_offset=0&tracks_limit=${CHAPTER_WINDOW}`, and gets `track_count` and
 `has_more_tracks` back alongside it; the browser fetches later windows through
-the same path as the reader reaches them — including, for a book left
-mid-way through, the window the saved position sits in.
-`src/lib/players/chapter-windows.js` holds the window arithmetic and
-`AudiobookChapters.svelte.js` the fetching and the slot plan the list renders.
-That plan is chapters plus placeholders: one row per window still missing, which
-is the row that scrolls into view and fetches its own window. The placeholders
-have to stay in the list in every order — filter them out and the book is
-silently truncated at whatever the first fetch returned, with nothing left to
-reach the rest. Searching and the reversed chapter order are the two cases that
-ask for every remaining window at once, because both are browsing the book as a
-whole.
+the same endpoint as the reader reaches them. The other half of that endpoint —
+the clamp, the offsets, and what the fields mean — is in
+[../reference/api-rest.md](../reference/api-rest.md).
 
-The macOS player (`apps/macos`) uses the same window and the same arithmetic, so
-both clients ask the backend for the same amount per request.
+`src/lib/players/chapter-windows.js` holds the arithmetic and the row plan, all
+of it pure: `windowStart` and `windowStarts` say which window an index belongs
+to, `windowCount` clamps one to the end of the book, `missingWindows` lists what
+has not arrived, and `planRows` decides what the list renders.
+`AudiobookChapters.svelte.js` is the reactive half — the chapters themselves plus
+`seed`, `ensure`, `ensureAll`, and `prefetch` — and `ensure` is what every other
+path goes through.
+
+That row plan is chapters plus placeholders: one row per window still missing,
+which is the row that scrolls into view and fetches its own window. The
+placeholders have to stay in the list in every order — filter them out and the
+book is silently truncated at whatever the first fetch returned, with nothing
+left that could reach the rest. Searching and the reversed chapter order are the
+two cases that ask for every remaining window at once, because both are browsing
+the book as a whole; the reversed order reverses the placeholder rows with the
+chapters, since those stand for the chapters its top of the list is waiting for.
+
+Playback is what the window size is for. `AudiobookPlayer.svelte.js` calls the
+source's `prefetch` as the playhead moves, and `AudiobookChapters.prefetch` keeps
+`PREFETCH_AHEAD` chapters in hand — free while the playhead is inside a loaded
+window, and a fetch only as it nears the end of one. A `load` whose chapter has
+not arrived goes through `#awaitChapter`, which waits on `ensure(index)` and
+re-enters, marking the row with `pendingIndex` while it waits. A window that
+never arrives clears that marker and leaves the listener on the chapter they were
+on rather than on a player stuck mid-load, so a book resumed at chapter 300 loads
+exactly like one resumed at chapter 1.
+
+The macOS player (`apps/macos`) uses the same window and the same arithmetic —
+`ChapterWindow` (20 per window, 3 ahead) and `ChapterStore`, whose list renders a
+slot per chapter and fetches a window when a slot is built — so both clients ask
+the backend for the same amount per request.
 
 ## Environment
 

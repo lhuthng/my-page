@@ -1,7 +1,7 @@
 # Troubleshooting
 
-Audience: whoever diagnoses the blog in production. Update trigger: a new
-known failure mode.
+Audience: whoever diagnoses the blog, in production or locally. Update trigger: a
+new known failure mode.
 
 | Symptom | Likely cause | Action |
 | --- | --- | --- |
@@ -12,3 +12,4 @@ known failure mode.
 | Contact form fails silently | Mail transport not configured, or origin not in `ALLOWED_ORIGIN(S)` | See [configuration.md](configuration.md); the route is CORS-restricted. |
 | sync-pull fails with `no sync endpoints found` | Wrong URL shape, or the key was revoked | Use the public site URL or a direct backend URL; reissue the key from the dashboard. |
 | Emails not delivered | No SMTP/Brevo variables set | Mail is optional; configure a transport in [configuration.md](configuration.md). |
+| `make dev` starts both but API calls fail | The backend bound a port the frontend is not pointed at — a stray `PORT` in the shell (`0` means *any free port*, so it is ignored), or something else already holding `5174` | Compare the backend's `Starting 0.0.0.0:<port>` line with `API_URL` in `blog/frontend/.env`. `make dev` uses the two `.env` files; see [configuration.md](configuration.md). |

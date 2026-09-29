@@ -183,8 +183,34 @@ with HTTP Range support.
 | PATCH | `/audiobooks/id/{id}/tracks/{track_id}` | mod | Rename/re-duration/move |
 | DELETE | `/audiobooks/id/{id}/tracks/{track_id}` | mod | Remove and close the gap |
 | GET | `/audiobooks/check` | public | Slug availability |
-| GET | `/audiobooks/public/all` | public | Published catalogue |
-| GET | `/audiobooks/public/s/{slug}` | public | Published book with tracks |
+| GET | `/audiobooks/public/all` | public | Published catalogue (`?term=`, `?tag=`, `?limit=`, `?offset=`) |
+| GET | `/audiobooks/public/s/{slug}` | public | Published book, chapters windowed (`?tracks_offset=`, `?tracks_limit=`) |
+| POST | `/audiobooks/id/{id}/tracks/{track_id}/play` | public | Chapter play beacon |
+
+The public detail read is windowed, not whole. `get_public_audiobook`
+(`infrastructure/web/api/handlers/audiobook/read.rs`) takes `tracks_limit`
+chapters from `tracks_offset`; both are optional and both run through
+`clamp_page_size` / `clamp_offset`, which puts a supplied limit in `1..=200`
+(`TRACK_WINDOW_MAX`) and an offset at `0` or above. There is no server-side
+default window: `TRACK_WINDOW_DEFAULT` (20) names the window the players ask
+for, which is the same `CHAPTER_WINDOW` the frontend list is sized by, and a
+request without `tracks_limit` still gets the whole chapter list — that is the
+contract the dashboard editor reads. An offset on its own moves the start of an
+otherwise complete answer. `track_count` and `has_more_tracks` ride on every
+answer, so a caller that asked for no window can still tell a truncated chapter
+list from a short book.
+
+The public catalogue (`/audiobooks/public/all`) answers rows under `audiobooks`
+with a `has_more` flag: 24 per page by default and 100 at most, against the
+admin catalogue's 50.
+
+The play beacon measures listening time, not starts. The player reports a
+chapter every ten seconds of real playback; each counted report answers
+`{ "play_count": n }` with the chapter's new total, and a report that was ignored
+(unknown chapter, or a book that is not published) answers `204` with no body, so
+a caller can tell the two apart. `REPORT_MIN_INTERVAL_MS` in
+`handlers/audiobook/plays.rs` is the floor between two counted reports from one
+listener.
 
 ## Media — `/media`
 
