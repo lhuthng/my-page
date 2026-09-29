@@ -228,6 +228,54 @@ struct PlayPauseButton: View {
     }
 }
 
+/// An action drawn entirely in SwiftUI rather than with a system button style.
+///
+/// This window paints SwiftUI drawing but not the content of the AppKit-backed
+/// controls it hosts, so a `.bordered`/`.borderedProminent` button's title comes
+/// out blank while the button itself still works (see README, "Behavior notes").
+/// Anything here that needs a readable label draws the pill itself instead.
+struct PillButton: View {
+    let title: String
+    var filled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(filled ? Color.white : Theme.dark)
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(filled ? Theme.dark : Color.white))
+                .overlay(
+                    Capsule().strokeBorder(filled ? Color.clear : Theme.dark.opacity(0.35))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A slim determinate bar. Drawn in SwiftUI rather than with `ProgressView`,
+/// which is AppKit-backed and so would not paint its own content in this
+/// window (see `PillButton`).
+struct ProgressBar: View {
+    let fraction: Double
+    var height: CGFloat = 6
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.dark.opacity(0.15))
+                Capsule()
+                    .fill(Theme.primary)
+                    .frame(width: max(0, min(1, fraction)) * geo.size.width)
+            }
+        }
+        .frame(height: height)
+    }
+}
+
 /// Small Vietnam flag chip: 3:2, red field #DA251D, five-point yellow star.
 struct VNFlagBadge: View {
     var height: CGFloat = 18

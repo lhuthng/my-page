@@ -38,6 +38,7 @@ so the reveal is never guessed.
 ```sh
 make run    # dev build, runs from the CLI
 make open   # release build bundled as build/Audiobooks.app, then opens it
+make test   # unit tests (the updater's payload, digest, and version logic)
 ```
 
 A full Xcode install is required — the Command Line Tools alone cannot

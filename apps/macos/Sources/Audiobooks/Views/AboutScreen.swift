@@ -40,12 +40,20 @@ struct AboutScreen: View {
                     .foregroundStyle(Theme.dark.opacity(0.7))
             }
 
+            if case .downloading(_, let fraction) = updater.state {
+                ProgressBar(fraction: fraction)
+                    .frame(maxWidth: 220)
+            }
+
+            // Drawn in SwiftUI, not as a system button: this window does not
+            // paint AppKit-backed control content, so a `.bordered` title would
+            // come out blank. See `PillButton`.
             if case .available(let release) = updater.state {
-                Button("Install and restart") { updater.install(release) }
-                    .buttonStyle(.borderedProminent)
+                PillButton(title: "Install and restart", filled: true) {
+                    updater.install(release)
+                }
             } else if !updater.state.isBusy {
-                Button("Check for updates") { updater.checkInteractively() }
-                    .buttonStyle(.bordered)
+                PillButton(title: "Check for updates") { updater.checkInteractively() }
             }
 
             if case .failed(let message) = updater.state {
@@ -66,7 +74,8 @@ struct AboutScreen: View {
         switch updater.state {
         case .checking: "Checking…"
         case .upToDate: "Audiobooks \(AppInfo.version) is up to date"
-        case .installing, .downloading: "Installing…"
+        case .downloading(_, let fraction): "Downloading… \(Int(fraction * 100))%"
+        case .installing: "Installing…"
         default: "Audiobooks \(AppInfo.version)"
         }
     }

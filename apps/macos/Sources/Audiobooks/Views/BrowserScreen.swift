@@ -222,10 +222,9 @@ struct BrowserScreen: View {
                     .font(.callout)
                     .foregroundStyle(Theme.dark.opacity(0.7))
                     .multilineTextAlignment(.center)
-                Button("Try again") {
+                PillButton(title: "Try again") {
                     Task { await library.reload() }
                 }
-                .buttonStyle(.bordered)
             case .loading, .idle:
                 ProgressView().controlSize(.large)
                 Text("Loading audiobooks…")
