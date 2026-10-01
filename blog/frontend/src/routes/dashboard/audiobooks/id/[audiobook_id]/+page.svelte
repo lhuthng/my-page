@@ -1,6 +1,7 @@
 <script>
 	import { audiobooks, probeAudioDuration } from '$lib/api/audiobooks.js';
 	import AudiobookPlayer from '$lib/components/audio/AudiobookPlayer.svelte';
+	import LastUpdated from '$lib/components/dashboard/LastUpdated.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import { formatClock, formatDurationLabel } from '$lib/utils/duration.js';
 	import { fly } from 'svelte/transition';
@@ -552,6 +553,9 @@
 							· {formatDurationLabel(audiobook.total_duration_seconds)}
 						{/if}
 					</span>
+					<!-- `live`, because this page is where an author sits while editing:
+				     a book they touched a minute ago must not keep reading as stale. -->
+					<LastUpdated value={audiobook.updated_at} live />
 				</div>
 			{/if}
 		</div>
@@ -841,13 +845,23 @@
 									</button>
 								</div>
 
-								<input
-									class="grow min-w-0 rounded-lg border-2 border-transparent hover:border-dark/10 focus:border-dark px-2 py-1 text-sm bg-transparent"
-									type="text"
-									value={track.title}
-									aria-label="Chapter title"
-									onchange={(event) => renameTrack(track, event.currentTarget.value)}
-								/>
+								<div class="grow min-w-0 flex flex-col">
+									<input
+										class="rounded-lg border-2 border-transparent hover:border-dark/10 focus:border-dark px-2 py-1 text-sm bg-transparent"
+										type="text"
+										value={track.title}
+										aria-label="Chapter title"
+										onchange={(event) => renameTrack(track, event.currentTarget.value)}
+									/>
+									<!-- Per chapter, not per book: "when did I last touch THIS one" is the
+									     question a 24-chapter book actually raises. Editor-only by
+									     construction — listeners get the player, never this list. -->
+									{#if track.updated_at}
+										<div class="px-2">
+											<LastUpdated value={track.updated_at} label="Updated" />
+										</div>
+									{/if}
+								</div>
 
 								<span class="text-xs text-dark/50 tabular-nums shrink-0 w-14 text-right">
 									{formatClock(track.duration_seconds)}

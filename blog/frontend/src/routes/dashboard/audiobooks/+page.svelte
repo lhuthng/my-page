@@ -1,6 +1,8 @@
 <script>
 	import { audiobooks } from '$lib/api/audiobooks.js';
 	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
+	import LastUpdated from '$lib/components/dashboard/LastUpdated.svelte';
+	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import { formatDurationLabel } from '$lib/utils/duration.js';
 	import { fly } from 'svelte/transition';
@@ -175,17 +177,15 @@
 </svelte:head>
 
 <section class="flex flex-col gap-4 pb-8">
-	<div class="bg-white rounded-xl p-4 flex items-center justify-between gap-2 flex-wrap">
-		<h1 class="text-2xl font-semibold">
-			Audiobooks
-			<span class="text-dark/40 text-lg font-normal">({items.length})</span>
-		</h1>
-		<div class="w-fit duo-btn" data-duo-color={showForm ? 'light' : 'green'}>
-			<button onclick={() => (showForm = !showForm)}>
-				{showForm ? 'Cancel' : 'New audiobook'}
-			</button>
-		</div>
-	</div>
+	<PageHeader title="Audiobooks" count={items.length}>
+		{#snippet actions()}
+			<div class="w-fit duo-btn" data-duo-color={showForm ? 'light' : 'green'}>
+				<button onclick={() => (showForm = !showForm)}>
+					{showForm ? 'Cancel' : 'New audiobook'}
+				</button>
+			</div>
+		{/snippet}
+	</PageHeader>
 
 	{#if showForm}
 		<form
@@ -351,6 +351,11 @@
 								<span>{formatDurationLabel(audiobook.total_duration_seconds)}</span>
 							{/if}
 						</div>
+
+						<!-- The question this list is usually asked is "is this still current?",
+					     so the book's last change sits with its other facts rather than
+					     behind the Manage link. -->
+						<LastUpdated value={audiobook.updated_at} />
 
 						{#if audiobook.tags?.length}
 							<ul class="flex flex-wrap gap-1">

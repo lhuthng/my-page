@@ -1,11 +1,22 @@
 <script>
 	import { onMount, untrack } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
 	import { gql } from '$lib/api/graphql';
+	import DashCard from '$lib/components/dashboard/DashCard.svelte';
+	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
+	import LastUpdated from '$lib/components/dashboard/LastUpdated.svelte';
+	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
+	import StatCard from '$lib/components/dashboard/StatCard.svelte';
 
 	let { data } = $props();
 
 	let overview = $state(untrack(() => data).overview);
 	let loading = $state(untrack(() => data).overview === null);
+	// When these figures were read. Not `createdAt`-style data of their own — it
+	// is the age of the fetch, which is what tells the reader whether the numbers
+	// under it can still be trusted.
+	let fetchedAt = $state(new Date());
+	let refreshing = $state(false);
 	let activeTopTab = $state('views');
 	let visitorCountries = $derived(data.visitorCountries ?? []);
 	let visitorTotal = $derived(visitorCountries.reduce((sum, item) => sum + item.visits, 0));
@@ -48,18 +59,38 @@
 		return countryNames.of(code) ?? code;
 	}
 
-	onMount(async () => {
-		if (loading) {
-			try {
-				const result = await gql.overview();
-				overview = result.overview;
-			} catch {
-				overview = null;
-			} finally {
-				loading = false;
-			}
-		}
+	onMount(() => {
+		// Only when the server could not hand the overview over. Otherwise its
+		// numbers are already on screen and the stamp already describes them.
+		if (loading) refresh({ initial: true });
 	});
+
+	/**
+	 * Re-read the overview, moving the freshness stamp with it.
+	 *
+	 * The country breakdown comes from the page's server load rather than from
+	 * this GraphQL query, so a genuine refresh has to re-run both — otherwise the
+	 * button would quietly leave that half of the page stale while claiming the
+	 * whole page was current.
+	 *
+	 * Only the initial load blanks the page into skeletons. A manual refresh
+	 * leaves the figures up: "these numbers changed" is not a reason to collapse
+	 * a layout the author was already reading.
+	 */
+	async function refresh({ initial = false } = {}) {
+		if (initial) loading = true;
+		else refreshing = true;
+		try {
+			const [result] = await Promise.all([gql.overview(), invalidateAll()]);
+			overview = result.overview;
+		} catch {
+			overview = null;
+		} finally {
+			fetchedAt = new Date();
+			refreshing = false;
+			loading = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -67,6 +98,21 @@
 </svelte:head>
 
 <section class="flex flex-col gap-4 pb-8">
+	<PageHeader title="Dashboard">
+		{#snippet actions()}
+			<div class="flex items-center gap-3">
+				<!-- The figures below are a snapshot, so the page says how old the
+				     snapshot is and offers the one thing that makes it current again. -->
+				<LastUpdated value={fetchedAt} label="Updated" live />
+				<div class="w-fit duo-btn" data-duo-color="light" class:opacity-60={refreshing}>
+					<button onclick={() => refresh()} disabled={refreshing}>
+						{refreshing ? 'Refreshing…' : 'Refresh'}
+					</button>
+				</div>
+			</div>
+		{/snippet}
+	</PageHeader>
+
 	{#if loading}
 		<div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
 			{#each { length: 4 } as _, i (i)}
@@ -84,19 +130,15 @@
 		<!-- ── Stat cards ─────────────────────────────── -->
 		<div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
 			{#each [['Published Posts', overview.totalPublished], ['Drafts', overview.totalDrafts], ['Registered Users', overview.totalUsers], ['Comments', overview.totalComments]] as [label, value]}
-				<div class="bg-white rounded-xl p-4">
-					<p class="text-3xl font-bold text-dark">{value}</p>
-					<p class="text-base text-dark/60 mt-1">{label}</p>
-				</div>
+				<StatCard {label} {value} />
 			{/each}
 		</div>
 
 		<!-- ── Top posts + Role breakdown ─────────────── -->
 		<div class="grid xl:grid-cols-3 gap-4">
 			<!-- Top posts (takes 2/3 width on xl) -->
-			<div class="xl:col-span-2 bg-white rounded-xl p-4 flex flex-col gap-3">
-				<div class="flex flex-wrap items-center justify-between gap-2">
-					<h2 class="text-2xl font-semibold">Top Performing Posts</h2>
+			<DashCard title="Top Performing Posts" class="xl:col-span-2">
+				{#snippet actions()}
 					<div class="flex gap-1 bg-background/40 rounded-lg p-1 text-base">
 						{#each [['views', 'Views'], ['likes', 'Likes'], ['comments', 'Comments']] as [key, label]}
 							<button
@@ -109,7 +151,7 @@
 							</button>
 						{/each}
 					</div>
-				</div>
+				{/snippet}
 				{#if topPosts?.length}
 					<ol class="flex flex-col">
 						{#each topPosts as post, i}
@@ -139,13 +181,12 @@
 						{/each}
 					</ol>
 				{:else}
-					<p class="text-dark/40 text-sm text-center py-4">No published posts yet</p>
+					<EmptyState message="No published posts yet" />
 				{/if}
-			</div>
+			</DashCard>
 
 			<!-- Role breakdown (1/3) -->
-			<div class="bg-white rounded-xl p-4 flex flex-col gap-4">
-				<h2 class="text-2xl font-semibold">User Roles</h2>
+			<DashCard title="User Roles">
 				{#if overview.roleCounts}
 					{@const total = Math.max(
 						overview.roleCounts.admin + overview.roleCounts.moderator + overview.roleCounts.user,
@@ -171,14 +212,13 @@
 						{overview.totalUsers} users total
 					</p>
 				{/if}
-			</div>
+			</DashCard>
 		</div>
 
 		<!-- ── Growth chart ────────────────────────────── -->
 		{#if overview.growth?.length}
 			{@const maxVal = Math.max(...overview.growth.flatMap((g) => [g.newPosts, g.newUsers]), 1)}
-			<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
-				<h2 class="text-2xl font-semibold">Activity - Last 30 Days</h2>
+			<DashCard title="Activity - Last 30 Days">
 				<div class="flex gap-4 text-sm text-dark/60">
 					<span class="flex items-center gap-1.5">
 						<span class="inline-block w-3 h-3 rounded-sm bg-accent-blue"></span>
@@ -215,16 +255,12 @@
 						</div>
 					{/each}
 				</div>
-			</div>
+			</DashCard>
 		{/if}
 
 		{#if data.role === 'admin'}
-			<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
-				<div class="flex flex-wrap items-end justify-between gap-2">
-					<div>
-						<h2 class="text-2xl font-semibold">Visitor Countries</h2>
-						<p class="text-sm text-dark/50">Last 30 days, aggregated by Cloudflare country</p>
-					</div>
+			<DashCard title="Visitor Countries">
+				{#snippet actions()}
 					<div class="flex gap-4 text-sm text-dark/60">
 						<span>
 							<strong class="text-dark">{visitorTotal}</strong>
@@ -235,7 +271,8 @@
 							unknown
 						</span>
 					</div>
-				</div>
+				{/snippet}
+				<p class="text-sm text-dark/50 -mt-2">Last 30 days, aggregated by Cloudflare country</p>
 				{#if topVisitorCountries.length}
 					<div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
 						{#each topVisitorCountries as country}
@@ -257,21 +294,21 @@
 						{/each}
 					</div>
 				{:else}
-					<p class="text-dark/40 text-sm text-center py-4">
-						No visitor country data yet. Data appears after requests include CF-IPCountry.
-					</p>
+					<EmptyState
+						message="No visitor country data yet"
+						hint="Data appears after requests include CF-IPCountry."
+					/>
 				{/if}
-			</div>
+			</DashCard>
 		{/if}
 
 		<!-- ── Recent posts + Recent users ────────────── -->
 		<div class="grid xl:grid-cols-2 gap-4">
 			<!-- Recent Posts -->
-			<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
-				<div class="flex items-center justify-between">
-					<h2 class="text-2xl font-semibold">Recent Posts</h2>
+			<DashCard title="Recent Posts">
+				{#snippet actions()}
 					<a href="/dashboard/posts" class="text-base text-primary hover:underline">View all →</a>
-				</div>
+				{/snippet}
 				{#if overview.recentPosts?.length}
 					<ul class="flex flex-col">
 						{#each overview.recentPosts as post}
@@ -307,16 +344,15 @@
 						{/each}
 					</ul>
 				{:else}
-					<p class="text-dark/40 text-sm text-center py-4">No posts yet</p>
+					<EmptyState message="No posts yet" />
 				{/if}
-			</div>
+			</DashCard>
 
 			<!-- Recent Users -->
-			<div class="bg-white rounded-xl p-4 flex flex-col gap-3">
-				<div class="flex items-center justify-between">
-					<h2 class="text-2xl font-semibold">Recent Registrations</h2>
+			<DashCard title="Recent Registrations">
+				{#snippet actions()}
 					<a href="/dashboard/users" class="text-base text-primary hover:underline">View all →</a>
-				</div>
+				{/snippet}
 				{#if overview.recentUsers?.length}
 					<ul class="flex flex-col">
 						{#each overview.recentUsers as u}
@@ -351,11 +387,13 @@
 						{/each}
 					</ul>
 				{:else}
-					<p class="text-dark/40 text-sm text-center py-4">No users yet</p>
+					<EmptyState message="No users yet" />
 				{/if}
-			</div>
+			</DashCard>
 		</div>
 	{:else}
-		<div class="bg-white rounded-xl p-8 flex justify-center text-dark/40">No data available.</div>
+		<div class="rounded-xl bg-white">
+			<EmptyState message="No data available." />
+		</div>
 	{/if}
 </section>
