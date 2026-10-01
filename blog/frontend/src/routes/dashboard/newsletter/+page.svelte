@@ -4,6 +4,7 @@
 	import PageHeader from '$lib/components/dashboard/PageHeader.svelte';
 	import DashCard from '$lib/components/dashboard/DashCard.svelte';
 	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
+	import { formatDateOnly } from '$lib/utils/datetime.js';
 
 	let { data } = $props();
 
@@ -23,13 +24,9 @@
 	let sendStatus = $state(true);
 	let sendMessage = $state('');
 
+	/** A '-' for a missing timestamp, the one thing the shared formatter cannot do. */
 	function formatDate(str) {
-		if (!str) return '-';
-		return new Date(str.replace(' ', 'T')).toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
+		return formatDateOnly(str) || '-';
 	}
 
 	async function handleSend(e) {

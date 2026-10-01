@@ -1,5 +1,6 @@
 import TimeAgo from 'javascript-time-ago';
 import en from 'javascript-time-ago/locale/en';
+import { formatDateOnly, parseDbDateTime } from './datetime.js';
 
 export const widthThreshold = {
 	lg: 1024
@@ -15,21 +16,41 @@ export function stopPropagation(e) {
 
 export const mediaSyntax = /\@(?:\([\d_]+\))?\[[\w-]+:([^\]]+)\]/g;
 
+/**
+ * A record's stored calendar day, e.g. `Sep 29, 2026`.
+ *
+ * Delegates to the shared formatter, which parses the database's UTC timestamp
+ * and renders the day in UTC. The old `text.split(' ')[0]` + bare `new Date()`
+ * looked right by accident: a date-only ISO string *is* parsed as UTC, but it
+ * was then rendered in the reader's local zone, so anyone west of Greenwich saw
+ * the previous day.
+ */
 export function textToDate(text) {
-	const dt = new Date(text.split(' ')[0]);
-	const options = { year: 'numeric', month: 'short', day: 'numeric' };
-	return dt.toLocaleDateString('en-US', options);
+	return formatDateOnly(text);
 }
 
+/**
+ * Today's date, in the reader's own timezone.
+ *
+ * Deliberately *not* UTC, unlike `textToDate`: this one seeds a new post's date
+ * field, so the question is "what day is it for the author sitting here", and
+ * answering in UTC would hand an author in Hanoi a yesterday-dated draft.
+ */
 export function nowToDate() {
-	const dt = new Date();
-	const options = { year: 'numeric', month: 'short', day: 'numeric' };
-	return dt.toLocaleDateString('en-US', options);
+	return formatDateOnly(new Date(), { timeZone: undefined });
 }
 
+/**
+ * How long ago something happened, e.g. `3 hours ago`.
+ *
+ * The instant is parsed as UTC (it used to be read as local time, which threw
+ * the computed age off by the reader's offset), and the result is a difference
+ * between two instants — so it is the same in every timezone.
+ */
 export function dateTillNow(date, format = 'mini') {
-	const localDate = new Date(date.replace(' ', 'T'));
-	return time.format(localDate, format);
+	const parsed = parseDbDateTime(date);
+	if (!parsed) return '';
+	return time.format(parsed, format);
 }
 
 export function arraysEqualIgnoreOrder(a, b) {

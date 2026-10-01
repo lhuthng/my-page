@@ -2,6 +2,7 @@
 	import { api } from '$lib/api/client.js';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
+	import { parseDbDateTime } from '$lib/utils/datetime.js';
 
 	let { data } = $props();
 	let items = $state(data.items ?? []);
@@ -13,8 +14,11 @@
 	let dialogOpen = $state(false);
 
 	function daysLeft(scheduled) {
-		if (!scheduled) return '';
-		const end = new Date(scheduled.replace(' ', 'T') + 'Z');
+		// A purge countdown, so this is a moment relative to now rather than a
+		// calendar day — the difference between two instants, which the shared
+		// parser gets right whatever the reader's offset is.
+		const end = parseDbDateTime(scheduled);
+		if (!end) return '';
 		const diff = end - new Date();
 		if (diff <= 0) return 'expires soon';
 		const d = Math.floor(diff / 86400000);

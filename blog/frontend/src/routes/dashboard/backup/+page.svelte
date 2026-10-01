@@ -1,5 +1,6 @@
 <script>
 	import { api, ApiError } from '$lib/api/client.js';
+	import { parseDbDateTime } from '$lib/utils/datetime.js';
 	import { fly } from 'svelte/transition';
 
 	let keys = $state([]);
@@ -91,13 +92,19 @@
 
 	function keyStatus(key) {
 		if (key.revoked_at) return { label: 'Revoked', class: 'text-accent-red' };
-		if (new Date(key.expires_at) < new Date()) return { label: 'Expired', class: 'text-dark/50' };
+		// Sync-key expiry arrives as RFC 3339 and the schema's own timestamps as
+		// unmarked UTC; the shared parser handles both rather than the caller
+		// having to know which is which.
+		const expires = parseDbDateTime(key.expires_at);
+		if (expires && expires < new Date()) return { label: 'Expired', class: 'text-dark/50' };
 		return { label: 'Active', class: 'text-accent-green' };
 	}
 
 	function formatDate(value) {
-		if (!value) return '—';
-		return new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z').toLocaleString();
+		// A moment in time, so rendered in the reader's own timezone — a key's
+		// expiry is a thing that happens to them, not a calendar day.
+		const parsed = parseDbDateTime(value);
+		return parsed ? parsed.toLocaleString() : '—';
 	}
 
 	loadKeys();

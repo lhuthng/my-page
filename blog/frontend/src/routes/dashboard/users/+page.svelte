@@ -6,6 +6,7 @@
 	import SearchInput from '$lib/components/dashboard/SearchInput.svelte';
 	import EmptyState from '$lib/components/dashboard/EmptyState.svelte';
 	import LoadingCards from '$lib/components/dashboard/LoadingCards.svelte';
+	import { formatDateOnly } from '$lib/utils/datetime.js';
 	import Heart from '$lib/components/svgs/Heart.svelte';
 	import Diamond from '$lib/components/svgs/Diamond.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';
@@ -92,13 +93,9 @@
 
 	let hasMore = $derived(userData.users.length < userData.total);
 
+	/** A '-' for a missing timestamp, the one thing the shared formatter cannot do. */
 	function formatDate(str) {
-		if (!str) return '-';
-		return new Date(str.replace(' ', 'T')).toLocaleDateString('en-US', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
+		return formatDateOnly(str) || '-';
 	}
 </script>
 
