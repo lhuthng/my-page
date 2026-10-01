@@ -33,7 +33,7 @@ impl AudiobookServiceImpl {
                    (SELECT COALESCE(SUM(t.duration_seconds), 0) FROM audiobook_tracks t
                      WHERE t.audiobook_id = a.id),
                    u.username, um.display_name,
-                   a.created_at, a.published_at
+                   a.created_at, COALESCE(a.updated_at, a.created_at), a.published_at
             FROM audiobooks a
             LEFT JOIN media m ON m.id = a.cover_image_id
             LEFT JOIN users u ON u.id = a.user_id
@@ -86,6 +86,7 @@ impl AudiobookServiceImpl {
                     owner_username,
                     owner_display_name,
                     created_at,
+                    updated_at,
                     published_at,
                 )| AudiobookSnapshot {
                     id,
@@ -102,6 +103,7 @@ impl AudiobookServiceImpl {
                     tags: Vec::new(),
                     tag_slugs: Vec::new(),
                     created_at,
+                    updated_at,
                     published_at,
                 },
             )
@@ -144,7 +146,7 @@ impl AudiobookServiceImpl {
                    (SELECT COALESCE(SUM(t.duration_seconds), 0) FROM audiobook_tracks t
                      WHERE t.audiobook_id = a.id),
                    u.username, um.display_name,
-                   a.created_at, a.published_at
+                   a.created_at, COALESCE(a.updated_at, a.created_at), a.published_at
             FROM audiobooks a
             LEFT JOIN media m ON m.id = a.cover_image_id
             LEFT JOIN users u ON u.id = a.user_id
@@ -182,6 +184,7 @@ impl AudiobookServiceImpl {
                     owner_username,
                     owner_display_name,
                     created_at,
+                    updated_at,
                     published_at,
                 )| AudiobookSnapshot {
                     id,
@@ -198,6 +201,7 @@ impl AudiobookServiceImpl {
                     tags: Vec::new(),
                     tag_slugs: Vec::new(),
                     created_at,
+                    updated_at,
                     published_at,
                 },
             )
@@ -229,7 +233,7 @@ impl AudiobookServiceImpl {
                    (SELECT COALESCE(SUM(t.duration_seconds), 0) FROM audiobook_tracks t
                      WHERE t.audiobook_id = a.id),
                    COALESCE(u.username, ''), COALESCE(um.display_name, ''),
-                   a.created_at, a.published_at
+                   a.created_at, COALESCE(a.updated_at, a.created_at), a.published_at
             FROM audiobooks a
             LEFT JOIN media m ON m.id = a.cover_image_id
             LEFT JOIN users u ON u.id = a.user_id
@@ -243,7 +247,7 @@ impl AudiobookServiceImpl {
                    (SELECT COALESCE(SUM(t.duration_seconds), 0) FROM audiobook_tracks t
                      WHERE t.audiobook_id = a.id),
                    COALESCE(u.username, ''), COALESCE(um.display_name, ''),
-                   a.created_at, a.published_at
+                   a.created_at, COALESCE(a.updated_at, a.created_at), a.published_at
             FROM audiobooks a
             LEFT JOIN media m ON m.id = a.cover_image_id
             LEFT JOIN users u ON u.id = a.user_id
@@ -290,7 +294,8 @@ impl AudiobookServiceImpl {
             track_count,
             has_more_tracks: false,
             created_at: row.10,
-            published_at: row.11,
+            updated_at: row.11,
+            published_at: row.12,
         })
     }
 
@@ -307,7 +312,7 @@ impl AudiobookServiceImpl {
                    (SELECT COALESCE(SUM(t.duration_seconds), 0) FROM audiobook_tracks t
                      WHERE t.audiobook_id = a.id),
                    COALESCE(u.username, ''), COALESCE(um.display_name, ''),
-                   a.created_at, a.published_at
+                   a.created_at, COALESCE(a.updated_at, a.created_at), a.published_at
             FROM audiobooks a
             LEFT JOIN media m ON m.id = a.cover_image_id
             LEFT JOIN users u ON u.id = a.user_id
@@ -347,7 +352,8 @@ impl AudiobookServiceImpl {
             track_count,
             has_more_tracks,
             created_at: row.10,
-            published_at: row.11,
+            updated_at: row.11,
+            published_at: row.12,
         })
     }
 }

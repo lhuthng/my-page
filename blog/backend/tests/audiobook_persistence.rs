@@ -1230,3 +1230,284 @@ async fn play_reports_accumulate_without_a_cap() {
 
     fx.cleanup().await;
 }
+
+// ── Per-chapter modified time ────────────────────────────────────────────────
+//
+// `CURRENT_TIMESTAMP` has one-second resolution, so "did this change?" cannot be
+// answered by comparing two stamps taken moments apart. Each test pins every
+// row to a sentinel first and then asserts which sentinel moved — an answer that
+// is the same whatever the clock does.
+
+/// Stamp one chapter, so a later comparison can tell "untouched" from "bumped".
+async fn pin_track_time(fx: &Fixture, track_id: i64, stamp: &str) {
+    sqlx::query("UPDATE audiobook_tracks SET updated_at = ? WHERE id = ?")
+        .bind(stamp)
+        .bind(track_id)
+        .execute(&fx.service.pool)
+        .await
+        .unwrap();
+}
+
+/// The stamps the read path reports, keyed by chapter title.
+async fn track_times(fx: &Fixture, audiobook_id: i64) -> Vec<(String, Option<String>)> {
+    let details = fx
+        .service
+        .get_audiobook(GetAudiobookCommand {
+            audiobook_id,
+            user_id: 1,
+            is_admin: false,
+        })
+        .await
+        .unwrap();
+    details
+        .tracks
+        .into_iter()
+        .map(|t| (t.title, t.updated_at))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_new_chapter_reports_a_modified_time() {
+    let fx = fixture("track-updated-at-new").await;
+    let book = fx.create("time-new", &[]).await;
+    fx.add_track(book, "Chapter One", 1, None).await;
+
+    let times = track_times(&fx, book).await;
+    assert_eq!(times.len(), 1);
+    // The insert supplies it explicitly, since the column has no default to
+    // fall back on.
+    assert!(
+        times[0].1.is_some(),
+        "a freshly added chapter must carry a modified time"
+    );
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn editing_a_chapter_stamps_only_that_chapter() {
+    let fx = fixture("track-updated-at-edit").await;
+    let book = fx.create("time-edit", &[]).await;
+    let first = fx.add_track(book, "One", 1, None).await;
+    let second = fx.add_track(book, "Two", 2, None).await;
+
+    pin_track_time(&fx, first, "2000-01-01 00:00:00").await;
+    pin_track_time(&fx, second, "2000-01-01 00:00:00").await;
+
+    fx.service
+        .update_track(UpdateTrackCommand {
+            audiobook_id: book,
+            track_id: second,
+            user_id: 1,
+            is_admin: false,
+            title: Some("Two, revised".to_string()),
+            number: None,
+            duration_seconds: None,
+        })
+        .await
+        .unwrap();
+
+    let times = track_times(&fx, book).await;
+    let stamp = |title: &str| {
+        times
+            .iter()
+            .find(|(t, _)| t == title)
+            .unwrap_or_else(|| panic!("missing chapter {title}"))
+            .1
+            .clone()
+    };
+
+    assert_ne!(
+        stamp("Two, revised"),
+        Some("2000-01-01 00:00:00".to_string()),
+        "the edited chapter must be stamped"
+    );
+    assert_eq!(
+        stamp("One"),
+        Some("2000-01-01 00:00:00".to_string()),
+        "an untouched neighbour must keep its own time"
+    );
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn reordering_a_book_does_not_restamp_its_chapters() {
+    let fx = fixture("track-updated-at-reorder").await;
+    let book = fx.create("time-reorder", &[]).await;
+    let a = fx.add_track(book, "A", 1, None).await;
+    let b = fx.add_track(book, "B", 2, None).await;
+    let c = fx.add_track(book, "C", 3, None).await;
+
+    for (id, stamp) in [
+        (a, "2000-01-01 00:00:00"),
+        (b, "2000-01-02 00:00:00"),
+        (c, "2000-01-03 00:00:00"),
+    ] {
+        pin_track_time(&fx, id, stamp).await;
+    }
+
+    // Move A to the end. Every chapter after it is renumbered, and none of them
+    // was edited — a reorder says where a chapter sits, not what it is. If this
+    // bumped rows, one drag would mark the whole list as freshly modified and
+    // the column would stop distinguishing anything.
+    fx.service
+        .reorder_tracks(ReorderTracksCommand {
+            audiobook_id: book,
+            user_id: 1,
+            is_admin: false,
+            order: vec![b, c, a],
+        })
+        .await
+        .unwrap();
+
+    let times = track_times(&fx, book).await;
+    assert_eq!(
+        times,
+        vec![
+            ("B".to_string(), Some("2000-01-02 00:00:00".to_string())),
+            ("C".to_string(), Some("2000-01-03 00:00:00".to_string())),
+            ("A".to_string(), Some("2000-01-01 00:00:00".to_string())),
+        ],
+        "a reorder must leave every chapter's own time alone"
+    );
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn dragging_one_chapter_past_its_neighbours_does_not_restamp_them() {
+    let fx = fixture("track-updated-at-drag").await;
+    let book = fx.create("time-drag", &[]).await;
+    let a = fx.add_track(book, "A", 1, None).await;
+    let b = fx.add_track(book, "B", 2, None).await;
+    let c = fx.add_track(book, "C", 3, None).await;
+
+    for (id, stamp) in [
+        (a, "2000-01-01 00:00:00"),
+        (b, "2000-01-02 00:00:00"),
+        (c, "2000-01-03 00:00:00"),
+    ] {
+        pin_track_time(&fx, id, stamp).await;
+    }
+
+    // The single-track move path (`number` on update_track) is separate from
+    // `reorder_tracks` and shifts its neighbours itself, so it needs its own
+    // case: it is the code path a drag in the editor actually takes.
+    fx.service
+        .update_track(UpdateTrackCommand {
+            audiobook_id: book,
+            track_id: a,
+            user_id: 1,
+            is_admin: false,
+            title: None,
+            number: Some(3),
+            duration_seconds: None,
+        })
+        .await
+        .unwrap();
+
+    let times = track_times(&fx, book).await;
+    for (title, stamp) in [
+        ("A", "2000-01-01 00:00:00"),
+        ("B", "2000-01-02 00:00:00"),
+        ("C", "2000-01-03 00:00:00"),
+    ] {
+        let found = times
+            .iter()
+            .find(|(t, _)| t == title)
+            .unwrap_or_else(|| panic!("missing {title}"));
+        assert_eq!(
+            found.1,
+            Some(stamp.to_string()),
+            "moving {title} shifted its number, which is not an edit"
+        );
+    }
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn replacing_a_chapter_audio_stamps_only_that_chapter() {
+    let fx = fixture("track-updated-at-replace").await;
+    let book = fx.create("time-replace", &[]).await;
+    let first = fx.add_track(book, "One", 1, None).await;
+    let second = fx.add_track(book, "Two", 2, None).await;
+
+    pin_track_time(&fx, first, "2000-01-01 00:00:00").await;
+    pin_track_time(&fx, second, "2000-01-01 00:00:00").await;
+
+    fx.service
+        .replace_track_medium(
+            ReplaceTrackMediumCommand {
+                audiobook_id: book,
+                track_id: first,
+                user_id: 1,
+                is_admin: false,
+                title: None,
+                duration_seconds: None,
+                medium: audio("One-rerecorded.mp3", 9),
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap();
+
+    let times = track_times(&fx, book).await;
+    let stamp = |title: &str| {
+        times
+            .iter()
+            .find(|(t, _)| t == title)
+            .unwrap_or_else(|| panic!("missing {title}"))
+            .1
+            .clone()
+    };
+
+    assert_ne!(
+        stamp("One"),
+        Some("2000-01-01 00:00:00".to_string()),
+        "a replaced audio file is the clearest edit there is"
+    );
+    assert_eq!(
+        stamp("Two"),
+        Some("2000-01-01 00:00:00".to_string()),
+        "replacing one chapter's audio must not touch another"
+    );
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn listing_a_chapter_does_not_restamp_it() {
+    let fx = fixture("track-updated-at-play").await;
+    let book = fx.create("time-play", &[]).await;
+    let track = fx.add_track(book, "Popular", 1, None).await;
+
+    fx.service
+        .change_audiobook_status(ChangeAudiobookStatusCommand {
+            audiobook_id: book,
+            user_id: 1,
+            is_admin: false,
+            status: "published".to_string(),
+        })
+        .await
+        .unwrap();
+
+    pin_track_time(&fx, track, "2000-01-01 00:00:00").await;
+
+    for _ in 0..3 {
+        fx.service
+            .record_track_play(RecordTrackPlayCommand { track_id: track })
+            .await
+            .unwrap();
+    }
+
+    let times = track_times(&fx, book).await;
+    assert_eq!(
+        times[0].1,
+        Some("2000-01-01 00:00:00".to_string()),
+        "listening is not editing: a popular chapter must not read as a recently changed one"
+    );
+
+    fx.cleanup().await;
+}

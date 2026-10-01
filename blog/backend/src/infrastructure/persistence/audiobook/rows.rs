@@ -12,6 +12,7 @@ pub(super) type SnapshotRow = (
     Option<String>,
     Option<String>,
     String,
+    String,
     Option<String>,
 );
 
@@ -27,6 +28,7 @@ pub(super) type DetailsRow = (
     String,
     String,
     String,
+    String,
     Option<String>,
 );
 
@@ -38,5 +40,9 @@ pub(super) type TrackRow = (
     Option<i64>,
     i64,
     Option<String>,
+    Option<String>,
+    // `updated_at`, already COALESCEd against `created_at` by the query, so a
+    // row that predates the backfill still carries a time. `None` only when the
+    // row has neither, which a hand-written insert can produce.
     Option<String>,
 );

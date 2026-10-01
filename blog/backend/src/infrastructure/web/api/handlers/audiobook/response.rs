@@ -22,6 +22,7 @@ pub struct AudiobookSummaryResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub owner_display_name: Option<String>,
     pub created_at: String,
+    pub updated_at: String,
     pub published_at: Option<String>,
 }
 
@@ -42,6 +43,7 @@ impl From<AudiobookSnapshot> for AudiobookSummaryResponse {
             owner_username: s.owner_username,
             owner_display_name: s.owner_display_name,
             created_at: s.created_at,
+            updated_at: s.updated_at,
             published_at: s.published_at,
         }
     }

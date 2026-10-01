@@ -65,7 +65,8 @@ impl AudiobookServiceImpl {
         let rows: Vec<TrackRow> = sqlx::query_as(
             r#"
             SELECT t.id, t.title, t.number, t.duration_seconds, t.play_count,
-                   m.short_name, m.file_type
+                   m.short_name, m.file_type,
+                   COALESCE(t.updated_at, t.created_at)
             FROM audiobook_tracks t
             LEFT JOIN media m ON m.id = t.media_id
             WHERE t.audiobook_id = ?
@@ -113,7 +114,16 @@ impl AudiobookServiceImpl {
 fn playable_tracks(rows: Vec<TrackRow>) -> Vec<AudiobookTrack> {
     rows.into_iter()
         .filter_map(
-            |(id, title, number, duration_seconds, play_count, short_name, file_type)| {
+            |(
+                id,
+                title,
+                number,
+                duration_seconds,
+                play_count,
+                short_name,
+                file_type,
+                updated_at,
+            )| {
                 let short_name = short_name?;
                 Some(AudiobookTrack {
                     id,
@@ -124,6 +134,7 @@ fn playable_tracks(rows: Vec<TrackRow>) -> Vec<AudiobookTrack> {
                     url: format!("media/i/{}", short_name),
                     short_name,
                     file_type: file_type.unwrap_or_else(|| "audio/mpeg".to_string()),
+                    updated_at,
                 })
             },
         )
@@ -208,8 +219,9 @@ impl AudiobookServiceImpl {
 
         let track_id: i64 = match sqlx::query_scalar(
             r#"
-            INSERT INTO audiobook_tracks (audiobook_id, media_id, title, number, duration_seconds)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO audiobook_tracks
+                (audiobook_id, media_id, title, number, duration_seconds, updated_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             RETURNING id
             "#,
         )
@@ -261,19 +273,25 @@ impl AudiobookServiceImpl {
                 MAX_TRACK_TITLE_CHARS,
             )
             .map_err(AudiobookError::Validation)?;
-            sqlx::query("UPDATE audiobook_tracks SET title = ? WHERE id = ?")
-                .bind(title)
-                .bind(cmd.track_id)
-                .execute(&mut *tx)
-                .await?;
+            // A content edit, so it stamps the chapter's own modified time.
+            // The reorder branch below deliberately does not.
+            sqlx::query(
+                "UPDATE audiobook_tracks SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
+            .bind(title)
+            .bind(cmd.track_id)
+            .execute(&mut *tx)
+            .await?;
         }
 
         if let Some(duration) = cmd.duration_seconds {
-            sqlx::query("UPDATE audiobook_tracks SET duration_seconds = ? WHERE id = ?")
-                .bind(duration.max(0))
-                .bind(cmd.track_id)
-                .execute(&mut *tx)
-                .await?;
+            sqlx::query(
+                "UPDATE audiobook_tracks SET duration_seconds = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
+            .bind(duration.max(0))
+            .bind(cmd.track_id)
+            .execute(&mut *tx)
+            .await?;
         }
 
         if let Some(number) = cmd.number {
@@ -382,23 +400,31 @@ impl AudiobookServiceImpl {
             }
         };
 
-        sqlx::query("UPDATE audiobook_tracks SET media_id = ? WHERE id = ? AND audiobook_id = ?")
-            .bind(media_id)
-            .bind(cmd.track_id)
-            .bind(cmd.audiobook_id)
-            .execute(&mut *tx)
-            .await?;
+        // A replaced audio file is the clearest content edit there is, so the
+        // chapter's own modified time moves with it.
+        sqlx::query(
+            "UPDATE audiobook_tracks SET media_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND audiobook_id = ?",
+        )
+        .bind(media_id)
+        .bind(cmd.track_id)
+        .bind(cmd.audiobook_id)
+        .execute(&mut *tx)
+        .await?;
 
         if let Some(duration) = cmd.duration_seconds {
-            sqlx::query("UPDATE audiobook_tracks SET duration_seconds = ? WHERE id = ?")
-                .bind(duration.max(0))
-                .bind(cmd.track_id)
-                .execute(&mut *tx)
-                .await?;
+            sqlx::query(
+                "UPDATE audiobook_tracks SET duration_seconds = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
+            .bind(duration.max(0))
+            .bind(cmd.track_id)
+            .execute(&mut *tx)
+            .await?;
         }
 
         if let Some(title) = title {
-            sqlx::query("UPDATE audiobook_tracks SET title = ? WHERE id = ?")
+            sqlx::query(
+                "UPDATE audiobook_tracks SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            )
                 .bind(title)
                 .bind(cmd.track_id)
                 .execute(&mut *tx)

@@ -20,6 +20,9 @@ pub struct AudiobookSnapshot {
     pub tags: Vec<String>,
     pub tag_slugs: Vec<String>,
     pub created_at: String,
+    /// Last change to the book or its chapter list, always populated (it falls
+    /// back to `created_at` for rows written before the column existed).
+    pub updated_at: String,
     pub published_at: Option<String>,
 }
 
@@ -60,6 +63,18 @@ pub struct AudiobookTrack {
     pub short_name: String,
     pub url: String,
     pub file_type: String,
+    /// When this chapter's own content last changed — its title, its duration,
+    /// or the audio file behind it.
+    ///
+    /// A reorder does not count: moving a chapter within the book changes where
+    /// it sits, not what it is, and if a drag marked every shifted neighbour as
+    /// modified then one reorder would make the whole list look freshly edited
+    /// and the field would stop meaning anything. Play counts are likewise
+    /// excluded, so a popular chapter does not read as a recently-edited one.
+    ///
+    /// Starts equal to the chapter's creation time, which is what a chapter
+    /// nobody has edited yet genuinely is.
+    pub updated_at: Option<String>,
 }
 
 /// A full audiobook with its ordered tracks and tags, as served to the player.
@@ -87,6 +102,9 @@ pub struct AudiobookDetails {
     /// asked for no window at all.
     pub has_more_tracks: bool,
     pub created_at: String,
+    /// Last change to the book or its chapter list, always populated (it falls
+    /// back to `created_at` for rows written before the column existed).
+    pub updated_at: String,
     pub published_at: Option<String>,
 }
 
