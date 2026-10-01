@@ -16,6 +16,9 @@ mod store;
 mod upload;
 mod validation;
 
+#[cfg(test)]
+mod tests;
+
 pub use files::clean_up_files;
 pub use hashing::{HashData, hash_bytes};
 pub use store::mirror_audio_to_bucket;

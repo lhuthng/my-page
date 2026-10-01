@@ -14,6 +14,13 @@ pub struct GetLinkResponse {
     pub short_name: Option<String>,
     pub url: String,
     pub file_type: String,
+    /// Upload time in UTC, e.g. `2026-09-29 21:04:33`.
+    ///
+    /// Present on search results, where the caller is looking at a directory of
+    /// files and wants to know when each arrived. The short-name resolution
+    /// used to fetch bytes omits it — nothing on that path has a use for it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -27,6 +34,10 @@ pub struct GetMediaDetailsResponse {
     pub file_type: String,
     pub description: String,
     pub aliases: Vec<String>,
+    /// Upload time in UTC. `created_at`, never `updated_at` — see
+    /// `LinkResult::created_at` for why the latter is not displayable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -103,6 +103,13 @@ pub struct LinkResult {
     pub short_name: Option<String>,
     pub url: String,
     pub file_type: String,
+    /// When the bytes were uploaded, in UTC.
+    ///
+    /// This is the row's `created_at` and nothing else. `updated_at` exists in
+    /// the schema but is never written after the insert — a description edit or
+    /// a short-name rename leaves it untouched — so it says "never modified"
+    /// about files that have been modified, and is deliberately not surfaced.
+    pub created_at: Option<String>,
     /// SHA-256 hex digest of the file content, stored at upload time.
     /// Used by `get_media` to reconstruct the on-disk path from the current
     /// MEDIA_PATH instead of relying on the potentially-stale `url` column.
@@ -121,6 +128,9 @@ pub struct MediaDetailResult {
     pub file_type: String,
     pub description: String,
     pub aliases: Vec<String>,
+    /// When the bytes were uploaded, in UTC. See `LinkResult::created_at` for
+    /// why this is `created_at` and never `updated_at`.
+    pub created_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]

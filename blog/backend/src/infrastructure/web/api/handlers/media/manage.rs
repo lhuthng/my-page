@@ -34,6 +34,7 @@ pub async fn get_details(
         description: details.description,
         file_type: details.file_type,
         aliases: details.aliases,
+        created_at: details.created_at,
     }))
 }
 

@@ -20,6 +20,7 @@ impl MediaServiceImpl {
                 m.file_type,
                 m.hash,
                 m.uploader_id,
+                m.created_at,
                 CASE
                     WHEN LOWER(m.short_name) = LOWER(?1) THEN 3
                     WHEN LOWER(m.short_name) LIKE LOWER(?1) || '%' THEN 2
@@ -48,6 +49,7 @@ impl MediaServiceImpl {
                 short_name: Some(r.short_name),
                 url: r.url,
                 file_type: r.file_type,
+                created_at: r.created_at,
                 hash: r.hash,
                 uploader_id: r.uploader_id,
             })

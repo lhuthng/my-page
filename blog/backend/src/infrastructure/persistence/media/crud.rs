@@ -10,9 +10,11 @@ use super::MediaServiceImpl;
 
 impl MediaServiceImpl {
     pub(super) async fn get_link(&self, cmd: GetLinkCommand) -> Result<LinkResult, MediaError> {
-        match sqlx::query_as::<_, (String, String, String, i64)>(
+        match sqlx::query_as::<_, (String, String, String, i64, Option<String>)>(
             r#"
-                SELECT url, file_type, hash, uploader_id FROM media WHERE short_name = ?;
+                SELECT url, file_type, hash, uploader_id, created_at
+                FROM media
+                WHERE short_name = ?;
             "#,
         )
         .bind(&cmd.short_name)
@@ -23,6 +25,7 @@ impl MediaServiceImpl {
                 short_name: None,
                 url: row.0,
                 file_type: row.1,
+                created_at: row.4,
                 hash: row.2,
                 uploader_id: row.3,
             }),
@@ -33,9 +36,9 @@ impl MediaServiceImpl {
         &self,
         cmd: GetMediaDetailsCommand,
     ) -> Result<MediaDetailResult, MediaError> {
-        let row: (i64, String, String, String) = sqlx::query_as(
+        let row: (i64, String, String, String, Option<String>) = sqlx::query_as(
             r#"
-            SELECT id, short_name, file_type, description
+            SELECT id, short_name, file_type, description, created_at
             FROM media
             WHERE short_name = ?
             "#,
@@ -67,6 +70,7 @@ impl MediaServiceImpl {
             file_type: row.2,
             description: row.3,
             aliases,
+            created_at: row.4,
         })
     }
     pub(super) async fn change_details(

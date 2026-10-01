@@ -53,6 +53,7 @@ pub async fn search(
                     short_name: r.short_name,
                     url: r.url,
                     file_type: r.file_type,
+                    created_at: r.created_at,
                 })
                 .collect(),
         })),
@@ -80,6 +81,7 @@ pub async fn get_link(
         // them, so it is the only URL worth handing out.
         url: format!("media/i/{short_name}"),
         file_type: link.file_type,
+        created_at: link.created_at,
     }))
 }
 
