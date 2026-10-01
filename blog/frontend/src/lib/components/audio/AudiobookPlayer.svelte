@@ -88,6 +88,7 @@
 					noMatch: 'Không có chương nào khớp tìm kiếm.',
 					playing: 'Đang phát',
 					paused: 'Tạm dừng',
+					showCurrentChapter: 'Xem chương đang phát',
 					trackError: {
 						aborted: 'Phát bị hủy bỏ.',
 						network: 'Lỗi mạng khi tải chương này.',
@@ -136,6 +137,7 @@
 					noMatch: 'No chapters match your search.',
 					playing: 'Playing',
 					paused: 'Paused',
+					showCurrentChapter: 'Show the chapter that is playing',
 					trackError: {
 						aborted: 'Playback aborted.',
 						network: 'Network error while loading this track.',
@@ -217,6 +219,85 @@
 	const isCurrent = (track) => track.id === current?.id;
 
 	/**
+	 * Which edge of the chapter list the playing chapter has scrolled off
+	 * through, or `null` while it is on screen where it belongs.
+	 *
+	 * A listener browses a long book by scrolling away from what is playing, and
+	 * a row that simply left the screen told them nothing about the audio still
+	 * running. Keeping one eye on the playhead at the edge it left through gives
+	 * that back without putting the reader's own scrolling under their thumb.
+	 */
+	let pinnedEdge = $state(null);
+
+	/** The chapter row that plays while it is on screen. */
+	const pinnedTrack = $derived(pinnedEdge === null ? null : current);
+
+	/** Take the reader back to the chapter that is playing. */
+	function returnToPlayhead() {
+		playlistEl
+			?.querySelector(`[data-track-index="${player.index}"]`)
+			?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	}
+
+	/**
+	 * Watch the playing chapter's row and record which edge it left through.
+	 *
+	 * The bar is a *separate* element rather than the row itself sticking in
+	 * place, and that is not a stylistic choice — it is what makes this
+	 * measurable. A sticky row reports its stuck position from both
+	 * `getBoundingClientRect` and `offsetTop`, so a pin decided by measuring the
+	 * row would see it already back in view, drop the pin, and oscillate on
+	 * every scroll frame. Here the observed row never moves visually, so the
+	 * measurement stays honest.
+	 */
+	function observeRow(node, active) {
+		let observer = null;
+
+		const stop = () => {
+			if (!observer) return;
+			observer.disconnect();
+			observer = null;
+			pinnedEdge = null;
+		};
+
+		const start = () => {
+			if (observer) return;
+			observer = new IntersectionObserver(
+				(entries) => {
+					const entry = entries[entries.length - 1];
+					const root = entry?.rootBounds;
+					const box = entry?.boundingClientRect;
+					if (!root || !box) {
+						pinnedEdge = null;
+						return;
+					}
+					// Off the top and off the bottom are different answers: the bar
+					// pins to whichever side the reader went past, which keeps it
+					// between them and the chapters they are browsing.
+					if (box.bottom <= root.top) pinnedEdge = 'top';
+					else if (box.top >= root.bottom) pinnedEdge = 'bottom';
+					else pinnedEdge = null;
+				},
+				// `node.closest('ol')` rather than `playlistEl`: the list is bound
+				// after its children render, and a null root here would silently
+				// measure against the viewport instead.
+				{ root: node.closest('ol'), threshold: 0 }
+			);
+			observer.observe(node);
+		};
+
+		// Only the chapter that is playing is watched. Attaching an observer to
+		// every row would have each of them overwrite the pin with an answer
+		// about its own position, and a 400-chapter book would run 400 of them.
+		if (active) start();
+
+		return {
+			update: (isActive) => (isActive ? start() : stop()),
+			destroy: stop
+		};
+	}
+
+	/**
 	 * Fetch a window once the row standing in for it scrolls into view.
 	 *
 	 * The list shows one reachable row per unloaded stretch, so this is what
@@ -274,12 +355,24 @@
 		if (persistent && player.playing) audiobookSession.claim(player, book);
 	});
 
-	// Keep the playing chapter visible in a long playlist.
+	// Keep the playing chapter in sight in a long playlist, without hijacking
+	// the scroll from a reader who has deliberately wandered off it.
 	$effect(() => {
 		const index = player.index;
-		if (!playlistEl) return;
-		const active = playlistEl.querySelector(`[data-track-index="${index}"]`);
-		active?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+		const list = playlistEl;
+		if (!list) return;
+		// `pinnedEdge` is read inside untrack on purpose: it is written from the
+		// observer above, and tracking a value this component writes would re-run
+		// the effect on every scroll.
+		untrack(() => {
+			// Chasing the playhead is only welcome while the reader is already
+			// following it. Once they have scrolled away, yanking the list back on
+			// every chapter change is the exact thing the bar exists to avoid.
+			if (pinnedEdge !== null) return;
+			list
+				.querySelector(`[data-track-index="${index}"]`)
+				?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+		});
 	});
 
 	onMount(() => {
@@ -871,87 +964,174 @@
 					class="w-full rounded-lg border-2 border-dark/15 bg-white py-2 pr-3 pl-9 text-sm text-dark outline-none placeholder:text-dark/40 focus:border-primary"
 				/>
 			</label>
-
 			{#if playlistRows.length === 0}
 				<p class="py-6 text-center text-sm text-dark/55">{t.noMatch}</p>
 			{:else}
-				<ol
-					bind:this={playlistEl}
-					class="custom-scrollbar flex flex-col max-h-96 overflow-y-auto divide-y divide-dark/10"
-				>
-					{#each playlistRows as row (row.kind === 'chapter' ? `chapter-${row.index}` : `waiting-${row.start ?? 'rest'}`)}
-						{#if row.kind === 'chapter' && row.track}
-							{@const index = row.index}
-							{@const track = row.track}
-							{@const active = isCurrent(track)}
-							<li data-track-index={index} data-track-id={track.id}>
-								<button
-									class="flex w-full items-center gap-3 border-l-2 px-2 py-2 text-left transition-colors {active
-										? 'border-primary bg-primary/10'
-										: 'border-transparent hover:bg-dark/5'}"
-									onclick={() => player.load(index, { play: true })}
-									aria-current={active ? 'true' : undefined}
-									aria-busy={player.pendingIndex === index ? 'true' : undefined}
-								>
-									<span
-										class="grow min-w-0 flex flex-col {player.pendingIndex === index
-											? 'animate-pulse motion-reduce:animate-none'
-											: ''}"
+				<!-- The wrapper is what the now-playing bar is positioned against, so the
+				     bar can overlay an edge of the list without taking a row of its own
+				     out of a fixed-height scroll area. -->
+				<div class="relative">
+					<ol
+						bind:this={playlistEl}
+						class="custom-scrollbar flex flex-col max-h-96 overflow-y-auto divide-y divide-dark/10"
+					>
+						{#each playlistRows as row (row.kind === 'chapter' ? `chapter-${row.index}` : `waiting-${row.start ?? 'rest'}`)}
+							{#if row.kind === 'chapter' && row.track}
+								{@const index = row.index}
+								{@const track = row.track}
+								{@const active = isCurrent(track)}
+								<li data-track-index={index} data-track-id={track.id} use:observeRow={active}>
+									<button
+										class="flex w-full items-center gap-3 border-l-2 px-2 py-2 text-left transition-colors {active
+											? 'border-primary bg-primary/10'
+											: 'border-transparent hover:bg-dark/5'}"
+										onclick={() => player.load(index, { play: true })}
+										aria-current={active ? 'true' : undefined}
+										aria-busy={player.pendingIndex === index ? 'true' : undefined}
 									>
-										<!-- Mobile: number on its own line so the title can wrap -->
-										<span class="md:hidden text-sm text-dark/50">Ch.{track.number}</span>
 										<span
-											class="font-['Baloo_2',Roboto,sans-serif] text-base font-medium line-clamp-2 md:line-clamp-1 {active
-												? 'text-dark'
-												: 'text-dark/70'}"
+											class="grow min-w-0 flex flex-col {player.pendingIndex === index
+												? 'animate-pulse motion-reduce:animate-none'
+												: ''}"
 										>
-											<span class="hidden md:inline">{t.chapter} {track.number} -</span>
-											{track.title}
-										</span>
-										{#if player.failures[track.id]}
-											<span class="text-base text-accent-red">
-												{t.trackError[player.failures[track.id]] ?? t.trackError.generic}
+											<!-- Mobile: number on its own line so the title can wrap -->
+											<span class="md:hidden text-sm text-dark/50">Ch.{track.number}</span>
+											<span
+												class="font-['Baloo_2',Roboto,sans-serif] text-base font-medium line-clamp-2 md:line-clamp-1 {active
+													? 'text-dark'
+													: 'text-dark/70'}"
+											>
+												<span class="hidden md:inline">{t.chapter} {track.number} -</span>
+												{track.title}
 											</span>
-										{/if}
-									</span>
-
-									<span
-										class="flex items-center gap-2 shrink-0 text-base text-dark/55 tabular-nums"
-									>
-										<span class="flex items-center gap-1" title={t.plays}>
-											<svg class="w-3.5 h-3.5 fill-dark/40" viewBox="0 0 24 24" aria-hidden="true">
-												<path d="M8 5l11 7-11 7z" />
-											</svg>
-											{acceptedPlays[track.id] ?? track.play_count ?? 0}
+											{#if player.failures[track.id]}
+												<span class="text-base text-accent-red">
+													{t.trackError[player.failures[track.id]] ?? t.trackError.generic}
+												</span>
+											{/if}
 										</span>
-										{formatClock(track.duration_seconds)}
-									</span>
-								</button>
-							</li>
-						{:else}
-							<!-- A window in flight, or a stretch of chapters nobody has
+
+										<span
+											class="flex items-center gap-2 shrink-0 text-base text-dark/55 tabular-nums"
+										>
+											<!-- Ahead of the stats, because a row whose playing state cannot be
+											     read at a glance is just another row. -->
+											{#if active}
+												<svg
+													class="w-4 h-4 shrink-0 fill-primary {player.playing
+														? 'animate-reel motion-reduce:animate-none'
+														: ''}"
+													viewBox="0 0 24 24"
+													role="img"
+													aria-label={player.playing ? t.playing : t.paused}
+												>
+													{#if player.playing}
+														<path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+													{:else}
+														<path d="M8 5l11 7-11 7z" />
+													{/if}
+												</svg>
+											{/if}
+											<span class="flex items-center gap-1" title={t.plays}>
+												<svg
+													class="w-3.5 h-3.5 fill-dark/40"
+													viewBox="0 0 24 24"
+													aria-hidden="true"
+												>
+													<path d="M8 5l11 7-11 7z" />
+												</svg>
+												{acceptedPlays[track.id] ?? track.play_count ?? 0}
+											</span>
+											{formatClock(track.duration_seconds)}
+										</span>
+									</button>
+								</li>
+							{:else}
+								<!-- A window in flight, or a stretch of chapters nobody has
 							     fetched: the row is the handle that fetches it, and it turns
 							     into chapters as they arrive. -->
-							<li
-								class="flex w-full items-center gap-3 px-2 py-2"
-								use:windowRow={row.start ?? row.index}
-							>
-								<span
-									class="grow min-w-0 flex flex-col gap-1.5 animate-pulse motion-reduce:animate-none"
-									aria-hidden="true"
+								<li
+									class="flex w-full items-center gap-3 px-2 py-2"
+									use:windowRow={row.start ?? row.index}
 								>
-									<span class="h-4 w-3/5 rounded-full bg-dark/10"></span>
-									<span class="h-3 w-1/3 rounded-full bg-dark/10 md:hidden"></span>
-								</span>
-								{#if row.kind === 'gap' && row.start != null}
-									<span class="shrink-0 text-sm text-dark/45 tabular-nums">
-										{t.loadingChapters(row.start + 1, row.start + row.count)}
+									<span
+										class="grow min-w-0 flex flex-col gap-1.5 animate-pulse motion-reduce:animate-none"
+										aria-hidden="true"
+									>
+										<span class="h-4 w-3/5 rounded-full bg-dark/10"></span>
+										<span class="h-3 w-1/3 rounded-full bg-dark/10 md:hidden"></span>
 									</span>
-								{/if}
-							</li>
-						{/if}
-					{/each}
-				</ol>
+									{#if row.kind === 'gap' && row.start != null}
+										<span class="shrink-0 text-sm text-dark/45 tabular-nums">
+											{t.loadingChapters(row.start + 1, row.start + row.count)}
+										</span>
+									{/if}
+								</li>
+							{/if}
+						{/each}
+					</ol>
+
+					<!-- Now-playing bar: what the listener is hearing, held at the edge of the
+					     list they scrolled the chapter off through. It is an overlay rather than a
+					     reserved row so it cannot reflow the list as it appears. -->
+					{#if pinnedEdge && pinnedTrack}
+						<div data-pinned-bar={pinnedEdge} class="bg-primary-20 px-2">
+							<div class="flex items-center gap-2 py-1">
+								<button
+									class="grow min-w-0 flex items-center gap-3 py-1 text-left"
+									onclick={returnToPlayhead}
+									title={t.showCurrentChapter}
+								>
+									<svg
+										class="w-4 h-4 shrink-0 fill-primary {player.playing
+											? 'animate-reel motion-reduce:animate-none'
+											: ''}"
+										viewBox="0 0 24 24"
+										role="img"
+										aria-label={player.playing ? t.playing : t.paused}
+									>
+										{#if player.playing}
+											<path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+										{:else}
+											<path d="M8 5l11 7-11 7z" />
+										{/if}
+									</svg>
+									<span
+										class="font-['Baloo_2',Roboto,sans-serif] grow min-w-0 text-base font-medium line-clamp-1"
+									>
+										<span class="hidden md:inline">{t.chapter} {pinnedTrack.number} -</span>
+										<span class="md:hidden">Ch.{pinnedTrack.number}</span>
+										{pinnedTrack.title}
+									</span>
+									<span class="shrink-0 text-sm tabular-nums text-dark/60">
+										{formatClock(position)} / {formatClock(duration)}
+									</span>
+								</button>
+
+								<div class="duo-btn w-fit shrink-0" data-duo-shape="round" data-duo-color="dark">
+									<button
+										class="p-1.5!"
+										onclick={() => player.toggle()}
+										aria-label={player.playing ? t.pause : t.play}
+									>
+										<svg class="w-5 h-5 fill-white" viewBox="0 0 24 24">
+											{#if player.playing}
+												<path d="M7 5h4v14H7zm6 0h4v14h-4z" />
+											{:else}
+												<path d="M8 5l11 7-11 7z" />
+											{/if}
+										</svg>
+									</button>
+								</div>
+							</div>
+							<!-- Chapter progress, so the bar reports how far in the chapter the
+							     listener is and not only which chapter it is. -->
+							<div class="h-1 w-full overflow-hidden rounded-full bg-dark/15">
+								<div class="h-full bg-primary" style="width: {playedPercent}%"></div>
+							</div>
+						</div>
+					{/if}
+				</div>
 			{/if}
 		</div>
 

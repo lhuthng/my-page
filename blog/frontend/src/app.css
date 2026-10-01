@@ -224,6 +224,23 @@ body {
 	}
 }
 
+/* The now-playing bar, held at the edge of the chapter list the playing chapter
+   scrolled off through. It is an overlay rather than a reserved row so that
+   appearing and disappearing cannot reflow the list, and an overlay needs an
+   opaque surface of its own — the chapters slide underneath it. The shadow is
+   what reads as "floating above the list" rather than "a row at the edge". */
+[data-pinned-bar] {
+	@apply absolute inset-x-0 z-20;
+}
+
+[data-pinned-bar='top'] {
+	@apply top-0 shadow-lg;
+}
+
+[data-pinned-bar='bottom'] {
+	@apply bottom-0 shadow-lg;
+}
+
 /* Mini player chapter line: slides back and forth so a title too long for the
    card can still be read. The travel distance is measured in JS
    (`--marquee-shift`) because it depends on how far the text overflows. */
