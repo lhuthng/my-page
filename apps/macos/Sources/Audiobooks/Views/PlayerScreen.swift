@@ -11,6 +11,20 @@ struct PlayerScreen: View {
 
     static let rates: [Double] = [0.75, 1, 1.25, 1.5, 1.75, 2]
 
+    /// Where the current chapter's own position is measured from. Named on the
+    /// list's *content* rather than on the scroll view, so the value reported is
+    /// the row's position in the book and does not move as the list scrolls —
+    /// which is what lets it survive the row being recycled off-screen.
+    private static let listContent = "chapterListContent"
+
+    /// The playing chapter's position in the list, in content coordinates.
+    @State private var rowOrigin: ChapterRowOrigin?
+    /// How far the list has scrolled, and how tall its viewport is. Together
+    /// these are the visible slice of content, which is what the origin above is
+    /// tested against.
+    @State private var scrollOffset: CGFloat = 0
+    @State private var viewportHeight: CGFloat = 0
+
     var body: some View {
         ZStack {
             Theme.page.ignoresSafeArea()
@@ -233,30 +247,91 @@ struct PlayerScreen: View {
 
             // Chapter list: always open, scrolling inside a clipped viewport that
             // stops short of the card's bottom, so rows never run past the corner.
-            ScrollView(.vertical, showsIndicators: false) {
-                // Lazy, because the book is the unit here and a long one has
-                // hundreds of chapters: only the slots near the viewport are
-                // built, and building one is what asks for its window.
-                LazyVStack(spacing: 0) {
-                    ForEach(0..<chapterCount, id: \.self) { index in
-                        chapterSlot(index: index, isLast: index == chapterCount - 1)
-                            .onAppear { player.windowNeeded(at: index) }
+            ScrollViewReader { listProxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    // Lazy, because the book is the unit here and a long one has
+                    // hundreds of chapters: only the slots near the viewport are
+                    // built, and building one is what asks for its window.
+                    LazyVStack(spacing: 0) {
+                        ForEach(0..<chapterCount, id: \.self) { index in
+                            chapterSlot(index: index, isLast: index == chapterCount - 1)
+                                .id(index)
+                                // Only the playing chapter is measured; the others
+                                // have nothing to report.
+                                .background {
+                                    if index == player.trackIndex {
+                                        GeometryReader { geo in
+                                            Color.clear.preference(
+                                                key: ChapterRowOriginKey.self,
+                                                value: ChapterRowOrigin(
+                                                    index: index,
+                                                    top: geo.frame(in: .named(Self.listContent))
+                                                        .minY,
+                                                    height: geo.size.height
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                                .onAppear { player.windowNeeded(at: index) }
+                        }
+                    }
+                    // A little inset so a row's highlight never runs into the
+                    // card's stroke, and an incomplete last row has room to be
+                    // cut off cleanly.
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 8)
+                    .coordinateSpace(name: Self.listContent)
+                    .onPreferenceChange(ChapterRowOriginKey.self) { origin in
+                        // Preferences are rebuilt from scratch every layout pass,
+                        // so a row the lazy stack has recycled stops contributing
+                        // and the collected value falls back to `nil`. Keeping
+                        // the last real reading is the whole point: it is what
+                        // still answers "which edge did it leave through" after
+                        // the row itself is gone.
+                        if let origin { rowOrigin = origin }
+                    }
+                    // Hand the pager this list's scroll view, so it recognises a
+                    // press here by identity rather than by frame or hit test.
+                    .background(ScrollViewProbe { pager.attachList($0) })
+                }
+                .onScrollGeometryChange(for: ListMetrics.self) { geometry in
+                    // Built from the offset and the container rather than from
+                    // `visibleRect`, because those two are unambiguous: the
+                    // visible slice of content runs from the offset for one
+                    // viewport's worth.
+                    ListMetrics(
+                        offset: geometry.contentOffset.y,
+                        viewport: geometry.containerSize.height
+                    )
+                } action: { _, metrics in
+                    scrollOffset = metrics.offset
+                    viewportHeight = metrics.viewport
+                }
+                .frame(maxHeight: .infinity)
+                .clipped()
+                .background(Color.white)
+                .modifier(ScrollEdgeFades())
+                // The bar floats over the list rather than taking a row of its
+                // own, so its appearing and disappearing cannot reflow the
+                // chapters the reader is looking at.
+                .overlay(alignment: pinnedEdge == .top ? .top : .bottom) {
+                    if let edge = pinnedEdge, let track = player.currentTrack {
+                        pinnedChapterBar(track, edge: edge) {
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                listProxy.scrollTo(player.trackIndex, anchor: .center)
+                            }
+                        }
+                        .transition(.opacity)
                     }
                 }
-                // A little inset so a row's highlight never runs into the
-                // card's stroke, and an incomplete last row has room to be
-                // cut off cleanly.
-                .padding(.horizontal, 4)
+                .animation(.easeInOut(duration: 0.18), value: pinnedEdge)
                 .padding(.bottom, 8)
-                // Hand the pager this list's scroll view, so it recognises a
-                // press here by identity rather than by frame or hit test.
-                .background(ScrollViewProbe { pager.attachList($0) })
+                // A different book is different content, so an old reading's
+                // position means nothing in it. A different *chapter* is not:
+                // that is precisely what `pinnedEdge` carries forward.
+                .onChange(of: player.book?.id) { _, _ in rowOrigin = nil }
             }
-            .frame(maxHeight: .infinity)
-            .clipped()
-            .background(Color.white)
-            .modifier(ScrollEdgeFades())
-            .padding(.bottom, 8)
         }
         // The card is white end to end, so the list's inset and fade land on it.
         .background(Color.white)
@@ -286,6 +361,127 @@ struct PlayerScreen: View {
     /// Chapters in the loaded book, whether or not their windows have arrived.
     private var chapterCount: Int {
         player.chapters?.total ?? player.book?.totalTracks ?? 0
+    }
+
+    // MARK: - Keeping the playing chapter in sight
+
+    /// Which edge of the list the playing chapter has scrolled off through, or
+    /// `nil` while it is on screen where it belongs.
+    ///
+    /// A reader browses a long book by scrolling away from what is playing, and
+    /// a row that simply left the viewport said nothing about the audio still
+    /// running. Holding it at the edge it left through gives that back without
+    /// taking the reader's own scrolling away from them.
+    private var pinnedEdge: VerticalEdge? {
+        guard let origin = rowOrigin else { return nil }
+        return Self.pinnedEdge(
+            measuredIndex: origin.index,
+            measuredTop: origin.top,
+            rowHeight: origin.height,
+            playingIndex: player.trackIndex,
+            offset: scrollOffset,
+            viewport: viewportHeight
+        )
+    }
+
+    /// Which edge the playing chapter has left the list through, or `nil` while
+    /// it is on screen.
+    ///
+    /// Pure and static so it can be tested without a window: an edge that is off
+    /// by a row shows the bar while the chapter is still visible, or hides it
+    /// while the chapter is off screen, and neither needs a running app to catch.
+    ///
+    /// `measuredIndex` may differ from `playingIndex`: the playhead moves on
+    /// while the reader is scrolled away, and the new row — being off screen —
+    /// never renders and so never reports. Carrying the reading forward is
+    /// arithmetic rather than a guess, because the rows are a fixed height, and
+    /// the height used is a measured one rather than a constant.
+    static func pinnedEdge(
+        measuredIndex: Int,
+        measuredTop: CGFloat,
+        rowHeight: CGFloat,
+        playingIndex: Int,
+        offset: CGFloat,
+        viewport: CGFloat
+    ) -> VerticalEdge? {
+        guard viewport > 0, rowHeight > 0 else { return nil }
+
+        let steps = CGFloat(playingIndex - measuredIndex)
+        let top = measuredTop + steps * rowHeight
+        let bottom = top + rowHeight
+
+        // A point of tolerance at each boundary: at exact equality the row is
+        // still a hair on screen, and pinning it there would make the bar
+        // flicker against the row it stands in for.
+        if bottom <= offset + 1 { return .top }
+        if top >= offset + viewport - 1 { return .bottom }
+        return nil
+    }
+
+    /// The playing chapter, held at the edge of the list it scrolled past.
+    ///
+    /// Deliberately built from the app's own controls — the same flat circular
+    /// transport button as the mini player, a hairline rule rather than the
+    /// web's raised `duo-btn` — so the bar reads as part of this app instead of
+    /// as a piece of the site dropped into it.
+    private func pinnedChapterBar(
+        _ track: AudiobookTrack,
+        edge: VerticalEdge,
+        onReturn: @escaping () -> Void
+    ) -> some View {
+        let ratio = player.duration > 0 ? min(1, max(0, player.displayTime / player.duration)) : 0
+
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                // The same tap-to-return target as the row itself: the whole
+                // label area takes the reader back to the playhead.
+                Button(action: onReturn) {
+                    HStack(spacing: 8) {
+                        Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "pause.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Theme.primary)
+                            .frame(width: 12)
+                        Text("\(track.number) - \(track.title)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.dark)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 6)
+                        Text(clock(player.displayTime))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(Theme.dark.opacity(0.55))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Show the chapter that is playing")
+
+                PlayPauseButton(isPlaying: player.isPlaying, size: 26) {
+                    player.togglePlayPause()
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+
+            // How far into the chapter the listener is, so the bar reports
+            // position and not only identity.
+            ProgressBar(fraction: ratio, height: 3)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
+        }
+        .background(Color.white)
+        // The rule sits on the face the list is scrolling towards, so the bar
+        // reads as an edge of the viewport rather than a floating panel.
+        .overlay(alignment: edge == .top ? .bottom : .top) {
+            Rectangle()
+                .fill(Theme.dark.opacity(0.15))
+                .frame(height: 1)
+        }
+        .shadow(
+            color: .black.opacity(0.12),
+            radius: 5,
+            y: edge == .top ? 2 : -2
+        )
     }
 
     /// One slot of the chapter list: the chapter when its window has arrived,
@@ -536,6 +732,34 @@ private struct ScrollViewProbe: NSViewRepresentable {
             if attempts < 20 { report(from: view, attempts: attempts + 1) }
         }
     }
+}
+
+/// Where the playing chapter sits in the list, in content coordinates.
+///
+/// `top` is measured in the list's *content* space, so it does not move as the
+/// list scrolls. That is what lets the value outlive the row: a chapter scrolled
+/// far enough away is recycled by the lazy stack and stops reporting, and the
+/// last reading — held in content space — is still a valid answer for which edge
+/// it left through.
+private struct ChapterRowOrigin: Equatable {
+    /// Which chapter this reading is about, so a carried-forward position knows
+    /// how far it has to travel.
+    var index: Int
+    var top: CGFloat
+    var height: CGFloat
+}
+
+private struct ChapterRowOriginKey: PreferenceKey {
+    static var defaultValue: ChapterRowOrigin?
+    static func reduce(value: inout ChapterRowOrigin?, nextValue: () -> ChapterRowOrigin?) {
+        value = nextValue() ?? value
+    }
+}
+
+/// The list's scroll position and the height of its viewport.
+private struct ListMetrics: Equatable {
+    var offset: CGFloat
+    var viewport: CGFloat
 }
 
 /// A faint white wash at both ends of a scroll viewport, so rows dissolve into

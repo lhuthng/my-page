@@ -13,8 +13,10 @@ dependencies, built with SwiftPM.
   player: large cover fading into the chapter list under a gradient veil, the
   mini player's green/red transport language, rate menu, and a labelled
   scrubber above the always-open chapter list, which fills in a window of
-  chapters at a time. Swipe back (or `Esc`, or the back chevron) returns to the
-  browser.
+  chapters at a time. Browsing away from what is playing holds that chapter at
+  the edge it left through — a flat bar with the app's own transport button,
+  the elapsed time and a position rule; clicking it scrolls back to the
+  playhead. Swipe back (or `Esc`, or the back chevron) returns to the browser.
 - **About** — one page to the right of the browser (the header's ⓘ button, or a
   swipe): a branded card — the site's logo mark redrawn as vectors in white on
   the app's primary ramp, the name and version, what the app is, the blog's own
