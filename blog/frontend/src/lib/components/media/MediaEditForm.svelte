@@ -5,6 +5,7 @@
 	import AliasList from './AliasList.svelte';
 	import DeleteButton from './DeleteButton.svelte';
 	import RevertButton from './RevertButton.svelte';
+	import { formatDateTime, formatRelative, toDateTimeAttr } from '$lib/utils/datetime.js';
 
 	let { shortName, onShortNameChanged } = $props();
 
@@ -14,8 +15,15 @@
 
 	$effect(() => {
 		if (details) {
-			const { short_name: shortName, description, file_type: fileType } = details.result;
-			truth = { shortName, description, fileType };
+			const {
+				short_name: shortName,
+				description,
+				file_type: fileType,
+				created_at: createdAt
+			} = details.result;
+			// `createdAt` is the server's, not the editor's: it belongs to `truth`
+			// alone, so it can never look like a field the form might submit.
+			truth = { shortName, description, fileType, createdAt };
 			draft = { shortName, description, fileType };
 		}
 	});
@@ -29,7 +37,9 @@
 	{:else if details?.status === 'waiting'}
 		<p class="text-sm text-dark/50 text-center py-4 animate-pulse">Loading details…</p>
 	{:else if draft && truth}
-		<span class="text-center text-sm font-semibold text-dark/60 uppercase tracking-wide">Details</span>
+		<span class="text-center text-sm font-semibold text-dark/60 uppercase tracking-wide">
+			Details
+		</span>
 		<form
 			class="flex flex-col gap-2"
 			method="patch"
@@ -105,6 +115,22 @@
 					/>
 				</div>
 			</fieldset>
+			{#if truth.createdAt}
+				<!-- A moment rather than a record's calendar day: this is the file's own
+				     arrival in the reader's history, so it is shown in their zone, with
+				     the exact time one hover away. -->
+				<p class="text-sm text-dark/50">
+					Uploaded
+					<time
+						datetime={toDateTimeAttr(truth.createdAt)}
+						title={formatDateTime(truth.createdAt, { style: 'long' })}
+					>
+						{formatDateTime(truth.createdAt)}
+					</time>
+					<span class="text-dark/35">· {formatRelative(truth.createdAt)}</span>
+				</p>
+			{/if}
+
 			<div class="flex w-full">
 				<label class="text-sm text-dark/50" for="file-type">
 					{draft.fileType}

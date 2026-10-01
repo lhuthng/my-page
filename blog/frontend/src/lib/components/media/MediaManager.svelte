@@ -21,7 +21,7 @@
 					disabled={editMode !== true}
 					class="grow bg-background/40 border-2 border-dark/10 focus:border-dark rounded-xl px-3 py-1.5 text-base placeholder:text-dark/30 outline-none disabled:opacity-40"
 					type="text"
-					placeholder="Search keywords"
+					placeholder="Search — empty shows recent uploads"
 					bind:value={keyword}
 				/>
 				<div class="w-fit duo-btn" data-duo-color="dark">

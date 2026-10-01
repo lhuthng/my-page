@@ -1,7 +1,21 @@
 <script>
 	import { untrack } from 'svelte';
 
-	let { size, file, isSelected, ok, onclick, ondblclick } = $props();
+	let {
+		size,
+		file,
+		isSelected,
+		ok,
+		/**
+		 * A short third line under the file name, e.g. when it was uploaded.
+		 * Optional because an upload in flight has no arrival date yet.
+		 */
+		meta = '',
+		/** The exact value behind `meta`, for the hover title. */
+		metaTitle = '',
+		onclick,
+		ondblclick
+	} = $props();
 
 	const f = untrack(() => file);
 	const isImage = f.type?.startsWith('image/');
@@ -89,7 +103,16 @@
 			</div>
 		</div>
 	</div>
-	<span class={`text-xs wrap-break-word line-clamp-2 text-dark ${isSelected ? 'select-text' : 'select-none'}`}>
+	<span
+		class={`text-xs wrap-break-word line-clamp-2 text-dark ${isSelected ? 'select-text' : 'select-none'}`}
+	>
 		{file.name}
 	</span>
+	{#if meta}
+		<!-- `title` carries the exact moment; the line itself stays short enough
+		     for a 100px tile. -->
+		<span class="text-[0.68rem] leading-tight text-dark/45 tabular-nums" title={metaTitle || meta}>
+			{meta}
+		</span>
+	{/if}
 </button>

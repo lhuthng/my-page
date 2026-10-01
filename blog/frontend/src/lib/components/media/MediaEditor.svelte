@@ -8,6 +8,7 @@
 	import MediaEditForm from './MediaEditForm.svelte';
 	import MediaUploadPreview from './MediaUploadPreview.svelte';
 	import Portal from '$lib/components/shell/Portal.svelte';
+	import { formatDateOnly, formatDateTime } from '$lib/utils/datetime.js';
 
 	let { keyword, detailPanel } = $props();
 
@@ -23,12 +24,29 @@
 
 	// Check for results
 	async function search(keyword) {
-		if (keyword.length < 2) return;
+		// An empty box asks for nothing in particular, and the backend answers
+		// that with the most recently uploaded files — the query already orders
+		// by upload date, so this is "show me what I last put in" rather than an
+		// unbounded listing. One character is skipped: it is noise to search on,
+		// and typing it is not a request to browse.
+		if (keyword.length === 1) return;
 		if (requestCache[keyword] === undefined) {
 			const req = { status: 'waiting' };
 			requestCache[keyword] = { ...req };
 
-			const res = await fetch(`/api/media?term=${keyword}&size=10`, {
+			// `/api/media/all`, not `/api/media`. The backend nests media under
+			// `/media/all`, `/media/d/:name`, `/media/i/:name` — there is no bare
+			// `/media` route, and a request for one fell through to the static-file
+			// service and failed, so this panel never listed anything.
+			//
+			// The `all` route also earns its keep beyond the correct path: its
+			// server handler re-roots every result's `url` through
+			// `fixClientRoute`, and the generic catch-all proxy does not. The
+			// backend answers with a backend-relative `media/i/<name>`, which a
+			// tile would resolve against the current route and request from the
+			// wrong place. Search is the endpoint that makes the thumbnails
+			// loadable, not just the one that answers.
+			const res = await fetch(`/api/media/all?term=${encodeURIComponent(keyword)}&size=24`, {
 				method: 'GET',
 				headers: { Authorization: auth() }
 			});
@@ -57,9 +75,14 @@
 	<MediaDirectory class="full p-2" cellWidth="120px" cellHeight="200px" onclick={() => {}}>
 		{#if requestCache[deKeyword]?.status === 'success'}
 			{#each requestCache[deKeyword]?.results as item, index (item.short_name)}
+				<!-- The upload date is rendered in the reader's own zone, matching the
+				     details panel: both describe a moment in their own history, so a
+				     tile and its panel must not disagree about which day it was. -->
 				<MediaUploadPreview
 					size={80}
 					file={{ name: item.short_name, url: item.url }}
+					meta={formatDateOnly(item.created_at, { timeZone: undefined })}
+					metaTitle={formatDateTime(item.created_at)}
 					isSelected={selection === item.short_name}
 					onclick={async () => {
 						if (!cache.details[item.short_name]) {
@@ -90,7 +113,8 @@
 			>
 				<p class="text-lg">Search media by keyword</p>
 				<p class="text-sm text-dark/30">
-					Type at least 2 characters, then select a tile to edit its details.
+					Your most recent uploads are shown already. Type 2 or more characters to narrow them down,
+					then select a tile to edit its details.
 				</p>
 			</div>
 		{/if}
