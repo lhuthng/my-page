@@ -12,6 +12,11 @@ Conventional commits with scopes, e.g. `feat(audiobooks): ...`,
   `make lint`).
 - Frontend: Prettier check (`make lint`), write with `make fmt`.
 - Backend unit tests: `cargo test` from `blog/backend`.
+- Frontend unit tests: `npm test` from `blog/frontend`.
+- macOS tests: `make test` from `apps/macos`.
+
+CI runs every gate on each push to master (the `gates` job in
+`.github/workflows/deploy.yml`); the deploy jobs wait on it.
 
 ## Migrations
 

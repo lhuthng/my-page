@@ -7,6 +7,9 @@ on:
       - ".github/workflows/**"
       - "blog/**"
       - "ops/**"
+      # macOS-only commits run the gates (the deploy jobs still
+      # skip: the paths-filter below matches blog/ and ops/ only).
+      - "apps/macos/**"
   workflow_dispatch:
 
 concurrency:
@@ -33,9 +36,71 @@ jobs:
               - 'blog/**'
               - 'ops/**'
 
+  # ── Quality gates: the checks CONTRIBUTING.md documents ─────────
+  # Runs on the macOS runner because the audiobooks suite needs
+  # Xcode's Swift toolchain; the Rust and Node suites are
+  # platform-independent, so one runner carries all three. The
+  # build jobs wait on this, so a push that fails a gate never
+  # reaches the VM.
+  gates:
+    needs: filter
+    runs-on: macos-15
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache cargo builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: blog/backend
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: blog/frontend/package-lock.json
+
+      - name: Backend format check
+        working-directory: blog/backend
+        run: cargo fmt --check
+
+      - name: Backend lint
+        working-directory: blog/backend
+        run: cargo clippy -- -D warnings
+
+      - name: Backend tests
+        working-directory: blog/backend
+        run: cargo test
+
+      # npm install, not npm ci: bun.lock is the real lockfile (the
+      # Dockerfile installs with bun) and package-lock.json has
+      # drifted from package.json, which npm ci would reject.
+      - name: Install frontend dependencies
+        working-directory: blog/frontend
+        run: npm install
+
+      - name: Frontend format check
+        working-directory: blog/frontend
+        run: npm run lint
+
+      - name: Frontend tests
+        working-directory: blog/frontend
+        run: npm test
+
+      - name: macOS tests
+        working-directory: apps/macos
+        run: make test
+
   # ── Build backend image on GitHub's servers and push to GHCR ─────────────
   build-push-backend:
-    needs: filter
+    needs: [filter, gates]
     if: |
       (needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message, '[manual deploy]'))
@@ -71,7 +136,7 @@ jobs:
 
   # ── Build frontend image on GitHub's servers and push to GHCR ────────────
   build-push-frontend:
-    needs: filter
+    needs: [filter, gates]
     if: |
       (needs.filter.outputs.blog == 'true' || contains(github.event.head_commit.message, '[deploy blog]')) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message, '[manual deploy]'))
