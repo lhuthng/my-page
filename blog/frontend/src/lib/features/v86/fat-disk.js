@@ -551,11 +551,21 @@ export function createEmptyFatDisk(diskSize) {
 	const fat1 = new Uint8Array(fatBytes);
 	const fat2 = new Uint8Array(fatBytes);
 	if (fatBits === 16) {
-		fat1[0] = 0xf8; fat1[1] = 0xff; fat1[2] = 0xff; fat1[3] = 0xff;
-		fat2[0] = 0xf8; fat2[1] = 0xff; fat2[2] = 0xff; fat2[3] = 0xff;
+		fat1[0] = 0xf8;
+		fat1[1] = 0xff;
+		fat1[2] = 0xff;
+		fat1[3] = 0xff;
+		fat2[0] = 0xf8;
+		fat2[1] = 0xff;
+		fat2[2] = 0xff;
+		fat2[3] = 0xff;
 	} else {
-		fat1[0] = 0xf8; fat1[1] = 0xff; fat1[2] = 0xff;
-		fat2[0] = 0xf8; fat2[1] = 0xff; fat2[2] = 0xff;
+		fat1[0] = 0xf8;
+		fat1[1] = 0xff;
+		fat1[2] = 0xff;
+		fat2[0] = 0xf8;
+		fat2[1] = 0xff;
+		fat2[2] = 0xff;
 	}
 	const fatOffset = partitionBase + RESERVED_SECTORS * BLOCK;
 	segments.set(fatOffset, fat1);
@@ -567,17 +577,28 @@ export function createEmptyFatDisk(diskSize) {
 
 	// MBR
 	const endLba = PARTITION_START_SECTOR + geo.partSectors - 1;
-	const heads = 255; const spt = 63;
+	const heads = 255;
+	const spt = 63;
 	const endCyl = Math.floor(endLba / (heads * spt));
 	const remainder = endLba % (heads * spt);
 	const endHead = Math.floor(remainder / spt);
 	const endSector = (remainder % spt) + 1;
 	const entry = new Uint8Array(16);
-	entry[0] = 0x80; entry[2] = 1; entry[4] = 0x06;
-	entry[5] = endHead & 0xff; entry[6] = endSector & 0xff; entry[7] = endCyl & 0xff;
+	entry[0] = 0x80;
+	entry[2] = 1;
+	entry[4] = 0x06;
+	entry[5] = endHead & 0xff;
+	entry[6] = endSector & 0xff;
+	entry[7] = endCyl & 0xff;
 	const start = 63;
-	entry[8] = start & 0xff; entry[9] = (start >> 8) & 0xff; entry[10] = (start >> 16) & 0xff; entry[11] = (start >>> 24) & 0xff;
-	entry[12] = geo.partSectors & 0xff; entry[13] = (geo.partSectors >> 8) & 0xff; entry[14] = (geo.partSectors >> 16) & 0xff; entry[15] = (geo.partSectors >>> 24) & 0xff;
+	entry[8] = start & 0xff;
+	entry[9] = (start >> 8) & 0xff;
+	entry[10] = (start >> 16) & 0xff;
+	entry[11] = (start >>> 24) & 0xff;
+	entry[12] = geo.partSectors & 0xff;
+	entry[13] = (geo.partSectors >> 8) & 0xff;
+	entry[14] = (geo.partSectors >> 16) & 0xff;
+	entry[15] = (geo.partSectors >>> 24) & 0xff;
 	segments.set(446, entry);
 	segments.set(510, new Uint8Array([0x55, 0xaa]));
 
@@ -599,7 +620,8 @@ export function readHddFiles(image) {
 		// Try floppy-style directly (no partition) as fallback
 		return [];
 	}
-	const partStart = (image[454] | (image[455] << 8) | (image[456] << 16) | (image[457] << 24) >>> 0) * 512;
+	const partStart =
+		(image[454] | (image[455] << 8) | (image[456] << 16) | ((image[457] << 24) >>> 0)) * 512;
 	if (partStart === 0 || partStart >= image.length) return [];
 	const partBytes = image.subarray(partStart);
 	if (partBytes.length < 512) return [];
@@ -620,7 +642,8 @@ export function readHddFiles(image) {
 	const clusterBytes = sectorsPerCluster * bytesPerSector;
 	if (clusterBytes <= 0) return [];
 	// Estimate fatBits from rootEntries/fat size similar to floppy
-	const dataSectors = totalSectors - reservedSectors - fatCount * fatSectors - rootEntries * 32 / bytesPerSector;
+	const dataSectors =
+		totalSectors - reservedSectors - fatCount * fatSectors - (rootEntries * 32) / bytesPerSector;
 	const clusters = Math.floor(dataSectors / sectorsPerCluster);
 	const fatBits = clusters < 4085 ? 12 : 16;
 	const fatStart = reservedSectors * bytesPerSector;
@@ -648,10 +671,16 @@ export function readHddFiles(image) {
 		const total = parts.reduce((s, p) => s + p.length, 0);
 		const out = new Uint8Array(total);
 		let o = 0;
-		for (const p of parts) { out.set(p, o); o += p.length; }
+		for (const p of parts) {
+			out.set(p, o);
+			o += p.length;
+		}
 		return out;
 	};
-	const readName = (bytes) => String.fromCharCode(...bytes).replace(/[^\x20-\x7e]+/g, '').trim();
+	const readName = (bytes) =>
+		String.fromCharCode(...bytes)
+			.replace(/[^\x20-\x7e]+/g, '')
+			.trim();
 	const files = [];
 	const readDir = (dirBytes, prefix) => {
 		const dirView = new DataView(dirBytes.buffer, dirBytes.byteOffset, dirBytes.byteLength);
@@ -678,7 +707,9 @@ export function readHddFiles(image) {
 	};
 	try {
 		readDir(partBytes.subarray(rootStart, rootStart + rootBytes), '');
-	} catch { return []; }
+	} catch {
+		return [];
+	}
 	return files;
 }
 

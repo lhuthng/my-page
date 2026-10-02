@@ -35,15 +35,13 @@ impl AudiobookService for AudiobookServiceImpl {
     async fn get_audiobooks(
         &self,
         cmd: commands::audiobook::GetAudiobooksCommand,
-    ) -> Result<entities::audiobook::AudiobookSnapshotPage, errors::audiobook::AudiobookError>
-    {
+    ) -> Result<entities::audiobook::AudiobookSnapshotPage, errors::audiobook::AudiobookError> {
         self.get_audiobooks(cmd).await
     }
     async fn get_public_audiobooks(
         &self,
         cmd: commands::audiobook::GetPublicAudiobooksCommand,
-    ) -> Result<entities::audiobook::AudiobookSnapshotPage, errors::audiobook::AudiobookError>
-    {
+    ) -> Result<entities::audiobook::AudiobookSnapshotPage, errors::audiobook::AudiobookError> {
         self.get_public_audiobooks(cmd).await
     }
     async fn get_audiobook(

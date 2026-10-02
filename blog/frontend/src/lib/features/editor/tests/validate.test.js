@@ -4,11 +4,15 @@ import { validateBasicsFields, validatePatchFieldsMap } from '../model/validate.
 
 test('validateBasicsFields keys errors by the field that caused them', () => {
 	assert.deepEqual(validateBasicsFields({ title: 'T', slug: 'ok', excerpt: 'E' }), {});
-	assert.deepEqual(Object.keys(validateBasicsFields({ title: '', slug: 'ok', excerpt: 'E' })), ['title']);
+	assert.deepEqual(Object.keys(validateBasicsFields({ title: '', slug: 'ok', excerpt: 'E' })), [
+		'title'
+	]);
 	assert.deepEqual(Object.keys(validateBasicsFields({ title: '   ', slug: 'ok', excerpt: 'E' })), [
 		'title'
 	]);
-	assert.deepEqual(Object.keys(validateBasicsFields({ title: 'T', slug: '', excerpt: 'E' })), ['slug']);
+	assert.deepEqual(Object.keys(validateBasicsFields({ title: 'T', slug: '', excerpt: 'E' })), [
+		'slug'
+	]);
 	assert.deepEqual(Object.keys(validateBasicsFields({ title: 'T', slug: 'ok', excerpt: '' })), [
 		'excerpt'
 	]);

@@ -23,7 +23,9 @@
 	{#if !media}
 		<p class="text-sm text-dark/50 text-center py-4">Select an uploaded media to edit it.</p>
 	{:else}
-		<span class="text-center text-sm font-semibold text-dark/60 uppercase tracking-wide">Details</span>
+		<span class="text-center text-sm font-semibold text-dark/60 uppercase tracking-wide">
+			Details
+		</span>
 		<form
 			class="flex flex-col gap-2"
 			method="post"

@@ -235,9 +235,7 @@ export function createEditorViewModel({
 	// collapsed, so drafts written by an older build still restore correctly.
 	const storedBody = (stored) => stored?.body ?? stored?.draft;
 	const localDraftAvailable = $derived(
-		!!localDraft &&
-			storedBody(localDraft) !== undefined &&
-			storedBody(localDraft) !== entry.body
+		!!localDraft && storedBody(localDraft) !== undefined && storedBody(localDraft) !== entry.body
 	);
 
 	const autosaveDebounce = useDebounce(() => {

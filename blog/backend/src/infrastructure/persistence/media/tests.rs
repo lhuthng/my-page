@@ -4,7 +4,9 @@
 // migrated database instead.
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
-use crate::application::commands::media::{GetMediaDetailsCommand, GetLinkCommand, SearchMediaCommand};
+use crate::application::commands::media::{
+    GetLinkCommand, GetMediaDetailsCommand, SearchMediaCommand,
+};
 
 use super::MediaServiceImpl;
 
@@ -75,8 +77,14 @@ async fn search_reports_each_result_upload_time() {
     // The SQL orders by `created_at DESC`, so the newest upload comes first —
     // which is what makes an empty search read as "my most recent uploads".
     assert_eq!(results[0].short_name.as_deref(), Some("banner.two"));
-    assert_eq!(results[0].created_at.as_deref(), Some("2026-09-30 08:15:00"));
-    assert_eq!(results[1].created_at.as_deref(), Some("2026-09-29 21:04:33"));
+    assert_eq!(
+        results[0].created_at.as_deref(),
+        Some("2026-09-30 08:15:00")
+    );
+    assert_eq!(
+        results[1].created_at.as_deref(),
+        Some("2026-09-29 21:04:33")
+    );
 }
 
 #[tokio::test]

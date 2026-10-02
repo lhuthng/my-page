@@ -99,7 +99,13 @@ export async function deleteEntryDraft(kind, id, authHeader, fetchImpl = fetch) 
 	}).catch(() => {});
 }
 
-export async function deleteEntry(kind, id, authHeader, { reason, detail, force } = {}, fetchImpl = fetch) {
+export async function deleteEntry(
+	kind,
+	id,
+	authHeader,
+	{ reason, detail, force } = {},
+	fetchImpl = fetch
+) {
 	const params = new URLSearchParams();
 	if (reason) params.set('reason', reason);
 	if (detail) params.set('detail', detail);

@@ -98,7 +98,8 @@ test('formatLastUpdated drops the relative half past a week', () => {
 	const old = formatLastUpdated(new Date(NOW - 86400 * 40 * 1000).toISOString(), { now: NOW });
 	assert.ok(!old.includes('ago'));
 	assert.match(old, /2026/);
-});test('formatDateOnly reports the day the database stored, not the reader’s', () => {
+});
+test('formatDateOnly reports the day the database stored, not the reader’s', () => {
 	// The whole point: this is a *record's* day, so it must not depend on where
 	// the reader is. 23:30 UTC is already the next calendar day in Hanoi and
 	// still the previous evening in New York — neither may move the date.

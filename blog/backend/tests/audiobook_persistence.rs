@@ -631,7 +631,10 @@ async fn publishing_requires_a_track_and_gates_the_public_feed() {
     assert_eq!(public.audiobooks[0].slug, "publish-book");
     assert_eq!(public.audiobooks[0].track_count, 1);
     assert_eq!(public.audiobooks[0].total_duration_seconds, 120);
-    assert_eq!(public.audiobooks[0].translator.as_deref(), Some("Tran Slator"));
+    assert_eq!(
+        public.audiobooks[0].translator.as_deref(),
+        Some("Tran Slator")
+    );
     assert_eq!(public.audiobooks[0].tags, vec!["Fiction".to_string()]);
     // The cover-less audiobook has no media URL to render.
     assert!(public.audiobooks[0].url.is_none());

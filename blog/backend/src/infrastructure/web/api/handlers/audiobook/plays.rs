@@ -28,8 +28,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     application::{
-        commands::audiobook::RecordTrackPlayCommand,
-        services::audiobook::AudiobookService,
+        commands::audiobook::RecordTrackPlayCommand, services::audiobook::AudiobookService,
     },
     domain::errors::audiobook::AudiobookError,
     infrastructure::web::{
@@ -55,15 +54,18 @@ const REPORT_MIN_INTERVAL_MS: i64 = 10_000;
 /// bucket. Direct, un-proxied clients all share the fallback, which throttles
 /// them collectively rather than letting them through — the safe direction.
 fn listener_identity(headers: &HeaderMap) -> String {
-    if let Some(ip) = headers.get("cf-connecting-ip").and_then(|v| v.to_str().ok()) {
+    if let Some(ip) = headers
+        .get("cf-connecting-ip")
+        .and_then(|v| v.to_str().ok())
+    {
         return ip.trim().to_string();
     }
-    if let Some(forwarded) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
-        if let Some(first) = forwarded.split(',').next() {
-            let first = first.trim();
-            if !first.is_empty() {
-                return first.to_string();
-            }
+    if let Some(forwarded) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok())
+        && let Some(first) = forwarded.split(',').next()
+    {
+        let first = first.trim();
+        if !first.is_empty() {
+            return first.to_string();
         }
     }
     "unknown".to_string()

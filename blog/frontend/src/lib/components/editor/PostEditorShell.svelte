@@ -175,9 +175,7 @@
 
 			<div class="rounded-xl border-2 border-dark/10 bg-white p-4">
 				<div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-					<h3 class="text-sm font-semibold uppercase tracking-wide text-dark/50">
-						Media library
-					</h3>
+					<h3 class="text-sm font-semibold uppercase tracking-wide text-dark/50">Media library</h3>
 					<!--
 						Live counter rather than the flashing red paragraph this
 						replaced: it only counts tokens the content editor has

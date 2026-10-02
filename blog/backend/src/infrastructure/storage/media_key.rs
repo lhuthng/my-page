@@ -204,8 +204,9 @@ mod tests {
             (".abc.", "abc"),
         ] {
             let hash = format!("{prefix}9.{SHA}");
-            let key = media_key(&hash, "image/webp", 7)
-                .unwrap_or_else(|| panic!("`{prefix}` is written by a write path, so it must resolve"));
+            let key = media_key(&hash, "image/webp", 7).unwrap_or_else(|| {
+                panic!("`{prefix}` is written by a write path, so it must resolve")
+            });
             assert_eq!(key.key, format!("{directory}/7/{SHA}.webp"), "{prefix}");
             assert_eq!(key.sha256, SHA, "{prefix}");
         }

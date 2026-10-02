@@ -148,9 +148,9 @@ pub async fn get_public_audiobook(
 ) -> Result<impl IntoResponse, AudiobookError> {
     // A limit is what makes this a windowed read. Without one the answer is the
     // whole chapter list — an offset alone still moves the window's start.
-    let tracks_limit = query.tracks_limit.map(|limit| {
-        clamp_page_size(Some(limit), TRACK_WINDOW_DEFAULT, TRACK_WINDOW_MAX)
-    });
+    let tracks_limit = query
+        .tracks_limit
+        .map(|limit| clamp_page_size(Some(limit), TRACK_WINDOW_DEFAULT, TRACK_WINDOW_MAX));
 
     let audiobook = state
         .audiobook_service
