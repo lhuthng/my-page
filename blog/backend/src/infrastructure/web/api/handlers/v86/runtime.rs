@@ -185,7 +185,7 @@ pub async fn runtime_descriptor_for(
         variant_rows.iter().skip(1).map(&describe_variant).collect();
     // Variant 1 is the default and is represented both by project_v86_games'
     // legacy iso_* columns and by the top of the variants list.
-    let default_variant = variant_rows.first().map(&describe_variant);
+    let default_variant = variant_rows.first().map(describe_variant);
 
     let (base_url, game_url, iso_url) = match public_base_url {
         Some(base) => {
