@@ -159,6 +159,12 @@ impl<'a> HTTPServer<'a> {
     }
 }
 
+impl<'a> Default for HTTPServer<'a> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,11 +191,5 @@ mod tests {
         assert_eq!(HTTPServer::resolve_port("70000"), HTTPServer::DEFAULT_PORT);
         assert_eq!(HTTPServer::resolve_port("-1"), HTTPServer::DEFAULT_PORT);
         assert_eq!(HTTPServer::resolve_port("5174x"), HTTPServer::DEFAULT_PORT);
-    }
-}
-
-impl<'a> Default for HTTPServer<'a> {
-    fn default() -> Self {
-        Self::new()
     }
 }
