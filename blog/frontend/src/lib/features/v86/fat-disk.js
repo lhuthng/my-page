@@ -144,17 +144,24 @@ function lfnChecksum(name11) {
 	let sum = 0;
 	for (let i = 0; i < 11; i++) {
 		const b = name11.charCodeAt(i);
-		sum = ((sum & 1) << 7) + (sum >> 1) + b;
+		// Masked every step, not just at the end: without this the running
+		// value exceeds 8 bits and the next `>> 1` shifts garbage down,
+		// producing checksums Windows ignores (long names silently vanish).
+		sum = (((sum & 1) << 7) + (sum >> 1) + b) & 0xff;
 	}
-	return sum & 0xff;
+	return sum;
 }
 
-const LFN_SLOTS = [1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+const LFN_SLOTS = [1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30];
 
 /** LFN entries for a name, ordered first-write-first (0x40|n first). */
 function lfnEntries(name, checksum) {
 	const chars = Array.from(name);
-	const count = Math.ceil(chars.length / 13);
+	// Floor + 1, not ceil: a name that exactly fills its entries (e.g. 13
+	// chars in 1 entry) still needs a trailing entry for the 0x0000
+	// terminator, otherwise Windows reads into the next entry and the name
+	// never matches (both game exes are exactly 13 chars).
+	const count = Math.floor(chars.length / 13) + 1;
 	const entries = [];
 	for (let seq = count; seq >= 1; seq--) {
 		const order = seq === count ? 0x40 | seq : seq;
@@ -162,7 +169,11 @@ function lfnEntries(name, checksum) {
 		entry[0] = order;
 		entry[11] = 0x0f;
 		entry[13] = checksum;
-		const startIdx = (count - seq) * 13;
+		// VFAT positions chunk `s` at chars[(s-1)*13 …], so the 0x40-flagged
+		// first entry holds the TAIL, not the head: entry `s` starts at
+		// (s-1)*13. Getting this backwards shows only tail fragments
+		// ("mapElem0000.dat" displayed as "at") and nothing resolves.
+		const startIdx = (seq - 1) * 13;
 		let terminated = false;
 		for (let k = 0; k < 13; k++) {
 			const idx = startIdx + k;
