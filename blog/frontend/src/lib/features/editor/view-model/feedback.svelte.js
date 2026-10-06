@@ -53,6 +53,17 @@ export function createFeedback() {
 	}
 
 	function dropToast(id) {
+		// No-op when nothing to remove: every `$effect` that calls `dismiss`
+		// in its else-branch reads `toasts` here, so an unconditional
+		// `toasts = ...filter` re-triggers itself -> effect_update_depth_exceeded.
+		if (!toasts.some((t) => t.id === id)) {
+			const stray = timers.get(id);
+			if (stray !== undefined) clearTimeout(stray);
+			timers.delete(id);
+			remaining.delete(id);
+			startedAt.delete(id);
+			return;
+		}
 		const handle = timers.get(id);
 		if (handle !== undefined) clearTimeout(handle);
 		timers.delete(id);
