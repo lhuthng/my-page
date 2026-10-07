@@ -23,9 +23,16 @@
 // left a red line in the toolbar for the rest of the session and upload
 // progress outlived the upload. See docs/editor-feedback-ux.md.
 
-import { MAX_TOASTS, TOAST_MS, overflowCount, remainingAfter } from '../model/feedback.js';
+import {
+	ATTENTION_MS,
+	MAX_TOASTS,
+	TOAST_MS,
+	overflowCount,
+	remainingAfter,
+	toastMsFor
+} from '../model/feedback.js';
 
-export { MAX_TOASTS, TOAST_MS };
+export { ATTENTION_MS, MAX_TOASTS, TOAST_MS };
 
 export function createFeedback() {
 	let toasts = $state([]);
@@ -72,7 +79,7 @@ export function createFeedback() {
 		toasts = toasts.filter((t) => t.id !== id);
 	}
 
-	function toast(message, { tone = 'success', ms = TOAST_MS } = {}) {
+	function toast(message, { tone = 'success', ms } = {}) {
 		const id = ++seq;
 		toasts.push({ id, message, tone });
 		// Bounded stack: the oldest is evicted, so a burst of saves can never
@@ -80,7 +87,10 @@ export function createFeedback() {
 		for (let i = overflowCount(toasts.length); i > 0; i -= 1) {
 			dropToast(toasts[0].id);
 		}
-		arm(id, ms);
+		// The caller may override it, but the default is tone-aware: only a
+		// plain success is an acknowledgement. A message you have to read gets
+		// more time on screen.
+		arm(id, ms ?? toastMsFor(tone));
 		return id;
 	}
 

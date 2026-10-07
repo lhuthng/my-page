@@ -168,8 +168,27 @@ export function createEditorViewModel({
 	function reportSaveFailure(message, retry) {
 		feedback.banner('save-failed', message, {
 			tone: 'error',
-			actions: [{ label: 'Retry', run: retry }]
+			actions: [{ label: 'Retry', run: retry }],
+			// Dismissing the report also clears the failed state it describes,
+			// so the status pill does not keep saying "Save failed" after the
+			// user has read it and moved on. Guarded: some failures (a v86 build,
+			// a js-dos upload) never set `save.status = 'error'`, and must not
+			// have an unrelated status clobbered by their banner's `×`.
+			onDismiss: () => {
+				if (ui.save.status === 'error') ui.save.status = 'idle';
+			}
 		});
+	}
+
+	/**
+	 * Enter the saving state for a new attempt — and retire the previous
+	 * failure's report with it. The banner is keyed `save-failed`, so without
+	 * this a retry that succeeds leaves "Save failed" on screen for the rest of
+	 * the session, which reads as the save never having worked.
+	 */
+	function beginSave() {
+		feedback.dismiss('save-failed');
+		ui.save.status = 'saving';
 	}
 
 	// ---- slug availability --------------------------------------------------
@@ -288,7 +307,15 @@ export function createEditorViewModel({
 				actions: [
 					{ label: 'Reload their version', run: acceptRemoteVersion },
 					{ label: 'Overwrite with mine', run: overwriteRemoteVersion }
-				]
+				],
+				// The `×` here is "I will deal with it": it drops the report and the
+				// status with it, so a later Save re-runs the check and can raise the
+				// same banner again — rather than leaving a Conflict pill with no
+				// way to reach the decision. Guarded so the effect's own teardown
+				// (on a status that has already moved on) never clobbers it.
+				onDismiss: () => {
+					if (ui.save.status === 'conflict') ui.save.status = 'idle';
+				}
 			});
 			return;
 		}
@@ -416,7 +443,7 @@ export function createEditorViewModel({
 		appendCreateCover(formData, ui.createCoverFile, entry.ogImageSeconds);
 
 		try {
-			ui.save.status = 'saving';
+			beginSave();
 			const { id } = await createEntry('post', formData, auth(), fetchImpl);
 			ui.save.status = 'saved';
 			feedback.toast('Draft created');
@@ -468,7 +495,7 @@ export function createEditorViewModel({
 		appendInlineFiles(formData, offlineKeys);
 
 		try {
-			ui.save.status = 'saving';
+			beginSave();
 			const response = await patchEntry('post', entry.id, formData, auth(), fetchImpl);
 			baseline = refreshBaseline(baseline, entry, { updatedAt: response.updated_at });
 			ui.save.status = 'saved';
@@ -490,6 +517,10 @@ export function createEditorViewModel({
 
 	async function publish() {
 		if (ui.isPublishing) return;
+		// A publish attempt supersedes the last failure's report, the same way a
+		// save does (see `beginSave`). `publish` does not touch `save.status`,
+		// so the dismissal is spelled out here.
+		feedback.dismiss('save-failed');
 		ui.isPublishing = true;
 		try {
 			await publishEntry(kind, entry.id, auth(), fetchImpl);
@@ -596,7 +627,7 @@ export function createEditorViewModel({
 		appendInlineFiles(formData, offlineKeys);
 
 		try {
-			ui.save.status = 'saving';
+			beginSave();
 			const { id } = await createEntry('project', formData, auth(), fetchImpl);
 			ui.save.status = 'saved';
 			feedback.toast('Draft created');
@@ -665,7 +696,7 @@ export function createEditorViewModel({
 		appendInlineFiles(formData, offlineKeys);
 
 		try {
-			ui.save.status = 'saving';
+			beginSave();
 			const response = await patchEntry('project', entry.id, formData, auth(), fetchImpl);
 			baseline = refreshBaseline(baseline, entry, { updatedAt: response.updated_at });
 			ui.save.status = 'saved';
@@ -753,7 +784,7 @@ export function createEditorViewModel({
 		appendInlineFiles(formData, offlineKeys);
 
 		try {
-			ui.save.status = 'saving';
+			beginSave();
 			const { id } = await createEntry('game', formData, auth(), fetchImpl);
 			ui.save.status = 'saved';
 			feedback.toast('Draft created');
@@ -861,7 +892,7 @@ export function createEditorViewModel({
 		appendInlineFiles(formData, offlineKeys);
 
 		try {
-			ui.save.status = 'saving';
+			beginSave();
 			const response = await patchEntry('game', entry.id, formData, auth(), fetchImpl);
 			baseline = refreshBaseline(baseline, entry, { updatedAt: response.updated_at });
 			ui.save.status = 'saved';

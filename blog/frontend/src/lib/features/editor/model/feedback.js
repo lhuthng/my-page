@@ -9,6 +9,22 @@ export const TOAST_MS = 4000;
 export const MAX_TOASTS = 3;
 
 /**
+ * How long a message that is *not* a plain success stays up.
+ *
+ * A success is an acknowledgement: you already know what you did, and the
+ * confirmation just closes the loop. Anything else — "Nothing to save.", a
+ * neutral report you have to actually read — is information, and 4 s is long
+ * enough to miss. Failures are stickier still (banners, no timer at all), so
+ * this only ever applies to the transient class.
+ */
+export const ATTENTION_MS = 7000;
+
+/** The default lifetime for a transient message, by tone. */
+export function toastMsFor(tone) {
+	return tone === 'success' ? TOAST_MS : ATTENTION_MS;
+}
+
+/**
  * How many of the oldest toasts must be dropped to get back inside the cap.
  *
  * A burst of saves must not be able to bury the editor under toasts, so the

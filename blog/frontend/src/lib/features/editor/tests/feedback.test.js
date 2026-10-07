@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_TOASTS, TOAST_MS, overflowCount, remainingAfter } from '../model/feedback.js';
+import {
+	ATTENTION_MS,
+	MAX_TOASTS,
+	TOAST_MS,
+	overflowCount,
+	remainingAfter,
+	toastMsFor
+} from '../model/feedback.js';
 
 test('the toast stack is bounded', () => {
 	// A burst of saves must not be able to bury the editor, so the oldest is
@@ -32,4 +39,12 @@ test('the toast lifetime matches the spec', () => {
 	// docs/editor-feedback-ux.md §2: transient messages auto-dismiss at 4s.
 	assert.equal(TOAST_MS, 4000);
 	assert.equal(MAX_TOASTS, 3);
+});
+
+test('a success is an acknowledgement, anything else is a message to read', () => {
+	// Reported from use: the wrong-thing messages went by before they could be
+	// read. Only a plain success keeps the acknowledgement lifetime.
+	assert.equal(toastMsFor('success'), TOAST_MS);
+	assert.equal(toastMsFor('neutral'), ATTENTION_MS);
+	assert.ok(ATTENTION_MS > TOAST_MS);
 });

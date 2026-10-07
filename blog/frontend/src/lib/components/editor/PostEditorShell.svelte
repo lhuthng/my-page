@@ -124,7 +124,6 @@
 
 <article class="flex flex-col gap-4 pb-10">
 	<EditorToolbar {vm} {titleLabel} />
-	<EditorFeedback {vm} />
 
 	<div class="flex not-xl:flex-col gap-4">
 		<div class="flex flex-col grow min-w-0 gap-4">
@@ -305,3 +304,10 @@
 		</aside>
 	</div>
 </article>
+
+<!--
+	Floating chrome, deliberately outside the article: the messages render in a
+	fixed corner, and an in-flow wrapper would leave a phantom gap in the
+	article's `gap-4` column even while empty.
+-->
+<EditorFeedback {vm} />
