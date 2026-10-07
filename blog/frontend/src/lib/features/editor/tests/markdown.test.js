@@ -84,6 +84,18 @@ test('renders a stored body once its indices are decoded', () => {
 	assert.match(html, /<img[^>]+src="\/media\/i\/photo\.png"/);
 });
 
+test('the game directive reaches its mount point with the slug intact', () => {
+	// `:::app game <slug>` is how a post embeds a whole game. `App.svelte`
+	// keys off exactly these data attributes to pick the embed, so the type and
+	// the slug have to survive the render.
+	const html = renderBody(createMarkdownRenderer(), ':::app game my-game 100% 600', {});
+
+	assert.match(html, /class="app-container/);
+	assert.match(html, /data-type="game"/);
+	assert.match(html, /data-name="my-game"/);
+	assert.match(html, /data-height="600px"/);
+});
+
 test('an unresolved media key renders a marker instead of a broken image', () => {
 	const html = renderBody(createMarkdownRenderer(), '@[img:nope]', {});
 	assert.match(html, /class="missing-image"/);

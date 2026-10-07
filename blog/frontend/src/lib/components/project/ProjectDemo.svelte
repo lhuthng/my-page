@@ -4,6 +4,9 @@
 	import JsDosPlayer from './JsDosPlayer.svelte';
 	import V86Player from './V86Player.svelte';
 
+	// `showBack` and `heading` exist for the embedded form (`:::app game`): an
+	// article supplies its own context, and a heading rendered here would also
+	// be collected as one of the post's headings by `findHeaders`.
 	let {
 		title,
 		demoType = 'html5',
@@ -13,6 +16,8 @@
 		height = '520px',
 		backHref = '/projects',
 		backLabel = 'All projects',
+		showBack = true,
+		heading = 'Demo',
 		children,
 		...rest
 	} = $props();
@@ -28,13 +33,19 @@
 </script>
 
 <section class="bg-white rounded-xl p-4">
-	<div class="space-y-2">
-		<BackButton href={backHref} text={backLabel} />
-		<div class="flex items-center gap-3 mb-3">
-			<h2 class="text-xl lg:text-2xl">Demo</h2>
-			<hr class="grow border" />
+	{#if showBack || heading}
+		<div class="space-y-2">
+			{#if showBack}
+				<BackButton href={backHref} text={backLabel} />
+			{/if}
+			{#if heading}
+				<div class="flex items-center gap-3 mb-3">
+					<h2 class="text-xl lg:text-2xl">{heading}</h2>
+					<hr class="grow border" />
+				</div>
+			{/if}
 		</div>
-	</div>
+	{/if}
 	<div class="mx-auto max-w-full" bind:this={beforeDemoPortal} style:width></div>
 
 	<!-- Device bezel: the same gradient faceplate over a dark screen as the

@@ -7,6 +7,7 @@
 	let LottieStateSwitcher = $state();
 	let JsDosApp = $state();
 	let V86App = $state();
+	let GameApp = $state();
 	$effect(() => {
 		if (type === 'glb-demo') {
 			import('./GLBDemo.svelte').then((m) => (GLBDemo = m.default));
@@ -19,6 +20,10 @@
 		}
 		if (type === 'v86') {
 			import('./V86App.svelte').then((m) => (V86App = m.default));
+		}
+		// A whole game by slug, whichever launcher it uses — `:::app game my-game`.
+		if (type === 'game') {
+			import('./GameApp.svelte').then((m) => (GameApp = m.default));
 		}
 	});
 </script>
@@ -43,5 +48,9 @@
 {:else if type === 'v86'}
 	{#if V86App}
 		<V86App {name} {width} {height} />
+	{/if}
+{:else if type === 'game'}
+	{#if GameApp}
+		<GameApp {name} {width} {height} />
 	{/if}
 {/if}
