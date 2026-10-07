@@ -15,7 +15,9 @@
 
 <div {...rest}>
 	<div class="flex flex-col py-4 gap-4 w-full">
-		<div class="flex flex-wrap items-center justify-between gap-2">
+		<!-- A pane like the results below it: the toolbar used to float on the page
+		     background on its own. -->
+		<div class="flex flex-wrap items-center justify-between gap-2 bg-white rounded-xl p-4">
 			<div class="flex gap-2 flex-1 min-w-56 max-w-sm">
 				<input
 					disabled={editMode !== true}

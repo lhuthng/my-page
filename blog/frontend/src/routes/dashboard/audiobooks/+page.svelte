@@ -177,15 +177,19 @@
 </svelte:head>
 
 <section class="flex flex-col gap-4 pb-8">
-	<PageHeader title="Audiobooks" count={items.length}>
-		{#snippet actions()}
-			<div class="w-fit duo-btn" data-duo-color={showForm ? 'light' : 'green'}>
-				<button onclick={() => (showForm = !showForm)}>
-					{showForm ? 'Cancel' : 'New audiobook'}
-				</button>
-			</div>
-		{/snippet}
-	</PageHeader>
+	<!-- A pane, like the form and the list below: the title row used to sit on the
+	     page background on its own. -->
+	<div class="bg-white rounded-xl p-4 flex flex-col gap-4">
+		<PageHeader title="Audiobooks" count={items.length}>
+			{#snippet actions()}
+				<div class="w-fit duo-btn" data-duo-color={showForm ? 'light' : 'green'}>
+					<button onclick={() => (showForm = !showForm)}>
+						{showForm ? 'Cancel' : 'New audiobook'}
+					</button>
+				</div>
+			{/snippet}
+		</PageHeader>
+	</div>
 
 	{#if showForm}
 		<form

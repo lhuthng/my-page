@@ -98,20 +98,27 @@
 </svelte:head>
 
 <section class="flex flex-col gap-4 pb-8">
-	<PageHeader title="Dashboard">
-		{#snippet actions()}
-			<div class="flex items-center gap-3">
-				<!-- The figures below are a snapshot, so the page says how old the
-				     snapshot is and offers the one thing that makes it current again. -->
-				<LastUpdated value={fetchedAt} label="Updated" live />
-				<div class="w-fit duo-btn" data-duo-color="light" class:opacity-60={refreshing}>
-					<button onclick={() => refresh()} disabled={refreshing}>
-						{refreshing ? 'Refreshing…' : 'Refresh'}
-					</button>
+	<!--
+		The page chrome is a pane like everything under it. Left bare, the title
+		row floated straight on the page background while every card below sat in
+		white — the same header the other dashboard pages already wrap.
+	-->
+	<div class="bg-white rounded-xl p-4 flex flex-col gap-4">
+		<PageHeader title="Dashboard">
+			{#snippet actions()}
+				<div class="flex items-center gap-3">
+					<!-- The figures below are a snapshot, so the page says how old the
+					     snapshot is and offers the one thing that makes it current again. -->
+					<LastUpdated value={fetchedAt} label="Updated" live />
+					<div class="w-fit duo-btn" data-duo-color="light" class:opacity-60={refreshing}>
+						<button onclick={() => refresh()} disabled={refreshing}>
+							{refreshing ? 'Refreshing…' : 'Refresh'}
+						</button>
+					</div>
 				</div>
-			</div>
-		{/snippet}
-	</PageHeader>
+			{/snippet}
+		</PageHeader>
+	</div>
 
 	{#if loading}
 		<div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
