@@ -73,6 +73,10 @@ function isNoindexPath(pathname) {
 	return NOINDEX_PATHS.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+function isHtmlResponse(response) {
+	return (response.headers.get('content-type') ?? '').includes('text/html');
+}
+
 function hardenHtml(html) {
 	const officialOrigin = SITE_ORIGIN.replaceAll('$', '$$$$');
 	const absoluteRootReferences = html.replace(
@@ -83,7 +87,7 @@ function hardenHtml(html) {
 	return absoluteRootReferences;
 }
 
-function applySecurityHeaders(response, event, noindex) {
+function applySecurityHeaders(response, event, noindex, personalized = false) {
 	// Responses returned by the API proxy can carry immutable Undici headers.
 	// Always copy them into a new Response before applying site-wide headers.
 	const mutableResponse = new Response(response.body, {
@@ -104,6 +108,14 @@ function applySecurityHeaders(response, event, noindex) {
 
 	if (noindex) {
 		mutableResponse.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+		mutableResponse.headers.set('Cache-Control', 'private, no-store');
+	} else if (personalized && isHtmlResponse(mutableResponse)) {
+		// A page rendered for a signed-in reader belongs to that reader alone:
+		// the root layout puts their display name, username, and avatar into the
+		// markup and serialises their access token into the page data. Cloudflare
+		// skips anything marked private or no-store, which is what keeps a cache
+		// rule for HTML from handing one reader's page to the next. Anonymous
+		// pages keep the `public, s-maxage=...` their load functions set.
 		mutableResponse.headers.set('Cache-Control', 'private, no-store');
 	}
 
@@ -245,10 +257,15 @@ export async function handle({ event, resolve }) {
 		await populateUser(event);
 	}
 
+	// Read before `resolve`, because what the page renders depends on it. A
+	// present cookie is enough to make the response reader-specific, even when
+	// the backend ends up rejecting it.
+	const personalized = Boolean(event.cookies.get('refresh-token'));
+
 	const noindex = isNoindexPath(event.url.pathname);
 	const response = await resolve(event, {
 		transformPageChunk: !dev ? ({ html }) => hardenHtml(html) : undefined
 	});
 
-	return applySecurityHeaders(response, event, noindex || response.status >= 400);
+	return applySecurityHeaders(response, event, noindex || response.status >= 400, personalized);
 }

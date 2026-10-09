@@ -369,7 +369,7 @@
 		{/if}
 	</div>
 
-	<div class="rounded-xl bg-black p-2 drop-shadow-xl">
+	<div class="overflow-hidden rounded-xl bg-black p-2 drop-shadow-xl">
 		<div class="flex items-center justify-between px-2 py-1 text-xs text-white/60">
 			<span>{player.status || 'Starting…'}{player.paused ? ' (frozen)' : ''}</span>
 			<button class="hover:text-white" onclick={() => player.captureMouse()}>
@@ -379,9 +379,32 @@
 		<div bind:this={player.shell}>
 			<div
 				bind:this={player.screenContainer}
-				class="w-full"
+				class="screen w-full"
 				style="height: {data.runtime.display_height ?? '520px'}"
 			></div>
 		</div>
 	</div>
 </section>
+
+<style lang="postcss">
+	@reference "../../../../../../app.css";
+
+	/* A guest that switches to a video mode bigger than the frame was sized for
+	   has to be scaled down into it rather than left to spill over the page.
+	   Flex, not grid: a percentage max-height resolves against the flex line's
+	   definite height, which is what actually clamps the canvas. */
+	.screen {
+		@apply flex items-center justify-center overflow-hidden;
+	}
+
+	.screen :global(canvas) {
+		image-rendering: pixelated;
+		image-rendering: crisp-edges;
+		max-width: 100%;
+		max-height: 100%;
+		width: auto !important;
+		height: auto !important;
+		object-fit: contain;
+		display: block;
+	}
+</style>

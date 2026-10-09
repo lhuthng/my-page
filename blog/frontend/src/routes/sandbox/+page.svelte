@@ -1,5 +1,6 @@
 <script>
 	import SandboxMachine from './SandboxMachine.svelte';
+	import Slider from '$lib/components/ui/Slider.svelte';
 	import { readFloppyFiles, floppyFilesToZip } from '$lib/features/v86/floppy.js';
 	import { loadBlankFloppy } from '$lib/players/v86-saves.js';
 	import { createEmptyFatDisk, readHddFiles } from '$lib/features/v86/fat-disk.js';
@@ -26,6 +27,13 @@
 	let hddStatus = $state('');
 	let hddCritical = $state(false);
 	let hddAttached = $state(false);
+
+	// The same mouse knobs a game's manifest carries, exposed so a game can be
+	// dialled in here before any of it is written down. Defaults are the
+	// sandbox's old hard-coded behaviour, so nothing changes until you touch it.
+	let mouseSpeed = $state(1);
+	let revertMouseY = $state(false);
+	let disableMouse = $state(false);
 
 	const selected = $derived(data.systems.find((system) => system.id === versionId));
 
@@ -282,6 +290,45 @@
 
 	{#if booted}
 		<div class="rounded-xl bg-white p-4 drop-shadow-xl">
+			<h2 class="mb-2 font-semibold">Mouse</h2>
+			<p class="mb-3 text-sm text-dark/60">
+				The same knobs a game's manifest carries. Find what a game needs here, then write it down.
+			</p>
+			<div class="flex flex-wrap items-end gap-x-6 gap-y-3">
+				<label class="flex flex-col gap-1 text-sm sm:w-64">
+					<span class="flex items-center justify-between gap-3">
+						<span class="font-medium">Mouse speed</span>
+						<span class="tabular-nums text-dark/60">{mouseSpeed.toFixed(2)}×</span>
+					</span>
+					<Slider min="0.1" max="3" step="0.1" bind:value={mouseSpeed} />
+				</label>
+				<label class="flex items-center gap-2 text-sm">
+					<input type="checkbox" class="accent-primary h-4 w-4" bind:checked={revertMouseY} />
+					<span
+						class="underline decoration-dashed underline-offset-2 cursor-help"
+						title="v86's mouse adapter negates movementY. Turn this on to send the browser's natural direction instead."
+					>
+						Invert mouse Y
+					</span>
+				</label>
+				<label class="flex items-center gap-2 text-sm">
+					<input type="checkbox" class="accent-primary h-4 w-4" bind:checked={disableMouse} />
+					<span
+						class="underline decoration-dashed underline-offset-2 cursor-help"
+						title="Hands the guest no mouse at all — no pointer, no clicks. For games you drive entirely from the keyboard."
+					>
+						Disable mouse
+					</span>
+				</label>
+			</div>
+			{#if disableMouse}
+				<p class="mt-3 text-sm text-dark/60">
+					v86 sets its mouse support up at boot, so this lands on the next start or restart.
+				</p>
+			{/if}
+		</div>
+
+		<div class="rounded-xl bg-white p-4 drop-shadow-xl">
 			<h2 class="mb-2 font-semibold">Floppy drive</h2>
 			<div class="flex flex-wrap items-end gap-3">
 				<button
@@ -425,6 +472,9 @@
 				system={booted}
 				hdd={hddBuffer}
 				hddSize={hddBuffer ? hddSizeMB * 1024 * 1024 : 0}
+				{mouseSpeed}
+				{revertMouseY}
+				{disableMouse}
 				onready={(handle) => {
 					machine = handle;
 					hddAttached = !!hddBuffer;

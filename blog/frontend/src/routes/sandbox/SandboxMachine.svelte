@@ -5,7 +5,18 @@
 	// Self-contained: the sandbox drives v86 directly rather than going through
 	// the project player, which carries saves, variants, launcher CDs and
 	// snapshots that a scratch machine has none of.
-	let { system, hdd: initialHdd = null, hddSize: initialHddSize = 0, onready } = $props();
+	let {
+		system,
+		hdd: initialHdd = null,
+		hddSize: initialHddSize = 0,
+		// The mouse knobs a game's manifest carries, so a game can be dialled in
+		// here before any of it is written down. `disableMouse` is a v86
+		// constructor option, so it only takes effect on the next boot.
+		mouseSpeed = 1,
+		revertMouseY = false,
+		disableMouse = false,
+		onready
+	} = $props();
 
 	let screen = $state();
 	let shell = $state();
@@ -99,7 +110,11 @@
 					use_parts: true
 				},
 				acpi: false,
-				disable_speaker: false
+				disable_speaker: false,
+				// No bundled mouse adapter: its own capture, wheel and click
+				// handling go with it, leaving the guest the deltas we send (none,
+				// while the mouse is switched off).
+				disable_mouse: disableMouse
 			};
 			// v86 instantiates the CD drive with or without media, so Windows
 			// letters it at boot and a disc can go in whenever. On a reboot the
@@ -273,18 +288,23 @@
 	};
 
 	const captureMouse = () => {
+		if (disableMouse) return;
 		if (typeof emulator?.lock_mouse === 'function') emulator.lock_mouse();
 		else screen?.querySelector('canvas')?.requestPointerLock?.();
 	};
 
 	// v86's bundled adapter negates movementY, which is the direction the
-	// guest expects, so send it straight through while carrying fractional
-	// movement between events — the same approach the project player uses.
+	// guest expects, so send it straight through by default. `revertMouseY`
+	// sends the browser's natural direction instead and `mouseSpeed` scales
+	// the movement, exactly like the project player does. Fractional movement
+	// is carried between events so a slow drag still ticks the guest.
 	const handleCapturedMouseMove = (event) => {
+		if (disableMouse) return;
 		if (!emulator || document.pointerLockElement === null) return;
 		if (typeof event.movementX !== 'number' || typeof event.movementY !== 'number') return;
-		mouseRemainderX += event.movementX;
-		mouseRemainderY -= event.movementY;
+		const ySign = revertMouseY ? 1 : -1;
+		mouseRemainderX += event.movementX * mouseSpeed;
+		mouseRemainderY += event.movementY * ySign * mouseSpeed;
 		const deltaX = mouseRemainderX < 0 ? Math.ceil(mouseRemainderX) : Math.floor(mouseRemainderX);
 		const deltaY = mouseRemainderY < 0 ? Math.ceil(mouseRemainderY) : Math.floor(mouseRemainderY);
 		mouseRemainderX -= deltaX;
@@ -315,7 +335,9 @@
 			{#if mips > 0}· {mips.toFixed(0)} MIPS{/if}
 		</span>
 		<span class="flex flex-wrap gap-3">
-			<button class="hover:text-white" onclick={captureMouse}>Capture mouse</button>
+			{#if !disableMouse}
+				<button class="hover:text-white" onclick={captureMouse}>Capture mouse</button>
+			{/if}
 			<button class="hover:text-white" onclick={pause}>{paused ? 'Resume' : 'Pause'}</button>
 			<button class="hover:text-white" onclick={reboot}>Restart</button>
 			<button class="hover:text-white" onclick={fullscreen}>Fullscreen</button>

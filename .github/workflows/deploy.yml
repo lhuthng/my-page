@@ -17,10 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Commits tagged [manual deploy] skip the whole pipeline below — use this
-  # when you're building and deploying locally via scripts/emergency/deploy.sh
-  # instead (see scripts/emergency/README.md). Doesn't apply to a manual
-  # workflow_dispatch run, which is already an explicit choice to use CI.
+  # [manual deploy] skips the pipeline for local deploys
+  # (scripts/emergency/deploy.sh); workflow_dispatch always deploys.
   filter:
     if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[manual deploy]')
     runs-on: ubuntu-latest
@@ -36,12 +34,9 @@ jobs:
               - 'blog/**'
               - 'ops/**'
 
-  # ── Quality gates: the checks CONTRIBUTING.md documents ─────────
-  # Runs on the macOS runner because the audiobooks suite needs
-  # Xcode's Swift toolchain; the Rust and Node suites are
-  # platform-independent, so one runner carries all three. The
-  # build jobs wait on this, so a push that fails a gate never
-  # reaches the VM.
+  # ── Quality gates (CONTRIBUTING.md) ────────────────────────────
+  # One macOS runner carries all three suites: Swift needs Xcode.
+  # The build jobs wait on this, so a failed gate never deploys.
   gates:
     needs: filter
     runs-on: macos-15
@@ -79,9 +74,8 @@ jobs:
         working-directory: blog/backend
         run: cargo test
 
-      # npm install, not npm ci: bun.lock is the real lockfile (the
-      # Dockerfile installs with bun) and package-lock.json has
-      # drifted from package.json, which npm ci would reject.
+      # npm install, not npm ci: bun.lock is the real lockfile and
+      # package-lock.json has drifted from package.json.
       - name: Install frontend dependencies
         working-directory: blog/frontend
         run: npm install
@@ -170,7 +164,6 @@ jobs:
             type=gha
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/blog-frontend:cache,mode=max
 
-  # SSHs into the Oracle VM, pulls new images, restarts containers, verifies
   deploy-blog:
     needs: [build-push-backend, build-push-frontend]
     runs-on: ubuntu-latest
@@ -191,9 +184,8 @@ jobs:
           script: |
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-      # The VM is not a git checkout - images come from GHCR and this compose
-      # file is the only repo-managed file the runtime reads. Ship it so
-      # compose changes (env, healthchecks, restart policy) reach the VM.
+      # The VM is not a git checkout: images come from GHCR, and this
+      # compose file is the only repo-managed file the runtime reads.
       - name: Sync compose file to VM
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -204,9 +196,8 @@ jobs:
           target: "~/MyPage/blog"
           strip_components: 1
 
-      # nginx sites are repo-managed (ops/nginx/). Ship them, swap into
-      # sites-enabled, and reload only when the content actually changed so
-      # unrelated deploys don't touch nginx. Certs stay owned by certbot.
+      # Repo-managed nginx sites (ops/nginx/): swap in and reload only
+      # on change. Certs stay owned by certbot.
       - name: Sync nginx sites to VM
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -263,9 +254,8 @@ jobs:
             docker compose up -d --remove-orphans
             docker image prune -f
 
-      # Migrations run automatically via sqlx::migrate!() when backend starts.
-      # --wait blocks until both containers report healthy (their healthchecks
-      # probe /health), so this step fails the deploy instead of a fixed sleep.
+      # Migrations run on backend startup (sqlx::migrate!()); --wait
+      # fails the deploy instead of sleeping a fixed time.
       - name: Wait for backend and frontend to become healthy
         uses: appleboy/ssh-action@v1.2.0
         with:

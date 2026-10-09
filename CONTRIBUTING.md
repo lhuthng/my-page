@@ -8,15 +8,15 @@ Conventional commits with scopes, e.g. `feat(audiobooks): ...`,
 
 ## Gates
 
-- Backend: `cargo fmt` and `cargo clippy -- -D warnings` (both wired into
-  `make lint`).
-- Frontend: Prettier check (`make lint`), write with `make fmt`.
+- Backend: `cargo fmt` and `cargo clippy -- -D warnings`.
+- Frontend: Prettier (`make lint` checks, `make fmt` writes).
 - Backend unit tests: `cargo test` from `blog/backend`.
 - Frontend unit tests: `npm test` from `blog/frontend`.
-- macOS tests: `make test` from `apps/macos`.
+- macOS tests: `make test` from `apps/macos` (needs Xcode).
 
-CI runs every gate on each push to master (the `gates` job in
-`.github/workflows/deploy.yml`); the deploy jobs wait on it.
+From `blog/`, `make lint` runs both linters and `make fmt` both
+formatters. CI runs every gate on each push to master (the `gates`
+job in `.github/workflows/deploy.yml`); the deploy jobs wait on it.
 
 ## Migrations
 
