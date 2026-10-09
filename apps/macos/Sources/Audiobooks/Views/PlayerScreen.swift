@@ -331,6 +331,14 @@ struct PlayerScreen: View {
                 // position means nothing in it. A different *chapter* is not:
                 // that is precisely what `pinnedEdge` carries forward.
                 .onChange(of: player.book?.id) { _, _ in rowOrigin = nil }
+                // Open on the chapter that is playing, as the web player's
+                // "keep the playing chapter in sight" effect does. This is not
+                // only about looking right: the pinned bar decides an edge from
+                // a frame the playing row has to report at least once, so a list
+                // that opened at the top of a resumed book left the bar with
+                // nothing to decide from until the reader happened to scroll
+                // the chapter's row into view themselves.
+                .onAppear { openOnPlayhead(listProxy) }
             }
         }
         // The card is white end to end, so the list's inset and fade land on it.
@@ -364,6 +372,22 @@ struct PlayerScreen: View {
     }
 
     // MARK: - Keeping the playing chapter in sight
+
+    /// Bring the playing chapter into view as the list opens.
+    ///
+    /// `anchor: .center` matches the pinned bar's own return, so arriving and
+    /// returning land the chapter in the same place. A book that opens on its
+    /// first chapter is already there and this is a no-op. Deferred a runloop
+    /// because the row the scroll needs is only in the stack once it has laid
+    /// out, and `scrollTo` an id that is not there yet finishes as nothing
+    /// rather than arriving late.
+    private func openOnPlayhead(_ proxy: ScrollViewProxy) {
+        let index = player.trackIndex
+        guard index > 0, index < chapterCount else { return }
+        DispatchQueue.main.async {
+            proxy.scrollTo(index, anchor: .center)
+        }
+    }
 
     /// Which edge of the list the playing chapter has scrolled off through, or
     /// `nil` while it is on screen where it belongs.

@@ -120,6 +120,14 @@ backend works from the bundled app too.
   loads the next window: a 2000-chapter book paints the rows near the viewport
   rather than all of them. The playhead keeps the next few chapters in hand, so
   a chapter boundary is not where the network shows up.
+- The chapter list **opens on the chapter that is playing**, mirroring the web
+  player's own follow effect: a book resumed at chapter 300 shows chapter 300
+  rather than the top of the book with the playhead hundreds of rows below. It
+  is not only a matter of looking right. The pinned bar decides an edge from a
+  frame that only the playing row reports, so a list that opened at the top of
+  a resumed book had nothing to decide from until the reader scrolled that row
+  into view — the bar was missing exactly when it was wanted. A book that opens
+  on its first chapter is already there, and the scroll is a no-op.
 - Play counts coming back from a beacon are written into whichever chapter
   holds them — the loaded window on screen — rather than into the book's opening
   window, which is all `AudiobookDetails.tracks` holds for a windowed book.
