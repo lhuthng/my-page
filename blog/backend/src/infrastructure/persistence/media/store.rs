@@ -11,7 +11,9 @@
 
 use std::path::Path;
 
-use crate::infrastructure::storage::{MEDIA_CACHE_CONTROL, audio_object_key, media_key};
+use crate::infrastructure::storage::{
+    MEDIA_CACHE_CONTROL, audio_object_key, chunked, is_audio, media_key,
+};
 use crate::infrastructure::web::server::MediaConfig;
 
 /// Copies a just-written audio file into the bucket.
@@ -77,6 +79,57 @@ pub async fn mirror_audio_to_bucket(
             path = %file_path.display(),
             %error,
             "audio: bucket mirror failed; the disk copy is still authoritative"
+        ),
+    }
+}
+
+/// Encodes a just-written audio file into chunked zstd objects and writes the
+/// manifest that marks the row as chunked.
+///
+/// Called from the audiobook track write path, beside the bucket mirror and
+/// with the same failure contract: the plain file is authoritative, so a
+/// failure here is logged and the row stays exactly as servable as it was —
+/// what is lost is the manifest, which is the switch that hands reads to the
+/// chunks. That ordering is what keeps a half-finished encode from being
+/// visible: `chunked::write` puts the chunks down before the manifest, so a
+/// manifest that exists always names chunks that exist.
+///
+/// The plain copy is deliberately *kept*. Dropping it is the cutover that
+/// halves the space these bytes take, and it is a separate change because a
+/// chunked row cannot be answered by redirecting to the bucket: reassembling a
+/// range means reading chunks through this process.
+pub async fn write_chunked_audio(
+    config: &MediaConfig,
+    hash: &str,
+    content_type: &str,
+    uploader_id: i64,
+    bytes: &[u8],
+) {
+    // Not audio => nothing to do, and the scope is structural: only audiobook
+    // audio is chunked, exactly as only audiobook audio is mirrored.
+    if !is_audio(content_type) {
+        return;
+    }
+    let Some(key) = media_key(hash, content_type, uploader_id) else {
+        tracing::warn!(
+            hash,
+            content_type,
+            "chunks: no storage key derivable, nothing chunked"
+        );
+        return;
+    };
+
+    match chunked::write(config, &key.key, content_type, bytes).await {
+        Ok(manifest) => tracing::info!(
+            key = %key.key,
+            chunks = manifest.chunks.len(),
+            raw_size = manifest.raw_size,
+            "chunks: audio stored as zstd chunks"
+        ),
+        Err(error) => tracing::error!(
+            key = %key.key,
+            %error,
+            "chunks: audio was not chunked; the plain file still serves it"
         ),
     }
 }

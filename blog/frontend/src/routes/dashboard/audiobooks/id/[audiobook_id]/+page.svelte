@@ -55,7 +55,7 @@
 	/**
 	 * Fetch the server copy. Track mutations pass `silent`, which keeps the
 	 * editor mounted: flipping back to the loading placeholder collapses the
-	 * page and throws the author to the top on every reorder or delete. A
+	 * page and throws the author to the top on every upload or delete. A
 	 * silent reload also leaves the unsaved metadata draft untouched.
 	 */
 	async function load({ silent = false } = {}) {
@@ -127,12 +127,19 @@
 		}
 	}
 
-	/** Read the leading chapter number from names such as `Ch.6` or `Chapter 12`. */
+	/**
+	 * Read the leading chapter number from names such as `Ch.6` or `Chapter 12`.
+	 *
+	 * `null` means the name carries no chapter marker at all — an unnamed file,
+	 * which is appended past the highest slot. A number that cannot be a slot
+	 * (say `Ch.0`) comes back as it is, so the caller rejects the file rather
+	 * than quietly treating it as unnamed.
+	 */
 	function chapterNumberFromFilename(name) {
 		const match = name.match(/^\s*(?:ch\.?|chapter)\s*(\d+)(?=$|[\s._\-–—:])/i);
 		if (!match) return null;
 		const number = Number(match[1]);
-		return Number.isInteger(number) && number > 0 ? number : null;
+		return Number.isInteger(number) ? number : null;
 	}
 
 	/**
@@ -155,10 +162,14 @@
 	}
 
 	/**
-	 * Classify a panel upload before sending anything. Numbered files that
-	 * match existing tracks are never appended as duplicates: replacement-only
-	 * uploads ask for confirmation, while a mixed batch makes the author choose
-	 * between the new files and the matching files.
+	 * Classify a panel upload before sending anything, by the chapter number in
+	 * the file name.
+	 *
+	 * A number an existing chapter holds is a replacement — always asked for
+	 * rather than applied silently. A number that names nothing yet is the slot
+	 * the new chapter takes, not a reason to append it. Anything else is refused
+	 * before an upload starts: no number at all in a mixed batch, a number that
+	 * cannot be a slot, or the same number twice in one batch.
 	 */
 	function queueTrackUpload(files) {
 		const list = Array.from(files ?? []);
@@ -169,12 +180,26 @@
 			number: chapterNumberFromFilename(file.name)
 		}));
 		if (numbered.every(({ number }) => number === null)) {
-			addTracks(list);
+			addTracks(numbered);
+			return;
+		}
+		const impossible = numbered.filter(({ number }) => number !== null && number < 1);
+		if (impossible.length > 0) {
+			error = `Chapter numbers start at 1 (${impossible
+				.map(({ file }) => file.name)
+				.join(', ')}). Nothing was uploaded.`;
 			return;
 		}
 		if (numbered.some(({ number }) => number === null)) {
 			error =
 				'Every file in a batch must start with a chapter number (for example, Ch.6) so additions and replacements can be identified. Nothing was uploaded.';
+			return;
+		}
+		const repeated = numbered
+			.map(({ number }) => number)
+			.filter((number, index, all) => all.indexOf(number) !== index);
+		if (repeated.length > 0) {
+			error = `Two files name chapter ${formatChapterNumbers(repeated)}, and a slot holds one chapter. Upload them one at a time. Nothing was uploaded.`;
 			return;
 		}
 
@@ -184,7 +209,7 @@
 		for (const item of numbered) {
 			const track = tracksByNumber.get(item.number);
 			if (track) replacements.push({ ...item, track });
-			else additions.push(item.file);
+			else additions.push(item);
 		}
 
 		if (replacements.length > 0 && additions.length > 0) {
@@ -201,14 +226,14 @@
 
 		uploading = true;
 		error = '';
-		uploads = list.map((file) => ({
+		uploads = list.map(({ file }) => ({
 			name: file.name,
 			status: 'pending',
 			operation: 'add',
 			message: ''
 		}));
 
-		for (const [index, file] of list.entries()) {
+		for (const [index, { file, number }] of list.entries()) {
 			uploads[index] = { ...uploads[index], status: 'probing' };
 			// Probe in the browser: the server has no audio decoder, and the
 			// element has to read the header to play the file anyway.
@@ -219,6 +244,9 @@
 				const form = new FormData();
 				form.append('file', file, file.name);
 				form.append('title', titleFromFilename(file.name));
+				// The slot the file name named. Without one the server appends past
+				// the highest chapter rather than guessing a position.
+				if (number !== null) form.append('number', String(number));
 				if (duration) form.append('duration_seconds', String(duration));
 
 				await audiobooks.addTrack(audiobookId, form);
@@ -289,36 +317,6 @@
 		else addTracks(pending.additions);
 	}
 
-	/** Renumber the playlist in place so the editor mirrors the server. */
-	function resequence(tracks) {
-		tracks.forEach((track, index) => (track.number = index + 1));
-	}
-
-	/**
-	 * Persist a new track order. The list is already reordered locally, so a
-	 * failure just restores the server's order rather than leaving the UI lying
-	 * about what was saved — and it never blanks the page.
-	 */
-	async function persistOrder(order) {
-		try {
-			await audiobooks.reorderTracks(audiobookId, order);
-		} catch (e) {
-			error = e?.message ?? 'Could not reorder the tracks.';
-			await load({ silent: true });
-		}
-	}
-
-	/** Move the track at `from` so it ends up at index `to`, then persist. */
-	async function moveTrack(from, to) {
-		if (!audiobook || to < 0 || to >= audiobook.tracks.length || to === from) return;
-		const tracks = [...audiobook.tracks];
-		const [moved] = tracks.splice(from, 1);
-		tracks.splice(to, 0, moved);
-		resequence(tracks);
-		audiobook.tracks = tracks;
-		await persistOrder(tracks.map((track) => track.id));
-	}
-
 	async function renameTrack(track, title) {
 		const next = title.trim();
 		if (!next || next === track.title) return;
@@ -331,20 +329,18 @@
 	}
 
 	/**
-	 * Remove a track optimistically: the row disappears immediately and the
-	 * numbering closes up, so the list never collapses into a loading state and
-	 * the author keeps their scroll position. A failed request puts it back.
+	 * Remove a track optimistically: the row disappears immediately, so the list
+	 * never collapses into a loading state and the author keeps their scroll
+	 * position. A failed request puts it back. The slot it held is left empty,
+	 * so the chapters after it keep their numbers.
 	 */
 	async function removeTrack(track) {
 		const snapshot = [...audiobook.tracks];
-		const tracks = snapshot.filter((item) => item.id !== track.id);
-		resequence(tracks);
-		audiobook.tracks = tracks;
+		audiobook.tracks = snapshot.filter((item) => item.id !== track.id);
 		try {
 			await audiobooks.removeTrack(audiobookId, track.id);
 			flash('Track removed.');
 		} catch (e) {
-			resequence(snapshot);
 			audiobook.tracks = snapshot;
 			error = e?.message ?? 'Could not remove the track.';
 		}
@@ -373,24 +369,6 @@
 		}
 	}
 
-	// ----- Drag to reorder ---------------------------------------------------
-	// Reordering is driven by pointer events rather than native HTML5 drag and
-	// drop: the same code works for mouse, pen and touch, and it does not fight
-	// the text input that lives inside each row.
-	/** Index of the row being dragged, or `null` when idle. */
-	let dragIndex = $state(null);
-	/** Index the dragged row will land on once dropped. */
-	let dropIndex = $state(null);
-	/** Row the drop line sits above; `null` means "after the last row". */
-	let dropAnchorId = $state(null);
-	/** Pointer travel since the drag started, used to follow the cursor. */
-	let dragOffset = $state(0);
-	/** True once the pointer has moved far enough to count as a drag. */
-	let dragActive = $state(false);
-	let dragRows = [];
-	let dragStartY = 0;
-	let dragRowTop = 0;
-	let dragRowHeight = 0;
 	/** Track id under a dragged file, so its row can highlight as a drop target. */
 	let fileOverId = $state(null);
 	/** True while audio files hover the chapters panel. */
@@ -398,71 +376,7 @@
 	/** Track id whose audio is currently being swapped. */
 	let replacingId = $state(null);
 
-	function onRowPointerDown(event, index) {
-		if (event.button !== 0) return;
-		// Controls inside the row keep their own behaviour.
-		if (event.target.closest('input, button, label, a, select, textarea')) return;
-		// Touch has no hover affordance and dragging the row body would fight
-		// page scrolling, so on touch only the grip starts a drag.
-		if (event.pointerType !== 'mouse' && !event.target.closest('[data-drag-handle]')) return;
-
-		const list = event.currentTarget.closest('ol');
-		if (!list) return;
-
-		dragRows = [...list.querySelectorAll('li[data-track-row]')];
-		const rect = event.currentTarget.getBoundingClientRect();
-		dragIndex = index;
-		dropIndex = index;
-		dropAnchorId = null;
-		dragOffset = 0;
-		dragActive = false;
-		dragStartY = event.clientY;
-		// The row moves by transform, so its resting geometry is captured once.
-		dragRowTop = rect.top;
-		dragRowHeight = rect.height;
-		event.preventDefault();
-		event.currentTarget.setPointerCapture(event.pointerId);
-	}
-
-	function onRowPointerMove(event) {
-		if (dragIndex === null) return;
-		dragOffset = event.clientY - dragStartY;
-		if (!dragActive && Math.abs(dragOffset) < 4) return;
-		dragActive = true;
-
-		// Count the rows whose midpoint sits above the dragged row's centre:
-		// that count is exactly where it lands once removed and re-inserted.
-		const centre = dragRowTop + dragOffset + dragRowHeight / 2;
-		let slot = 0;
-		for (let i = 0; i < dragRows.length; i++) {
-			if (i === dragIndex) continue;
-			const rect = dragRows[i].getBoundingClientRect();
-			if (centre > rect.top + rect.height / 2) slot += 1;
-		}
-		dropIndex = slot;
-
-		// The drop line goes above whichever row will follow the dragged one.
-		const anchor = dragRows.filter((_, i) => i !== dragIndex)[slot] ?? null;
-		dropAnchorId = anchor ? Number(anchor.dataset.trackId) : null;
-	}
-
-	function onRowPointerUp(event) {
-		if (dragIndex === null) return;
-		const from = dragIndex;
-		const to = dropIndex;
-		const moved = dragActive;
-		if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-			event.currentTarget.releasePointerCapture(event.pointerId);
-		}
-		dragIndex = null;
-		dropIndex = null;
-		dropAnchorId = null;
-		dragOffset = 0;
-		dragActive = false;
-		if (moved && to !== null && to !== from) moveTrack(from, to);
-	}
-
-	/** File drags are the only native drags left; `dataTransfer` marks them. */
+	/** File drags are the only drags the chapter list has; `dataTransfer` marks them. */
 	function isFileDrag(event) {
 		const types = event.dataTransfer?.types;
 		return types ? Array.from(types).includes('Files') : false;
@@ -744,8 +658,9 @@
 
 			<p class="text-xs text-dark/40">
 				Drag files in here to add chapters, or drop a file on a row to replace its audio. Files
-				named Ch.# or Chapter # are matched to the chapter list automatically; keep additions and
-				replacements in separate batches. Drag any row — or its grip — up and down to reorder.
+				named Ch.# or Chapter # are matched to the chapter list automatically: a number an existing
+				chapter holds replaces that chapter's audio, and a number no chapter uses yet becomes the
+				new chapter's slot. Keep additions and replacements in separate batches.
 			</p>
 
 			{#if uploads.length}
@@ -782,68 +697,15 @@
 				</p>
 			{:else}
 				<ol class="flex flex-col">
-					{#each audiobook.tracks as track, index (track.id)}
-						{#if dragActive && dropAnchorId === track.id}
-							<li class="h-1 my-1 rounded-full bg-primary" aria-hidden="true"></li>
-						{/if}
+					{#each audiobook.tracks as track (track.id)}
 						<li
-							data-track-row
-							data-track-id={track.id}
 							class={fileOverId === track.id ? 'bg-primary/15 rounded-lg' : ''}
 							in:fly={{ y: -6, duration: 150 }}
 							ondragover={(event) => onRowFileDragOver(event, track)}
 							ondrop={(event) => onRowFileDrop(event, track)}
 						>
-							<div
-								class="flex items-center gap-2 py-2 {dragActive && dragIndex === index
-									? 'relative z-10 opacity-70 bg-white rounded-lg shadow-lg'
-									: ''}"
-								style={dragActive && dragIndex === index
-									? `transform: translateY(${dragOffset}px)`
-									: ''}
-								onpointerdown={(event) => onRowPointerDown(event, index)}
-								onpointermove={onRowPointerMove}
-								onpointerup={onRowPointerUp}
-								onpointercancel={onRowPointerUp}
-							>
-								<span
-									data-drag-handle
-									class="cursor-grab active:cursor-grabbing touch-none text-dark/40 hover:text-dark p-1 shrink-0"
-									title="Drag to reorder"
-									aria-hidden="true"
-								>
-									<svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
-										<circle cx="9" cy="6" r="1.6" />
-										<circle cx="15" cy="6" r="1.6" />
-										<circle cx="9" cy="12" r="1.6" />
-										<circle cx="15" cy="12" r="1.6" />
-										<circle cx="9" cy="18" r="1.6" />
-										<circle cx="15" cy="18" r="1.6" />
-									</svg>
-								</span>
-
+							<div class="flex items-center gap-2 py-2">
 								<span class="w-6 text-right text-sm text-dark/40 shrink-0">{track.number}</span>
-
-								<div class="flex flex-col shrink-0">
-									<button
-										class="text-dark/40 hover:text-dark disabled:opacity-20 leading-none"
-										disabled={index === 0}
-										onclick={() => moveTrack(index, index - 1)}
-										aria-label="Move {track.title} up"
-										title="Move up"
-									>
-										▲
-									</button>
-									<button
-										class="text-dark/40 hover:text-dark disabled:opacity-20 leading-none"
-										disabled={index === audiobook.tracks.length - 1}
-										onclick={() => moveTrack(index, index + 1)}
-										aria-label="Move {track.title} down"
-										title="Move down"
-									>
-										▼
-									</button>
-								</div>
 
 								<div class="grow min-w-0 flex flex-col">
 									<input
@@ -896,9 +758,6 @@
 							</div>
 						</li>
 					{/each}
-					{#if dragActive && dragIndex !== null && dropAnchorId === null}
-						<li class="h-1 my-1 rounded-full bg-primary" aria-hidden="true"></li>
-					{/if}
 				</ol>
 			{/if}
 		</div>
@@ -956,7 +815,7 @@
 						pendingChapterUpload.replacements.map(({ number }) => number)
 					)}
 					already exist, while chapters {formatChapterNumbers(
-						pendingChapterUpload.additions.map((file) => chapterNumberFromFilename(file.name))
+						pendingChapterUpload.additions.map(({ number }) => number)
 					)}
 					are new. You cannot add and replace chapters in the same batch. Choose to add only the new chapters
 					or replace only the existing chapter audio.
@@ -964,8 +823,8 @@
 					Chapters {formatChapterNumbers(
 						pendingChapterUpload.replacements.map(({ number }) => number)
 					)}
-					already exist. Their audio and titles will be updated from the filenames while their positions
-					stay unchanged.
+					already exist. Their audio and titles will be updated from the filenames while their chapter
+					numbers stay unchanged.
 				{/if}
 			</p>
 			<div class="mt-6 flex justify-end gap-3 flex-wrap">

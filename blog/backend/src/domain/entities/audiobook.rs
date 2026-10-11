@@ -66,11 +66,11 @@ pub struct AudiobookTrack {
     /// When this chapter's own content last changed — its title, its duration,
     /// or the audio file behind it.
     ///
-    /// A reorder does not count: moving a chapter within the book changes where
-    /// it sits, not what it is, and if a drag marked every shifted neighbour as
-    /// modified then one reorder would make the whole list look freshly edited
-    /// and the field would stop meaning anything. Play counts are likewise
-    /// excluded, so a popular chapter does not read as a recently-edited one.
+    /// Moving a chapter to another slot does not count: it changes where the
+    /// chapter sits, not what it is, so a move would otherwise mark every
+    /// chapter it passed as freshly edited and the field would stop meaning
+    /// anything. Play counts are likewise excluded, so a popular chapter does
+    /// not read as a recently-edited one.
     ///
     /// Starts equal to the chapter's creation time, which is what a chapter
     /// nobody has edited yet genuinely is.

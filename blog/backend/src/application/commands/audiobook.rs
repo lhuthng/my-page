@@ -82,7 +82,9 @@ pub struct AddTrackCommand {
     pub user_id: i64,
     pub is_admin: bool,
     pub title: String,
-    /// 1-based playback position; appended to the end when omitted.
+    /// The chapter's slot in the book. Gaps are normal — chapters 1 and 100
+    /// can coexist — and with none given the chapter takes the next free slot
+    /// past the highest one.
     pub number: Option<i64>,
     pub duration_seconds: Option<i64>,
     pub medium: MediumDetails,
@@ -98,8 +100,9 @@ pub struct UpdateTrackCommand {
     pub duration_seconds: Option<i64>,
 }
 
-/// Swap a track's audio for a freshly uploaded file, keeping its position in
-/// the playlist. Metadata that is not supplied is left untouched.
+/// Swap a track's audio for a freshly uploaded file, keeping the chapter's
+/// slot. Metadata that is not supplied is left untouched, and the audio being
+/// replaced is released once nothing else is playing it.
 pub struct ReplaceTrackMediumCommand {
     pub audiobook_id: i64,
     pub track_id: i64,
@@ -116,15 +119,6 @@ pub struct RemoveTrackCommand {
     pub track_id: i64,
     pub user_id: i64,
     pub is_admin: bool,
-}
-
-pub struct ReorderTracksCommand {
-    pub audiobook_id: i64,
-    pub user_id: i64,
-    pub is_admin: bool,
-    /// Track ids in their desired playback order. Must be a permutation of the
-    /// audiobook's current tracks.
-    pub order: Vec<i64>,
 }
 
 pub struct ListAudiobookTagsCommand {

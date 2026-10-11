@@ -10,8 +10,7 @@ mod tracks;
 mod write;
 
 pub use dto::{
-    ChangeStatusPayload, ListQuery, ReorderTracksPayload, SlugQuery, UpdateAudiobookPayload,
-    UpdateTrackPayload,
+    ChangeStatusPayload, ListQuery, SlugQuery, UpdateAudiobookPayload, UpdateTrackPayload,
 };
 pub use plays::record_track_play;
 pub use read::{
@@ -23,7 +22,7 @@ pub use response::{
     AudiobookSummaryResponse, AudiobookTagsResponse, SlugAvailabilityResponse,
     TrackCreatedResponse, TrackPlayResponse,
 };
-pub use tracks::{add_track, remove_track, reorder_tracks, replace_track_medium, update_track};
+pub use tracks::{add_track, remove_track, replace_track_medium, update_track};
 pub use write::{change_cover, change_status, delete_audiobook, new_audiobook, update_audiobook};
 
 // ---------------------------------------------------------------------------
@@ -51,9 +50,6 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/id/{audiobook_id}/cover", patch(change_cover))
         .route("/id/{audiobook_id}/status", post(change_status))
         .route("/id/{audiobook_id}/tracks", post(add_track))
-        // Declared before the `{track_id}` routes so the static segment
-        // is matched first for PUT.
-        .route("/id/{audiobook_id}/tracks/order", put(reorder_tracks))
         .route("/id/{audiobook_id}/tracks/{track_id}", patch(update_track))
         .route("/id/{audiobook_id}/tracks/{track_id}", delete(remove_track))
         // Replacing the audio is a multipart PUT so the file and its metadata

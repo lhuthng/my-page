@@ -14,9 +14,9 @@ pub(super) const MAX_DESCRIPTION_CHARS: usize = 4000;
 pub(super) const MAX_TRANSLATOR_CHARS: usize = 200;
 pub(super) const MAX_TRACK_TITLE_CHARS: usize = 300;
 pub(super) const MAX_TAG_NAME_CHARS: usize = 60;
-/// Upper bound on tracks per audiobook: the editor reorders in memory and the
-/// player renders a flat playlist, so an unbounded count would let one request
-/// pull an enormous payload.
+/// Upper bound on tracks per audiobook: the editor loads the whole playlist and
+/// the player renders it as a flat list, so an unbounded count would let one
+/// request pull an enormous payload.
 pub(super) const MAX_TRACKS_PER_AUDIOBOOK: i64 = 2000;
 pub(super) const MAX_TAGS_PER_AUDIOBOOK: usize = 25;
 

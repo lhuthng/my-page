@@ -114,12 +114,6 @@ impl AudiobookService for AudiobookServiceImpl {
     ) -> Result<(), errors::audiobook::AudiobookError> {
         self.remove_track(cmd).await
     }
-    async fn reorder_tracks(
-        &self,
-        cmd: commands::audiobook::ReorderTracksCommand,
-    ) -> Result<(), errors::audiobook::AudiobookError> {
-        self.reorder_tracks(cmd).await
-    }
     async fn list_audiobook_tags(
         &self,
         cmd: commands::audiobook::ListAudiobookTagsCommand,

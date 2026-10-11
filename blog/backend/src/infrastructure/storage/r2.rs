@@ -1,9 +1,10 @@
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use aws_sdk_s3::{
     Client,
     config::{BehaviorVersion, Credentials, Region},
     operation::create_multipart_upload::CreateMultipartUploadOutput,
+    presigning::PresigningConfig,
     primitives::ByteStream,
     types::{CompletedMultipartUpload, CompletedPart},
 };
@@ -313,6 +314,37 @@ impl R2Client {
             .await
             .map_err(|e| StorageError(format!("download_to_file {key}: flush: {e}")))?;
         Ok(())
+    }
+
+    /// A signed, expiring URL for an object, for a client that will fetch the
+    /// bytes itself.
+    ///
+    /// Signing is what gives a URL a lifetime, so a link that travels — into a
+    /// log, a screenshot, someone else's tab — stops working when it runs out.
+    ///
+    /// The bound on that promise is worth being explicit about: this bucket is
+    /// served on a public domain, so an object reachable without a signature is
+    /// reachable even once one has expired. Signing expires *access through this
+    /// URL*; it is not secrecy. Deployments that need the latter have to take
+    /// the public domain away first.
+    pub async fn presigned_get_url(
+        &self,
+        key: &str,
+        expires_in: Duration,
+    ) -> Result<String, StorageError> {
+        let config = PresigningConfig::expires_in(expires_in)
+            .map_err(|e| StorageError(format!("presign {key}: {e}")))?;
+
+        let request = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(key)
+            .presigned(config)
+            .await
+            .map_err(|e| StorageError(format!("presign {key}: {e}")))?;
+
+        Ok(request.uri().to_string())
     }
 
     pub async fn delete_object(&self, key: &str) -> Result<(), StorageError> {

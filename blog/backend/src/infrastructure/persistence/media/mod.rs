@@ -21,7 +21,7 @@ mod tests;
 
 pub use files::clean_up_files;
 pub use hashing::{HashData, hash_bytes};
-pub use store::mirror_audio_to_bucket;
+pub use store::{mirror_audio_to_bucket, write_chunked_audio};
 
 pub struct MediaServiceImpl {
     pub pool: SqlitePool,

@@ -72,10 +72,6 @@ export const audiobooks = {
 	removeTrack: (audiobookId, trackId) =>
 		api.delete(`audiobooks/id/${audiobookId}/tracks/${trackId}`),
 
-	/** `order` must list every track id exactly once. */
-	reorderTracks: (audiobookId, order) =>
-		api.put(`audiobooks/id/${audiobookId}/tracks/order`, { body: { order } }),
-
 	/** Slug availability; `available: true` means the slug is free. */
 	checkSlug: (slug) =>
 		api.get(`audiobooks/check?slug=${encodeURIComponent(slug)}`, { auth: false }),

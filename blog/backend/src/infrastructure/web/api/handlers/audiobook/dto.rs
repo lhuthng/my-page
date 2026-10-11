@@ -61,11 +61,6 @@ pub struct UpdateTrackPayload {
     pub duration_seconds: Option<i64>,
 }
 
-#[derive(Deserialize)]
-pub struct ReorderTracksPayload {
-    pub order: Vec<i64>,
-}
-
 // ---------------------------------------------------------------------------
 // Dashboard (moderator/admin) endpoints
 // ---------------------------------------------------------------------------

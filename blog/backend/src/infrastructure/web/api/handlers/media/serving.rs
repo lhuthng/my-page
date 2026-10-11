@@ -2,6 +2,7 @@
 // support, including the thumbnail fallback, the audio-bucket branch, and the
 // path re-rooting rules.
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::{
     Json,
@@ -24,10 +25,16 @@ use crate::{
     },
     domain::{entities::media::LinkResult, errors::media::MediaError},
     infrastructure::{
-        storage::{MEDIA_CACHE_CONTROL, MediaKey, StorageError, audio_object_key, media_key},
+        storage::{
+            MEDIA_CACHE_CONTROL, MediaKey, StorageError, audio_object_key, chunk_key,
+            chunked::{self, CHUNK_CONTENT_TYPE, ChunkEntry, ChunkManifest},
+            is_audio, media_key,
+        },
         web::{
-            api::handlers::media::dto::{GetLinkResponse, MediaQuery, SearchResponse},
-            server::{AppState, AudioReadMode, AudioStore},
+            api::handlers::media::dto::{
+                ChunkManifestResponse, ChunkResponse, GetLinkResponse, MediaQuery, SearchResponse,
+            },
+            server::{AppState, AudioReadMode, AudioStore, MediaConfig},
         },
     },
 };
@@ -83,6 +90,151 @@ pub async fn get_link(
         file_type: link.file_type,
         created_at: link.created_at,
     }))
+}
+
+/// How long a signed chunk URL stays good.
+///
+/// A chapter is minutes long and is buffered as it plays, so the window only has
+/// to outlast one listen; a listener who leaves a chapter paused longer than
+/// this gets a failed chunk fetch and re-reads the manifest, which is why the
+/// player is expected to treat a chunk failure as "ask for the table again"
+/// rather than as a broken chapter.
+const CHUNK_URL_TTL: Duration = Duration::from_secs(6 * 60 * 60);
+
+/// A chapter's chunk table: what a player needs to fetch and decompress the
+/// audio itself.
+///
+/// The audio URL is deliberately not advertised as chunked here — a client asks
+/// for this table when it *wants* to decompress, and a client that does not
+/// simply never asks. That is what lets the browser player, the macOS app and
+/// anything else that only speaks mp3 keep working off the same media row.
+#[axum::debug_handler]
+pub async fn get_track_manifest(
+    State(state): State<Arc<AppState>>,
+    Path(short_name): Path<String>,
+) -> Result<Json<ChunkManifestResponse>, MediaError> {
+    let link = state
+        .media_service
+        .get_link(GetLinkCommand {
+            short_name: short_name.clone(),
+        })
+        .await?;
+
+    let Some(key) = media_key(&link.hash, &link.file_type, link.uploader_id) else {
+        return Err(MediaError::FileNotFound);
+    };
+    // A row with no manifest has no table. 404 rather than an empty one, so a
+    // caller's fallback is unambiguously "play the audio URL" and it never has
+    // to decide that for itself.
+    let Some(manifest) =
+        chunked::read_manifest(&state.media_config, &key.key, &link.file_type).await
+    else {
+        return Err(MediaError::FileNotFound);
+    };
+
+    chunk_manifest_response(&state.media_config, &short_name, &link, &key, &manifest).await
+}
+
+async fn chunk_manifest_response(
+    config: &MediaConfig,
+    short_name: &str,
+    link: &LinkResult,
+    key: &MediaKey,
+    manifest: &ChunkManifest,
+) -> Result<Json<ChunkManifestResponse>, MediaError> {
+    let mut chunks = Vec::with_capacity(manifest.chunks.len());
+
+    for (index, entry) in manifest.chunks.iter().enumerate() {
+        let url = match &config.audio_bucket {
+            // Audio on the bucket: the chunk is fetched straight from it, so a
+            // play costs this process no bandwidth at all. The URL is signed,
+            // which is what gives it a lifetime.
+            Some(bucket) => {
+                let object = audio_object_key(&chunk_key(&key.key, index), &link.file_type)
+                    .ok_or(MediaError::FileNotFound)?;
+                bucket
+                    .client
+                    .presigned_get_url(&object, CHUNK_URL_TTL)
+                    .await
+                    .map_err(internal_error)?
+            }
+            // Audio on the disk: there is no URL to sign, so the chunk comes
+            // back through this process instead.
+            None => format!("media/i/{short_name}/chunk/{index}"),
+        };
+
+        chunks.push(ChunkResponse {
+            index,
+            offset: manifest.raw_offset(index),
+            raw: entry.raw,
+            compressed: entry.compressed,
+            sha256: entry.sha256.clone(),
+            url,
+        });
+    }
+
+    Ok(Json(ChunkManifestResponse {
+        version: manifest.version,
+        chunk_size: manifest.chunk_size,
+        raw_size: manifest.raw_size,
+        level: manifest.level,
+        content_type: manifest.content_type.clone(),
+        chunks,
+    }))
+}
+
+/// One chunk of a chapter, exactly as stored: a standalone zstd frame for the
+/// caller to decompress.
+#[axum::debug_handler]
+pub async fn get_media_chunk(
+    State(state): State<Arc<AppState>>,
+    Path((short_name, index)): Path<(String, usize)>,
+) -> Result<Response<Body>, MediaError> {
+    let link = state
+        .media_service
+        .get_link(GetLinkCommand { short_name })
+        .await?;
+
+    let Some(key) = media_key(&link.hash, &link.file_type, link.uploader_id) else {
+        return Err(MediaError::FileNotFound);
+    };
+    let Some(manifest) =
+        chunked::read_manifest(&state.media_config, &key.key, &link.file_type).await
+    else {
+        return Err(MediaError::FileNotFound);
+    };
+    let Some(entry) = manifest.chunks.get(index) else {
+        return Err(MediaError::FileNotFound);
+    };
+
+    chunk_bytes_response(&state.media_config, &key, &link.file_type, index, entry).await
+}
+
+/// Answers with one stored chunk.
+///
+/// The ETag is the SHA-256 of the chunk's *raw* bytes rather than of the frame,
+/// because that is the value a client can check its decompression against: a
+/// frame can be stored correctly and still decode wrong, and the manifest
+/// carries the same hash for that reason.
+async fn chunk_bytes_response(
+    config: &MediaConfig,
+    key: &MediaKey,
+    file_type: &str,
+    index: usize,
+    entry: &ChunkEntry,
+) -> Result<Response<Body>, MediaError> {
+    let bytes = chunked::compressed_chunk(config, &key.key, file_type, index, entry)
+        .await
+        .map_err(internal_error)?;
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, CHUNK_CONTENT_TYPE)
+        .header(header::CACHE_CONTROL, MEDIA_CACHE_CONTROL)
+        .header(header::ETAG, format!("\"{}\"", entry.sha256))
+        .header(header::CONTENT_LENGTH, bytes.len())
+        .body(Body::from(bytes))
+        .map_err(|e| MediaError::InternalError(e.to_string()))
 }
 
 #[axum::debug_handler]
@@ -157,6 +309,16 @@ async fn serve_media(
     let Some(key) = media_key(&link.hash, &link.file_type, link.uploader_id) else {
         return Err(MediaError::FileNotFound);
     };
+
+    // Chunked audio answers first. The manifest is the switch: a row written
+    // before chunking existed has none and falls through to the plain file
+    // below, which is what makes this per-file rather than all-or-nothing.
+    if is_audio(&link.file_type)
+        && let Some(manifest) =
+            chunked::read_manifest(&state.media_config, &key.key, &link.file_type).await
+    {
+        return chunked_media_response(&state.media_config, link, &key, &manifest, headers);
+    }
 
     if let Some(bucket) = &state.media_config.audio_bucket
         && let Some(object) = audio_object_key(&key.key, &link.file_type)
@@ -318,6 +480,92 @@ async fn bucket_media_response(
                 .map_err(|e| MediaError::InternalError(e.to_string()))
         }
     }
+}
+
+/// Serves a chunked row by reassembling the requested range from its chunks.
+///
+/// Every header is the one the plain path sends — same content type, same
+/// SHA-256 ETag, same `Accept-Ranges` — because from a client's side a chapter
+/// is a chapter. Where the bytes are compressed is a property of the store, not
+/// of the protocol, so a player that could seek and range before still does,
+/// and nothing about the player had to change for the audio to shrink.
+///
+/// The one thing this cannot do is redirect: a client cannot be pointed at a
+/// single object when the bytes it asked for span several of them. A chunked
+/// row is therefore always streamed through here, however `AUDIO_READ` is set.
+fn chunked_media_response(
+    config: &MediaConfig,
+    link: &LinkResult,
+    key: &MediaKey,
+    manifest: &ChunkManifest,
+    headers: &HeaderMap,
+) -> Result<Response<Body>, MediaError> {
+    let size = manifest.raw_size;
+    let etag = format!("\"{}\"", key.sha256);
+
+    // Same range handling as the plain path, against the *raw* length: the
+    // compression is invisible to the arithmetic a client does with these
+    // numbers.
+    let range = headers
+        .get(header::RANGE)
+        .and_then(|value| value.to_str().ok());
+    let if_range_matches = headers
+        .get(header::IF_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value == etag)
+        .unwrap_or(true);
+
+    let partial = if_range_matches
+        .then(|| range.and_then(|r| parse_byte_range(r, size)))
+        .flatten();
+
+    // No usable range answers with the whole chapter, which is what the plain
+    // path does as well: a malformed range is not an error worth a 416.
+    let (start, end, status) = match partial {
+        Some((start, end)) => (start, end, StatusCode::PARTIAL_CONTENT),
+        None => (0, size.saturating_sub(1), StatusCode::OK),
+    };
+
+    if size == 0 {
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, link.file_type.clone())
+            .header(header::CACHE_CONTROL, MEDIA_CACHE_CONTROL)
+            .header(header::ETAG, etag)
+            .header(header::ACCEPT_RANGES, "bytes")
+            .header(header::CONTENT_LENGTH, 0)
+            .body(Body::empty())
+            .map_err(|e| MediaError::InternalError(e.to_string()));
+    }
+
+    let body = Body::from_stream(chunked::range_stream(
+        config.dir.clone(),
+        config
+            .audio_bucket
+            .as_ref()
+            .map(|bucket| bucket.client.clone()),
+        key.key.clone(),
+        link.file_type.clone(),
+        manifest.clone(),
+        start,
+        end,
+    ));
+
+    let mut builder = Response::builder()
+        .status(status)
+        .header(header::CONTENT_TYPE, link.file_type.clone())
+        .header(header::CACHE_CONTROL, MEDIA_CACHE_CONTROL)
+        .header(header::ETAG, etag)
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::CONTENT_LENGTH, end - start + 1);
+
+    if status == StatusCode::PARTIAL_CONTENT {
+        builder = builder.header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{size}"));
+    }
+
+    builder
+        .body(body)
+        .map_err(|e| MediaError::InternalError(e.to_string()))
 }
 
 fn internal_error(error: StorageError) -> MediaError {
@@ -531,6 +779,281 @@ mod tests {
             !first.contains("X-Amz-Signature") && !first.contains("X-Amz-Expires"),
             "the bucket is public, so nothing should be signed: {first}"
         );
+    }
+
+    /// A chunked chapter written to a temporary media directory, plus the row
+    /// that names it.
+    async fn chunked_chapter(payload: &[u8]) -> (MediaConfig, R2Client, LinkResult, MediaKey) {
+        let dir =
+            std::env::temp_dir().join(format!("serving-chunked-{}", uuid::Uuid::new_v4().simple()));
+        let config = MediaConfig {
+            dir,
+            allowed_file_types: Vec::new(),
+            allowed_avatar_types: Vec::new(),
+            allowed_cover_types: Vec::new(),
+            allowed_audio_types: Vec::new(),
+            audio_bucket: None,
+        };
+
+        let key = media_key(SHA, "audio/mpeg", 1).expect("key");
+        crate::infrastructure::storage::chunked::write(&config, &key.key, "audio/mpeg", payload)
+            .await
+            .expect("write chunks");
+
+        let link = LinkResult {
+            short_name: Some("abt-1-deadbeef-suffix".to_string()),
+            url: "media/i/abt-1-deadbeef-suffix".to_string(),
+            file_type: "audio/mpeg".to_string(),
+            created_at: None,
+            hash: SHA.to_string(),
+            uploader_id: 1,
+        };
+
+        (config, audio_store(AudioReadMode::Proxy).client, link, key)
+    }
+
+    fn range_headers(range: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RANGE, range.parse().expect("range header"));
+        headers
+    }
+
+    #[tokio::test]
+    async fn a_chunked_chapter_is_served_as_ordinary_audio() {
+        // The whole point of serving chunked audio through this handler: a
+        // client sees a normal range-capable mp3, so the compression is
+        // invisible and no player had to change.
+        let payload: Vec<u8> = (0..(1024 * 1024 * 2 + 777))
+            .map(|i: i64| (i.wrapping_mul(31) % 251) as u8)
+            .collect();
+        let (config, _client, link, key) = chunked_chapter(&payload).await;
+        let manifest =
+            crate::infrastructure::storage::chunked::read_manifest(&config, &key.key, "audio/mpeg")
+                .await
+                .expect("manifest");
+
+        // A window crossing a chunk boundary, which is what a seek does.
+        let start = 1024 * 1024 - 100;
+        let end = 1024 * 1024 + 500;
+        let response = chunked_media_response(
+            &config,
+            &link,
+            &key,
+            &manifest,
+            &range_headers(&format!("bytes={start}-{end}")),
+        )
+        .expect("response");
+
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("audio/mpeg"),
+            "the reassembled bytes are mp3, not zstd"
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok()),
+            Some(format!("bytes {start}-{end}/{}", payload.len()).as_str()),
+            "the range is expressed against the raw length, so a client's arithmetic is unchanged"
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
+            Some(format!("\"{SHA}\"").as_str()),
+            "same ETag as the plain path, so a client switching stores sees no change"
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(header::ACCEPT_RANGES)
+                .and_then(|v| v.to_str().ok()),
+            Some("bytes")
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        assert_eq!(
+            body.as_ref(),
+            &payload[start as usize..=end as usize],
+            "the bytes served must be the original audio for that span"
+        );
+
+        std::fs::remove_dir_all(&config.dir).ok();
+    }
+
+    /// The same media directory, but configured as a deployment whose audio
+    /// lives on the bucket. Nothing is fetched from it here — signing happens
+    /// locally — so the URLs can be checked without a network.
+    fn config_as_bucket(config: &MediaConfig) -> MediaConfig {
+        MediaConfig {
+            dir: config.dir.clone(),
+            allowed_file_types: Vec::new(),
+            allowed_avatar_types: Vec::new(),
+            allowed_cover_types: Vec::new(),
+            allowed_audio_types: Vec::new(),
+            audio_bucket: Some(audio_store(AudioReadMode::Proxy)),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_chunk_table_maps_offsets_and_points_at_each_chunk() {
+        // What a player needs to turn a seek into a fetch: where each chunk
+        // begins and where to get it. Without the offsets it could not seek
+        // without downloading the chapter from the start, which is the thing
+        // the whole design is for.
+        let payload: Vec<u8> = (0..(1024 * 1024 + 250))
+            .map(|i: usize| (i % 251) as u8)
+            .collect();
+        let (config, _client, link, key) = chunked_chapter(&payload).await;
+        let manifest =
+            crate::infrastructure::storage::chunked::read_manifest(&config, &key.key, "audio/mpeg")
+                .await
+                .expect("manifest");
+
+        let Json(table) =
+            chunk_manifest_response(&config, "abt-1-deadbeef-suffix", &link, &key, &manifest)
+                .await
+                .expect("table");
+
+        assert_eq!(table.raw_size, payload.len() as u64);
+        assert_eq!(table.chunks.len(), 2);
+        assert_eq!(table.chunks[0].offset, 0);
+        assert_eq!(table.chunks[1].offset, 1024 * 1024);
+        assert_eq!(table.chunks[1].raw, 250);
+        assert_eq!(table.content_type, "audio/mpeg");
+        // On the disk there is nothing to sign, so chunks come back through
+        // this backend rather than straight from a bucket.
+        assert_eq!(table.chunks[0].url, "media/i/abt-1-deadbeef-suffix/chunk/0");
+        assert_eq!(table.chunks[1].url, "media/i/abt-1-deadbeef-suffix/chunk/1");
+
+        std::fs::remove_dir_all(&config.dir).ok();
+    }
+
+    #[tokio::test]
+    async fn chunk_urls_are_signed_and_expire_when_the_audio_is_on_the_bucket() {
+        let payload: Vec<u8> = (0..2048).map(|i: usize| (i % 251) as u8).collect();
+        let (config, _client, link, key) = chunked_chapter(&payload).await;
+        let manifest =
+            crate::infrastructure::storage::chunked::read_manifest(&config, &key.key, "audio/mpeg")
+                .await
+                .expect("manifest");
+
+        let Json(table) = chunk_manifest_response(
+            &config_as_bucket(&config),
+            "abt-1-deadbeef-suffix",
+            &link,
+            &key,
+            &manifest,
+        )
+        .await
+        .expect("table");
+
+        for chunk in &table.chunks {
+            assert!(
+                chunk.url.contains("X-Amz-Signature="),
+                "a chunk URL must be signed: {}",
+                chunk.url
+            );
+            assert!(
+                chunk
+                    .url
+                    .contains(&format!("X-Amz-Expires={}", CHUNK_URL_TTL.as_secs())),
+                "and must carry its lifetime: {}",
+                chunk.url
+            );
+            // Fetched straight from the bucket, so this process is not in the
+            // byte path at all.
+            assert!(
+                chunk.url.contains("audio/"),
+                "and must point into the audio prefix: {}",
+                chunk.url
+            );
+        }
+
+        std::fs::remove_dir_all(&config.dir).ok();
+    }
+
+    #[tokio::test]
+    async fn a_chunk_is_served_as_the_zstd_frame_the_client_decodes() {
+        // The client's half of the contract: what comes back is a standalone
+        // zstd frame that decompresses to that chunk's raw bytes — not the
+        // audio, and not a frame that needs the chunks before it.
+        let payload: Vec<u8> = (0..(1024 * 1024 + 64))
+            .map(|i: usize| (i % 251) as u8)
+            .collect();
+        let (config, _client, _link, key) = chunked_chapter(&payload).await;
+        let manifest =
+            crate::infrastructure::storage::chunked::read_manifest(&config, &key.key, "audio/mpeg")
+                .await
+                .expect("manifest");
+        // The second chunk deliberately: a client fetching it alone is the case
+        // that would break if the frames were not independent.
+        let entry = manifest.chunks[1].clone();
+
+        let response = chunk_bytes_response(&config, &key, "audio/mpeg", 1, &entry)
+            .await
+            .expect("response");
+
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some(CHUNK_CONTENT_TYPE)
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
+            Some(format!("\"{}\"", entry.sha256).as_str()),
+            "the raw hash is what a client checks its decompression against"
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        assert_eq!(body.len() as u64, entry.compressed);
+        assert_eq!(
+            zstd::bulk::decompress(&body, entry.raw as usize).expect("decompress"),
+            payload[1024 * 1024..],
+            "decompressing the second chunk alone must give the second chunk's bytes"
+        );
+
+        std::fs::remove_dir_all(&config.dir).ok();
+    }
+
+    #[tokio::test]
+    async fn a_chunked_chapter_answers_a_plain_request_with_the_whole_file() {
+        let payload: Vec<u8> = (0..4096).map(|i: i64| (i % 256) as u8).collect();
+        let (config, _client, link, key) = chunked_chapter(&payload).await;
+        let manifest =
+            crate::infrastructure::storage::chunked::read_manifest(&config, &key.key, "audio/mpeg")
+                .await
+                .expect("manifest");
+        let response = chunked_media_response(&config, &link, &key, &manifest, &HeaderMap::new())
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            response.headers().get(header::CONTENT_RANGE).is_none(),
+            "a whole-file answer carries no Content-Range"
+        );
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        assert_eq!(body.as_ref(), payload.as_slice());
+
+        std::fs::remove_dir_all(&config.dir).ok();
     }
 
     #[tokio::test]

@@ -1,4 +1,4 @@
-// Track management: add, edit, remove, reorder.
+// Track management: add, edit, remove.
 use std::sync::Arc;
 
 use axum::{
@@ -12,8 +12,7 @@ use axum::{
 use crate::{
     application::{
         commands::audiobook::{
-            AddTrackCommand, RemoveTrackCommand, ReorderTracksCommand, ReplaceTrackMediumCommand,
-            UpdateTrackCommand,
+            AddTrackCommand, RemoveTrackCommand, ReplaceTrackMediumCommand, UpdateTrackCommand,
         },
         services::audiobook::AudiobookService,
     },
@@ -22,7 +21,7 @@ use crate::{
         errors::{audiobook::AudiobookError, media::MediaError},
     },
     infrastructure::web::{
-        api::handlers::audiobook::dto::{ReorderTracksPayload, UpdateTrackPayload},
+        api::handlers::audiobook::dto::UpdateTrackPayload,
         api::handlers::audiobook::response::TrackCreatedResponse,
         api::handlers::audiobook::shared::{caller_id, is_admin, read_text},
         api::handlers::support::cover::extract_medium,
@@ -227,24 +226,6 @@ pub async fn remove_track(
             track_id,
             user_id: caller_id(&claims)?,
             is_admin: is_admin(&claims),
-        })
-        .await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-pub async fn reorder_tracks(
-    State(state): State<Arc<AppState>>,
-    Extension(claims): Extension<Claims>,
-    Path(audiobook_id): Path<i64>,
-    Json(payload): Json<ReorderTracksPayload>,
-) -> Result<StatusCode, AudiobookError> {
-    state
-        .audiobook_service
-        .reorder_tracks(ReorderTracksCommand {
-            audiobook_id,
-            user_id: caller_id(&claims)?,
-            is_admin: is_admin(&claims),
-            order: payload.order,
         })
         .await?;
     Ok(StatusCode::NO_CONTENT)

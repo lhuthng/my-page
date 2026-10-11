@@ -69,7 +69,7 @@ pub trait AudiobookService {
         cmd: commands::audiobook::UpdateTrackCommand,
     ) -> Result<(), errors::audiobook::AudiobookError>;
 
-    /// Replace a track's audio file in place, keeping its playlist position.
+    /// Replace a track's audio file in place, keeping the chapter's slot.
     async fn replace_track_medium(
         &self,
         cmd: commands::audiobook::ReplaceTrackMediumCommand,
@@ -79,11 +79,6 @@ pub trait AudiobookService {
     async fn remove_track(
         &self,
         cmd: commands::audiobook::RemoveTrackCommand,
-    ) -> Result<(), errors::audiobook::AudiobookError>;
-
-    async fn reorder_tracks(
-        &self,
-        cmd: commands::audiobook::ReorderTracksCommand,
     ) -> Result<(), errors::audiobook::AudiobookError>;
 
     async fn list_audiobook_tags(

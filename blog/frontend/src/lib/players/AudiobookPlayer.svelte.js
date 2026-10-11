@@ -5,16 +5,33 @@
  * reactive state, so the Svelte component only renders controls. Mirrors the
  * `players/*.svelte.js` convention used by the game players.
  *
- * Streaming: the element's `src` is pointed at the track's media URL and never
- * at a blob or a fetched ArrayBuffer. The browser therefore issues ordinary
- * HTTP requests, using Range requests to buffer ahead and to seek, so a
- * multi-hour file is never held in memory. Only one track is ever loading.
+ * Streaming, in either of the two ways a chapter can be stored:
+ *
+ * **Plain** — `src` is pointed at the chapter's media URL and the browser does
+ * the work: ordinary HTTP requests with Range requests to buffer ahead and to
+ * seek, so a multi-hour file is never held in memory.
+ *
+ * **Chunked** — a chapter stored as zstd chunks is decompressed here instead,
+ * one chunk at a time (`audio-chunks.js`), and handed to the element as a Blob.
+ * The bytes then come straight from the bucket on signed URLs rather than
+ * through the backend, which is the point: a play costs the server nothing. The
+ * price is that a Blob is its own timeline, so the decompressed bytes always
+ * start at the chapter's first byte and a seek extends that prefix rather than
+ * jumping into the middle of it.
+ *
+ * Which one a book uses is asked once, not per chapter — see `#probeChunked`.
+ * Until the answer arrives a chapter streams plainly, so nothing ever waits on
+ * the question, and a book that has no chunks at all costs one request.
+ *
+ * Only one track is ever loading.
  *
  * The chapter list itself may also arrive a window at a time (`chapters`),
  * which is why `load` can be handed a chapter that has not been fetched yet:
  * it asks for that window and re-enters once it lands, and keeps the few
  * chapters ahead of the playhead in hand so the boundary is never a stall.
  */
+
+import { ChunkedAudio, offsetForTime, readChunkTable } from './audio-chunks.js';
 
 const STORAGE_PREFIX = 'audiobook-player:';
 /** Writing localStorage on every `timeupdate` would fire ~4x/second. */
@@ -59,6 +76,26 @@ export class AudiobookPlayer {
 	pendingIndex = $state(null);
 
 	#audio = null;
+	/**
+	 * Whether this book's chapters are stored as zstd chunks: `null` until asked,
+	 * `true` for a chunked book, `false` for one that plays plainly. Three-valued
+	 * on purpose — "not asked yet" and "asked, and the answer is no" lead to
+	 * different behaviour, and only the first one may wait on a probe.
+	 */
+	#chunkedSupport = null;
+	/** The probe in flight, so a load can wait for it instead of guessing. */
+	#probe = null;
+	/**
+	 * Whether that probe has answered. Tracked apart from `#probe` because a
+	 * probe that answers "there was nothing to ask about" leaves the question
+	 * open while its promise is still the most recent one: without this a load
+	 * would wait on an already-settled probe, re-enter itself, and wait again.
+	 */
+	#probeSettled = false;
+	/** The chunked source of the chapter playing, or null when it is plain. */
+	#chunks = null;
+	/** The Blob URL `src` points at, kept so it can be revoked rather than leaked. */
+	#chunkUrl = null;
 	#storageKey = null;
 	#lastPersist = 0;
 	#sleepTicker = null;
@@ -108,8 +145,17 @@ export class AudiobookPlayer {
 		return this.tracks.reduce((sum, track) => sum + (track.duration_seconds ?? 0), 0);
 	}
 
-	/** Duration to display: the live element value, else the stored metadata. */
+	/**
+	 * Duration to display: the chapter's own length when it is chunked, else the
+	 * live element value, else the stored metadata.
+	 *
+	 * A chunked chapter is played from a prefix of itself, so the element's
+	 * duration is how much has been decompressed rather than how long the
+	 * chapter is — a scrubber drawn from it would grow as the listener listened.
+	 * The stored length is the truth in that case.
+	 */
 	get displayDuration() {
+		if (this.#chunks && this.current?.duration_seconds) return this.current.duration_seconds;
 		if (Number.isFinite(this.duration) && this.duration > 0) return this.duration;
 		return this.current?.duration_seconds ?? 0;
 	}
@@ -163,6 +209,10 @@ export class AudiobookPlayer {
 
 		this.#restore();
 		this.setupMediaSession();
+		// Asked here rather than on the first chapter's load so the answer is
+		// usually in hand before anybody presses play — and asked once per book,
+		// because how a book was uploaded is not a per-chapter property.
+		this.#probe = this.#probeChunked();
 
 		window.addEventListener('pagehide', this.#onPageHide);
 		document.addEventListener('visibilitychange', this.#onPageHide);
@@ -176,6 +226,7 @@ export class AudiobookPlayer {
 			}
 		}
 		this.#handlers = null;
+		this.#releaseChunkUrl();
 		this.#clearSleep();
 		window.removeEventListener('pagehide', this.#onPageHide);
 		document.removeEventListener('visibilitychange', this.#onPageHide);
@@ -225,6 +276,30 @@ export class AudiobookPlayer {
 		// the chapter boundary.
 		this.chapters?.prefetch(index);
 
+		if (this.#chunkedSupport === null && this.#probe && !this.#probeSettled) {
+			// The one probe this book makes is still in flight. Waiting it out
+			// costs a single small request and means the first chapter is already
+			// playing from decoded chunks rather than being streamed plainly and
+			// then switched under the listener.
+			this.pendingIndex = index;
+			this.#probe.then(() => {
+				if (this.#detached) return;
+				this.load(index, { play, seek, keepResumeOffer: true });
+			});
+			return;
+		}
+
+		if (this.#chunkedSupport === true) {
+			// Decompressed here, one chunk at a time, and only as far as the
+			// playhead needs. A chapter whose own manifest is missing plays
+			// plainly: a book is chunked as a whole, but one chapter is not
+			// evidence about the next.
+			this.#loadChunked(track, { seek, play });
+			return;
+		}
+
+		this.#chunks = null;
+		this.#releaseChunkUrl();
 		// Assigning `src` (rather than fetching) hands streaming to the browser:
 		// it will Range-request the file and buffer incrementally.
 		audio.src = track.url;
@@ -324,11 +399,179 @@ export class AudiobookPlayer {
 		const target = Math.max(0, limit > 0 ? Math.min(seconds, limit) : seconds);
 		this.time = target;
 
+		if (this.#chunks) {
+			// The bytes have to exist before the element can be put at them: a
+			// position past the decompressed prefix would be clamped by the
+			// element to the end of what it holds, which is a seek that silently
+			// does nothing.
+			this.#seekChunked(target);
+			return;
+		}
+
 		if (Number.isFinite(audio.duration) && audio.duration > 0) {
 			audio.currentTime = target;
 		} else {
 			// Metadata is not ready yet; apply the seek once it is.
 			this.#pendingSeek = target;
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// Chunked chapters
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Asks whether this book is stored as chunks, and remembers the answer.
+	 *
+	 * A `404` is the ordinary answer for a book uploaded before chunking
+	 * existed, so a missing table is not a failure and must not be logged or
+	 * retried per chapter — it is the other half of the design. A transport
+	 * failure is treated the same way: the plain stream is always available.
+	 */
+	async #probeChunked() {
+		const track = this.current ?? this.tracks[0];
+		if (!track) {
+			// Nothing to ask about yet. The question stays open — a later load can
+			// still find a chunked chapter — but nobody waits on it any more, so
+			// that load goes plain instead of deferring to a settled probe.
+			this.#probeSettled = true;
+			return;
+		}
+
+		const table = await this.#chapterTable(track);
+		this.#chunkedSupport = table ? true : false;
+		this.#probeSettled = true;
+	}
+
+	/** One chapter's chunk table, or null when it has none. */
+	async #chapterTable(track) {
+		try {
+			const response = await fetch(`${track.url}/manifest`);
+			if (!response.ok) return null;
+			return readChunkTable(await response.json());
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Loads a chapter from its chunks and points the element at the Blob.
+	 *
+	 * Only as far as the requested position: replaying from the start loads one
+	 * chunk, and a restored position loads exactly the chunks under it. A chapter
+	 * that turns out to have no usable table — or a chunk that will not load —
+	 * falls back to the plain URL, which is what played before chunks existed.
+	 */
+	async #loadChunked(track, { seek, play }) {
+		const audio = this.#audio;
+		if (!audio) return;
+
+		const table = await this.#chapterTable(track);
+		if (this.#detached || this.trackAt(this.index) !== track) return;
+
+		if (!table) {
+			this.#chunks = null;
+			this.#releaseChunkUrl();
+			audio.src = track.url;
+			audio.load();
+			this.#announceSource(play);
+			return;
+		}
+
+		const duration = track.duration_seconds ?? 0;
+		const offset = seek > 0 ? offsetForTime(seek, duration, table.rawSize) : 0;
+		const source = new ChunkedAudio(table);
+
+		try {
+			await source.loadThroughOffset(offset);
+		} catch {
+			// A chunk that cannot be fetched or decoded is a chapter that plays
+			// plainly, not a chapter that fails to play.
+			if (this.#detached || this.trackAt(this.index) !== track) return;
+			this.#chunks = null;
+			this.#releaseChunkUrl();
+			audio.src = track.url;
+			audio.load();
+			this.#announceSource(play);
+			return;
+		}
+
+		if (this.#detached || this.trackAt(this.index) !== track) return;
+
+		this.#chunks = source;
+		this.#setChunkUrl(source.toBlobUrl());
+		if (this.#chunkUrl) {
+			audio.src = this.#chunkUrl;
+			audio.load();
+			// The Blob holds only the prefix that was decompressed, so a restored
+			// position is applied once the element has read the new source.
+			if (seek > 0) this.#pendingSeek = seek;
+		} else {
+			audio.src = track.url;
+			audio.load();
+		}
+
+		this.#announceSource(play);
+	}
+
+	/**
+	 * The bookkeeping every source change owes, wherever the bytes came from:
+	 * the Media Session's idea of the chapter, the saved session, and whether it
+	 * should be playing. The plain path does the same at the end of `load`.
+	 */
+	#announceSource(play) {
+		this.#updateMediaMetadata();
+		this.#persist(true);
+		if (play) this.play();
+		else this.playing = false;
+	}
+
+	/**
+	 * Moves a chunked chapter's playhead, extending the prefix if it has to.
+	 *
+	 * A position already inside the decompressed bytes is a plain assignment and
+	 * no network at all; a position past them decompresses the chunks in between
+	 * first and re-points `src`, because a bigger Blob is a different URL.
+	 */
+	async #seekChunked(target) {
+		const chunks = this.#chunks;
+		const audio = this.#audio;
+		if (!chunks || !audio) return;
+
+		const before = chunks.loadedBytes;
+		try {
+			await chunks.loadThroughTime(target, this.displayDuration);
+		} catch {
+			return;
+		}
+
+		if (this.#detached || chunks !== this.#chunks) return;
+
+		if (chunks.loadedBytes === before) {
+			audio.currentTime = target;
+			return;
+		}
+
+		this.#setChunkUrl(chunks.toBlobUrl());
+		if (!this.#chunkUrl) return;
+
+		audio.src = this.#chunkUrl;
+		audio.load();
+		this.#pendingSeek = target;
+	}
+
+	/** Swaps in a Blob URL, revoking the one it replaces. */
+	#setChunkUrl(url) {
+		if (!url) return;
+		if (this.#chunkUrl) URL.revokeObjectURL(this.#chunkUrl);
+		this.#chunkUrl = url;
+	}
+
+	/** Drops the Blob URL, if any. A revoked URL is a Blob that can be collected. */
+	#releaseChunkUrl() {
+		if (this.#chunkUrl) {
+			URL.revokeObjectURL(this.#chunkUrl);
+			this.#chunkUrl = null;
 		}
 	}
 

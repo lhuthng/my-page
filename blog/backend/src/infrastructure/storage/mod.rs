@@ -1,3 +1,4 @@
+pub mod chunked;
 mod dispatch;
 pub mod fs;
 pub mod media_key;
@@ -7,7 +8,10 @@ use std::env;
 use std::fmt;
 use std::path::Path;
 
-pub use media_key::{AUDIO_OBJECT_PREFIX, MediaKey, audio_object_key, is_audio, media_key};
+pub use media_key::{
+    AUDIO_OBJECT_PREFIX, MediaKey, audio_object_key, chunk_dir, chunk_key, is_audio, manifest_key,
+    media_key,
+};
 
 /// `Cache-Control` every media object carries. It is part of the object's
 /// contract rather than a caller's choice: it is the header the client ends up

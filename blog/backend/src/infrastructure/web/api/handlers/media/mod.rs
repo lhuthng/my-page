@@ -9,11 +9,12 @@ mod upload;
 
 pub use aliases::{add_alias, change_alias, delete_alias, get_aliases};
 pub use dto::{
-    AddAliasPayload, ChangeAliasPayload, ChangeDetailsPayload, GetAliasesResponse, GetLinkResponse,
-    GetMediaDetailsResponse, MediaQuery, SearchResponse,
+    AddAliasPayload, ChangeAliasPayload, ChangeDetailsPayload, ChunkManifestResponse,
+    ChunkResponse, GetAliasesResponse, GetLinkResponse, GetMediaDetailsResponse, MediaQuery,
+    SearchResponse,
 };
 pub use manage::{change_details, get_details};
-pub use serving::{get_link, get_media, search};
+pub use serving::{get_link, get_media, get_media_chunk, get_track_manifest, search};
 pub use upload::upload;
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,12 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
             Router::new()
                 .route("/s/{short_name}", get(get_link))
                 .route("/i/{short_name}", get(get_media))
+                // The chunked source of the same row, for a client that
+                // decompresses zstd itself. A row that is not chunked answers
+                // 404 here, which is how a player learns to fall back to the
+                // audio URL above without asking twice.
+                .route("/i/{short_name}/manifest", get(get_track_manifest))
+                .route("/i/{short_name}/chunk/{index}", get(get_media_chunk))
                 .route("/all", get(search)),
         )
         .fallback_service(get_service(ServeDir::new(&state.media_config.dir)))

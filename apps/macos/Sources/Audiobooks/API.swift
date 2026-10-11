@@ -99,6 +99,31 @@ struct AudiobookAPI {
         return body.playCount
     }
 
+    /// A chapter's chunk table, or `nil` when the chapter is stored as a plain
+    /// file.
+    ///
+    /// A `404` is the ordinary answer for a chapter that was never chunked, so
+    /// it is not an error and must not be logged as one — the caller streams the
+    /// chapter normally. Anything else that goes wrong is deliberately also
+    /// `nil`: a chapter's bytes are always reachable through the plain URL, so
+    /// no failure to read this table is worth refusing to play.
+    func chunkManifest(for track: AudiobookTrack) async throws -> ChunkManifest? {
+        guard let stream = track.streamURL else { return nil }
+
+        let (data, response) = try await URLSession.shared.data(
+            from: stream.appendingPathComponent("manifest")
+        )
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError(message: "Invalid response from server")
+        }
+        if http.statusCode == 404 { return nil }
+        guard (200..<300).contains(http.statusCode) else { return nil }
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try? decoder.decode(ChunkManifest.self, from: data)
+    }
+
     private func get<T: Decodable>(_ url: URL) async throws -> T {
         let (data, response) = try await URLSession.shared.data(from: url)
         guard let http = response as? HTTPURLResponse else {

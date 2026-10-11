@@ -179,7 +179,6 @@ with HTTP Range support.
 | PATCH | `/audiobooks/id/{id}/cover` | mod | Replace cover |
 | POST | `/audiobooks/id/{id}/status` | mod | `draft` / `published` / `archived` |
 | POST | `/audiobooks/id/{id}/tracks` | mod | Upload a track (100 MB) |
-| PUT | `/audiobooks/id/{id}/tracks/order` | mod | Reorder (every id exactly once) |
 | PATCH | `/audiobooks/id/{id}/tracks/{track_id}` | mod | Rename/re-duration/move |
 | DELETE | `/audiobooks/id/{id}/tracks/{track_id}` | mod | Remove and close the gap |
 | GET | `/audiobooks/check` | public | Slug availability |

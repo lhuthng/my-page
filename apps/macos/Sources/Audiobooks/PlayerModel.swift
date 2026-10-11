@@ -343,6 +343,19 @@ final class PlayerModel: NSObject, ObservableObject {
 
     // MARK: - Internals
 
+    /// Whether this book's chapters are stored as zstd chunks: `nil` until a
+    /// manifest has been asked for, `true` once one has been seen, `false` for a
+    /// book that plays plainly. Three-valued because "not asked yet" has to wait
+    /// for an answer and "asked, and there is none" must not ask again.
+    private var chunkedSupport: Bool?
+    /// The table for `chunkTableTrackId`, kept so the playlist does not re-ask
+    /// for a chapter it has already been told about.
+    private var chunkTable: ChunkManifest?
+    private var chunkTableTrackId: Int64?
+    /// Retained for as long as its asset plays: `AVAssetResourceLoader` does not
+    /// keep its delegate alive, and the asset outlives `loadCurrent`.
+    private var chunkedLoader: ChunkedAudioResourceLoader?
+
     private func loadCurrent(autoplay: Bool, resumeAt: Double? = nil) {
         // Playing another chapter answers the question too.
         if autoplay { clearResumePrompt() }
@@ -371,7 +384,38 @@ final class PlayerModel: NSObject, ObservableObject {
         durationTask?.cancel()
         artworkTask?.cancel()
 
-        let item = AVPlayerItem(url: url)
+        // How this chapter's bytes are stored: streamed from the backend, or
+        // kept as zstd chunks and decoded on this machine. The table is per
+        // chapter, so this asks about the chapter in hand — but the answer is
+        // remembered for the book, because how a book was uploaded does not vary
+        // from chapter to chapter, and that is what keeps a plain book to one
+        // request instead of one per chapter.
+        if chunkTableTrackId != track.id, chunkedSupport != false {
+            chunkTableTrackId = track.id
+            let wanted = track.id
+            Task { [weak self] in
+                guard let self else { return }
+                let table = try? await AudiobookAPI.shared.chunkManifest(for: track)
+                guard self.chunkTableTrackId == wanted else { return }
+                self.chunkedSupport = table != nil
+                self.chunkTable = table
+                self.loadCurrent(autoplay: autoplay, resumeAt: resumeAt)
+            }
+            return
+        }
+
+        let item: AVPlayerItem
+        if let table = chunkTable, chunkTableTrackId == track.id,
+           let loader = try? ChunkedAudioResourceLoader(manifest: table)
+        {
+            chunkedLoader = loader
+            item = AVPlayerItem(asset: loader.makeAsset(sourceURL: url))
+        } else {
+            // No table, an unusable one, or a book that has none: the plain URL,
+            // which is exactly what played before any of this existed.
+            chunkedLoader = nil
+            item = AVPlayerItem(url: url)
+        }
         player.replaceCurrentItem(with: item)
         pendingSeekTarget = nil
         displayTime = 0

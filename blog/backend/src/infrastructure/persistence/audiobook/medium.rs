@@ -6,7 +6,9 @@ use tokio::fs;
 
 use crate::domain::entities::media::MediaType;
 use crate::domain::errors::audiobook::AudiobookError;
-use crate::infrastructure::persistence::media::{HashData, hash_bytes, mirror_audio_to_bucket};
+use crate::infrastructure::persistence::media::{
+    HashData, hash_bytes, mirror_audio_to_bucket, write_chunked_audio,
+};
 use crate::infrastructure::web::server::MediaConfig;
 
 use super::AudiobookServiceImpl;
@@ -92,6 +94,12 @@ impl AudiobookServiceImpl {
             wrote_file,
         )
         .await;
+
+        // The chunked form of the same bytes, written from the upload rather
+        // than re-read from the disk, so the encoder never waits on a file
+        // system it just wrote to. Also after the row, for the same reason as
+        // the mirror: a failed encode must not leave chunks nothing names.
+        write_chunked_audio(config, &hash, &content_type, uploader_id, &medium.bytes).await;
 
         Ok(media_id)
     }

@@ -144,6 +144,35 @@ pub fn audio_object_key(key: &str, content_type: &str) -> Option<String> {
     is_audio(content_type).then(|| format!("{AUDIO_OBJECT_PREFIX}/{key}"))
 }
 
+/// The directory holding a medium's compressed chunks, store-relative:
+/// `<key>.d`.
+///
+/// It hangs off the medium's own key rather than sitting in a namespace of its
+/// own, so which chunks belong to which audio file is readable from the path
+/// alone — and so removing the directory removes exactly one chapter's chunks.
+/// The `.d` suffix cannot collide with another row's key: every key ends in the
+/// extension its content type names, and no extension is `.d`.
+pub fn chunk_dir(key: &str) -> String {
+    format!("{key}.d")
+}
+
+/// One chunk's store-relative key: `<key>.d/<index>.zst`.
+///
+/// The index is zero-padded so a directory listing sorts into play order, which
+/// is what makes a chunked row inspectable with `ls` as well as by a reader.
+pub fn chunk_key(key: &str, index: usize) -> String {
+    format!("{}.d/{index:05}.zst", key)
+}
+
+/// The chunk manifest's store-relative key: `<key>.zm`.
+///
+/// Its presence is what marks a row as chunked — see
+/// [`chunked::read_manifest`](crate::infrastructure::storage::chunked::read_manifest) —
+/// so it is written last and deleted last.
+pub fn manifest_key(key: &str) -> String {
+    format!("{key}.zm")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +299,39 @@ mod tests {
         assert_eq!(
             audio_object_key(&format!("avt/11/{SHA}.png"), "image/png"),
             None
+        );
+    }
+
+    #[test]
+    fn chunk_keys_hang_off_the_medium_key() {
+        // One chapter's chunks are addressed off its own key, so the layout
+        // needs no table to say which chunks belong to which file.
+        let key = media_key(SHA, "audio/mpeg", 7).expect("key").key;
+
+        assert_eq!(chunk_dir(&key), format!("b4/c0/{SHA}.mp3.d"));
+        assert_eq!(chunk_key(&key, 0), format!("b4/c0/{SHA}.mp3.d/00000.zst"));
+        assert_eq!(chunk_key(&key, 12), format!("b4/c0/{SHA}.mp3.d/00012.zst"));
+        assert_eq!(manifest_key(&key), format!("b4/c0/{SHA}.mp3.zm"));
+
+        // Padding is for sorting, so a three-digit index has to sit between
+        // the two above rather than after both of them.
+        assert!(chunk_key(&key, 5) > chunk_key(&key, 0));
+        assert!(chunk_key(&key, 5) < chunk_key(&key, 12));
+    }
+
+    #[test]
+    fn a_chunk_and_its_manifest_are_audio_objects_too() {
+        // Chunks share the chapter's prefix in the bucket, so they live and
+        // expire with the audio they belong to.
+        let key = media_key(SHA, "audio/ogg", 2).expect("key").key;
+
+        assert_eq!(
+            audio_object_key(&chunk_key(&key, 3), "audio/ogg"),
+            Some(format!("audio/b4/c0/{SHA}.ogg.d/00003.zst"))
+        );
+        assert_eq!(
+            audio_object_key(&manifest_key(&key), "audio/json"),
+            Some(format!("audio/b4/c0/{SHA}.ogg.zm"))
         );
     }
 

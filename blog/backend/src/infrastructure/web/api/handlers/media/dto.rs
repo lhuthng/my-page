@@ -45,6 +45,42 @@ pub struct GetAliasesResponse {
     pub aliases: Vec<String>,
 }
 
+/// A chapter's chunk table, with a fetchable URL per chunk.
+///
+/// This is what a player that decompresses chunks itself needs and the audio
+/// URL cannot give it: where each chunk's raw bytes begin, how long each is, and
+/// where to get it. Without the offsets a player could not turn a seek into a
+/// chunk, and would be back to fetching the chapter from the start.
+#[derive(Serialize, Deserialize)]
+pub struct ChunkManifestResponse {
+    pub version: u32,
+    /// Raw bytes per chunk, so a player can predict a chunk from an offset
+    /// rather than reading the whole table to find out.
+    pub chunk_size: u64,
+    /// Length of the chapter once reassembled.
+    pub raw_size: u64,
+    pub level: i32,
+    pub content_type: String,
+    pub chunks: Vec<ChunkResponse>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ChunkResponse {
+    pub index: usize,
+    /// Where this chunk's raw bytes start within the chapter.
+    pub offset: u64,
+    /// Raw (decompressed) length of this chunk.
+    pub raw: u64,
+    /// Length of the zstd frame as stored.
+    pub compressed: u64,
+    /// SHA-256 of the chunk's raw bytes, so a player can check its own
+    /// decompression instead of assuming it worked.
+    pub sha256: String,
+    /// Where to fetch the compressed chunk. Signed and expiring when the audio
+    /// lives on the bucket, and this backend's own chunk route when it does not.
+    pub url: String,
+}
+
 #[derive(Deserialize)]
 pub struct AddAliasPayload {
     pub alias: String,

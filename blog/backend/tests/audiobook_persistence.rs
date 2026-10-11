@@ -13,8 +13,8 @@ use backend::{
             AddTrackCommand, ChangeAudiobookStatusCommand, CheckAudiobookSlugCommand,
             DeleteAudiobookCommand, GetAudiobookCommand, GetAudiobooksCommand,
             GetPublicAudiobookCommand, GetPublicAudiobooksCommand, NewAudiobookCommand,
-            RecordTrackPlayCommand, RemoveTrackCommand, ReorderTracksCommand,
-            ReplaceTrackMediumCommand, UpdateAudiobookCommand, UpdateTrackCommand,
+            RecordTrackPlayCommand, RemoveTrackCommand, ReplaceTrackMediumCommand,
+            UpdateAudiobookCommand, UpdateTrackCommand,
         },
         services::audiobook::AudiobookService,
     },
@@ -22,7 +22,9 @@ use backend::{
         entities::{audiobook::AudiobookDetails, media::MediaType, media::MediumDetails},
         errors::audiobook::AudiobookError,
     },
-    infrastructure::{persistence::audiobook::AudiobookServiceImpl, web::server::MediaConfig},
+    infrastructure::{
+        persistence::audiobook::AudiobookServiceImpl, storage::media_key, web::server::MediaConfig,
+    },
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 
@@ -195,7 +197,7 @@ async fn migration_creates_audiobook_schema() {
 }
 
 #[tokio::test]
-async fn tracks_append_in_order_and_keep_contiguous_numbering() {
+async fn chapters_keep_the_slot_they_are_given() {
     let fx = fixture("order").await;
     let book = fx.create("ordered-book", &[]).await;
 
@@ -212,7 +214,8 @@ async fn tracks_append_in_order_and_keep_contiguous_numbering() {
         ]
     );
 
-    // Removing the middle track must close the gap, not leave 1,3.
+    // A chapter's number is a slot, not a position: removing the middle one
+    // leaves the gap where it was instead of closing up to 1, 2.
     fx.service
         .remove_track(RemoveTrackCommand {
             audiobook_id: book,
@@ -227,115 +230,49 @@ async fn tracks_append_in_order_and_keep_contiguous_numbering() {
         fx.track_numbers(book).await,
         vec![
             ("Chapter One".to_string(), 1),
-            ("Chapter Three".to_string(), 2),
-        ]
-    );
-
-    // Inserting at an explicit position shifts the following tracks down.
-    let inserted = fx.add_track(book, "Interlude", 9, Some(1)).await;
-    assert_eq!(
-        fx.track_numbers(book).await,
-        vec![
-            ("Interlude".to_string(), 1),
-            ("Chapter One".to_string(), 2),
             ("Chapter Three".to_string(), 3),
         ]
     );
 
-    let _ = (first, third, inserted);
-    fx.cleanup().await;
-}
-
-#[tokio::test]
-async fn reorder_requires_an_exact_permutation() {
-    let fx = fixture("reorder").await;
-    let book = fx.create("reorder-book", &[]).await;
-    let a = fx.add_track(book, "A", 1, None).await;
-    let b = fx.add_track(book, "B", 2, None).await;
-    let c = fx.add_track(book, "C", 3, None).await;
-
-    fx.service
-        .reorder_tracks(ReorderTracksCommand {
-            audiobook_id: book,
-            user_id: 1,
-            is_admin: false,
-            order: vec![c, a, b],
-        })
-        .await
-        .unwrap();
-
+    // A chapter named 5 takes slot 5 and leaves 1 and 3 exactly as they are —
+    // which is the whole point of slots: the editor sends the number it read
+    // off the file name, and a batch must not renumber the rest of the book.
+    let inserted = fx.add_track(book, "Interlude", 9, Some(5)).await;
     assert_eq!(
         fx.track_numbers(book).await,
         vec![
-            ("C".to_string(), 1),
-            ("A".to_string(), 2),
-            ("B".to_string(), 3),
+            ("Chapter One".to_string(), 1),
+            ("Chapter Three".to_string(), 3),
+            ("Interlude".to_string(), 5),
         ]
     );
 
-    // A partial list must be rejected rather than silently dropping a track.
-    let err = fx
-        .service
-        .reorder_tracks(ReorderTracksCommand {
-            audiobook_id: book,
-            user_id: 1,
-            is_admin: false,
-            order: vec![a, b],
-        })
-        .await
-        .unwrap_err();
-    assert!(matches!(err, AudiobookError::Validation(_)), "got {err:?}");
+    // With no slot named it lands past the highest, rather than at `count + 1`,
+    // which would land on a slot another chapter already holds.
+    let appended = fx.add_track(book, "Epilogue", 10, None).await;
+    assert_eq!(
+        fx.track_numbers(book).await,
+        vec![
+            ("Chapter One".to_string(), 1),
+            ("Chapter Three".to_string(), 3),
+            ("Interlude".to_string(), 5),
+            ("Epilogue".to_string(), 6),
+        ]
+    );
 
-    // A duplicated id is not a permutation either.
-    let err = fx
-        .service
-        .reorder_tracks(ReorderTracksCommand {
-            audiobook_id: book,
-            user_id: 1,
-            is_admin: false,
-            order: vec![a, a, b],
-        })
-        .await
-        .unwrap_err();
-    assert!(matches!(err, AudiobookError::Validation(_)), "got {err:?}");
-
-    // Ordering survived the rejected calls.
-    assert_eq!(fx.track_numbers(book).await[0].0, "C");
+    let _ = (first, third, inserted, appended);
     fx.cleanup().await;
 }
 
 #[tokio::test]
-async fn moving_a_track_up_and_down_shifts_the_others() {
+async fn moving_a_chapter_moves_only_that_chapter() {
     let fx = fixture("move").await;
     let book = fx.create("move-book", &[]).await;
     let a = fx.add_track(book, "A", 1, None).await;
     let _b = fx.add_track(book, "B", 2, None).await;
     let _c = fx.add_track(book, "C", 3, None).await;
 
-    // A moves from 1 to 3: B and C shift up.
-    fx.service
-        .update_track(UpdateTrackCommand {
-            audiobook_id: book,
-            track_id: a,
-            user_id: 1,
-            is_admin: false,
-            title: None,
-            number: Some(3),
-            duration_seconds: None,
-        })
-        .await
-        .unwrap();
-
-    assert_eq!(
-        fx.track_numbers(book).await,
-        vec![
-            ("B".to_string(), 1),
-            ("C".to_string(), 2),
-            ("A".to_string(), 3),
-        ]
-    );
-
-    // A moves back to 1: B and C shift down again.
+    // A moves from slot 1 to slot 4: a free slot, so nothing gives way.
     fx.service
         .update_track(UpdateTrackCommand {
             audiobook_id: book,
@@ -343,7 +280,7 @@ async fn moving_a_track_up_and_down_shifts_the_others() {
             user_id: 1,
             is_admin: false,
             title: Some("A renamed".to_string()),
-            number: Some(1),
+            number: Some(4),
             duration_seconds: None,
         })
         .await
@@ -352,9 +289,35 @@ async fn moving_a_track_up_and_down_shifts_the_others() {
     assert_eq!(
         fx.track_numbers(book).await,
         vec![
-            ("A renamed".to_string(), 1),
             ("B".to_string(), 2),
             ("C".to_string(), 3),
+            ("A renamed".to_string(), 4),
+        ]
+    );
+
+    // A slot another chapter holds is a collision rather than a move: B keeps
+    // its slot and A stays where it is.
+    let err = fx
+        .service
+        .update_track(UpdateTrackCommand {
+            audiobook_id: book,
+            track_id: a,
+            user_id: 1,
+            is_admin: false,
+            title: None,
+            number: Some(2),
+            duration_seconds: None,
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AudiobookError::Validation(_)), "got {err:?}");
+
+    assert_eq!(
+        fx.track_numbers(book).await,
+        vec![
+            ("B".to_string(), 2),
+            ("C".to_string(), 3),
+            ("A renamed".to_string(), 4),
         ]
     );
     fx.cleanup().await;
@@ -1149,7 +1112,11 @@ async fn duplicate_audio_bytes_share_one_file_on_disk() {
     assert_eq!(rows[0].1, rows[1].1);
     assert_ne!(rows[0].0, rows[1].0);
 
-    let files = std::fs::read_dir(&fx.media_dir)
+    // Identical audio is encoded once too. The chunk objects hang off the same
+    // content-addressed key as the plain file, so a second row naming the same
+    // bytes adds no second file, no second set of chunks and no second
+    // manifest — which is the property this test exists for.
+    let entries: Vec<std::path::PathBuf> = std::fs::read_dir(&fx.media_dir)
         .unwrap()
         .filter_map(|e| e.ok())
         .filter(|e| e.path().is_dir())
@@ -1161,12 +1128,34 @@ async fn duplicate_audio_bytes_share_one_file_on_disk() {
                     std::fs::read_dir(d.path())
                         .unwrap()
                         .filter_map(|e| e.ok())
+                        .map(|e| e.path())
                         .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
         })
-        .count();
-    assert_eq!(files, 1, "identical audio must be stored once");
+        .collect();
+
+    let count_with_extension = |extension: &str| {
+        entries
+            .iter()
+            .filter(|path| path.extension().and_then(|e| e.to_str()) == Some(extension))
+            .count()
+    };
+    assert_eq!(
+        count_with_extension("mp3"),
+        1,
+        "identical audio must be stored once"
+    );
+    assert_eq!(
+        count_with_extension("zm"),
+        1,
+        "and carry exactly one chunk manifest"
+    );
+    assert_eq!(
+        count_with_extension("d"),
+        1,
+        "and exactly one chunk directory"
+    );
 
     fx.cleanup().await;
 }
@@ -1335,52 +1324,8 @@ async fn editing_a_chapter_stamps_only_that_chapter() {
 }
 
 #[tokio::test]
-async fn reordering_a_book_does_not_restamp_its_chapters() {
-    let fx = fixture("track-updated-at-reorder").await;
-    let book = fx.create("time-reorder", &[]).await;
-    let a = fx.add_track(book, "A", 1, None).await;
-    let b = fx.add_track(book, "B", 2, None).await;
-    let c = fx.add_track(book, "C", 3, None).await;
-
-    for (id, stamp) in [
-        (a, "2000-01-01 00:00:00"),
-        (b, "2000-01-02 00:00:00"),
-        (c, "2000-01-03 00:00:00"),
-    ] {
-        pin_track_time(&fx, id, stamp).await;
-    }
-
-    // Move A to the end. Every chapter after it is renumbered, and none of them
-    // was edited — a reorder says where a chapter sits, not what it is. If this
-    // bumped rows, one drag would mark the whole list as freshly modified and
-    // the column would stop distinguishing anything.
-    fx.service
-        .reorder_tracks(ReorderTracksCommand {
-            audiobook_id: book,
-            user_id: 1,
-            is_admin: false,
-            order: vec![b, c, a],
-        })
-        .await
-        .unwrap();
-
-    let times = track_times(&fx, book).await;
-    assert_eq!(
-        times,
-        vec![
-            ("B".to_string(), Some("2000-01-02 00:00:00".to_string())),
-            ("C".to_string(), Some("2000-01-03 00:00:00".to_string())),
-            ("A".to_string(), Some("2000-01-01 00:00:00".to_string())),
-        ],
-        "a reorder must leave every chapter's own time alone"
-    );
-
-    fx.cleanup().await;
-}
-
-#[tokio::test]
-async fn dragging_one_chapter_past_its_neighbours_does_not_restamp_them() {
-    let fx = fixture("track-updated-at-drag").await;
+async fn moving_a_chapter_does_not_restamp_the_others() {
+    let fx = fixture("track-updated-at-move").await;
     let book = fx.create("time-drag", &[]).await;
     let a = fx.add_track(book, "A", 1, None).await;
     let b = fx.add_track(book, "B", 2, None).await;
@@ -1395,8 +1340,8 @@ async fn dragging_one_chapter_past_its_neighbours_does_not_restamp_them() {
     }
 
     // The single-track move path (`number` on update_track) is separate from
-    // `reorder_tracks` and shifts its neighbours itself, so it needs its own
-    // case: it is the code path a drag in the editor actually takes.
+    // `reorder_tracks`, so it needs its own case: moving a chapter to another
+    // slot is not an edit, and must leave every other chapter's time alone.
     fx.service
         .update_track(UpdateTrackCommand {
             audiobook_id: book,
@@ -1404,7 +1349,7 @@ async fn dragging_one_chapter_past_its_neighbours_does_not_restamp_them() {
             user_id: 1,
             is_admin: false,
             title: None,
-            number: Some(3),
+            number: Some(4),
             duration_seconds: None,
         })
         .await
@@ -1423,7 +1368,7 @@ async fn dragging_one_chapter_past_its_neighbours_does_not_restamp_them() {
         assert_eq!(
             found.1,
             Some(stamp.to_string()),
-            "moving {title} shifted its number, which is not an edit"
+            "a chapter that only moved is not a chapter that changed"
         );
     }
 
@@ -1511,6 +1456,191 @@ async fn listing_a_chapter_does_not_restamp_it() {
         Some("2000-01-01 00:00:00".to_string()),
         "listening is not editing: a popular chapter must not read as a recently changed one"
     );
+
+    fx.cleanup().await;
+}
+
+/// The media row behind a chapter, and where its bytes sit on disk.
+async fn track_medium(fx: &Fixture, track_id: i64) -> (i64, PathBuf) {
+    let (media_id, hash, file_type, uploader_id): (i64, String, String, i64) = sqlx::query_as(
+        "SELECT m.id, m.hash, m.file_type, m.uploader_id
+         FROM audiobook_tracks t JOIN media m ON m.id = t.media_id
+         WHERE t.id = ?",
+    )
+    .bind(track_id)
+    .fetch_one(&fx.service.pool)
+    .await
+    .unwrap();
+
+    let key = media_key(&hash, &file_type, uploader_id).expect("a chapter's audio has a key");
+    (media_id, fx.media_dir.join(&key.key))
+}
+
+#[tokio::test]
+async fn a_chapter_cannot_take_a_slot_another_chapter_holds() {
+    let fx = fixture("slot-taken").await;
+    let book = fx.create("slot-book", &[]).await;
+    fx.add_track(book, "One", 1, None).await;
+
+    let rows_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media")
+        .fetch_one(&fx.service.pool)
+        .await
+        .unwrap();
+
+    let err = fx
+        .service
+        .add_track(
+            AddTrackCommand {
+                audiobook_id: book,
+                user_id: 1,
+                is_admin: false,
+                title: "Imposter".to_string(),
+                number: Some(1),
+                duration_seconds: Some(120),
+                medium: audio("Imposter.mp3", 3),
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, AudiobookError::Validation(_)), "got {err:?}");
+
+    assert_eq!(
+        fx.track_numbers(book).await,
+        vec![("One".to_string(), 1)],
+        "a rejected slot must not have added a chapter"
+    );
+
+    // The slot is checked before the upload is stored, so a rejected one leaves
+    // no file behind for the backfill to trip over later.
+    let rows_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media")
+        .fetch_one(&fx.service.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        rows_before, rows_after,
+        "a rejected slot must not leave an upload behind"
+    );
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn replacing_a_chapter_removes_the_audio_it_replaced() {
+    let fx = fixture("replace-cleans").await;
+    let book = fx.create("clean-book", &[]).await;
+    let first = fx.add_track(book, "One", 1, None).await;
+    fx.add_track(book, "Two", 2, None).await;
+
+    let (old_media_id, old_path) = track_medium(&fx, first).await;
+    assert!(old_path.exists(), "the original upload starts on disk");
+
+    // The chunked form of that same upload, addressed off the medium's own
+    // key. Its presence here is the write path's side of the contract: an
+    // upload that produced no manifest would leave every read on the plain
+    // file and quietly never chunk anything.
+    let old_key = old_path
+        .strip_prefix(&fx.media_dir)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let old_manifest = fx
+        .media_dir
+        .join(backend::infrastructure::storage::manifest_key(&old_key));
+    let old_chunk_dir = fx
+        .media_dir
+        .join(backend::infrastructure::storage::chunk_dir(&old_key));
+    assert!(
+        old_manifest.is_file(),
+        "an upload writes its chunk manifest"
+    );
+    assert!(old_chunk_dir.is_dir(), "and the chunks the manifest names");
+
+    fx.service
+        .replace_track_medium(
+            ReplaceTrackMediumCommand {
+                audiobook_id: book,
+                track_id: first,
+                user_id: 1,
+                is_admin: false,
+                title: None,
+                duration_seconds: None,
+                medium: audio("One-rerecorded.mp3", 9),
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        !old_path.exists(),
+        "the audio a chapter no longer plays must not survive the swap"
+    );
+    assert!(
+        !old_manifest.exists(),
+        "nor its manifest, or the chunks it named would be unreachable"
+    );
+    assert!(
+        !old_chunk_dir.exists(),
+        "nor the chunks themselves: the swap releases every copy of the old take"
+    );
+
+    let old_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media WHERE id = ?")
+        .bind(old_media_id)
+        .fetch_one(&fx.service.pool)
+        .await
+        .unwrap();
+    assert_eq!(old_rows, 0, "the replaced media row goes with its file");
+
+    // The chapter itself is untouched and plays the new take.
+    let (new_media_id, new_path) = track_medium(&fx, first).await;
+    assert_ne!(new_media_id, old_media_id);
+    assert!(
+        new_path.exists(),
+        "the replacement is what the chapter plays now"
+    );
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn replacing_keeps_the_file_another_chapter_still_plays() {
+    let fx = fixture("replace-shared").await;
+    let book = fx.create("shared-book", &[]).await;
+    // The same bytes twice: content addressing gives both chapters one file.
+    let first = fx.add_track(book, "One", 7, None).await;
+    let second = fx.add_track(book, "Two", 7, None).await;
+
+    let (first_media, shared_path) = track_medium(&fx, first).await;
+    let (second_media, second_path) = track_medium(&fx, second).await;
+    assert_ne!(first_media, second_media, "each chapter gets its own row");
+    assert_eq!(shared_path, second_path, "but the same bytes are one file");
+
+    fx.service
+        .replace_track_medium(
+            ReplaceTrackMediumCommand {
+                audiobook_id: book,
+                track_id: first,
+                user_id: 1,
+                is_admin: false,
+                title: None,
+                duration_seconds: None,
+                medium: audio("One-rerecorded.mp3", 9),
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        second_path.exists(),
+        "the other chapter is still playing those bytes"
+    );
+
+    // Which is only meaningful if that chapter can still reach its audio.
+    let (second_media_after, _) = track_medium(&fx, second).await;
+    assert_eq!(second_media_after, second_media);
 
     fx.cleanup().await;
 }
