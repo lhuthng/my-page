@@ -361,6 +361,9 @@ struct PlayerScreen: View {
                 .monospacedDigit()
                 .foregroundStyle(Theme.dark.opacity(0.65))
             Spacer()
+            ChapterRefreshButton(isRefreshing: player.chapters?.isRefreshing ?? false) {
+                player.refreshChapters()
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -629,6 +632,36 @@ struct PlayerScreen: View {
         .menuIndicator(.hidden)
         .focusable(false)
         .fixedSize()
+    }
+}
+
+/// The small circular control beside the chapter count: asks the open book for
+/// its chapter list again, so chapters added since it was opened appear. It
+/// becomes a spinner in place while the fetch runs, so the header never shifts.
+private struct ChapterRefreshButton: View {
+    let isRefreshing: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle().fill(Theme.dark.opacity(0.1))
+                if isRefreshing {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.dark.opacity(0.75))
+                }
+            }
+            .frame(width: 22, height: 22)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshing)
+        .help("Check for new chapters")
+        .accessibilityLabel("Check for new chapters")
     }
 }
 

@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Combine
 import Foundation
 import MediaPlayer
 
@@ -86,6 +87,17 @@ final class PlayerModel: NSObject, ObservableObject {
     /// The playhead at the previous tick, so only real elapsed audio time counts.
     private var lastTickSeconds: Double = 0
     private var playReportTask: Task<Void, Never>?
+    /// Forwards the chapter store's changes through this model, which is what the
+    /// player screen observes. Without it a window that arrives while paused
+    /// would not repaint until some unrelated publish happened.
+    private var chaptersObservation: AnyCancellable?
+    /// The open book's chapter poll; see `startChapterPolling`.
+    private var chapterPollTask: Task<Void, Never>?
+
+    /// How often the open book re-reads its chapter list. One small request per
+    /// interval, for the loaded book only: new chapters show up without a
+    /// reopen, and an idle library costs nothing.
+    private static let chapterPollInterval: Duration = .seconds(15)
 
     /// Real seconds of listening per reported play; mirrors the web player's
     /// interval so both surfaces measure the same way.
@@ -142,6 +154,7 @@ final class PlayerModel: NSObject, ObservableObject {
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         if let terminateObserver { NotificationCenter.default.removeObserver(terminateObserver) }
         playReportTask?.cancel()
+        chapterPollTask?.cancel()
     }
 
     // MARK: - Opening books
@@ -189,6 +202,8 @@ final class PlayerModel: NSObject, ObservableObject {
         let chapters = ChapterStore(slug: details.slug, total: details.totalTracks, api: api)
         chapters.seed(details.tracks)
         self.chapters = chapters
+        observeChapters(chapters)
+        startChapterPolling(chapters)
 
         var index = 0
         var resumeAt: Double?
@@ -252,6 +267,41 @@ final class PlayerModel: NSObject, ObservableObject {
     func windowNeeded(at index: Int) {
         guard let chapters, index >= 0, index < chapters.total else { return }
         Task { await chapters.ensure(index) }
+    }
+
+    /// Re-read the open book's chapter list now, picking up chapters added
+    /// since it was opened. The player screen's refresh button calls this; the
+    /// poll started by `applyDetails` does the same work on a timer.
+    func refreshChapters() {
+        guard let chapters else { return }
+        Task { await chapters.refresh() }
+    }
+
+    /// Mirror the store's published changes onto this model, so a window that
+    /// arrives (or a refresh that changes the count) repaints the player even
+    /// while nothing is playing.
+    private func observeChapters(_ store: ChapterStore) {
+        chaptersObservation = store.objectWillChange.sink { [weak self] _ in
+            Task { @MainActor in self?.objectWillChange.send() }
+        }
+    }
+
+    /// Watch the loaded book for new chapters, and only the loaded book: the
+    /// task is cancelled when another book replaces this one, so the library
+    /// never polls and a closed book costs nothing.
+    private func startChapterPolling(_ store: ChapterStore) {
+        chapterPollTask?.cancel()
+        chapterPollTask = Task { [weak store] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: Self.chapterPollInterval)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, let store else { return }
+                await store.refresh()
+            }
+        }
     }
 
     /// Start a specific chapter from its beginning.

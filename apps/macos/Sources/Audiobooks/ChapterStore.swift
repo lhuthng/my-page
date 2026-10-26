@@ -21,6 +21,8 @@ final class ChapterStore: ObservableObject {
     @Published private(set) var loadedWindows: Set<Int> = []
     /// Window starts being fetched right now.
     @Published private(set) var pendingWindows: Set<Int> = []
+    /// A refresh of the book's chapter list is in flight.
+    @Published private(set) var isRefreshing = false
 
     private let api: AudiobookAPI
     private let slug: String
@@ -96,6 +98,48 @@ final class ChapterStore: ObservableObject {
         return fetched && track(at: index) != nil
     }
 
+    /// Re-read the book's chapter list.
+    ///
+    /// A book can gain chapters while it is open, and the client has no other
+    /// way to hear about it: the store was sized from the count the book
+    /// arrived with. The opening window is fetched again because every answer
+    /// carries `track_count`, and the install regrows the slots to match. When
+    /// the book has grown, the window holding the last chapter is fetched too,
+    /// so the new rows arrive filled instead of waiting for a scroll.
+    ///
+    /// Concurrent calls share nothing: the second returns immediately, which
+    /// keeps a poll and a button press from stacking requests.
+    @discardableResult
+    func refresh() async -> Bool {
+        guard !isRefreshing else { return false }
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        do {
+            let before = total
+            let details = try await api.details(slug: slug, tracksOffset: 0)
+            guard details.trackCount != nil else {
+                // A backend that predates windowed chapters answers with the
+                // whole book, and its count is the list it just sent.
+                install(details.tracks, at: 0, total: details.tracks.count)
+                return true
+            }
+
+            install(details.tracks, at: 0, total: details.totalTracks)
+
+            let lastStart = ChapterWindow.start(of: details.totalTracks - 1)
+            if details.totalTracks > before, lastStart > 0 {
+                let tail = try await api.details(slug: slug, tracksOffset: lastStart)
+                install(tail.tracks, at: lastStart, total: tail.totalTracks)
+            }
+            return true
+        } catch {
+            // The list that is already on screen is still usable; a failed
+            // refresh leaves it alone rather than emptying it.
+            return false
+        }
+    }
+
     /// Keep the chapters just ahead of the playhead in hand, so the next
     /// chapter is ready before the current one ends.
     func prefetch(_ index: Int) {
@@ -119,13 +163,19 @@ final class ChapterStore: ObservableObject {
                 chapters.append(contentsOf: Array(repeating: nil, count: reported - chapters.count))
             } else {
                 chapters.removeLast(chapters.count - reported)
+                // Windows past the new end no longer hold anything, and a later
+                // growth must not take their stale marks as "already fetched".
+                loadedWindows = loadedWindows.filter { $0 < chapters.count }
             }
         }
 
         for (position, track) in tracks.enumerated() {
             let index = offset + position
             guard chapters.indices.contains(index) else { continue }
-            chapters[index] = track
+            // Polling re-reads windows the list already holds; only an actual
+            // difference is worth a publish, or every poll would repaint the
+            // chapter list for nothing.
+            if chapters[index] != track { chapters[index] = track }
         }
 
         // Every window this answer covers counts as loaded — normally exactly
