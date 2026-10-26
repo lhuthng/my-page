@@ -3,7 +3,9 @@
 use async_graphql::{Context, Object};
 use sqlx::SqlitePool;
 
-use super::super::helpers::{DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts};
+use super::super::helpers::{
+    DASHBOARD_POST_COLUMNS, DASHBOARD_POST_JOINS, attach_tags_to_posts, staff_scope,
+};
 use super::super::rows::{DashboardPostRow, DashboardProjectRow, PostDetailRow};
 use super::super::types::{GqlDashboardPost, GqlDashboardProject, GqlPostDetail};
 
@@ -18,8 +20,9 @@ impl DetailQuery {
         id: i64,
     ) -> async_graphql::Result<GqlPostDetail> {
         let pool = ctx.data::<SqlitePool>()?;
+        let scope = staff_scope(ctx)?;
 
-        let row = sqlx::query_as::<_, PostDetailRow>(
+        let sql = format!(
             r#"
             SELECT p.id, p.title, p.slug, p.excerpt, p.content, p.status,
                    p.is_featured, p.view_count, p.published_at, p.created_at, p.updated_at,
@@ -31,14 +34,25 @@ impl DetailQuery {
             JOIN user_meta um ON um.user_id = p.user_id
             LEFT JOIN media m ON m.id = p.cover_media_id
             LEFT JOIN series s ON s.id = p.series_id
-            WHERE p.id = ?
+            WHERE p.id = ?{}
             "#,
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| async_graphql::Error::new(e.to_string()))?
-        .ok_or_else(|| async_graphql::Error::new("Post not found"))?;
+            // Admins read any post; everyone else reads only their own, which
+            // is the same `required_author_id` rule as the REST detail route.
+            if scope.is_admin {
+                ""
+            } else {
+                " AND p.user_id = ?"
+            }
+        );
+        let mut query = sqlx::query_as::<_, PostDetailRow>(&sql).bind(id);
+        if !scope.is_admin {
+            query = query.bind(scope.user_id);
+        }
+        let row = query
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| async_graphql::Error::new(e.to_string()))?
+            .ok_or_else(|| async_graphql::Error::new("Post not found"))?;
 
         let tag_rows = sqlx::query_as::<_, (String, String)>(
             r#"SELECT tags.name, tags.slug FROM post_tags JOIN tags ON tags.id = post_tags.tag_id WHERE post_tags.post_id = ?"#,
@@ -93,8 +107,9 @@ impl DetailQuery {
         id: i64,
     ) -> async_graphql::Result<GqlDashboardProject> {
         let pool = ctx.data::<SqlitePool>()?;
+        let scope = staff_scope(ctx)?;
 
-        let row = sqlx::query_as::<_, DashboardProjectRow>(
+        let sql = format!(
             r#"
             SELECT
                 projects.id AS project_id, p.id AS post_id, p.title, p.slug, p.excerpt,
@@ -107,14 +122,23 @@ impl DetailQuery {
             JOIN user_meta um ON um.user_id = p.user_id
             JOIN post_stats ps ON ps.post_id = p.id
             LEFT JOIN media m ON m.id = p.cover_media_id
-            WHERE projects.id = ?
+            WHERE projects.id = ?{}
             "#,
-        )
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| async_graphql::Error::new(e.to_string()))?
-        .ok_or_else(|| async_graphql::Error::new("Project not found"))?;
+            if scope.is_admin {
+                ""
+            } else {
+                " AND p.user_id = ?"
+            }
+        );
+        let mut query = sqlx::query_as::<_, DashboardProjectRow>(&sql).bind(id);
+        if !scope.is_admin {
+            query = query.bind(scope.user_id);
+        }
+        let row = query
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| async_graphql::Error::new(e.to_string()))?
+            .ok_or_else(|| async_graphql::Error::new("Project not found"))?;
 
         let tag_rows = sqlx::query_as::<_, (String, String)>(
             r#"SELECT tags.name, tags.slug FROM post_tags JOIN tags ON tags.id = post_tags.tag_id WHERE post_tags.post_id = ?"#,

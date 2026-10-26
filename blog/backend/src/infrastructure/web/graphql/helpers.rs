@@ -1,9 +1,36 @@
 use std::collections::HashMap;
 
+use async_graphql::Context;
 use sqlx::SqlitePool;
+
+use crate::domain::entities::secret::Claims;
 
 use super::rows::{DashboardPostRow, DashboardProjectRow, TagJoinRow};
 use super::types::{GqlDashboardPost, GqlDashboardProject};
+
+/// Who is asking, in the shape the REST listings already use.
+///
+/// `/graphql` sits behind the same `mod_check` layer as the dashboard routes,
+/// but it re-implements the queries against the pool, so it does not inherit
+/// their scope. Every resolver that returns staff-only rows has to ask for
+/// this and apply the same predicate the REST service applies: an admin sees
+/// everything, a moderator sees only what it owns.
+pub struct StaffScope {
+    pub user_id: i64,
+    pub is_admin: bool,
+}
+
+pub fn staff_scope(ctx: &Context<'_>) -> Result<StaffScope, async_graphql::Error> {
+    let claims = ctx.data::<Claims>()?;
+    let user_id = claims
+        .user_id
+        .parse::<i64>()
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+    Ok(StaffScope {
+        user_id,
+        is_admin: claims.role == "admin",
+    })
+}
 
 pub const DASHBOARD_POST_COLUMNS: &str = r#"
     p.id AS post_id, p.title, p.slug, p.excerpt,

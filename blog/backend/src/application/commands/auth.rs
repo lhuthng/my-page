@@ -17,6 +17,11 @@ pub struct RefreshAccessTokenCommand {
 }
 
 #[derive(serde::Deserialize)]
+pub struct LogoutCommand {
+    pub refresh_token: String,
+}
+
+#[derive(serde::Deserialize)]
 pub struct VerifyEmailCommand {
     pub token: String,
 }

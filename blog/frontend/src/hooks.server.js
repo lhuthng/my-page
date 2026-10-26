@@ -1,6 +1,7 @@
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { SITE_HOSTNAME, SITE_ORIGIN } from '$lib/config/site.js';
+import { cacheUser, getCachedUser } from '$lib/server/user-cache.js';
 import { fixClientRoute, route } from '$lib/server/proxy';
 
 const EXEMPT_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
@@ -13,18 +14,6 @@ const NOINDEX_PATHS = [
 	'/reset-password',
 	'/verify-email'
 ];
-const userCache = new Map();
-// Access tokens live 24h (ACCESS_JWT_EXP_HOURS), so a refreshed token and its
-// profile stay valid far beyond this TTL. Cold-cache users otherwise pay two
-// sequential backend round-trips (refresh + users/me) on every cache miss.
-const USER_CACHE_TTL_MS = 30 * 60 * 1000;
-
-function pruneUserCache() {
-	const now = Date.now();
-	for (const [key, entry] of userCache) {
-		if (entry.expiresAt <= now) userCache.delete(key);
-	}
-}
 
 function commaSeparated(value) {
 	return (value ?? '')
@@ -96,7 +85,16 @@ function applySecurityHeaders(response, event, noindex, personalized = false) {
 		headers: new Headers(response.headers)
 	});
 
-	mutableResponse.headers.set('Content-Security-Policy', "frame-ancestors 'self'");
+	// SvelteKit sets most of the policy itself (see `kit.csp` in
+	// svelte.config.js). Frame embedding is not something it knows about, so it
+	// is appended here rather than overwriting what the renderer produced.
+	const contentSecurityPolicy = mutableResponse.headers.get('Content-Security-Policy');
+	mutableResponse.headers.set(
+		'Content-Security-Policy',
+		contentSecurityPolicy
+			? `${contentSecurityPolicy}; frame-ancestors 'self'`
+			: "frame-ancestors 'self'"
+	);
 	mutableResponse.headers.set('X-Frame-Options', 'SAMEORIGIN');
 	mutableResponse.headers.set('X-Content-Type-Options', 'nosniff');
 	mutableResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -131,13 +129,11 @@ async function populateUser(event) {
 
 	if (!refreshToken) return;
 
-	const cached = userCache.get(refreshToken);
-	if (cached && cached.expiresAt > Date.now()) {
-		if (cached.result) {
-			event.locals.accessToken = cached.result.accessToken;
-			event.locals.user = cached.result.user;
-			event.locals.role = cached.result.role;
-		}
+	const cached = getCachedUser(refreshToken);
+	if (cached) {
+		event.locals.accessToken = cached.accessToken;
+		event.locals.user = cached.user;
+		event.locals.role = cached.role;
 		return;
 	}
 
@@ -187,8 +183,7 @@ async function populateUser(event) {
 	event.locals.user = result.user;
 	event.locals.role = result.role;
 
-	pruneUserCache();
-	userCache.set(refreshToken, { expiresAt: Date.now() + USER_CACHE_TTL_MS, result });
+	cacheUser(refreshToken, result);
 }
 
 export async function handle({ event, resolve }) {

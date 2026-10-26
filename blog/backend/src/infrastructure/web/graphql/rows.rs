@@ -2,7 +2,8 @@
 pub struct UserRow {
     pub id: i64,
     pub username: String,
-    pub email: String,
+    /// Absent for a moderator: e-mail is personal data only an admin lists.
+    pub email: Option<String>,
     pub role: String,
     pub created_at: String,
     pub display_name: String,

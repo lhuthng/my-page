@@ -20,3 +20,9 @@ fn groups_paths_by_first_segment() {
     assert_eq!(path_group("/projects/s/demo"), "projects");
     assert_eq!(path_group("/"), "root");
 }
+
+#[test]
+fn unknown_and_oversized_paths_collapse_into_other() {
+    assert_eq!(path_group("/made-up-by-a-scan-42"), "other");
+    assert_eq!(path_group(&format!("/{}", "x".repeat(400))), "other");
+}

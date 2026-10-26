@@ -14,8 +14,9 @@ use validator::Validate;
 use crate::{
     application::{
         commands::auth::{
-            LoginCommand, RefreshAccessTokenCommand, RegisterCommand, RequestPasswordResetCommand,
-            ResendVerificationCommand, ResetPasswordCommand, VerifyEmailCommand,
+            LoginCommand, LogoutCommand, RefreshAccessTokenCommand, RegisterCommand,
+            RequestPasswordResetCommand, ResendVerificationCommand, ResetPasswordCommand,
+            VerifyEmailCommand,
         },
         services::auth::AuthService,
     },
@@ -185,6 +186,27 @@ pub async fn refresh_token(
 }
 
 #[axum::debug_handler]
+pub async fn logout(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+) -> Result<impl IntoResponse, AuthError> {
+    // The refresh token is the session's credential, so possession of it is
+    // what authorises ending the session. This runs before the cookie is
+    // cleared and works even when the access token has already expired.
+    if let Some(token) = jar.get("refresh-token") {
+        state
+            .auth_service
+            .logout(LogoutCommand {
+                refresh_token: token.value().to_string(),
+            })
+            .await?;
+    }
+
+    let jar = jar.remove(Cookie::build(("refresh-token", "")).path("/").build());
+    Ok((jar, StatusCode::NO_CONTENT))
+}
+
+#[axum::debug_handler]
 pub async fn verify_email(
     State(state): State<Arc<AppState>>,
     Query(query): Query<VerifyEmailQuery>,
@@ -311,4 +333,5 @@ pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/reset-password", post(reset_password))
         .route("/resend-verification", post(resend_verification))
         .route("/refresh", post(refresh_token))
+        .route("/logout", post(logout))
 }

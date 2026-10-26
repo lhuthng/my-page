@@ -13,11 +13,6 @@ pub struct UnsubscribeCommand {
     pub token: String,
 }
 
-#[derive(serde::Deserialize)]
-pub struct UnsubscribeByEmailCommand {
-    pub email: String,
-}
-
 pub struct ListSubscribersCommand {
     pub is_admin: bool,
 }

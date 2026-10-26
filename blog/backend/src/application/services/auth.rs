@@ -19,6 +19,13 @@ pub trait AuthService {
         cmd: commands::auth::RefreshAccessTokenCommand,
         config: entities::auth::AuthConfig,
     ) -> Result<entities::auth::AuthTokens, errors::auth::AuthError>;
+    /// Ends the session the refresh token belongs to. The token is verified
+    /// before anything is written, so a forged one cannot sign another user
+    /// out.
+    async fn logout(
+        &self,
+        cmd: commands::auth::LogoutCommand,
+    ) -> Result<(), errors::auth::AuthError>;
     async fn verify_email(
         &self,
         cmd: commands::auth::VerifyEmailCommand,

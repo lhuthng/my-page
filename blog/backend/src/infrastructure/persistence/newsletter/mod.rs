@@ -52,12 +52,6 @@ impl NewsletterService for NewsletterServiceImpl {
     ) -> Result<bool, errors::newsletter::NewsletterError> {
         self.unsubscribe(cmd).await
     }
-    async fn unsubscribe_by_email(
-        &self,
-        cmd: commands::newsletter::UnsubscribeByEmailCommand,
-    ) -> Result<bool, errors::newsletter::NewsletterError> {
-        self.unsubscribe_by_email(cmd).await
-    }
     async fn list_subscribers(
         &self,
         cmd: commands::newsletter::ListSubscribersCommand,

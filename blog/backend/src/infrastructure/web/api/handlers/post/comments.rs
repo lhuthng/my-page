@@ -23,6 +23,9 @@ use crate::{
     },
 };
 
+/// Must stay in sync with `blog/frontend/src/lib/features/comments/guest-identities.js`.
+const GUEST_IDENTITIES: &[&str] = &["cutiecube", "straymeowmet", "loafphantom"];
+
 pub async fn new_comment(
     State(state): State<Arc<AppState>>,
     Extension(opt_claims): Extension<Option<Claims>>,
@@ -30,6 +33,18 @@ pub async fn new_comment(
     Json(body): Json<NewCommentBody>,
 ) -> Result<impl IntoResponse, PostError> {
     let post_id: i64 = post_id_str.parse().map_err(|_| PostError::PostNotFound)?;
+
+    // The picker in the comment UI offers exactly these avatars. The route is
+    // public, so the backend cannot trust that: without this check any caller
+    // could store an arbitrary string in `comments.guest_identity`.
+    let guest_identity = match body.guest_identity.as_deref() {
+        Some(code) if GUEST_IDENTITIES.contains(&code) => Some(code.to_string()),
+        Some(_) => {
+            return Err(PostError::UploadFailed("Unknown guest identity".into()));
+        }
+        None => None,
+    };
+
     let comment_id = match opt_claims {
         Some(claims) => {
             let user_id = claims
@@ -44,12 +59,12 @@ pub async fn new_comment(
                     user_id,
                     parent_id: body.parent_id,
                     content: body.content,
-                    guest_identity: body.guest_identity,
+                    guest_identity,
                 })
                 .await?
         }
         None => {
-            let guest_identity = body.guest_identity.ok_or(PostError::UploadFailed(
+            let guest_identity = guest_identity.ok_or(PostError::UploadFailed(
                 "guest_identity is required for anonymous comments".into(),
             ))?;
             state

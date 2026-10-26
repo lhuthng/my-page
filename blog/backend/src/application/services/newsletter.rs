@@ -27,14 +27,6 @@ pub trait NewsletterService {
         cmd: commands::newsletter::UnsubscribeCommand,
     ) -> Result<bool, errors::newsletter::NewsletterError>;
 
-    /// Email-based unsubscribe (no token required). Returns `true` when the
-    /// subscription was actually removed, `false` when there was no active
-    /// subscription for that email. Never returns an error for a missing email.
-    async fn unsubscribe_by_email(
-        &self,
-        cmd: commands::newsletter::UnsubscribeByEmailCommand,
-    ) -> Result<bool, errors::newsletter::NewsletterError>;
-
     async fn list_subscribers(
         &self,
         cmd: commands::newsletter::ListSubscribersCommand,

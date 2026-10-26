@@ -13,7 +13,7 @@ use crate::{
     application::{
         commands::newsletter::{
             ConfirmSubscriptionCommand, ListSubscribersCommand, SendCampaignCommand,
-            SubscribeCommand, UnsubscribeByEmailCommand, UnsubscribeCommand,
+            SubscribeCommand, UnsubscribeCommand,
         },
         services::newsletter::NewsletterService,
     },
@@ -28,6 +28,10 @@ use crate::{
 pub struct SubscribePayload {
     pub email: String,
 }
+
+/// The only answer `POST /newsletter/subscribe` ever gives. It must not vary
+/// with the address's current state: the endpoint is anonymous.
+const SUBSCRIBE_ACK: &str = "Check your inbox to confirm your subscription.";
 
 #[axum::debug_handler]
 pub async fn subscribe(
@@ -55,7 +59,20 @@ pub async fn subscribe(
     .await
     .map_err(|_| {
         NewsletterError::InternalError("Subscribing timed out. Please try again.".to_string())
-    })??;
+    })?;
+
+    // An address that is already confirmed answers exactly like a fresh one.
+    // A 409 here (or any other distinct status) is an unauthenticated oracle
+    // for "is this address subscribed?".
+    let mail_payload = match mail_payload {
+        Ok(payload) => payload,
+        Err(NewsletterError::AlreadySubscribed) => {
+            return Ok(Json(NewsletterMessageResponse {
+                message: SUBSCRIBE_ACK.to_string(),
+            }));
+        }
+        Err(err) => return Err(err),
+    };
 
     timeout(
         Duration::from_secs(15),
@@ -77,7 +94,7 @@ pub async fn subscribe(
     .map_err(NewsletterError::InternalError)?;
 
     Ok(Json(NewsletterMessageResponse {
-        message: "Check your inbox to confirm your subscription.".to_string(),
+        message: SUBSCRIBE_ACK.to_string(),
     }))
 }
 
@@ -117,39 +134,6 @@ pub async fn unsubscribe(
         "You have been unsubscribed."
     } else {
         "You're already unsubscribed."
-    };
-
-    Ok(Json(NewsletterMessageResponse {
-        message: message.to_string(),
-    }))
-}
-
-#[derive(serde::Deserialize, validator::Validate)]
-pub struct UnsubscribeByEmailPayload {
-    #[validate(email(message = "Invalid email address"))]
-    pub email: String,
-}
-
-#[axum::debug_handler]
-pub async fn unsubscribe_by_email(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<UnsubscribeByEmailPayload>,
-) -> Result<Json<NewsletterMessageResponse>, NewsletterError> {
-    if let Err(err) = payload.validate() {
-        return Err(NewsletterError::InternalError(err.to_string()));
-    }
-
-    let unsubscribed = state
-        .newsletter_service
-        .unsubscribe_by_email(UnsubscribeByEmailCommand {
-            email: payload.email,
-        })
-        .await?;
-
-    let message = if unsubscribed {
-        "You have been unsubscribed."
-    } else {
-        "No active subscription found for that email."
     };
 
     Ok(Json(NewsletterMessageResponse {
@@ -245,5 +229,5 @@ pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/subscribe", post(subscribe))
         .route("/confirm", get(confirm))
-        .route("/unsubscribe", get(unsubscribe).post(unsubscribe_by_email))
+        .route("/unsubscribe", get(unsubscribe))
 }

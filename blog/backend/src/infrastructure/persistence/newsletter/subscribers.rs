@@ -6,7 +6,7 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 
 use crate::application::commands::newsletter::{
-    ConfirmSubscriptionCommand, SubscribeCommand, UnsubscribeByEmailCommand, UnsubscribeCommand,
+    ConfirmSubscriptionCommand, SubscribeCommand, UnsubscribeCommand,
 };
 use crate::domain::entities::newsletter::ConfirmSubscriptionMailPayload;
 use crate::domain::errors::newsletter::NewsletterError;
@@ -56,7 +56,7 @@ pub(crate) fn decode_token(token: &str) -> Result<(i64, String), NewsletterError
 /// `SHA256(secret)` (same shape as the confirm-token hash) purely so
 /// verification stays a uniform "re-hash and compare" operation.
 pub(crate) fn derive_unsubscribe_secret(subscriber_id: i64) -> String {
-    let jwt_secret = std::env::var("JWT_SECRET").unwrap_or_default();
+    let jwt_secret = crate::infrastructure::web::server::config::auth::jwt_secret();
     hex::encode(Sha256::digest(
         format!("{}{}{}", jwt_secret, DELIMITER, subscriber_id).as_bytes(),
     ))
@@ -228,30 +228,6 @@ impl NewsletterServiceImpl {
         )
         .bind(Utc::now().to_rfc3339())
         .bind(subscriber_id)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() > 0)
-    }
-
-    pub(super) async fn unsubscribe_by_email(
-        &self,
-        cmd: UnsubscribeByEmailCommand,
-    ) -> Result<bool, NewsletterError> {
-        let email = cmd.email.trim().to_string();
-        if email.is_empty() {
-            return Ok(false);
-        }
-
-        let result = sqlx::query(
-            r#"
-            UPDATE newsletter_subscribers
-            SET status = 'unsubscribed', unsubscribed_at = ?
-            WHERE email = ? AND status != 'unsubscribed'
-            "#,
-        )
-        .bind(Utc::now().to_rfc3339())
-        .bind(&email)
         .execute(&self.pool)
         .await?;
 

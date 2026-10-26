@@ -68,6 +68,29 @@ test('raw HTML in a body stays escaped', () => {
 	assert.match(html, /&lt;script&gt;/);
 });
 
+test('math that KaTeX cannot parse is escaped, not emitted as markup', () => {
+	// markdown-it-katex returns the raw LaTeX source when KaTeX throws. The
+	// trailing `&` below is what makes KaTeX throw, so this is the exact shape
+	// that used to reach `{@html}` as a live tag.
+	const renderer = createMarkdownRenderer();
+
+	const inline = renderBody(renderer, '$<img src=x onerror=alert(1)>&$', {});
+	assert.doesNotMatch(inline, /<img/);
+	assert.match(inline, /class="katex-error"/);
+	assert.match(inline, /&lt;img src=x onerror=alert\(1\)&gt;&amp;/);
+
+	const block = renderBody(renderer, '$$<img src=x onerror=alert(1)>&$$', {});
+	assert.doesNotMatch(block, /<img/);
+	assert.match(block, /class="katex-error"/);
+});
+
+test('valid math still renders through KaTeX', () => {
+	const renderer = createMarkdownRenderer();
+
+	assert.match(renderBody(renderer, '$x^2$', {}), /class="katex"/);
+	assert.match(renderBody(renderer, '$$x^2$$', {}), /class="katex-display"/);
+});
+
 test('renders a stored body once its indices are decoded', () => {
 	// The end-to-end shape the loaders use: decode indices, build the
 	// dictionary, then render.

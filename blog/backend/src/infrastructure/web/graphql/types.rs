@@ -4,7 +4,8 @@ use async_graphql::SimpleObject;
 pub struct GqlUser {
     pub id: i64,
     pub username: String,
-    pub email: String,
+    /// Null unless the caller is an admin.
+    pub email: Option<String>,
     pub role: String,
     pub display_name: String,
     pub bio: String,

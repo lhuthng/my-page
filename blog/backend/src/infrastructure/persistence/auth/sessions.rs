@@ -4,7 +4,7 @@ use bcrypt::verify;
 use chrono::{Duration, Utc};
 use tokio::join;
 
-use crate::application::commands::auth::{LoginCommand, RefreshAccessTokenCommand};
+use crate::application::commands::auth::{LoginCommand, LogoutCommand, RefreshAccessTokenCommand};
 use crate::domain::entities::auth::{AuthConfig, AuthTokens, LoginResult};
 use crate::domain::entities::secret::Claims;
 use crate::domain::errors::auth::AuthError;
@@ -88,12 +88,13 @@ impl AuthServiceImpl {
 
         sqlx::query(
             r#"
-            INSERT INTO sessions (user_id, token_hash, expires_at)
-            VALUES ($1, $2, $3)
+            INSERT INTO sessions (user_id, token_hash, expires_at, revoked_at)
+            VALUES ($1, $2, $3, NULL)
             ON CONFLICT (user_id)
             DO UPDATE SET
                 token_hash = excluded.token_hash,
-                expires_at = excluded.expires_at;
+                expires_at = excluded.expires_at,
+                revoked_at = NULL;
             "#,
         )
         .bind(user_row.id)
@@ -131,7 +132,8 @@ impl AuthServiceImpl {
             r#"
             SELECT user_id, token_hash, expires_at, role
             FROM sessions JOIN users ON users.id = user_id
-            WHERE user_id = ? AND users.email_verified_at IS NOT NULL
+            WHERE user_id = ? AND sessions.revoked_at IS NULL
+              AND users.email_verified_at IS NOT NULL
             "#,
         )
         .bind(user_id)
@@ -172,5 +174,54 @@ impl AuthServiceImpl {
             Err(sqlx::Error::RowNotFound) => Err(AuthError::InvalidToken),
             Err(e) => Err(AuthError::InternalError(e.to_string())),
         }
+    }
+
+    /// Sign-out used to be a cookie deletion with no server-side effect: a
+    /// refresh token copied before sign-out kept minting access tokens for the
+    /// rest of the session lifetime. The row is verified first so a forged
+    /// token cannot revoke somebody else's session, then marked revoked, which
+    /// the refresh lookup now honours.
+    pub(super) async fn logout(&self, cmd: LogoutCommand) -> Result<(), AuthError> {
+        let raw = general_purpose::URL_SAFE_NO_PAD
+            .decode(&cmd.refresh_token)
+            .map_err(|_| AuthError::InvalidToken)?;
+        let raw = String::from_utf8(raw).map_err(|_| AuthError::InvalidToken)?;
+        let Some((user_id, token)) = raw.split_once(DELIMITER) else {
+            return Err(AuthError::InvalidToken);
+        };
+
+        let row = sqlx::query_as::<_, SessionRow>(
+            r#"
+            SELECT user_id, token_hash, expires_at, role
+            FROM sessions JOIN users ON users.id = user_id
+            WHERE user_id = ?
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AuthError::InternalError(e.to_string()))?;
+
+        // No session to end: sign-out stays idempotent.
+        let Some(row) = row else { return Ok(()) };
+
+        let token_hash = row.token_hash.clone();
+        let token_owned = token.to_string();
+        let is_valid = tokio::task::spawn_blocking(move || verify(&token_owned, &token_hash))
+            .await
+            .map_err(|e| AuthError::InternalError(e.to_string()))?
+            .map_err(|e| AuthError::InternalError(e.to_string()))?;
+
+        if !is_valid {
+            return Err(AuthError::InvalidToken);
+        }
+
+        sqlx::query("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL")
+            .bind(Utc::now().to_rfc3339())
+            .bind(row.user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 }

@@ -3,6 +3,7 @@
 use async_graphql::{Context, Object};
 use sqlx::SqlitePool;
 
+use super::super::helpers::staff_scope;
 use super::super::rows::UserRow;
 use super::super::types::{GqlUser, UserConnection};
 
@@ -20,6 +21,7 @@ impl UsersQuery {
         role: Option<String>,
     ) -> async_graphql::Result<UserConnection> {
         let pool = ctx.data::<SqlitePool>()?;
+        let scope = staff_scope(ctx)?;
         let limit = limit.unwrap_or(20) as i64;
         let offset = offset.unwrap_or(0) as i64;
 
@@ -31,7 +33,12 @@ impl UsersQuery {
             );
         }
 
-        if role.is_some() {
+        // A moderator may list ordinary accounts only, and role filtering is an
+        // admin privilege. This is the predicate the REST dashboard applies.
+        let role_filter_applies = scope.is_admin && role.is_some();
+        if !scope.is_admin {
+            where_parts.push("u.role = 'user'".to_string());
+        } else if role_filter_applies {
             where_parts.push("u.role = ?".to_string());
         }
 
@@ -45,7 +52,7 @@ impl UsersQuery {
         if let Some(ref s) = search {
             count_query = count_query.bind(s).bind(s);
         }
-        if let Some(ref r) = role {
+        if role_filter_applies && let Some(ref r) = role {
             count_query = count_query.bind(r);
         }
         let total: i64 = count_query
@@ -53,9 +60,12 @@ impl UsersQuery {
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
+        // E-mail is personal data that only an admin sees; the REST listing
+        // does not project it at all.
+        let email_column = if scope.is_admin { "u.email" } else { "NULL" };
         let data_sql = format!(
             r#"
-            SELECT u.id, u.username, u.email, u.role, u.created_at,
+            SELECT u.id, u.username, {email_column} AS email, u.role, u.created_at,
                    um.display_name, um.bio, m.url AS avatar_url
             FROM users u
             JOIN user_meta um ON um.user_id = u.id
@@ -70,7 +80,7 @@ impl UsersQuery {
         if let Some(ref s) = search {
             data_query = data_query.bind(s).bind(s);
         }
-        if let Some(ref r) = role {
+        if role_filter_applies && let Some(ref r) = role {
             data_query = data_query.bind(r);
         }
         let rows = data_query

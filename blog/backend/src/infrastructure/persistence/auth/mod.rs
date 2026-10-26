@@ -52,6 +52,12 @@ impl AuthService for AuthServiceImpl {
     ) -> Result<entities::auth::AuthTokens, errors::auth::AuthError> {
         self.refresh_access_token(cmd, config).await
     }
+    async fn logout(
+        &self,
+        cmd: commands::auth::LogoutCommand,
+    ) -> Result<(), errors::auth::AuthError> {
+        self.logout(cmd).await
+    }
     async fn verify_email(
         &self,
         cmd: commands::auth::VerifyEmailCommand,
