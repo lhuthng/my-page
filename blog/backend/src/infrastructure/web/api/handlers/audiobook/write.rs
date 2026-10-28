@@ -212,11 +212,14 @@ pub async fn delete_audiobook(
 ) -> Result<StatusCode, AudiobookError> {
     state
         .audiobook_service
-        .delete_audiobook(DeleteAudiobookCommand {
-            audiobook_id,
-            user_id: caller_id(&claims)?,
-            is_admin: is_admin(&claims),
-        })
+        .delete_audiobook(
+            DeleteAudiobookCommand {
+                audiobook_id,
+                user_id: caller_id(&claims)?,
+                is_admin: is_admin(&claims),
+            },
+            &state.media_config,
+        )
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

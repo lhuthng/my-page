@@ -16,14 +16,20 @@ use backend::{
             RecordTrackPlayCommand, RemoveTrackCommand, ReplaceTrackMediumCommand,
             UpdateAudiobookCommand, UpdateTrackCommand,
         },
-        services::audiobook::AudiobookService,
+        commands::media::{UploadMediaWithoutDescriptionCommand, UploadMediumCommand},
+        services::{audiobook::AudiobookService, media::MediaService},
     },
     domain::{
         entities::{audiobook::AudiobookDetails, media::MediaType, media::MediumDetails},
         errors::audiobook::AudiobookError,
     },
     infrastructure::{
-        persistence::audiobook::AudiobookServiceImpl, storage::media_key, web::server::MediaConfig,
+        persistence::{
+            audiobook::AudiobookServiceImpl,
+            media::{MEDIA_REFERENCES, MediaServiceImpl, hash_bytes},
+        },
+        storage::{chunk_dir, chunk_key, manifest_key, media_key},
+        web::server::MediaConfig,
     },
 };
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
@@ -217,12 +223,15 @@ async fn chapters_keep_the_slot_they_are_given() {
     // A chapter's number is a slot, not a position: removing the middle one
     // leaves the gap where it was instead of closing up to 1, 2.
     fx.service
-        .remove_track(RemoveTrackCommand {
-            audiobook_id: book,
-            track_id: second,
-            user_id: 1,
-            is_admin: false,
-        })
+        .remove_track(
+            RemoveTrackCommand {
+                audiobook_id: book,
+                track_id: second,
+                user_id: 1,
+                is_admin: false,
+            },
+            &config(&fx),
+        )
         .await
         .unwrap();
 
@@ -953,18 +962,24 @@ async fn track_uploads_reject_non_audio_and_metadata_is_validated() {
 }
 
 #[tokio::test]
-async fn deleting_an_audiobook_cascades_tracks_but_keeps_media() {
+async fn deleting_an_audiobook_takes_its_chapter_audio_with_it() {
     let fx = fixture("delete").await;
     let book = fx.create("delete-book", &["Temp"]).await;
-    fx.add_track(book, "One", 1, None).await;
-    fx.add_track(book, "Two", 2, None).await;
+    let first = fx.add_track(book, "One", 1, None).await;
+    let second = fx.add_track(book, "Two", 2, None).await;
+    let (_, first_path) = track_medium(&fx, first).await;
+    let (_, second_path) = track_medium(&fx, second).await;
+    assert!(first_path.exists() && second_path.exists());
 
     fx.service
-        .delete_audiobook(DeleteAudiobookCommand {
-            audiobook_id: book,
-            user_id: 1,
-            is_admin: false,
-        })
+        .delete_audiobook(
+            DeleteAudiobookCommand {
+                audiobook_id: book,
+                user_id: 1,
+                is_admin: false,
+            },
+            &config(&fx),
+        )
         .await
         .unwrap();
 
@@ -980,19 +995,24 @@ async fn deleting_an_audiobook_cascades_tracks_but_keeps_media() {
         .unwrap();
     assert_eq!(links, 0, "tag links cascade with the audiobook");
 
-    // Tag vocabulary and media survive: both are reusable, and media files are
-    // content-addressed and owned by the media manager.
+    // Tag vocabulary survives: it is reusable by the next book.
     let tags: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audiobook_tags")
         .fetch_one(&fx.service.pool)
         .await
         .unwrap();
     assert_eq!(tags, 1);
 
+    // The audio does not: nothing plays it any more, and the bucket has no
+    // other owner, so both the rows and the files go with the book.
     let media: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media")
         .fetch_one(&fx.service.pool)
         .await
         .unwrap();
-    assert_eq!(media, 2);
+    assert_eq!(media, 0, "a deleted book leaves no media rows behind");
+    assert!(
+        !first_path.exists() && !second_path.exists(),
+        "nor the audio files they named"
+    );
 
     let err = fx
         .service
@@ -1643,4 +1663,632 @@ async fn replacing_keeps_the_file_another_chapter_still_plays() {
     assert_eq!(second_media_after, second_media);
 
     fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn removing_a_chapter_takes_its_audio_with_it() {
+    let fx = fixture("remove-cleans").await;
+    let book = fx.create("remove-book", &[]).await;
+    let first = fx.add_track(book, "One", 1, None).await;
+    let second = fx.add_track(book, "Two", 2, None).await;
+
+    let (gone_media, gone_path) = track_medium(&fx, first).await;
+    let (kept_media, kept_path) = track_medium(&fx, second).await;
+
+    let gone_key = gone_path
+        .strip_prefix(&fx.media_dir)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let gone_chunk_dir = fx
+        .media_dir
+        .join(backend::infrastructure::storage::chunk_dir(&gone_key));
+    assert!(gone_chunk_dir.is_dir(), "the upload chunked itself");
+
+    fx.service
+        .remove_track(
+            RemoveTrackCommand {
+                audiobook_id: book,
+                track_id: first,
+                user_id: 1,
+                is_admin: false,
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        !gone_path.exists(),
+        "nothing plays that audio once its only chapter is gone"
+    );
+    assert!(
+        !gone_chunk_dir.exists(),
+        "its disk chunks must also be removed"
+    );
+    assert!(!fx.media_dir.join(manifest_key(&gone_key)).exists());
+
+    let gone_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media WHERE id = ?")
+        .bind(gone_media)
+        .fetch_one(&fx.service.pool)
+        .await
+        .unwrap();
+    assert_eq!(gone_rows, 0, "the media row goes with the files");
+
+    // The chapter that stayed is untouched.
+    let (kept_media_after, _) = track_medium(&fx, second).await;
+    assert_eq!(kept_media_after, kept_media);
+    assert!(kept_path.exists());
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn removing_a_chapter_keeps_the_file_another_chapter_still_plays() {
+    let fx = fixture("remove-shared").await;
+    let book = fx.create("remove-shared-book", &[]).await;
+    // The same bytes twice: two rows, one file.
+    let first = fx.add_track(book, "One", 5, None).await;
+    let second = fx.add_track(book, "Two", 5, None).await;
+
+    let (first_media, shared_path) = track_medium(&fx, first).await;
+    let (_, second_path) = track_medium(&fx, second).await;
+    assert_eq!(shared_path, second_path);
+
+    fx.service
+        .remove_track(
+            RemoveTrackCommand {
+                audiobook_id: book,
+                track_id: first,
+                user_id: 1,
+                is_admin: false,
+            },
+            &config(&fx),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        shared_path.exists(),
+        "the remaining chapter still plays those bytes"
+    );
+    let first_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media WHERE id = ?")
+        .bind(first_media)
+        .fetch_one(&fx.service.pool)
+        .await
+        .unwrap();
+    assert_eq!(first_rows, 0, "only the row of the removed chapter goes");
+
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn media_reference_query_covers_every_foreign_key() {
+    let fx = fixture("reference-schema").await;
+    let foreign_keys: Vec<(String, String)> = sqlx::query_as(
+        "SELECT s.name, f.\"from\" FROM sqlite_schema s
+         JOIN pragma_foreign_key_list(s.name) f
+         WHERE s.type = 'table' AND f.\"table\" = 'media'
+         ORDER BY s.name, f.\"from\"",
+    )
+    .fetch_all(&fx.service.pool)
+    .await
+    .unwrap();
+    let mut covered: Vec<(String, String)> = MEDIA_REFERENCES
+        .split("UNION ALL")
+        .map(|branch| {
+            let words: Vec<_> = branch.split_whitespace().collect();
+            match words.as_slice() {
+                ["SELECT", column, "FROM", table] => (table.to_string(), column.to_string()),
+                _ => panic!("unexpected reference query branch: {branch}"),
+            }
+        })
+        .collect();
+    covered.sort();
+    assert_eq!(
+        covered, foreign_keys,
+        "every media FK must protect ownership"
+    );
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn removing_and_replacing_preserve_every_kind_of_media_reference() {
+    for (name, reference) in [
+        (
+            "alias",
+            "INSERT INTO media_aliases (media_id, alias) VALUES (?, 'kept')",
+        ),
+        (
+            "post-use",
+            "INSERT INTO post_media_usages (post_id, medium_id, code) VALUES (1, ?, 1)",
+        ),
+        (
+            "post-cover",
+            "UPDATE posts SET cover_media_id = ? WHERE id = 1",
+        ),
+        (
+            "series-cover",
+            "INSERT INTO series (user_id, title, slug, cover_image_id) VALUES (1, 'Series', 'series', ?)",
+        ),
+        (
+            "book-cover",
+            "UPDATE audiobooks SET cover_image_id = ? WHERE slug = 'holder'",
+        ),
+        (
+            "avatar",
+            "INSERT INTO user_meta (user_id, display_name, avatar_image_id) VALUES (1, 'Alice', ?)",
+        ),
+        (
+            "track",
+            "INSERT INTO audiobook_tracks (audiobook_id, media_id, title, number) VALUES ((SELECT id FROM audiobooks WHERE slug = 'holder'), ?, 'Kept', 1)",
+        ),
+    ] {
+        for replace in [false, true] {
+            let fx = fixture(&format!("reference-{name}-{replace}")).await;
+            let book = fx.create("source", &[]).await;
+            fx.create("holder", &[]).await;
+            sqlx::query(
+                "INSERT INTO posts (id, user_id, title, slug) VALUES (1, 1, 'Post', 'post')",
+            )
+            .execute(&fx.service.pool)
+            .await
+            .unwrap();
+            let track = fx.add_track(book, "Original", 7, None).await;
+            let (media_id, path) = track_medium(&fx, track).await;
+            sqlx::query(reference)
+                .bind(media_id)
+                .execute(&fx.service.pool)
+                .await
+                .unwrap();
+
+            if replace {
+                fx.service
+                    .replace_track_medium(
+                        ReplaceTrackMediumCommand {
+                            audiobook_id: book,
+                            track_id: track,
+                            user_id: 1,
+                            is_admin: false,
+                            title: None,
+                            duration_seconds: None,
+                            medium: audio("replacement.mp3", 9),
+                        },
+                        &config(&fx),
+                    )
+                    .await
+                    .unwrap();
+                assert_ne!(track_medium(&fx, track).await.0, media_id);
+            } else {
+                fx.service
+                    .remove_track(
+                        RemoveTrackCommand {
+                            audiobook_id: book,
+                            track_id: track,
+                            user_id: 1,
+                            is_admin: false,
+                        },
+                        &config(&fx),
+                    )
+                    .await
+                    .unwrap();
+            }
+
+            let retained: bool =
+                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM media WHERE id = ?)")
+                    .bind(media_id)
+                    .fetch_one(&fx.service.pool)
+                    .await
+                    .unwrap();
+            assert!(
+                retained,
+                "{name} must retain the media row after replace={replace}"
+            );
+            let references: i64 = sqlx::query_scalar(&format!(
+                "SELECT COUNT(*) FROM ({MEDIA_REFERENCES}) WHERE media_id = ?"
+            ))
+            .bind(media_id)
+            .fetch_one(&fx.service.pool)
+            .await
+            .unwrap();
+            assert_eq!(references, 1, "the {name} reference must survive");
+            assert_eq!(
+                std::fs::read(&path).unwrap(),
+                audio("original.mp3", 7).bytes
+            );
+            let key = path.strip_prefix(&fx.media_dir).unwrap().to_str().unwrap();
+            assert!(fx.media_dir.join(manifest_key(key)).is_file());
+            assert!(fx.media_dir.join(chunk_key(key, 0)).is_file());
+            fx.cleanup().await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn deleting_a_book_preserves_audio_shared_with_another_book() {
+    for same_row in [false, true] {
+        let fx = fixture(&format!("delete-cross-book-{same_row}")).await;
+        let gone = fx.create("gone", &[]).await;
+        let kept = fx.create("kept", &[]).await;
+        let first = fx.add_track(gone, "Gone", 7, None).await;
+        let second = fx.add_track(kept, "Kept", 7, None).await;
+        let (first_media, path) = track_medium(&fx, first).await;
+        let (second_media, second_path) = track_medium(&fx, second).await;
+        assert_eq!(path, second_path);
+        if same_row {
+            sqlx::query("UPDATE audiobook_tracks SET media_id = ? WHERE id = ?")
+                .bind(first_media)
+                .bind(second)
+                .execute(&fx.service.pool)
+                .await
+                .unwrap();
+            sqlx::query("DELETE FROM media WHERE id = ?")
+                .bind(second_media)
+                .execute(&fx.service.pool)
+                .await
+                .unwrap();
+        }
+
+        fx.service
+            .delete_audiobook(
+                DeleteAudiobookCommand {
+                    audiobook_id: gone,
+                    user_id: 1,
+                    is_admin: false,
+                },
+                &config(&fx),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            track_medium(&fx, second).await.0,
+            if same_row { first_media } else { second_media }
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), audio("same.mp3", 7).bytes);
+        let key = path.strip_prefix(&fx.media_dir).unwrap().to_str().unwrap();
+        assert!(fx.media_dir.join(manifest_key(key)).is_file());
+        assert!(fx.media_dir.join(chunk_dir(key)).is_dir());
+        assert!(fx.media_dir.join(chunk_key(key, 0)).is_file());
+        let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media")
+            .fetch_one(&fx.service.pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining, 1);
+        fx.cleanup().await;
+    }
+}
+
+#[tokio::test]
+async fn shared_path_writers_lock_before_touching_disk() {
+    let fx = fixture("writer-lock").await;
+    let book = fx.create("locked", &[]).await;
+    let track = fx.add_track(book, "Original", 1, None).await;
+    let writer_pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(&fx.db_path)
+                .busy_timeout(std::time::Duration::from_millis(100)),
+        )
+        .await
+        .unwrap();
+    let media_service = MediaServiceImpl::new(writer_pool.clone());
+    let audiobook_service = AudiobookServiceImpl::new(writer_pool.clone());
+
+    for (kind, seed) in [("single", 70), ("bulk", 71), ("add", 72), ("replace", 73)] {
+        let cfg = config(&fx);
+        let medium = audio("locked.mp3", seed);
+        let hashed = hash_bytes(&medium.bytes, &cfg.dir, ".mp3".to_string(), true)
+            .await
+            .unwrap();
+        assert!(!hashed.dir_path.exists());
+        let write = || async {
+            match kind {
+                "single" => media_service
+                    .upload(
+                        UploadMediumCommand {
+                            uploader_id: 1,
+                            short_name: "locked-single".to_string(),
+                            description: String::new(),
+                            file_name: medium.filename.clone(),
+                            content_type: medium.content_type.clone(),
+                            bytes: medium.bytes.clone(),
+                        },
+                        &cfg,
+                    )
+                    .await
+                    .map_err(|e| format!("{e:?}")),
+                "bulk" => media_service
+                    .bulk_upload(
+                        UploadMediaWithoutDescriptionCommand {
+                            uploader_id: 1,
+                            number_of_files: 1,
+                            short_names: vec!["locked-bulk".to_string()],
+                            file_names: vec![medium.filename.clone()],
+                            content_types: vec![medium.content_type.clone()],
+                            bytes_list: vec![medium.bytes.clone()],
+                        },
+                        &cfg,
+                    )
+                    .await
+                    .map_err(|e| format!("{e:?}")),
+                "add" => audiobook_service
+                    .add_track(
+                        AddTrackCommand {
+                            audiobook_id: book,
+                            user_id: 1,
+                            is_admin: false,
+                            title: "Locked".to_string(),
+                            number: None,
+                            duration_seconds: None,
+                            medium: medium.clone(),
+                        },
+                        &cfg,
+                    )
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| format!("{e:?}")),
+                "replace" => audiobook_service
+                    .replace_track_medium(
+                        ReplaceTrackMediumCommand {
+                            audiobook_id: book,
+                            track_id: track,
+                            user_id: 1,
+                            is_admin: false,
+                            title: None,
+                            duration_seconds: None,
+                            medium: medium.clone(),
+                        },
+                        &cfg,
+                    )
+                    .await
+                    .map_err(|e| format!("{e:?}")),
+                _ => unreachable!(),
+            }
+        };
+        let guard = fx.service.pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(5), write())
+            .await
+            .unwrap();
+        assert!(
+            result.is_err(),
+            "{kind} must not acquire the held write lock"
+        );
+        assert!(!hashed.file_path.exists(), "{kind} wrote before locking");
+        // Directories survive error cleanup, exposing even a write that was immediately undone.
+        assert!(
+            !hashed.dir_path.exists(),
+            "{kind} touched disk before locking"
+        );
+        guard.rollback().await.unwrap();
+        write().await.unwrap();
+        assert_eq!(std::fs::read(&hashed.file_path).unwrap(), medium.bytes);
+    }
+    writer_pool.close().await;
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn prune_command_rechecks_approval_and_holds_lock_through_verification() {
+    use axum::{Router, extract::Request, routing::any};
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+    use tokio::sync::{mpsc, oneshot};
+
+    for mode in [
+        "success",
+        "stale-alias",
+        "stale-shared",
+        "partial",
+        "verification",
+    ] {
+        let fx = fixture(&format!("prune-command-{mode}")).await;
+        let book = fx.create("prune-book", &[]).await;
+        let track = fx.add_track(book, "Original", 7, None).await;
+        let (media_id, path) = track_medium(&fx, track).await;
+        let key = path.strip_prefix(&fx.media_dir).unwrap().to_str().unwrap();
+        let mut files = Vec::new();
+        let mut selected = Vec::new();
+        for key in [key.to_string(), manifest_key(key), chunk_key(key, 0)] {
+            let path = fx.media_dir.join(&key);
+            files.push((path.clone(), std::fs::read(path).unwrap()));
+            selected.push(format!("audio/{key}"));
+        }
+        selected.sort();
+        sqlx::query("DELETE FROM audiobook_tracks WHERE id = ?")
+            .bind(track)
+            .execute(&fx.service.pool)
+            .await
+            .unwrap();
+        let objects = Arc::new(Mutex::new(selected.clone()));
+        objects
+            .lock()
+            .unwrap()
+            .push("audio/manual-review.mp3".into());
+        let submitted = Arc::new(Mutex::new(Vec::<String>::new()));
+        let (stage_tx, mut stage_rx) = mpsc::unbounded_channel::<(&str, oneshot::Sender<()>)>();
+        let app = Router::new().route("/{*path}", any({
+            let objects = objects.clone();
+            let submitted = submitted.clone();
+            move |request: Request| {
+                let objects = objects.clone();
+                let submitted = submitted.clone();
+                let stage_tx = stage_tx.clone();
+                async move {
+                    assert_eq!(request.uri().path().trim_end_matches('/'), "/bucket");
+                    let deleting = request.method() == http::Method::POST;
+                    let body = axum::body::to_bytes(request.into_body(), 1024 * 1024).await.unwrap();
+                    let body = String::from_utf8(body.to_vec()).unwrap();
+                    let verification = !deleting && !submitted.lock().unwrap().is_empty();
+                    if deleting || verification {
+                        let (resume_tx, resume_rx) = oneshot::channel();
+                        stage_tx.send((if deleting { "delete" } else { "verify" }, resume_tx)).unwrap();
+                        resume_rx.await.unwrap();
+                    }
+                    let response = if deleting {
+                        let keys: Vec<_> = body.split("<Key>").skip(1)
+                            .map(|part| part.split("</Key>").next().unwrap().to_string()).collect();
+                        submitted.lock().unwrap().extend(keys.clone());
+                        let mut objects = objects.lock().unwrap();
+                        let mut results = String::new();
+                        for (index, key) in keys.iter().enumerate() {
+                            if mode == "partial" && index + 1 == keys.len() {
+                                results.push_str(&format!("<Error><Key>{key}</Key><Code>AccessDenied</Code></Error>"));
+                            } else {
+                                objects.retain(|object| object != key);
+                                results.push_str(&format!("<Deleted><Key>{key}</Key></Deleted>"));
+                            }
+                        }
+                        format!("<DeleteResult>{results}</DeleteResult>")
+                    } else {
+                        let mut objects = objects.lock().unwrap();
+                        if verification && mode == "verification" {
+                            objects.push("audio/unexpected.mp3".into());
+                        }
+                        let contents: String = objects.iter().map(|key| format!(
+                            "<Contents><Key>{key}</Key><Size>64</Size><ETag>test-etag</ETag><LastModified>2020-01-01T00:00:00Z</LastModified></Contents>"
+                        )).collect();
+                        format!("<ListBucketResult><IsTruncated>false</IsTruncated>{contents}</ListBucketResult>")
+                    };
+                    ([(http::header::CONTENT_TYPE, "application/xml")], response)
+                }
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let command = |fingerprint: Option<&str>| {
+            let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_backfill-audio"));
+            command
+                .env_clear()
+                .current_dir(&fx.media_dir)
+                .env("DATABASE_URL", format!("sqlite://{}", fx.db_path.display()))
+                .env("MEDIA_PATH", &fx.media_dir)
+                .env("R2_ACCOUNT_ID", "test")
+                .env("R2_ACCESS_KEY_ID", "test-key")
+                .env("R2_SECRET_ACCESS_KEY", "test-secret")
+                .env("R2_BUCKET", "bucket")
+                .env("R2_ENDPOINT", &endpoint)
+                .kill_on_drop(true);
+            if let Some(fingerprint) = fingerprint {
+                command.args(["--prune", fingerprint]);
+            }
+            command
+        };
+        let dry = command(None).output().await.unwrap();
+        assert!(
+            dry.status.success(),
+            "{}",
+            String::from_utf8_lossy(&dry.stderr)
+        );
+        assert!(submitted.lock().unwrap().is_empty());
+        assert_eq!(objects.lock().unwrap().len(), selected.len() + 1);
+        let report = String::from_utf8(dry.stdout).unwrap();
+        let approval = report
+            .lines()
+            .find_map(|line| line.strip_prefix("Fingerprint: "))
+            .unwrap();
+        let planned: Vec<_> = report
+            .lines()
+            .filter(|line| line.starts_with('{'))
+            .map(|line| {
+                serde_json::from_str::<serde_json::Value>(line).unwrap()["key"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect();
+        assert_eq!(planned, selected);
+        if mode == "stale-alias" {
+            sqlx::query("INSERT INTO media_aliases (media_id, alias) VALUES (?, 'keep')")
+                .bind(media_id)
+                .execute(&fx.service.pool)
+                .await
+                .unwrap();
+        } else if mode == "stale-shared" {
+            sqlx::query("INSERT INTO media (hash, short_name, file_name, file_type, url, size, uploader_id)
+                SELECT hash, 'library-copy', file_name, file_type, url, size, uploader_id FROM media WHERE id = ?")
+                .bind(media_id).execute(&fx.service.pool).await.unwrap();
+        }
+        let mut apply_command = command(Some(approval));
+        let applying = tokio::spawn(async move { apply_command.output().await.unwrap() });
+        if !mode.starts_with("stale-") {
+            let writer_pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(
+                    SqliteConnectOptions::new()
+                        .filename(&fx.db_path)
+                        .busy_timeout(Duration::from_millis(100)),
+                )
+                .await
+                .unwrap();
+            for expected in ["delete", "verify"] {
+                let (stage, resume) =
+                    tokio::time::timeout(Duration::from_secs(10), stage_rx.recv())
+                        .await
+                        .unwrap()
+                        .unwrap();
+                assert_eq!(stage, expected);
+                assert!(
+                    writer_pool.begin_with("BEGIN IMMEDIATE").await.is_err(),
+                    "prune released the write lock during {stage}"
+                );
+                resume.send(()).unwrap();
+            }
+            let output = tokio::time::timeout(Duration::from_secs(10), applying)
+                .await
+                .unwrap()
+                .unwrap();
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(
+                output.status.success(),
+                mode == "success",
+                "{mode}: {stderr}"
+            );
+            if mode == "partial" {
+                assert!(stderr.contains("possibly partial"));
+                assert!(objects.lock().unwrap().contains(selected.last().unwrap()));
+            } else if mode == "verification" {
+                assert!(stderr.contains("verification failed"));
+            }
+            assert_eq!(*submitted.lock().unwrap(), selected);
+            assert!(
+                objects
+                    .lock()
+                    .unwrap()
+                    .contains(&"audio/manual-review.mp3".into())
+            );
+            writer_pool
+                .begin_with("BEGIN IMMEDIATE")
+                .await
+                .unwrap()
+                .rollback()
+                .await
+                .unwrap();
+            writer_pool.close().await;
+        } else {
+            let output = tokio::time::timeout(Duration::from_secs(10), applying)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(!output.status.success());
+            assert!(String::from_utf8_lossy(&output.stderr).contains("fingerprint changed"));
+            assert!(submitted.lock().unwrap().is_empty());
+            assert_eq!(objects.lock().unwrap().len(), selected.len() + 1);
+        }
+        let row_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media")
+            .fetch_one(&fx.service.pool)
+            .await
+            .unwrap();
+        assert_eq!(row_count, if mode == "stale-shared" { 2 } else { 1 });
+        for (path, bytes) in files {
+            assert_eq!(std::fs::read(path).unwrap(), bytes);
+        }
+        server.abort();
+        fx.cleanup().await;
+    }
 }

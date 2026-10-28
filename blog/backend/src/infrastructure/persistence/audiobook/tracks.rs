@@ -14,10 +14,10 @@ use crate::application::commands::audiobook::{
 use crate::domain::entities::audiobook::AudiobookTrack;
 use crate::domain::entities::media::MediaType;
 use crate::domain::errors::{audiobook::AudiobookError, media::MediaError};
-use crate::infrastructure::storage::{audio_object_key, chunked, media_key};
 use crate::infrastructure::web::server::MediaConfig;
 
 use super::AudiobookServiceImpl;
+use super::release::release_medium;
 use super::rows::TrackRow;
 use super::validation::{MAX_TRACK_TITLE_CHARS, MAX_TRACKS_PER_AUDIOBOOK};
 
@@ -56,51 +56,6 @@ async fn assert_slot_is_free(
     }
 
     Ok(())
-}
-
-/// Removes the bytes behind a media row: the disk copy, and the bucket object
-/// when the row is audio.
-///
-/// Only ever called once nothing points at them any more. Failures are logged
-/// rather than returned: the write that needed them has already committed, and
-/// a leftover file is a smaller problem than an error the author cannot act on.
-async fn discard_medium_files(config: &MediaConfig, hash: &str, file_type: &str, uploader_id: i64) {
-    let Some(key) = media_key(hash, file_type, uploader_id) else {
-        tracing::warn!(
-            hash,
-            file_type,
-            "removed medium: no storage key derivable, nothing deleted"
-        );
-        return;
-    };
-
-    match fs::remove_file(config.dir.join(&key.key)).await {
-        Ok(()) => tracing::info!(key = %key.key, "removed medium: disk copy deleted"),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => tracing::error!(
-            key = %key.key,
-            %error,
-            "removed medium: disk copy could not be deleted"
-        ),
-    }
-
-    if let Some(bucket) = &config.audio_bucket
-        && let Some(object) = audio_object_key(&key.key, file_type)
-        && let Err(error) = bucket.client.delete_object(&object).await
-    {
-        tracing::error!(
-            key = %object,
-            %error,
-            "removed medium: bucket object could not be deleted"
-        );
-    }
-
-    // The chunked form of the same audio, when there is one. Read first: the
-    // manifest is the only record of which chunks exist, so deleting it before
-    // its chunks would leave objects behind that nothing could ever name again.
-    if let Some(manifest) = chunked::read_manifest(config, &key.key, file_type).await {
-        chunked::discard(config, &key.key, file_type, &manifest).await;
-    }
 }
 
 impl AudiobookServiceImpl {
@@ -225,7 +180,7 @@ impl AudiobookServiceImpl {
             return Err(AudiobookError::Media(MediaError::InvalidFileType));
         }
 
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         Self::assert_owned(&mut tx, cmd.audiobook_id, cmd.user_id, cmd.is_admin).await?;
 
         let track_count: i64 =
@@ -410,7 +365,7 @@ impl AudiobookServiceImpl {
             None => None,
         };
 
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         Self::assert_owned(&mut tx, cmd.audiobook_id, cmd.user_id, cmd.is_admin).await?;
 
         let exists: Option<(i64,)> =
@@ -425,9 +380,8 @@ impl AudiobookServiceImpl {
 
         // The audio this chapter plays today, so its row and the files behind
         // it can be released once nothing refers to them any more.
-        let previous: Option<(i64, String, String, i64)> = sqlx::query_as(
-            "SELECT id, hash, file_type, uploader_id FROM media
-             WHERE id = (SELECT media_id FROM audiobook_tracks WHERE id = ? AND audiobook_id = ?)",
+        let previous: Option<(i64,)> = sqlx::query_as(
+            "SELECT media_id FROM audiobook_tracks WHERE id = ? AND audiobook_id = ?",
         )
         .bind(cmd.track_id)
         .bind(cmd.audiobook_id)
@@ -494,36 +448,8 @@ impl AudiobookServiceImpl {
         // What the swap left nameless, and whether it is free to go. Decided
         // inside the transaction, because the answer depends on rows the swap
         // itself has just written.
-        let released: Option<(String, String, i64)> = match previous {
-            Some((previous_id, hash, file_type, uploader_id)) => {
-                let still_played_by_a_chapter: i64 =
-                    sqlx::query_scalar("SELECT COUNT(*) FROM audiobook_tracks WHERE media_id = ?")
-                        .bind(previous_id)
-                        .fetch_one(&mut *tx)
-                        .await?;
-
-                if still_played_by_a_chapter > 0 {
-                    None
-                } else {
-                    // Identical audio uploaded twice shares one file, so another
-                    // row holding this hash has to keep the bytes — which is
-                    // also what makes a swap to the very same recording leave
-                    // them alone.
-                    let same_bytes_elsewhere: i64 =
-                        sqlx::query_scalar("SELECT COUNT(*) FROM media WHERE hash = ? AND id != ?")
-                            .bind(&hash)
-                            .bind(previous_id)
-                            .fetch_one(&mut *tx)
-                            .await?;
-
-                    sqlx::query("DELETE FROM media WHERE id = ?")
-                        .bind(previous_id)
-                        .execute(&mut *tx)
-                        .await?;
-
-                    (same_bytes_elsewhere == 0).then_some((hash, file_type, uploader_id))
-                }
-            }
+        let released = match previous {
+            Some((previous_id,)) => release_medium(&mut tx, previous_id).await?,
             None => None,
         };
 
@@ -531,38 +457,54 @@ impl AudiobookServiceImpl {
 
         // Only after the commit: a swap that rolled back must not have deleted
         // the audio it still points at.
-        if let Some((hash, file_type, uploader_id)) = released {
-            discard_medium_files(config, &hash, &file_type, uploader_id).await;
+        if let Some(released) = released {
+            released.discard(&self.pool, config).await;
         }
 
         Ok(())
     }
 
-    pub(super) async fn remove_track(&self, cmd: RemoveTrackCommand) -> Result<(), AudiobookError> {
+    pub(super) async fn remove_track(
+        &self,
+        cmd: RemoveTrackCommand,
+        config: &MediaConfig,
+    ) -> Result<(), AudiobookError> {
         let mut tx = self.pool.begin().await?;
         Self::assert_owned(&mut tx, cmd.audiobook_id, cmd.user_id, cmd.is_admin).await?;
+
+        // The audio this chapter plays, read before the row is gone.
+        let media: Option<(i64,)> = sqlx::query_as(
+            "SELECT media_id FROM audiobook_tracks WHERE id = ? AND audiobook_id = ?",
+        )
+        .bind(cmd.track_id)
+        .bind(cmd.audiobook_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((media_id,)) = media else {
+            return Err(AudiobookError::NotFound);
+        };
 
         // The slot the chapter held is left empty rather than closed up:
         // removing chapter 5 from a book of 1, 5 and 100 leaves the other two
         // exactly where they were.
-        let affected =
-            sqlx::query("DELETE FROM audiobook_tracks WHERE id = ? AND audiobook_id = ?")
-                .bind(cmd.track_id)
-                .bind(cmd.audiobook_id)
-                .execute(&mut *tx)
-                .await?
-                .rows_affected();
-
-        if affected == 0 {
-            return Err(AudiobookError::NotFound);
-        }
+        sqlx::query("DELETE FROM audiobook_tracks WHERE id = ? AND audiobook_id = ?")
+            .bind(cmd.track_id)
+            .bind(cmd.audiobook_id)
+            .execute(&mut *tx)
+            .await?;
 
         sqlx::query("UPDATE audiobooks SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
             .bind(cmd.audiobook_id)
             .execute(&mut *tx)
             .await?;
 
+        let released = release_medium(&mut tx, media_id).await?;
+
         tx.commit().await?;
+
+        if let Some(released) = released {
+            released.discard(&self.pool, config).await;
+        }
         Ok(())
     }
 }

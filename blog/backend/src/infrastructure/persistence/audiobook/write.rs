@@ -17,6 +17,7 @@ use crate::infrastructure::web::server::MediaConfig;
 
 use super::AudiobookServiceImpl;
 use super::medium::PreparedCover;
+use super::release::release_medium;
 use super::validation::{MAX_DESCRIPTION_CHARS, MAX_TITLE_CHARS, MAX_TRANSLATOR_CHARS};
 
 impl AudiobookServiceImpl {
@@ -352,19 +353,35 @@ impl AudiobookServiceImpl {
     pub(super) async fn delete_audiobook(
         &self,
         cmd: DeleteAudiobookCommand,
+        config: &MediaConfig,
     ) -> Result<(), AudiobookError> {
         let mut tx = self.pool.begin().await?;
         Self::assert_owned(&mut tx, cmd.audiobook_id, cmd.user_id, cmd.is_admin).await?;
 
-        // Tracks and tag links cascade. Media rows and their files are left
-        // alone: media is content-addressed and may be referenced elsewhere,
-        // and the media manager owns its own lifecycle.
+        // Collect ownership before the book deletion cascades to its tracks.
+        let media: Vec<(i64,)> =
+            sqlx::query_as("SELECT media_id FROM audiobook_tracks WHERE audiobook_id = ?")
+                .bind(cmd.audiobook_id)
+                .fetch_all(&mut *tx)
+                .await?;
+
         sqlx::query("DELETE FROM audiobooks WHERE id = ?")
             .bind(cmd.audiobook_id)
             .execute(&mut *tx)
             .await?;
 
+        let mut released = Vec::with_capacity(media.len());
+        for (media_id,) in media {
+            if let Some(medium) = release_medium(&mut tx, media_id).await? {
+                released.push(medium);
+            }
+        }
+
         tx.commit().await?;
+
+        for medium in released {
+            medium.discard(&self.pool, config).await;
+        }
         Ok(())
     }
 }

@@ -221,12 +221,15 @@ pub async fn remove_track(
 ) -> Result<StatusCode, AudiobookError> {
     state
         .audiobook_service
-        .remove_track(RemoveTrackCommand {
-            audiobook_id,
-            track_id,
-            user_id: caller_id(&claims)?,
-            is_admin: is_admin(&claims),
-        })
+        .remove_track(
+            RemoveTrackCommand {
+                audiobook_id,
+                track_id,
+                user_id: caller_id(&claims)?,
+                is_admin: is_admin(&claims),
+            },
+            &state.media_config,
+        )
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

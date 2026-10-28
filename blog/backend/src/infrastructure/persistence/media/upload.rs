@@ -38,14 +38,13 @@ impl MediaServiceImpl {
             file_path,
         } = hash_bytes(&bytes, &config.dir, extension.to_string(), true).await?;
 
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         if fs::try_exists(&file_path).await? {
             return Err(MediaError::Duplication);
         }
 
         fs::create_dir_all(&dir_path).await?;
         fs::write(&file_path, &bytes).await?;
-
-        let mut tx = self.pool.begin().await?;
 
         let result = sqlx::query(
             r#"
@@ -107,7 +106,7 @@ impl MediaServiceImpl {
             }
         }
 
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let mut got_error: Option<MediaError> = None;
         let mut file_paths = Vec::<PathBuf>::new();
 
@@ -185,12 +184,7 @@ impl MediaServiceImpl {
             return Err(error);
         }
 
-        match tx.commit().await {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                clean_up_files(&file_paths).await?;
-                Err(MediaError::from(e))
-            }
-        }
+        // A failed commit may release the write lock, so leave its files rather than unlink unguarded.
+        tx.commit().await.map_err(MediaError::from)
     }
 }

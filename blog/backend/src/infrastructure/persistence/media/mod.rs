@@ -23,6 +23,16 @@ pub use files::clean_up_files;
 pub use hashing::{HashData, hash_bytes};
 pub use store::{mirror_audio_to_bucket, write_chunked_audio};
 
+pub const MEDIA_REFERENCES: &str = "
+    SELECT media_id FROM audiobook_tracks
+    UNION ALL SELECT media_id FROM media_aliases
+    UNION ALL SELECT medium_id FROM post_media_usages
+    UNION ALL SELECT cover_media_id FROM posts
+    UNION ALL SELECT cover_image_id FROM series
+    UNION ALL SELECT cover_image_id FROM audiobooks
+    UNION ALL SELECT avatar_image_id FROM user_meta
+";
+
 pub struct MediaServiceImpl {
     pub pool: SqlitePool,
 }

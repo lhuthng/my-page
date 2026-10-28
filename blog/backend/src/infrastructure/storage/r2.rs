@@ -6,11 +6,19 @@ use aws_sdk_s3::{
     operation::create_multipart_upload::CreateMultipartUploadOutput,
     presigning::PresigningConfig,
     primitives::ByteStream,
-    types::{CompletedMultipartUpload, CompletedPart},
+    types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier},
 };
 use tokio::io::AsyncWriteExt;
 
 use super::{S3Settings, StorageError};
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct ListedObject {
+    pub key: String,
+    pub size: u64,
+    pub etag: Option<String>,
+    pub modified_at: Option<i64>,
+}
 
 /// S3-compatible storage backed by the S3 API — the `R2` variant of
 /// [`ObjectStore`](super::ObjectStore). One bucket holds the v86 artifacts and
@@ -358,10 +366,63 @@ impl R2Client {
         Ok(())
     }
 
-    /// Lists every object under a prefix as `(key, size)` pairs, paginating
-    /// through the bucket. The prefix must not have a trailing slash.
+    pub async fn delete_objects(&self, keys: &[String]) -> Result<(), StorageError> {
+        for batch in keys.chunks(1000) {
+            let objects = batch
+                .iter()
+                .map(|key| ObjectIdentifier::builder().key(key).build())
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| StorageError(format!("delete_objects: {e}")))?;
+            let delete = Delete::builder()
+                .set_objects(Some(objects))
+                .quiet(false)
+                .build()
+                .map_err(|e| StorageError(format!("delete_objects: {e}")))?;
+            let output = self
+                .client
+                .delete_objects()
+                .bucket(&self.bucket)
+                .delete(delete)
+                .send()
+                .await
+                .map_err(|e| StorageError(format!("delete_objects: {e}")))?;
+            if !output.errors().is_empty() {
+                return Err(StorageError(format!(
+                    "delete_objects: {:?}",
+                    output.errors()
+                )));
+            }
+            let acknowledged: std::collections::HashSet<_> = output
+                .deleted()
+                .iter()
+                .filter_map(|object| object.key())
+                .collect();
+            if acknowledged.len() != batch.len()
+                || batch.iter().any(|key| !acknowledged.contains(key.as_str()))
+            {
+                return Err(StorageError(
+                    "delete_objects: incomplete acknowledgements".into(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub async fn list_prefix(&self, prefix: &str) -> Result<Vec<(String, u64)>, StorageError> {
+        Ok(self
+            .list_prefix_with_metadata(prefix)
+            .await?
+            .into_iter()
+            .map(|object| (object.key, object.size))
+            .collect())
+    }
+
+    pub async fn list_prefix_with_metadata(
+        &self,
+        prefix: &str,
+    ) -> Result<Vec<ListedObject>, StorageError> {
         let mut objects = Vec::new();
+        let mut tokens = std::collections::HashSet::new();
         let mut token: Option<String> = None;
         loop {
             let mut request = self
@@ -376,17 +437,36 @@ impl R2Client {
                 .send()
                 .await
                 .map_err(|e| StorageError(format!("list_objects_v2 {prefix}: {e}")))?;
-            for object in output.contents().iter() {
-                if let Some(key) = object.key() {
-                    objects.push((key.to_string(), object.size().unwrap_or(0).max(0) as u64));
-                }
+            for object in output.contents() {
+                let key = object
+                    .key()
+                    .filter(|key| key.starts_with(prefix))
+                    .ok_or_else(|| {
+                        StorageError("listing returned a missing or out-of-prefix key".into())
+                    })?;
+                let size = object.size().filter(|size| *size >= 0).ok_or_else(|| {
+                    StorageError(format!("listing returned an invalid size for {key}"))
+                })?;
+                objects.push(ListedObject {
+                    key: key.to_owned(),
+                    size: size as u64,
+                    etag: object.e_tag().map(str::to_owned),
+                    modified_at: object.last_modified().map(|date| date.secs()),
+                });
             }
-            match output.next_continuation_token() {
-                Some(next) if !next.is_empty() && output.is_truncated() == Some(true) => {
-                    token = Some(next.to_string())
-                }
-                _ => break,
+            if output.is_truncated() != Some(true) {
+                break;
             }
+            let next = output
+                .next_continuation_token()
+                .filter(|next| !next.is_empty())
+                .ok_or_else(|| {
+                    StorageError("truncated listing has no continuation token".into())
+                })?;
+            if !tokens.insert(next.to_owned()) {
+                return Err(StorageError("listing repeated a continuation token".into()));
+            }
+            token = Some(next.to_owned());
         }
         Ok(objects)
     }
@@ -397,5 +477,167 @@ impl R2Client {
             self.delete_object(&key).await?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{Router, body::Bytes, extract::Request, routing::any};
+    use std::sync::{Arc, Mutex};
+
+    struct FakeS3 {
+        client: R2Client,
+        task: tokio::task::JoinHandle<()>,
+        requests: Arc<Mutex<Vec<(http::Uri, String)>>>,
+    }
+
+    impl Drop for FakeS3 {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    async fn fake_s3(reply: impl Fn(&str, usize) -> String + Send + Sync + 'static) -> FakeS3 {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let captured = requests.clone();
+        let reply = Arc::new(reply);
+        let app = Router::new().route(
+            "/{*path}",
+            any(move |request: Request| {
+                let captured = captured.clone();
+                let reply = reply.clone();
+                async move {
+                    let uri = request.uri().clone();
+                    let body: Bytes = axum::body::to_bytes(request.into_body(), 1024 * 1024)
+                        .await
+                        .unwrap();
+                    let body = String::from_utf8(body.to_vec()).unwrap();
+                    let mut captured = captured.lock().unwrap();
+                    captured.push((uri, body.clone()));
+                    (
+                        [(http::header::CONTENT_TYPE, "application/xml")],
+                        reply(&body, captured.len()),
+                    )
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = R2Client::from_settings(S3Settings {
+            endpoint,
+            region: "auto".into(),
+            bucket: "bucket".into(),
+            access_key: "test-key".into(),
+            secret_key: "test-secret".into(),
+        });
+        FakeS3 {
+            client,
+            task,
+            requests,
+        }
+    }
+
+    #[tokio::test]
+    async fn batch_delete_sends_only_exact_keys_in_bounded_batches() {
+        let server = fake_s3(|body, _| {
+            let deleted: String = body
+                .split("<Key>")
+                .skip(1)
+                .map(|part| {
+                    let key = part.split("</Key>").next().unwrap();
+                    format!("<Deleted><Key>{key}</Key></Deleted>")
+                })
+                .collect();
+            format!("<DeleteResult>{deleted}</DeleteResult>")
+        })
+        .await;
+        let keys: Vec<_> = (0..1001).map(|i| format!("audio/{i:04}.mp3")).collect();
+        server.client.delete_objects(&keys).await.unwrap();
+        let requests = server.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].1.matches("<Key>").count(), 1000);
+        assert_eq!(requests[1].1.matches("<Key>").count(), 1);
+        let sent: Vec<_> = requests
+            .iter()
+            .flat_map(|(_, body)| {
+                body.split("<Key>")
+                    .skip(1)
+                    .map(|part| part.split("</Key>").next().unwrap().to_owned())
+            })
+            .collect();
+        assert_eq!(sent, keys);
+        assert!(
+            requests
+                .iter()
+                .all(|(uri, _)| uri.query().unwrap().contains("delete"))
+        );
+    }
+
+    #[tokio::test]
+    async fn batch_delete_stops_on_per_object_errors_or_missing_acknowledgements() {
+        for reply in [
+            "<DeleteResult><Error><Key>audio/0000.mp3</Key><Code>AccessDenied</Code></Error></DeleteResult>",
+            "<DeleteResult></DeleteResult>",
+        ] {
+            let server = fake_s3(move |_, _| reply.into()).await;
+            let keys: Vec<_> = (0..1001).map(|i| format!("audio/{i:04}.mp3")).collect();
+            assert!(server.client.delete_objects(&keys).await.is_err());
+            assert_eq!(server.requests.lock().unwrap().len(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn listing_retains_identity_and_uses_literal_prefix_across_pages() {
+        let server = fake_s3(|_, page| match page {
+            1 => "<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>next</NextContinuationToken><Contents><Key>audio/a.mp3</Key><Size>4</Size><ETag>etag-a</ETag><LastModified>2020-01-01T00:00:00Z</LastModified></Contents></ListBucketResult>".into(),
+            _ => "<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>audio/b.mp3</Key><Size>8</Size><ETag>etag-b</ETag><LastModified>2020-01-02T00:00:00Z</LastModified></Contents></ListBucketResult>".into(),
+        }).await;
+        let objects = server
+            .client
+            .list_prefix_with_metadata("audio/")
+            .await
+            .unwrap();
+        assert_eq!(objects.len(), 2);
+        assert_eq!(objects[0].etag.as_deref(), Some("etag-a"));
+        assert_eq!(objects[0].size, 4);
+        assert_eq!(objects[0].modified_at, Some(1577836800));
+        let requests = server.requests.lock().unwrap();
+        for (uri, _) in requests.iter() {
+            let url = reqwest::Url::parse(&format!("http://localhost{uri}")).unwrap();
+            assert!(
+                url.query_pairs()
+                    .any(|(key, value)| key == "prefix" && value == "audio/")
+            );
+        }
+        assert!(
+            requests[1]
+                .0
+                .query()
+                .unwrap()
+                .contains("continuation-token=next")
+        );
+    }
+
+    #[tokio::test]
+    async fn incomplete_or_out_of_prefix_listing_is_an_error() {
+        for reply in [
+            "<ListBucketResult><IsTruncated>true</IsTruncated></ListBucketResult>",
+            "<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>same</NextContinuationToken></ListBucketResult>",
+            "<ListBucketResult><Contents><Key>audio-backup/a.mp3</Key><Size>4</Size></Contents></ListBucketResult>",
+            "<ListBucketResult><Contents><Key>audio/a.mp3</Key></Contents></ListBucketResult>",
+        ] {
+            let server = fake_s3(move |_, _| reply.into()).await;
+            assert!(
+                server
+                    .client
+                    .list_prefix_with_metadata("audio/")
+                    .await
+                    .is_err()
+            );
+        }
     }
 }

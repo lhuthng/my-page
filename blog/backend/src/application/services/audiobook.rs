@@ -56,6 +56,7 @@ pub trait AudiobookService {
     async fn delete_audiobook(
         &self,
         cmd: commands::audiobook::DeleteAudiobookCommand,
+        config: &MediaConfig,
     ) -> Result<(), errors::audiobook::AudiobookError>;
 
     async fn add_track(
@@ -79,6 +80,7 @@ pub trait AudiobookService {
     async fn remove_track(
         &self,
         cmd: commands::audiobook::RemoveTrackCommand,
+        config: &MediaConfig,
     ) -> Result<(), errors::audiobook::AudiobookError>;
 
     async fn list_audiobook_tags(

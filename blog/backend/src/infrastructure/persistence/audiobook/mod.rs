@@ -6,6 +6,7 @@ mod mapping;
 mod medium;
 mod plays;
 mod read;
+mod release;
 mod rows;
 mod tags;
 mod tracks;
@@ -85,8 +86,9 @@ impl AudiobookService for AudiobookServiceImpl {
     async fn delete_audiobook(
         &self,
         cmd: commands::audiobook::DeleteAudiobookCommand,
+        config: &MediaConfig,
     ) -> Result<(), errors::audiobook::AudiobookError> {
-        self.delete_audiobook(cmd).await
+        self.delete_audiobook(cmd, config).await
     }
     async fn add_track(
         &self,
@@ -111,8 +113,9 @@ impl AudiobookService for AudiobookServiceImpl {
     async fn remove_track(
         &self,
         cmd: commands::audiobook::RemoveTrackCommand,
+        config: &MediaConfig,
     ) -> Result<(), errors::audiobook::AudiobookError> {
-        self.remove_track(cmd).await
+        self.remove_track(cmd, config).await
     }
     async fn list_audiobook_tags(
         &self,
