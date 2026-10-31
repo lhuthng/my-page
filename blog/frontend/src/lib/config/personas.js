@@ -3,9 +3,10 @@
 // Everything here is written by the same author, but it is published under
 // three accounts so the archive stays navigable: systems work, personal notes,
 // and creative work. A byline cannot carry that on its own -- "The Architect"
-// only means something to a visitor who already knows -- so every surface that
-// shows an author says which persona it is, and the colours come from the
-// `data-role` theming in `app.css` rather than from here.
+// only means something to a visitor who already knows -- so author surfaces
+// such as post bylines say which persona it is, with colours from the
+// `data-role` theming in `app.css` rather than from here. The profile page's
+// header card is deliberately exempt: it stays plain, no color-coding.
 //
 // Keyed by profile slug, which is what the payloads carry (`author_slug` on
 // cards, `username` on a post). Accounts that are not one of the three, such as

@@ -160,7 +160,7 @@
 				class="rounded-full bg-background p-1 lg:p-2 transition-all duration-200 shadow-lg hover:brightness-102 hover:scale-102"
 			>
 				<a href="/" title="logo">
-					<svg class="not-lg:h-10 h-20 w-auto" viewBox="0 0 92.09 61.75">
+					<svg class="not-lg:h-10 h-16 w-auto" viewBox="0 0 92.09 61.75">
 						<g fill="none" stroke-linecap="round" stroke-linejoin="round">
 							<g stroke="#fff" stroke-width="9px">
 								<path

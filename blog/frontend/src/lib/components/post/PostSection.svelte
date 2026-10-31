@@ -342,9 +342,9 @@
 			<path d="M 0,0 L 12,0 A 12,12 0 0 0 0,12 Z" />
 		</svg>
 		<div class="relative grow">
-			<div class="sticky top-32 ml-4 not-xl:hidden bg-white text-base rounded-xl py-2">
+			<div class="sticky top-28 ml-4 not-xl:hidden bg-white text-base rounded-xl py-2">
 				<h2 class="text-center font-semibold text-lg pb-2">Table of contents</h2>
-				<div class="max-h-[calc(100vh-12.25rem)] px-2 overflow-y-auto custom-scrollbar">
+				<div class="max-h-[calc(100vh-11.25rem)] px-2 overflow-y-auto custom-scrollbar">
 					<ContentTable {headers} />
 				</div>
 			</div>

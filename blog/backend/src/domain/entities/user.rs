@@ -68,6 +68,7 @@ pub struct LatestComment {
     pub created_at: String,
     pub post_title: String,
     pub post_slug: String,
+    pub post_kind: String,
     pub avatar_url: Option<String>,
     pub display_name: Option<String>,
     pub username: Option<String>,

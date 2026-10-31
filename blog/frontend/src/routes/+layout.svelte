@@ -108,6 +108,6 @@
 	@reference "../app.css";
 
 	main {
-		@apply flex bg-background pt-32 text-dark not-lg:pt-16;
+		@apply flex bg-background pt-28 text-dark not-lg:pt-16;
 	}
 </style>

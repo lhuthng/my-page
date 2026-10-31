@@ -65,6 +65,7 @@ pub struct LatestComment {
     pub created_at: String,
     pub post_title: String,
     pub post_slug: String,
+    pub post_kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

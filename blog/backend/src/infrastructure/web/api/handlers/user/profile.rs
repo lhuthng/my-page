@@ -172,6 +172,7 @@ pub async fn get_latest_comments(
                 created_at: normalize_utc_timestamp(comment.created_at),
                 post_title: comment.post_title,
                 post_slug: comment.post_slug,
+                post_kind: comment.post_kind,
                 avatar_url: comment.avatar_url,
                 display_name: comment.display_name,
                 username: comment.username,

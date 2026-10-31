@@ -65,6 +65,7 @@ struct LatestCommentRow {
     created_at: String,
     post_title: String,
     post_slug: String,
+    post_kind: String,
     avatar_url: Option<String>,
     display_name: Option<String>,
     username: Option<String>,
@@ -336,6 +337,7 @@ impl UserService for UserServiceImpl {
                    c.created_at,
                    p.title AS post_title,
                    p.slug AS post_slug,
+                   p.content_kind AS post_kind,
                    'media/i/' || m.short_name AS avatar_url,
                    um.display_name,
                    u.username
@@ -364,6 +366,7 @@ impl UserService for UserServiceImpl {
                 created_at: row.created_at,
                 post_title: row.post_title,
                 post_slug: row.post_slug,
+                post_kind: row.post_kind,
                 avatar_url: row.avatar_url,
                 display_name: row.display_name,
                 username: row.username,

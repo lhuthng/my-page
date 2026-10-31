@@ -42,7 +42,7 @@
 		& h1,
 		& h2,
 		& h3 {
-			@apply scroll-mt-16 lg:scroll-mt-30;
+			@apply scroll-mt-16 lg:scroll-mt-28;
 		}
 		& h1 {
 			@apply mt-6 text-2xl font-bold;
