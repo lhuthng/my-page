@@ -407,10 +407,7 @@
 							/>
 							<div class="min-w-0 grow">
 								<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-									<a
-										class="font-semibold text-dark hover:text-primary"
-										href={commentHref(comment)}
-									>
+									<a class="font-semibold text-dark hover:text-primary" href={commentHref(comment)}>
 										{comment.post_title}
 									</a>
 									<span class="text-dark/50">•</span>
