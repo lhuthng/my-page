@@ -58,8 +58,9 @@
 		{@const thisRootId = rootForComment(comment)}
 
 		<li
+			id={`comment-${comment.id}`}
 			in:fly={{ y: 10, duration: 500 }}
-			class={`rounded-xl min-w-0 ${depth === 0 ? 'bg-white/80' : 'bg-white/60'}`}
+			class={`scroll-mt-16 lg:scroll-mt-28 rounded-xl min-w-0 ${depth === 0 ? 'bg-white/80' : 'bg-white/60'}`}
 		>
 			<div class="flex py-2 min-w-0">
 				<div

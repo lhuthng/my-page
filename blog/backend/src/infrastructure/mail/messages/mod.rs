@@ -1,3 +1,4 @@
+pub mod comment;
 pub mod contact;
 pub mod newsletter;
 pub mod password_reset;

@@ -312,6 +312,21 @@ jobs:
             wget -q -O /dev/null http://127.0.0.1:5000/health || \
               (echo "ERROR: frontend is not answering /health" && exit 1)
 
+      # Proves the mail transport is reachable and authenticated WITHOUT
+      # sending anything: SMTP gets an EHLO handshake, Brevo an authenticated
+      # account lookup. Warns instead of failing: a mail outage must not
+      # block a site deploy, but it must be loudly visible in the run log.
+      - name: Verify mail transport (sends nothing)
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/MyPage/blog
+            docker compose exec -T backend check-mail
+
       - name: Deployment summary
         run: |
           echo "## Deployment complete :rocket:" >> $GITHUB_STEP_SUMMARY

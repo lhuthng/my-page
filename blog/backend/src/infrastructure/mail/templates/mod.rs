@@ -5,11 +5,13 @@
 /// The design is a light theme (white card on light gray) with the site's
 /// navy/lavender accents, matching the huuthangle.site brand.
 mod auth;
+mod comment;
 mod contact;
 mod layout;
 mod newsletter;
 
 pub use auth::{password_reset, verification};
+pub use comment::comment_notification;
 pub use contact::contact_confirmation;
 #[cfg(debug_assertions)]
 pub use newsletter::CampaignPostData;

@@ -10,7 +10,7 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --bin backend --bin backfill-audio
+RUN cargo build --release --bin backend --bin backfill-audio --bin check-mail
 
 FROM alpine:3.21 AS runtime
 WORKDIR /app
@@ -21,6 +21,9 @@ COPY --from=builder /app/target/release/backend /usr/local/bin/backend
 # never on the VM:
 #   cd ~/MyPage/blog/backend && ./backfill-audio.sh --upload
 COPY --from=builder /app/target/release/backfill-audio /usr/local/bin/backfill-audio
+# The deploy workflow runs `docker compose exec -T backend check-mail` after
+# every deploy: proves the mail transport is reachable without sending mail.
+COPY --from=builder /app/target/release/check-mail /usr/local/bin/check-mail
 COPY --from=builder /app/assets /app/assets
 ENV PROJECT_V86_ASSETS_DIR=/app/assets
 EXPOSE 3000
