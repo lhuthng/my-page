@@ -172,7 +172,7 @@ async fn notify_comment_author(
 
     let row: Option<AuthorEmailRow> = sqlx::query_as(
         r#"
-        SELECT p.title, p.slug, p.content_kind, p.user_id AS author_id, u.email AS author_email,
+        SELECT p.title AS post_title, p.slug, p.content_kind, p.user_id AS author_id, u.email AS author_email,
                COALESCE(um.display_name, u.username) AS author_name
         FROM posts p
         LEFT JOIN users u ON u.id = p.user_id
