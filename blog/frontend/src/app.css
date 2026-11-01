@@ -96,6 +96,12 @@ body {
 	--color-role-text: var(--color-dark);
 	--color-role-muted: color-mix(in srgb, var(--color-primary) 75%, black);
 	--color-role-accent: var(--color-primary);
+	/* Notification rows hover one small step from their own tint. Reusing the
+	   card hover (45% -> 70% secondary) turns a white row into a saturated
+	   lavender block, which reads as a state change rather than a pointer
+	   highlight. */
+	--color-notification-hover: color-mix(in srgb, var(--color-secondary) 12%, white);
+	--color-notification-hover-unread: color-mix(in srgb, var(--color-secondary) 55%, white);
 	/* For the black panels: the homepage intro and the About sections, where
 	   the light end of the ramp is the only legible one. */
 	--color-role-on-dark: var(--color-background);
@@ -327,6 +333,12 @@ button {
 
 .full {
 	@apply h-full w-full;
+}
+
+/* Sticky rails and panels hang below the fixed header. The header measures
+   itself at runtime (+layout.svelte), so this offset cannot drift from it. */
+.sticky-below-header {
+	top: var(--content-top, 7.5rem);
 }
 
 .w-cap {

@@ -20,8 +20,7 @@ pub use newsletter::CampaignPostData;
 pub use newsletter::preview_page;
 pub use newsletter::{campaign, campaign_post_body, campaign_post_text, subscription_confirm};
 
-pub const FONT_STACK: &str =
-    "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+pub const FONT_STACK: &str = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans CJK JP', 'Yu Gothic', sans-serif";
 
 const BACKGROUND: &str = "#eef0f6";
 const CARD: &str = "#ffffff";

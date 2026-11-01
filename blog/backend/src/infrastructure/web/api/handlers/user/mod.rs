@@ -3,6 +3,7 @@
 // signatures use.
 mod avatar;
 mod dto;
+mod notifications;
 mod profile;
 
 pub use avatar::change_avatar;
@@ -11,6 +12,7 @@ pub use dto::{
     GetPostsQuery, GetPostsResponse, GetUserResponse, MeResponse, SearchUserQuery,
     SearchUserResponse,
 };
+pub use notifications::{get_notification_preferences, update_notification_preferences};
 pub use profile::{
     change_details, check_mod, get_latest_comments, get_posts, get_user, me, search,
 };
@@ -50,6 +52,10 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .route("/me/details", patch(change_details))
                 .route("/me/avatar", patch(change_avatar))
                 .route("/me/check-mod", get(check_mod))
+                .route(
+                    "/me/notification-preferences",
+                    get(get_notification_preferences).patch(update_notification_preferences),
+                )
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
                     middlewares::auth::user_guard,

@@ -6,6 +6,7 @@ pub mod game;
 pub mod image_convert;
 pub mod media;
 pub mod newsletter;
+pub mod notification;
 pub mod post;
 pub mod project;
 pub mod series;

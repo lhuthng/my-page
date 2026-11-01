@@ -1,9 +1,11 @@
 <script>
 	import {
+		auth,
 		authState,
 		changeAvatarUrl,
 		changeDisplayname as changeDisplayName
 	} from '$lib/auth/user.svelte.js';
+	import { page } from '$app/stores';
 	import { api } from '$lib/api/client';
 	import PostCard from '$lib/components/home/PostCard.svelte';
 	import Club from '$lib/components/svgs/Club.svelte';
@@ -63,6 +65,67 @@
 			editor.isEditing = false;
 		}
 	});
+
+	let isOwnProfile = $derived(authState.user?.username === username);
+	let notificationsSection = $state();
+	let notificationPrefs = $state(null);
+	let prefsLoading = false;
+	let prefsSaving = $state(false);
+	let prefsError = $state('');
+	let scrolledToNotifications = false;
+
+	async function loadNotificationPrefs() {
+		if (prefsLoading || notificationPrefs) return;
+		prefsLoading = true;
+		try {
+			const res = await fetch('/api/users/me/notification-preferences', {
+				headers: { Authorization: auth() }
+			});
+			if (res.ok) notificationPrefs = await res.json();
+		} catch {
+			// The section simply stays in its loading state.
+		} finally {
+			prefsLoading = false;
+		}
+	}
+
+	$effect(() => {
+		if (isOwnProfile) loadNotificationPrefs();
+	});
+
+	// The email footer links here with ?section=notifications.
+	$effect(() => {
+		if (
+			!scrolledToNotifications &&
+			notificationsSection &&
+			$page.url.searchParams.get('section') === 'notifications'
+		) {
+			scrolledToNotifications = true;
+			notificationsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		}
+	});
+
+	async function saveNotificationPrefs(patch) {
+		if (!notificationPrefs || prefsSaving) return;
+		prefsSaving = true;
+		prefsError = '';
+		const previous = notificationPrefs;
+		notificationPrefs = { ...notificationPrefs, ...patch };
+		try {
+			const res = await fetch('/api/users/me/notification-preferences', {
+				method: 'PATCH',
+				headers: { Authorization: auth(), 'Content-Type': 'application/json' },
+				body: JSON.stringify(patch)
+			});
+			if (!res.ok) throw new Error(await res.text());
+			notificationPrefs = await res.json();
+		} catch {
+			notificationPrefs = previous;
+			prefsError = 'Could not save. Try again.';
+		} finally {
+			prefsSaving = false;
+		}
+	}
 
 	const hasPosts = $derived(role === 'moderator' || role === 'admin');
 	let profileUrl = $derived(canonicalUrl(`/profiles/${username}`));
@@ -465,6 +528,96 @@
 						</button>
 					</div>
 				</div>
+			{/if}
+		</div>
+	{/if}
+	{#if isOwnProfile}
+		<div
+			id="notifications"
+			bind:this={notificationsSection}
+			class="flex scroll-mt-24 flex-col gap-4"
+		>
+			<h2 class="text-2xl font-bold">Notifications</h2>
+			<p class="text-dark/70">
+				In-app notifications are always on. Choose which ones also reach your inbox.
+			</p>
+			{#if notificationPrefs}
+				{#if notificationPrefs.show_prompt}
+					<div
+						class="rounded-xl border-2 border-accent-blue bg-accent-blue-light-2/20 p-4 text-dark/80"
+					>
+						<p class="mb-3">Email notifications are off. In-app notifications are always on.</p>
+						<div class="flex flex-wrap gap-2">
+							<div class="duo-btn" data-duo-color="green">
+								<button
+									type="button"
+									disabled={prefsSaving}
+									onclick={() =>
+										saveNotificationPrefs({
+											reply_email: true,
+											mention_email: true,
+											post_comment_email: true
+										})}
+								>
+									Turn on all
+								</button>
+							</div>
+							<div class="duo-btn" data-duo-color="red">
+								<button
+									type="button"
+									disabled={prefsSaving}
+									onclick={() => saveNotificationPrefs({ prompt_dismissed: true })}
+								>
+									Not now
+								</button>
+							</div>
+						</div>
+					</div>
+				{/if}
+
+				<div class="flex flex-col gap-2 text-lg">
+					<label class="flex items-center gap-2">
+						<input
+							type="checkbox"
+							class="h-4 w-4 accent-primary"
+							checked={notificationPrefs.reply_email}
+							disabled={prefsSaving}
+							onchange={() =>
+								saveNotificationPrefs({ reply_email: !notificationPrefs.reply_email })}
+						/>
+						Replies to my comments
+					</label>
+					<label class="flex items-center gap-2">
+						<input
+							type="checkbox"
+							class="h-4 w-4 accent-primary"
+							checked={notificationPrefs.mention_email}
+							disabled={prefsSaving}
+							onchange={() =>
+								saveNotificationPrefs({ mention_email: !notificationPrefs.mention_email })}
+						/>
+						Mentions of me
+					</label>
+					<label class="flex items-center gap-2">
+						<input
+							type="checkbox"
+							class="h-4 w-4 accent-primary"
+							checked={notificationPrefs.post_comment_email}
+							disabled={prefsSaving}
+							onchange={() =>
+								saveNotificationPrefs({
+									post_comment_email: !notificationPrefs.post_comment_email
+								})}
+						/>
+						New comments on my posts
+					</label>
+				</div>
+				{#if prefsError}
+					<p class="text-sm text-accent-red">{prefsError}</p>
+				{/if}
+				<p class="text-sm text-dark/50">Only verified email addresses receive notification mail.</p>
+			{:else}
+				<p class="text-dark/50">Loading...</p>
 			{/if}
 		</div>
 	{/if}

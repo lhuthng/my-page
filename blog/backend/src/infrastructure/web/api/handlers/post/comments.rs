@@ -14,7 +14,13 @@ use crate::{
         },
         services::post::PostService,
     },
-    domain::{entities::secret::Claims, errors::post::PostError},
+    domain::{
+        entities::{
+            notification::{CommentRecipient, NotificationKind},
+            secret::Claims,
+        },
+        errors::post::PostError,
+    },
     helper::time::normalize_utc_timestamp,
     infrastructure::{
         mail::{comment_notification, send_comment_notification_email},
@@ -28,19 +34,6 @@ use crate::{
 
 /// Must stay in sync with `blog/frontend/src/lib/features/comments/guest-identities.js`.
 const GUEST_IDENTITIES: &[&str] = &["cutiecube", "straymeowmet", "loafphantom"];
-
-/// The post's title/routing plus its author's contact details, as loaded for
-/// the notification email. `author_*` fields stay optional because the joins
-/// are LEFT: a post can outlive its author.
-#[derive(Debug, sqlx::FromRow)]
-struct AuthorEmailRow {
-    post_title: String,
-    slug: String,
-    content_kind: String,
-    author_id: Option<i64>,
-    author_email: Option<String>,
-    author_name: Option<String>,
-}
 
 pub async fn new_comment(
     State(state): State<Arc<AppState>>,
@@ -67,7 +60,7 @@ pub async fn new_comment(
     let email_guest_identity = guest_identity.clone();
     let email_content = body.content.clone();
 
-    let comment_id = match opt_claims {
+    let created = match opt_claims {
         Some(claims) => {
             let user_id = claims
                 .user_id
@@ -102,48 +95,53 @@ pub async fn new_comment(
         }
     };
 
-    spawn_comment_author_email(
+    spawn_comment_emails(
         &state,
         post_id,
-        comment_id,
+        created.comment_id,
         commenter_user_id,
         email_guest_identity,
         email_content,
+        created.recipients,
     );
 
-    Ok(Json(NewCommentResponse { comment_id }))
+    Ok(Json(NewCommentResponse {
+        comment_id: created.comment_id,
+    }))
 }
 
-/// Emails the post's author about a fresh comment. Fire-and-forget, in the
-/// same spirit as the publish-time newsletter fan-out: sending is best-effort
-/// and must never fail (or slow down) an already-succeeded comment.
-fn spawn_comment_author_email(
+/// Emails everyone the resolver selected for this comment. Fire-and-forget, in
+/// the same spirit as the publish-time newsletter fan-out: sending is
+/// best-effort and must never fail (or slow down) an already-succeeded comment.
+fn spawn_comment_emails(
     state: &Arc<AppState>,
     post_id: i64,
     comment_id: i64,
     commenter_user_id: Option<i64>,
     guest_identity: Option<String>,
     content: String,
+    recipients: Vec<CommentRecipient>,
 ) {
-    // Mail disabled: comments keep working, there is just no email.
-    if state.config.mail.is_none() {
+    // Mail disabled: comments and in-app notifications keep working.
+    if state.config.mail.is_none() || recipients.is_empty() {
         return;
     }
 
     let state = Arc::clone(state);
     tokio::spawn(async move {
-        if let Err(e) = notify_comment_author(
+        if let Err(e) = notify_comment_recipients(
             &state,
             post_id,
             comment_id,
             commenter_user_id,
             guest_identity,
             &content,
+            &recipients,
         )
         .await
         {
             tracing::error!(
-                "Failed to send comment notification email for post {}: {}",
+                "Failed to send comment notification emails for post {}: {}",
                 post_id,
                 e
             );
@@ -151,14 +149,45 @@ fn spawn_comment_author_email(
     });
 }
 
-/// Best-effort author notification for one new comment.
-async fn notify_comment_author(
+#[derive(Debug, sqlx::FromRow)]
+struct CommentMailPostRow {
+    post_title: String,
+    slug: String,
+    content_kind: String,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct CommentMailRecipientRow {
+    username: String,
+    email: String,
+    email_verified_at: Option<String>,
+    display_name: String,
+    notify_reply_email: i64,
+    notify_mention_email: i64,
+    notify_post_comment_email: i64,
+}
+
+impl CommentMailRecipientRow {
+    fn wants_email(&self, kind: NotificationKind) -> bool {
+        match kind {
+            NotificationKind::Reply => self.notify_reply_email != 0,
+            NotificationKind::Mention => self.notify_mention_email != 0,
+            NotificationKind::PostComment => self.notify_post_comment_email != 0,
+        }
+    }
+}
+
+/// Best-effort email fan-out for one new comment. The recipient list was
+/// resolved in the comment transaction, so email and in-app agree by
+/// construction. Each recipient gets at most one email for this comment.
+async fn notify_comment_recipients(
     state: &Arc<AppState>,
     post_id: i64,
     comment_id: i64,
     commenter_user_id: Option<i64>,
     guest_identity: Option<String>,
     content: &str,
+    recipients: &[CommentRecipient],
 ) -> Result<(), String> {
     let mail_config = state
         .config
@@ -167,13 +196,10 @@ async fn notify_comment_author(
         .ok_or_else(|| "mail is not configured".to_string())?;
     let app_base_url = state.config.app_base_url.clone();
 
-    let row: Option<AuthorEmailRow> = sqlx::query_as(
+    let post: Option<CommentMailPostRow> = sqlx::query_as(
         r#"
-        SELECT p.title AS post_title, p.slug, p.content_kind, p.user_id AS author_id, u.email AS author_email,
-               COALESCE(um.display_name, u.username) AS author_name
+        SELECT p.title AS post_title, p.slug, p.content_kind
         FROM posts p
-        LEFT JOIN users u ON u.id = p.user_id
-        LEFT JOIN user_meta um ON um.user_id = p.user_id
         WHERE p.id = ?
         "#,
     )
@@ -182,28 +208,10 @@ async fn notify_comment_author(
     .await
     .map_err(|e| e.to_string())?;
 
-    let Some(AuthorEmailRow {
-        post_title,
-        slug,
-        content_kind,
-        author_id,
-        author_email,
-        author_name,
-    }) = row
-    else {
-        // The post vanished between the insert and this read; nothing to notify.
+    let Some(post) = post else {
+        // The post vanished between the insert and this read; nothing to send.
         return Ok(());
     };
-    let Some(author_id) = author_id else {
-        return Ok(()); // Orphaned post (author deleted): nobody to notify.
-    };
-    let Some(author_email) = author_email else {
-        return Ok(()); // Defensive: users.email is NOT NULL, but never panic.
-    };
-    // The author commenting on their own post must not email themselves.
-    if commenter_user_id == Some(author_id) {
-        return Ok(());
-    }
 
     let commenter_name = match commenter_user_id {
         Some(user_id) => {
@@ -228,7 +236,7 @@ async fn notify_comment_author(
 
     // Deep links must land on the route the kind is served from, matching the
     // frontend's commentHref: posts, projects, and games each have their own.
-    let section = match content_kind.as_str() {
+    let section = match post.content_kind.as_str() {
         "project" => "projects",
         "game" => "games",
         _ => "posts",
@@ -237,30 +245,87 @@ async fn notify_comment_author(
         "{}/{}/{}#comment-{}",
         app_base_url.trim_end_matches('/'),
         section,
-        slug,
+        post.slug,
         comment_id
     );
 
-    // The template renders the markdown and caps the quote, so pass the raw
-    // comment body.
-    let (text, html) = comment_notification(
-        &app_base_url,
-        author_name.as_deref().unwrap_or("there"),
-        &post_title,
-        &commenter_name,
-        &content,
-        &comment_url,
-    );
+    for recipient in recipients {
+        let user: Option<CommentMailRecipientRow> = sqlx::query_as(
+            r#"
+            SELECT u.username,
+                   u.email,
+                   u.email_verified_at,
+                   COALESCE(um.display_name, u.username) AS display_name,
+                   u.notify_reply_email,
+                   u.notify_mention_email,
+                   u.notify_post_comment_email
+            FROM users u
+            LEFT JOIN user_meta um ON um.user_id = u.id
+            WHERE u.id = ?
+            "#,
+        )
+        .bind(recipient.user_id)
+        .fetch_optional(&state.post_service.pool)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    send_comment_notification_email(
-        &mail_config,
-        &author_email,
-        author_name.as_deref(),
-        &format!("New comment on \"{post_title}\""),
-        &text,
-        &html,
-    )
-    .await
+        let Some(user) = user else {
+            continue; // The account disappeared after the comment landed.
+        };
+        // Unverified addresses bounce; in-app still records the event.
+        if user.email_verified_at.is_none() || !user.wants_email(recipient.kind) {
+            continue;
+        }
+
+        let manage_url = format!(
+            "{}/profiles/{}?section=notifications",
+            app_base_url.trim_end_matches('/'),
+            user.username
+        );
+
+        // The template renders the markdown and caps the quote, so pass the
+        // raw comment body.
+        let (text, html) = comment_notification(
+            &app_base_url,
+            recipient.kind,
+            &user.display_name,
+            &post.post_title,
+            &commenter_name,
+            content,
+            &comment_url,
+            &manage_url,
+        );
+
+        let subject = match recipient.kind {
+            NotificationKind::Reply => format!("New reply on \"{}\"", post.post_title),
+            NotificationKind::Mention => {
+                format!("You were mentioned on \"{}\"", post.post_title)
+            }
+            NotificationKind::PostComment => format!("New comment on \"{}\"", post.post_title),
+        };
+
+        if let Err(e) = send_comment_notification_email(
+            &mail_config,
+            &user.email,
+            Some(&user.display_name),
+            &subject,
+            &text,
+            &html,
+        )
+        .await
+        {
+            // One bad address must not starve the rest of the recipient list.
+            tracing::error!(
+                "Failed to send {} notification for comment {} to user {}: {}",
+                recipient.kind.as_str(),
+                comment_id,
+                recipient.user_id,
+                e
+            );
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn get_comments(

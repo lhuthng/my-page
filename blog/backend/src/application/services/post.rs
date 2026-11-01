@@ -68,11 +68,11 @@ pub trait PostService {
     async fn post_new_comment(
         &self,
         cmd: commands::post::PostNewCommentCommand,
-    ) -> Result<i64, errors::post::PostError>;
+    ) -> Result<entities::notification::CommentCreated, errors::post::PostError>;
     async fn post_new_anonymous_comment(
         &self,
         cmd: commands::post::PostNewAnynymouseCommentCommand,
-    ) -> Result<i64, errors::post::PostError>;
+    ) -> Result<entities::notification::CommentCreated, errors::post::PostError>;
     async fn push_new_view(
         &self,
         cmd: commands::post::PushNewViewCommand,

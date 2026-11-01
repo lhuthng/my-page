@@ -6,7 +6,7 @@ use sqlx::SqlitePool;
 
 mod comments;
 mod detail;
-mod links;
+pub(crate) mod links;
 mod mapping;
 mod read;
 mod rows;
@@ -124,13 +124,13 @@ impl PostService for PostServiceImpl {
     async fn post_new_comment(
         &self,
         cmd: commands::post::PostNewCommentCommand,
-    ) -> Result<i64, errors::post::PostError> {
+    ) -> Result<entities::notification::CommentCreated, errors::post::PostError> {
         self.post_new_comment(cmd).await
     }
     async fn post_new_anonymous_comment(
         &self,
         cmd: commands::post::PostNewAnynymouseCommentCommand,
-    ) -> Result<i64, errors::post::PostError> {
+    ) -> Result<entities::notification::CommentCreated, errors::post::PostError> {
         self.post_new_anonymous_comment(cmd).await
     }
     async fn push_new_view(

@@ -111,8 +111,10 @@ pub fn preview_page(app_base_url: &str, campaign_post: Option<&CampaignPostData>
     use super::auth::{password_reset, verification};
     use super::comment::comment_notification;
     use super::contact::contact_confirmation;
+    use crate::domain::entities::notification::NotificationKind;
 
     let unsubscribe = format!("{app_base_url}/newsletter/unsubscribe?token=sample");
+    let manage = format!("{app_base_url}/profiles/thang?section=notifications");
 
     let campaign_html = match campaign_post {
         Some(post) => {
@@ -180,33 +182,52 @@ pub fn preview_page(app_base_url: &str, campaign_post: Option<&CampaignPostData>
             "Comment notification: plain",
             comment_notification(
                 app_base_url,
+                NotificationKind::PostComment,
                 "Thang",
                 "A deep dive into Rust ownership",
                 "cutiecube",
                 "This is a plain comment.\nA second line.\n\nAnd a new paragraph.",
                 &format!("{app_base_url}/posts/rust-ownership#comment-1"),
+                &manage,
+            ),
+        ),
+        (
+            "Comment notification: reply",
+            comment_notification(
+                app_base_url,
+                NotificationKind::Reply,
+                "Thang",
+                "A deep dive into Rust ownership",
+                "cutiecube",
+                "You are right, the borrow checker does get easier.",
+                &format!("{app_base_url}/posts/rust-ownership#comment-4"),
+                &manage,
             ),
         ),
         (
             "Comment notification: markdown",
             comment_notification(
                 app_base_url,
+                NotificationKind::PostComment,
                 "Thang",
                 "A deep dive into Rust ownership",
                 "cutiecube",
                 "Great write-up! I tried **bold**, *italic*, ~~strikethrough~~, and `inline code`.\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n- first item\n- second item\n\n[Read more](https://example.com/a/very/long/link/that/should/wrap/nicely)",
                 &format!("{app_base_url}/posts/rust-ownership#comment-2"),
+                &manage,
             ),
         ),
         (
             "Comment notification: image + GIF",
             comment_notification(
                 app_base_url,
+                NotificationKind::PostComment,
                 "Thang",
                 "A deep dive into Rust ownership",
                 "loafphantom",
                 "![tiny dance](https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif)\n\n![screenshot](https://example.com/screenshot.png)\n\n![spoofed](javascript:alert(1))",
                 &format!("{app_base_url}/posts/rust-ownership#comment-3"),
+                &manage,
             ),
         ),
     ];
@@ -236,7 +257,7 @@ pub fn preview_page(app_base_url: &str, campaign_post: Option<&CampaignPostData>
     body.dark {{ background:#0f1219; }}
     #theme-toggle {{ position:fixed; top:16px; right:16px; z-index:1000; padding:10px 14px; border-radius:9999px; border:1px solid #c3c9d6; background:#fff; color:#333a4d; font:600 14px system-ui,sans-serif; cursor:pointer; }}
     body.dark #theme-toggle {{ background:#232a3a; color:#e6e8f0; border-color:#3a4260; }}
-    h1 {{ margin:32px 0 8px; font-family:system-ui,sans-serif; font-size:20px; color:#222; }}
+    h1 {{ margin:32px 0 8px; font-size:20px; color:#222; }}
     body.dark h1 {{ color:#cfd6e4; }}
     body.dark [style*="background-color:#eef0f6"] {{ background-color:#161a26 !important; }}
     body.dark [style*="background:#eef1f6"] {{ background:#1a2030 !important; }}

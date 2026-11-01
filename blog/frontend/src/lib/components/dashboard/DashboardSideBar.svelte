@@ -23,7 +23,9 @@
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<nav class="hidden lg:block sticky self-start top-28 mb-4 w-54 min-w-54 drop-shadow-sm">
+<nav
+	class="sticky-below-header hidden lg:block sticky self-start mb-2 lg:mb-4 w-54 min-w-54 drop-shadow-sm"
+>
 	<ul class="space-y-2 bg-white p-2 rounded-xl">
 		<SideBarItem
 			icon={DashboardButton}

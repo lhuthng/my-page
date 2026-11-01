@@ -3,7 +3,9 @@
 use std::io::{Error, ErrorKind};
 
 use super::config::{media::MediaConfig, project_demo::ProjectDemoConfig};
-use super::maintenance::{backfill_reading_times, cleanup_orphaned_uploads, purge_expired_trash};
+use super::maintenance::{
+    backfill_reading_times, cleanup_orphaned_uploads, prune_read_notifications, purge_expired_trash,
+};
 use super::state::{AppConfig, AppState};
 use crate::infrastructure::{persistence, storage::ObjectStore, web::api};
 
@@ -124,6 +126,16 @@ impl<'a> HTTPServer<'a> {
             loop {
                 interval.tick().await;
                 let _ = purge_expired_trash(&purge_pool, &purge_storage, &purge_dir).await;
+            }
+        });
+        // Read notifications age out daily; unread rows stay.
+        let notification_pool = pool.clone();
+        tokio::spawn(async move {
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(24 * 60 * 60));
+            loop {
+                interval.tick().await;
+                let _ = prune_read_notifications(&notification_pool).await;
             }
         });
         let graphql_schema = crate::infrastructure::web::graphql::build_schema(pool.clone());

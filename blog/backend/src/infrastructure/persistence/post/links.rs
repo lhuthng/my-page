@@ -8,6 +8,16 @@ use crate::domain::errors::post::PostError;
 
 pub(super) static MENTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"@([A-Za-z0-9_-]+)").unwrap());
 
+/// Usernames mentioned in a comment, deduplicated in first-seen order.
+pub(crate) fn mentioned_usernames(content: &str) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    MENTION_RE
+        .captures_iter(content)
+        .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
+        .filter(|name| seen.insert(name.clone()))
+        .collect()
+}
+
 /// Upper bound on how many tags one post may carry. The tag SQL is built by
 /// joining one placeholder per tag, so this also bounds the generated statement.
 pub(super) const MAX_TAGS_PER_POST: usize = 30;

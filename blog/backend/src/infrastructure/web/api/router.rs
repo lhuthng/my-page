@@ -81,6 +81,10 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         .nest("/mail", handlers::mail::routes(state.clone()))
         .nest("/newsletter", handlers::newsletter::routes(state.clone()))
         .nest(
+            "/notifications",
+            handlers::notification::routes(state.clone()),
+        )
+        .nest(
             "/analytics",
             handlers::dashboard::analytics_routes(state.clone()),
         )

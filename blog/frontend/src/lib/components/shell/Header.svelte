@@ -12,6 +12,8 @@
 	import FacebookButton from './buttons/FacebookButton.svelte';
 	import GithubButton from './buttons/GithubButton.svelte';
 	import HomeButton from './buttons/HomeButton.svelte';
+	import NotificationBell from './NotificationBell.svelte';
+	import { notificationState, startNotificationPolling } from '$lib/notifications/store.svelte.js';
 	import LinkedinButton from './buttons/LinkedinButton.svelte';
 	import ProjectButton from './buttons/ProjectButton.svelte';
 	import PBody from './PBody.svelte';
@@ -145,6 +147,11 @@
 	let mounted = $state();
 	onMount(() => {
 		mounted = true;
+		startNotificationPolling();
+	});
+
+	$effect(() => {
+		if (authState.user) notificationState.refreshCount();
 	});
 
 	afterNavigate(() => {
@@ -153,7 +160,7 @@
 	});
 </script>
 
-<header class="fixed w-full bg-white text-dark z-100 shadow-lg">
+<header class="site-header fixed w-full bg-white text-dark z-100 shadow-lg">
 	<div class="z-10 flex not-lg:justify-center w-cap-2 p-2 lg:p-4 gap-4">
 		<div class="flex items-center gap-4">
 			<div
@@ -314,21 +321,27 @@
 				{/if}
 			</div>
 			{#if displayName && username}
-				<div>
-					Welcome back,
-					<a class="font-bold" href="/profiles/{username}">
-						{displayName}
-						<img
-							class="w-6 h-6 ml-1 rounded-full border-2 inline object-cover"
-							src={avatarUrl}
-							alt="small-avatar"
-						/>
-					</a>
+				<div class="flex items-center gap-3">
+					<NotificationBell />
+					<div>
+						Welcome back,
+						<a class="font-bold" href="/profiles/{username}">
+							{displayName}
+							<img
+								class="w-6 h-6 ml-1 rounded-full border-2 inline object-cover"
+								src={avatarUrl}
+								alt="small-avatar"
+							/>
+						</a>
+					</div>
 				</div>
 			{/if}
 		</div>
 	</div>
-	<div class="lg:hidden absolute right-4 top-1/2 -translate-y-1/2">
+	<div class="lg:hidden absolute inset-y-0 right-4 flex items-center gap-2">
+		{#if displayName && username}
+			<NotificationBell />
+		{/if}
 		<button
 			type="button"
 			aria-label="Open Mobile Menu"

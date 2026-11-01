@@ -30,6 +30,7 @@
 	let status = $state(true);
 	let message = $state('');
 	let redirecting = $state(false);
+	let registered = $state(false);
 	let verificationNeeded = $state(false);
 	let verificationIdentifier = $state('');
 	let resendPending = $state(false);
@@ -97,12 +98,20 @@
 		pending = false;
 		if (!res.status) {
 			status = false;
+			registered = false;
 			message = res.message;
 		} else {
 			status = true;
+			registered = true;
 			message = res.success.message;
 			verificationNeeded = false;
 		}
+	}
+
+	function toggleMode() {
+		isLogging = !isLogging;
+		registered = false;
+		message = '';
 	}
 
 	async function handleResendVerification() {
@@ -399,6 +408,17 @@
 					{/if}
 				</div>
 			{/if}
+			{#if registered}
+				<div
+					in:fly
+					class="rounded-2xl border-2 border-accent-green bg-accent-green-light-3 p-3 text-lg text-dark/80"
+				>
+					<p>
+						Email notifications are off by default. In-app notifications are always on. You can turn
+						email notifications on from your profile.
+					</p>
+				</div>
+			{/if}
 			{#if isLogging && isLogged}
 				<div class="flex flex-col items-center w-full">
 					<span class="text-accent-green">
@@ -413,7 +433,7 @@
 				<span>or</span>
 			</div>
 			<div class="w-full duo-btn" data-duo-color="primary">
-				<button type="button" class="w-full" onclick={() => (isLogging = !isLogging)}>
+				<button type="button" class="w-full" onclick={toggleMode}>
 					{#if isLogging}
 						Sign Up
 					{:else}

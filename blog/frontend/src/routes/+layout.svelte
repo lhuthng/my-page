@@ -26,6 +26,7 @@
 	let pDiv = $state();
 	let mDiv = $state();
 	let scrollTarget = $state();
+	let shell = $state();
 
 	const ignoreRoutes = ['login', 'verify-email', 'reset-password', 'newsletter'];
 
@@ -49,6 +50,19 @@
 	onMount(() => {
 		el.pbody = pDiv;
 		el.mbody = mDiv;
+
+		// The header is fixed and its height depends on what is inside it (the
+		// signed-in row is taller than the signed-out one), so pages cannot
+		// hard-code an offset. Publish the measured height once and let the
+		// content offset and every sticky rail follow that one value.
+		const header = shell.querySelector('.site-header');
+		const syncHeaderHeight = () => {
+			shell.style.setProperty('--header-height', `${header.getBoundingClientRect().height}px`);
+		};
+		syncHeaderHeight();
+		const observer = new ResizeObserver(syncHeaderHeight);
+		observer.observe(header);
+		return () => observer.disconnect();
 	});
 </script>
 
@@ -82,7 +96,7 @@
 </svelte:head>
 
 <div class="fixed w-dvw h-dvh pointer-events-none z-11" bind:this={mDiv}></div>
-<div class="relative flex flex-col min-h-screen z-10">
+<div class="shell relative flex flex-col min-h-screen z-10" bind:this={shell}>
 	<div class="absolute pointer-events-none inset-0 z-50" bind:this={pDiv}></div>
 	<Header />
 	<main class="grow" bind:this={scrollTarget}>
@@ -107,7 +121,25 @@
 <style lang="postcss">
 	@reference "../app.css";
 
+	/* One header offset for the whole site: the measured header height plus the
+	   page gap. The gap matches the rail spacing (0.5rem) below lg and widens
+	   with the rails at lg. The fallbacks match the rendered header before the
+	   observer has measured it. */
+	.shell {
+		--header-height: 4rem;
+		--page-gap: 0.5rem;
+		--content-top: calc(var(--header-height) + var(--page-gap));
+	}
+
+	@media (width >= 64rem) {
+		.shell {
+			--header-height: 7.5rem;
+			--page-gap: 1rem;
+		}
+	}
+
 	main {
-		@apply flex bg-background pt-28 text-dark not-lg:pt-16;
+		@apply flex bg-background text-dark;
+		padding-top: var(--content-top);
 	}
 </style>

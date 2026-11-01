@@ -48,6 +48,12 @@
 		>
 			*{message}
 		</p>
+		{#if success}
+			<p class="mt-3 text-sm text-dark/60">
+				Email notifications are off by default. In-app notifications are always on. You can turn
+				email notifications on from your profile.
+			</p>
+		{/if}
 		{#if !pending}
 			<div class="text-lg mx-auto mt-6 w-60 duo-btn" data-duo-color="primary">
 				<a href="/login">{success ? 'Log In' : 'Back To Login'}</a>

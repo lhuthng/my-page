@@ -1,19 +1,18 @@
 // Comment creation (authenticated and anonymous) and the view/like counters.
-use std::collections::HashSet;
-
 use crate::application::commands::post::{
     PostNewAnynymouseCommentCommand, PostNewCommentCommand, PushNewLikeCommand, PushNewViewCommand,
 };
+use crate::domain::entities::notification::CommentCreated;
 use crate::domain::errors::post::PostError;
+use crate::infrastructure::persistence::notification::record_comment_notifications;
 
 use super::PostServiceImpl;
-use super::links::MENTION_RE;
 
 impl PostServiceImpl {
     pub(super) async fn post_new_comment(
         &self,
         cmd: PostNewCommentCommand,
-    ) -> Result<i64, PostError> {
+    ) -> Result<CommentCreated, PostError> {
         let content = crate::helper::string::validate_text(&cmd.content, "Comment", 2000)
             .map_err(PostError::Validation)?;
         let cmd = PostNewCommentCommand { content, ..cmd };
@@ -52,81 +51,26 @@ impl PostServiceImpl {
         .fetch_one(&mut *tx)
         .await?;
 
-        if let Some(parent_id) = cmd.parent_id {
-            let recipient_user_id = sqlx::query_scalar::<_, Option<i64>>(
-                r#"
-                SELECT user_id
-                FROM comments
-                WHERE id = ?
-                "#,
-            )
-            .bind(parent_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .flatten();
-
-            if let Some(recipient_user_id) = recipient_user_id
-                && recipient_user_id != cmd.user_id
-            {
-                sqlx::query(
-                    r#"
-                    INSERT INTO notifications (
-                        recipient_user_id,
-                        actor_user_id,
-                        post_id,
-                        comment_id,
-                        type
-                    )
-                    VALUES (?, ?, ?, ?, 'reply')
-                    "#,
-                )
-                .bind(recipient_user_id)
-                .bind(cmd.user_id)
-                .bind(cmd.post_id)
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-            }
-        }
-
-        // Notify any @mentioned registered users
-        let mentioned: HashSet<String> = MENTION_RE
-            .captures_iter(&cmd.content)
-            .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
-            .collect();
-        if !mentioned.is_empty() {
-            let placeholders = mentioned.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-            let sql = format!("SELECT id FROM users WHERE username IN ({})", placeholders);
-            let mut q = sqlx::query_scalar::<_, i64>(&sql);
-            for username in &mentioned {
-                q = q.bind(username);
-            }
-            let mentioned_ids: Vec<i64> = q.fetch_all(&mut *tx).await?;
-            for mentioned_id in mentioned_ids {
-                if mentioned_id != cmd.user_id {
-                    sqlx::query(
-                        r#"
-                        INSERT INTO notifications (recipient_user_id, actor_user_id, post_id, comment_id, type)
-                        VALUES (?, ?, ?, ?, 'mention')
-                        "#,
-                    )
-                    .bind(mentioned_id)
-                    .bind(cmd.user_id)
-                    .bind(cmd.post_id)
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await?;
-                }
-            }
-        }
+        let recipients = record_comment_notifications(
+            &mut tx,
+            cmd.post_id,
+            id,
+            Some(cmd.user_id),
+            cmd.parent_id,
+            &cmd.content,
+        )
+        .await?;
 
         tx.commit().await?;
-        Ok(id)
+        Ok(CommentCreated {
+            comment_id: id,
+            recipients,
+        })
     }
     pub(super) async fn post_new_anonymous_comment(
         &self,
         cmd: PostNewAnynymouseCommentCommand,
-    ) -> Result<i64, PostError> {
+    ) -> Result<CommentCreated, PostError> {
         let content = crate::helper::string::validate_text(&cmd.content, "Comment", 2000)
             .map_err(PostError::Validation)?;
         let cmd = PostNewAnynymouseCommentCommand { content, ..cmd };
@@ -163,37 +107,23 @@ impl PostServiceImpl {
         .fetch_one(&mut *tx)
         .await?;
 
-        // Anonymous commenter CAN write @mentions; notify matched registered users
-        // (actor_user_id is NULL since there is no authenticated user)
-        let mentioned: HashSet<String> = MENTION_RE
-            .captures_iter(&cmd.content)
-            .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
-            .collect();
-        if !mentioned.is_empty() {
-            let placeholders = mentioned.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-            let sql = format!("SELECT id FROM users WHERE username IN ({})", placeholders);
-            let mut q = sqlx::query_scalar::<_, i64>(&sql);
-            for username in &mentioned {
-                q = q.bind(username);
-            }
-            let mentioned_ids: Vec<i64> = q.fetch_all(&mut *tx).await?;
-            for mentioned_id in mentioned_ids {
-                sqlx::query(
-                    r#"
-                    INSERT INTO notifications (recipient_user_id, actor_user_id, post_id, comment_id, type)
-                    VALUES (?, NULL, ?, ?, 'mention')
-                    "#,
-                )
-                .bind(mentioned_id)
-                .bind(cmd.post_id)
-                .bind(id)
-                .execute(&mut *tx)
-                .await?;
-            }
-        }
+        // Anonymous commenter CAN write @mentions; notify matched registered
+        // users with a NULL actor (there is no authenticated user).
+        let recipients = record_comment_notifications(
+            &mut tx,
+            cmd.post_id,
+            id,
+            None,
+            cmd.parent_id,
+            &cmd.content,
+        )
+        .await?;
 
         tx.commit().await?;
-        Ok(id)
+        Ok(CommentCreated {
+            comment_id: id,
+            recipients,
+        })
     }
     pub(super) async fn push_new_view(&self, cmd: PushNewViewCommand) -> Result<(), PostError> {
         sqlx::query(

@@ -248,7 +248,11 @@ export async function handle({ event, resolve }) {
 			});
 	}
 
-	if (accept.includes('text/html') || accept.includes('application/sveltekit')) {
+	if (
+		accept.includes('text/html') ||
+		accept.includes('application/sveltekit') ||
+		event.isDataRequest
+	) {
 		await populateUser(event);
 	}
 

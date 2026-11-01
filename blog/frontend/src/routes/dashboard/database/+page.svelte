@@ -206,7 +206,7 @@
 
 <div class="flex gap-4 items-start">
 	<aside
-		class="w-48 shrink-0 bg-white rounded-xl p-2 flex flex-col gap-0.5 self-start sticky top-4"
+		class="sticky-below-header w-48 shrink-0 bg-white rounded-xl p-2 flex flex-col gap-0.5 self-start sticky"
 	>
 		<p class="text-xs font-semibold text-dark/40 uppercase tracking-wider px-3 py-1.5">Tables</p>
 		{#each TABLES as t}
