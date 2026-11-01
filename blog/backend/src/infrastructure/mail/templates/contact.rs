@@ -14,10 +14,7 @@ pub fn contact_confirmation(app_base_url: &str, name: &str) -> (String, String) 
         name = escape_html(name),
     );
 
-    let footer = site_footer(
-        app_base_url,
-        "This is a confirmation that your message was received.",
-    );
+    let footer = site_footer(app_base_url, "Your message was received.");
     let html = render_shell(app_base_url, "Thanks for reaching out!", &inner, &footer);
     (text, html)
 }

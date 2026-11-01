@@ -12,25 +12,22 @@ use super::{MUTED, PRIMARY, TEXT, escape_html};
 
 pub fn subscription_confirm(app_base_url: &str, confirm_link: &str) -> (String, String) {
     let text = format!(
-        "Hey there! (◕‿◕)\n\nYou're one step away from newsletter greatness - open the link below within 30 minutes to confirm your subscription to the HuuThangLe site:\n\n{}\n\nIf this wasn't you, just ignore this email. No harm, no foul! (￣▽￣)ノ\n",
+        "Hey there! (◕‿◕)\n\nYou're one step away from newsletter greatness - open the link below within 30 minutes to confirm your subscription to Thắng's Blog:\n\n{}\n\nIf this wasn't you, just ignore this email. No harm, no foul! (￣▽￣)ノ\n",
         confirm_link
     );
 
     let inner = format!(
         r#"<h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:{TEXT};line-height:1.3;">You're one click away! (＾▽＾)</h1>
-<p style="margin:0 0 20px;">Hey there! Thanks for subscribing to the HuuThangLe newsletter. Confirm your email address by clicking the button below within <strong>30 minutes</strong> and you're officially in the club.</p>
+<p style="margin:0 0 20px;">Hey there! Thanks for subscribing to the Thắng's Blog newsletter. Confirm your email address by clicking the button below within <strong>30 minutes</strong> and you're officially in the club.</p>
 {button}
 <p style="margin:24px 0 0;font-size:14px;color:{MUTED};">If you didn't sign up for this, you can safely ignore this email - no spam, no hard feelings! (´-ω-`)</p>"#,
-        button = render_button("Confirm subscription ✨", confirm_link),
+        button = render_button("Confirm subscription (◕‿◕)", confirm_link),
     );
 
-    let footer = site_footer(
-        app_base_url,
-        "You received this email because this address was used to subscribe.",
-    );
+    let footer = site_footer(app_base_url, "This address was used to subscribe.");
     let html = render_shell(
         app_base_url,
-        "Confirm your subscription to the HuuThangLe newsletter.",
+        "Confirm your subscription to Thắng's Blog.",
         &inner,
         &footer,
     );
@@ -46,22 +43,17 @@ pub fn campaign(
     unsubscribe_link: &str,
 ) -> (String, String) {
     let text = format!(
-        "{}\n\n---\nSent with ♡ by HuuThangLe.site\nUnsubscribe: {}\n",
+        "{}\n\n---\nFrom huuthangle.site\nUnsubscribe: {}\n",
         body_text, unsubscribe_link
     );
 
     let site = escape_html(&format!("{}/", app_base_url.trim_end_matches('/')));
     let footer = format!(
-        r#"Sent with ♡ by <a href="{site}" style="color:{PRIMARY};text-decoration:none;">huuthangle.site</a> · <a href="{unsub}" style="color:{PRIMARY};text-decoration:none;">Unsubscribe</a>"#,
+        r#"From <a href="{site}" style="color:{PRIMARY};text-decoration:none;">huuthangle.site</a><br><span style="display:inline-block;margin-top:4px;"><a href="{unsub}" style="color:{PRIMARY};text-decoration:none;">Unsubscribe</a></span>"#,
         unsub = escape_html(unsubscribe_link),
     );
 
-    let html = render_shell(
-        app_base_url,
-        "Latest from HuuThangLe.site",
-        body_html,
-        &footer,
-    );
+    let html = render_shell(app_base_url, "Latest from Thắng's Blog", body_html, &footer);
     (text, html)
 }
 
@@ -260,7 +252,7 @@ pub fn preview_page(app_base_url: &str, campaign_post: Option<&CampaignPostData>
     const btn = document.createElement('button');
     btn.id = 'theme-toggle';
     const apply = () => {{
-        btn.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+        btn.textContent = document.body.classList.contains('dark') ? 'Light mode' : 'Dark mode';
     }};
     btn.onclick = () => {{
         document.body.classList.toggle('dark');

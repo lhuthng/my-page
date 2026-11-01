@@ -22,13 +22,10 @@ pub fn verification(app_base_url: &str, username: &str, verify_link: &str) -> (S
         button = render_button("Verify email", verify_link),
     );
 
-    let footer = site_footer(
-        app_base_url,
-        "You received this email because this address was used to create an account.",
-    );
+    let footer = site_footer(app_base_url, "This address was used to sign up.");
     let html = render_shell(
         app_base_url,
-        "Verify your HuuThangLe account",
+        "Verify your Thắng's Blog account",
         &inner,
         &footer,
     );
@@ -50,13 +47,10 @@ pub fn password_reset(app_base_url: &str, username: &str, reset_link: &str) -> (
         button = render_button("Reset password", reset_link),
     );
 
-    let footer = site_footer(
-        app_base_url,
-        "You received this email because a password reset was requested for this address.",
-    );
+    let footer = site_footer(app_base_url, "A password reset was requested.");
     let html = render_shell(
         app_base_url,
-        "Reset your HuuThangLe password",
+        "Reset your Thắng's Blog password",
         &inner,
         &footer,
     );

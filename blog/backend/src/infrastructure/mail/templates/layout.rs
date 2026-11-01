@@ -49,21 +49,21 @@ pub fn render_shell(
 <meta name="color-scheme" content="light">
 <meta name="supported-color-schemes" content="light">
 <meta name="x-apple-disable-message-reformatting">
-<title>huuthangle.site</title>
+<title>Thắng's Blog</title>
 </head>
 <body style="margin:0;padding:0;background-color:{BACKGROUND};word-spacing:normal;font-family:{FONT_STACK};">
 <div role="presentation" style="display:none;font-size:1px;color:{BACKGROUND};line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">{preheader}{spacer}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:{BACKGROUND};">
 <tr>
 <td align="center" style="padding:28px 12px;">
-<div style="max-width:600px;margin:0 auto;border-radius:14px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+<div style="max-width:600px;margin:0 auto;border:2px solid {NAVY};border-radius:14px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
 <td style="background-color:{NAVY};padding:20px 28px;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
 <tr>
-<td style="vertical-align:middle;"><img src="{logo_url}" width="auto" height="36" alt="huuthangle.site" style="display:block;border:0;border-radius:8px;"></td>
-<td style="vertical-align:middle;padding-left:12px;"><span style="color:{WHITE};font-family:{FONT_STACK};font-size:18px;font-weight:700;letter-spacing:0.2px;">HuuThangLe.site</span></td>
+<td style="vertical-align:middle;"><img src="{logo_url}" width="auto" height="36" alt="Thắng's Blog" style="display:block;border:0;border-radius:8px;"></td>
+<td style="vertical-align:middle;padding-left:12px;"><span style="color:{WHITE};font-family:{FONT_STACK};font-size:18px;font-weight:700;letter-spacing:0.2px;">Thắng's Blog</span></td>
 </tr>
 </table>
 </td>
@@ -98,7 +98,8 @@ pub fn render_shell(
 pub(super) fn site_footer(app_base_url: &str, note: &str) -> String {
     let site = escape_html(&format!("{}/", app_base_url.trim_end_matches('/')));
     format!(
-        r#"<a href="{site}" style="color:{PRIMARY};text-decoration:none;">huuthangle.site</a> · {note}"#,
+        r#"From <a href="{site}" style="color:{PRIMARY};text-decoration:none;">huuthangle.site</a><br><span style="display:inline-block;margin-top:4px;">{note}</span>"#,
         site = site,
+        note = escape_html(note),
     )
 }

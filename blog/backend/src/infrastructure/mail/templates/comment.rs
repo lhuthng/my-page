@@ -1,7 +1,7 @@
 /// New-comment notification email sent to a post's author.
 use super::layout::{render_button, render_shell, site_footer};
 use super::markdown::render_comment;
-use super::{MUTED, PRIMARY, TEXT, escape_html};
+use super::{PRIMARY, TEXT, escape_html};
 
 /// How many characters of a fresh comment are quoted in the author email.
 const COMMENT_EXCERPT_CHARS: usize = 280;
@@ -27,8 +27,7 @@ pub fn comment_notification(
         r#"<h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:{TEXT};line-height:1.3;">New comment (ﾉ´ヮ`)ﾉ*: ･ﾟ</h1>
 <p style="margin:0 0 20px;">Hey {author_name}, <strong>{commenter_name}</strong> just left a comment on <strong>"{post_title}"</strong>:</p>
 <div style="margin:0 0 24px;padding:12px 16px;border-left:3px solid {PRIMARY};color:{TEXT};font-size:15px;line-height:1.6;">{excerpt_html}</div>
-{button}
-<p style="margin:24px 0 0;font-size:14px;color:{MUTED};">You're receiving this because you wrote this post.</p>"#,
+{button}"#,
         author_name = escape_html(author_name),
         commenter_name = escape_html(commenter_name),
         post_title = escape_html(post_title),
@@ -36,10 +35,7 @@ pub fn comment_notification(
         button = render_button("Read the comment", comment_url),
     );
 
-    let footer = site_footer(
-        app_base_url,
-        "You received this email because you wrote this post.",
-    );
+    let footer = site_footer(app_base_url, "You wrote this post.");
     let html = render_shell(
         app_base_url,
         &format!("{commenter_name} commented on your post"),
