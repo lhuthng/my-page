@@ -17,15 +17,6 @@ impl NotificationKind {
         }
     }
 
-    pub fn from_str(value: &str) -> Option<Self> {
-        match value {
-            "reply" => Some(NotificationKind::Reply),
-            "mention" => Some(NotificationKind::Mention),
-            "post_comment" => Some(NotificationKind::PostComment),
-            _ => None,
-        }
-    }
-
     /// Lower rank wins when one recipient qualifies for several kinds on the
     /// same comment.
     pub fn priority(self) -> u8 {

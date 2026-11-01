@@ -32,6 +32,7 @@ fn copy_for(kind: NotificationKind) -> (&'static str, &'static str, &'static str
     }
 }
 
+#[allow(clippy::too_many_arguments)] // each input is a distinct string; a struct would only rename them
 pub fn comment_notification(
     app_base_url: &str,
     kind: NotificationKind,
