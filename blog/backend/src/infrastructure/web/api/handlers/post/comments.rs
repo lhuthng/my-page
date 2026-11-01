@@ -29,9 +29,6 @@ use crate::{
 /// Must stay in sync with `blog/frontend/src/lib/features/comments/guest-identities.js`.
 const GUEST_IDENTITIES: &[&str] = &["cutiecube", "straymeowmet", "loafphantom"];
 
-/// How many characters of a fresh comment are quoted in the author email.
-const COMMENT_EXCERPT_CHARS: usize = 280;
-
 /// The post's title/routing plus its author's contact details, as loaded for
 /// the notification email. `author_*` fields stay optional because the joins
 /// are LEFT: a post can outlive its author.
@@ -244,23 +241,14 @@ async fn notify_comment_author(
         comment_id
     );
 
-    // Quote a short head of the comment; the full text is one click away.
-    let excerpt: String = {
-        let mut chars = content.chars();
-        let head: String = chars.by_ref().take(COMMENT_EXCERPT_CHARS).collect();
-        if chars.next().is_some() {
-            format!("{head}…")
-        } else {
-            head
-        }
-    };
-
+    // The template renders the markdown and caps the quote, so pass the raw
+    // comment body.
     let (text, html) = comment_notification(
         &app_base_url,
         author_name.as_deref().unwrap_or("there"),
         &post_title,
         &commenter_name,
-        &excerpt,
+        &content,
         &comment_url,
     );
 

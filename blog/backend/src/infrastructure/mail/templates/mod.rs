@@ -8,6 +8,7 @@ mod auth;
 mod comment;
 mod contact;
 mod layout;
+mod markdown;
 mod newsletter;
 
 pub use auth::{password_reset, verification};

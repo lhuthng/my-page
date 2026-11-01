@@ -117,6 +117,7 @@ pub fn campaign_post_body(
 #[cfg(debug_assertions)]
 pub fn preview_page(app_base_url: &str, campaign_post: Option<&CampaignPostData>) -> String {
     use super::auth::{password_reset, verification};
+    use super::comment::comment_notification;
     use super::contact::contact_confirmation;
 
     let unsubscribe = format!("{app_base_url}/newsletter/unsubscribe?token=sample");
@@ -183,6 +184,39 @@ pub fn preview_page(app_base_url: &str, campaign_post: Option<&CampaignPostData>
             "Contact confirmation",
             contact_confirmation(app_base_url, "Visitor"),
         ),
+        (
+            "Comment notification: plain",
+            comment_notification(
+                app_base_url,
+                "Thang",
+                "A deep dive into Rust ownership",
+                "cutiecube",
+                "This is a plain comment.\nA second line.\n\nAnd a new paragraph.",
+                &format!("{app_base_url}/posts/rust-ownership#comment-1"),
+            ),
+        ),
+        (
+            "Comment notification: markdown",
+            comment_notification(
+                app_base_url,
+                "Thang",
+                "A deep dive into Rust ownership",
+                "cutiecube",
+                "Great write-up! I tried **bold**, *italic*, ~~strikethrough~~, and `inline code`.\n\n```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n- first item\n- second item\n\n[Read more](https://example.com/a/very/long/link/that/should/wrap/nicely)",
+                &format!("{app_base_url}/posts/rust-ownership#comment-2"),
+            ),
+        ),
+        (
+            "Comment notification: image + GIF",
+            comment_notification(
+                app_base_url,
+                "Thang",
+                "A deep dive into Rust ownership",
+                "loafphantom",
+                "![tiny dance](https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif)\n\n![screenshot](https://example.com/screenshot.png)\n\n![spoofed](javascript:alert(1))",
+                &format!("{app_base_url}/posts/rust-ownership#comment-3"),
+            ),
+        ),
     ];
 
     let mut body = String::new();
@@ -214,6 +248,7 @@ pub fn preview_page(app_base_url: &str, campaign_post: Option<&CampaignPostData>
     body.dark h1 {{ color:#cfd6e4; }}
     body.dark [style*="background-color:#eef0f6"] {{ background-color:#161a26 !important; }}
     body.dark [style*="background:#eef1f6"] {{ background:#1a2030 !important; }}
+    body.dark [style*="background:#f3f4f8"] {{ background:#1a2030 !important; }}
     body.dark [style*="background-color:#ffffff"] {{ background-color:#232a3a !important; }}
     body.dark [style*="color:#333a4d"] {{ color:#e6e8f0 !important; }}
     body.dark [style*="color:#6b7280"] {{ color:#a7b0c2 !important; }}
@@ -241,4 +276,30 @@ pub fn preview_page(app_base_url: &str, campaign_post: Option<&CampaignPostData>
 </body>
 </html>"#
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::preview_page;
+
+    #[test]
+    fn preview_includes_every_template_including_comments() {
+        let html = preview_page("https://huuthangle.site", None);
+        for label in [
+            "Subscription confirm",
+            "Campaign",
+            "Account verification",
+            "Password reset",
+            "Contact confirmation",
+            "Comment notification: plain",
+            "Comment notification: markdown",
+            "Comment notification: image + GIF",
+        ] {
+            assert!(html.contains(label), "missing preview: {label}");
+        }
+        // Markdown is rendered, and unsafe image URLs never reach the page.
+        assert!(html.contains("<strong>bold</strong>"));
+        assert!(html.contains("<img src=\"https://media.giphy.com"));
+        assert!(!html.contains("javascript:"));
+    }
 }

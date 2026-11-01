@@ -40,6 +40,7 @@ async-graphql = { version = "7", features = ["playground"] }
 async-graphql-axum = "7"
 zip = "0.6"
 aws-sdk-s3 = "1.140.0"
+pulldown-cmark = { version = "0.13.6", default-features = false }
 
 [profile.release]
 lto = true
