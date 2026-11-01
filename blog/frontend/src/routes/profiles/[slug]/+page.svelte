@@ -96,13 +96,22 @@
 	// The email footer links here with ?section=notifications.
 	$effect(() => {
 		if (
-			!scrolledToNotifications &&
-			notificationsSection &&
-			$page.url.searchParams.get('section') === 'notifications'
+			scrolledToNotifications ||
+			!notificationsSection ||
+			$page.url.searchParams.get('section') !== 'notifications'
 		) {
-			scrolledToNotifications = true;
-			notificationsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			return;
 		}
+
+		scrolledToNotifications = true;
+		const section = notificationsSection;
+		// Smooth scrolling travels past the post images above, which load
+		// lazily and push the section down mid-animation. Jump instead, after
+		// `load` so the browser's own scroll restoration cannot cancel it.
+		const scroll = () =>
+			requestAnimationFrame(() => section.scrollIntoView({ behavior: 'instant', block: 'start' }));
+		if (document.readyState === 'complete') scroll();
+		else window.addEventListener('load', scroll, { once: true });
 	});
 
 	async function saveNotificationPrefs(patch) {
@@ -556,7 +565,7 @@
 										saveNotificationPrefs({
 											reply_email: true,
 											mention_email: true,
-											post_comment_email: true
+											...(hasPosts ? { post_comment_email: true } : {})
 										})}
 								>
 									Turn on all
@@ -598,19 +607,21 @@
 						/>
 						Mentions of me
 					</label>
-					<label class="flex items-center gap-2">
-						<input
-							type="checkbox"
-							class="h-4 w-4 accent-primary"
-							checked={notificationPrefs.post_comment_email}
-							disabled={prefsSaving}
-							onchange={() =>
-								saveNotificationPrefs({
-									post_comment_email: !notificationPrefs.post_comment_email
-								})}
-						/>
-						New comments on my posts
-					</label>
+					{#if hasPosts}
+						<label class="flex items-center gap-2">
+							<input
+								type="checkbox"
+								class="h-4 w-4 accent-primary"
+								checked={notificationPrefs.post_comment_email}
+								disabled={prefsSaving}
+								onchange={() =>
+									saveNotificationPrefs({
+										post_comment_email: !notificationPrefs.post_comment_email
+									})}
+							/>
+							New comments on my posts
+						</label>
+					{/if}
 				</div>
 				{#if prefsError}
 					<p class="text-sm text-accent-red">{prefsError}</p>

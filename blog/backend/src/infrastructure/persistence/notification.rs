@@ -272,7 +272,9 @@ pub async fn get_preferences(
                    notification_prompt_dismissed_at IS NULL
                    AND notify_reply_email = 0
                    AND notify_mention_email = 0
-                   AND notify_post_comment_email = 0
+                   -- Only post authors can receive this kind, so it does not
+                   -- count as an available switch for everyone else.
+                   AND (notify_post_comment_email = 0 OR role NOT IN ('moderator', 'admin'))
                    AND created_at >= datetime('now', '-7 days')
                ) AS show_prompt
         FROM users
