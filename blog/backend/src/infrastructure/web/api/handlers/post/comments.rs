@@ -1,9 +1,11 @@
 // Comments: authenticated and anonymous creation, per-post listing.
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::{
     Extension, Json,
     extract::{Path, Query, State},
+    http::HeaderMap,
     response::IntoResponse,
 };
 
@@ -19,7 +21,7 @@ use crate::{
             notification::{CommentRecipient, NotificationKind},
             secret::Claims,
         },
-        errors::post::PostError,
+        errors::{auth::AuthError, post::PostError},
     },
     helper::time::normalize_utc_timestamp,
     infrastructure::{
@@ -27,6 +29,7 @@ use crate::{
         web::{
             api::handlers::post::dto::{CommentsQuery, NewCommentBody},
             api::handlers::post::response::{Comment, CommentsResponse, NewCommentResponse},
+            api::security,
             server::AppState,
         },
     },
@@ -35,12 +38,39 @@ use crate::{
 /// Must stay in sync with `blog/frontend/src/lib/features/comments/guest-identities.js`.
 const GUEST_IDENTITIES: &[&str] = &["cutiecube", "straymeowmet", "loafphantom"];
 
+/// The comment route is public at the API origin, so the SvelteKit proxy limit
+/// is not a security boundary. Guests are throttled per address, signed-in
+/// users per account.
+const GUEST_COMMENT_IP_LIMIT: (usize, Duration) = (5, Duration::from_secs(10 * 60));
+const USER_COMMENT_LIMIT: (usize, Duration) = (30, Duration::from_secs(10 * 60));
+
 pub async fn new_comment(
     State(state): State<Arc<AppState>>,
     Extension(opt_claims): Extension<Option<Claims>>,
+    headers: HeaderMap,
     Path(post_id_str): Path<String>,
     Json(body): Json<NewCommentBody>,
 ) -> Result<impl IntoResponse, PostError> {
+    let (rate_key, (max_requests, window)) = match &opt_claims {
+        Some(claims) => (
+            security::identifier_key("comment-user", &claims.user_id),
+            USER_COMMENT_LIMIT,
+        ),
+        None => (
+            security::client_key("comment-guest", &headers),
+            GUEST_COMMENT_IP_LIMIT,
+        ),
+    };
+    state
+        .rate_limiter
+        .check(&rate_key, max_requests, window)
+        .map_err(|err| match err {
+            AuthError::RateLimited { retry_after_secs } => {
+                PostError::RateLimited { retry_after_secs }
+            }
+            _ => PostError::InternalError("comment rate limiter failed".to_string()),
+        })?;
+
     let post_id: i64 = post_id_str.parse().map_err(|_| PostError::PostNotFound)?;
 
     // The picker in the comment UI offers exactly these avatars. The route is
@@ -336,7 +366,9 @@ pub async fn get_comments(
     let before = query.before;
     let limit = crate::helper::string::clamp_page_size(query.limit, 1, 100);
     let parent_id = query.parent_id;
-    let post_id = post_id_str.parse::<i64>().unwrap();
+    let post_id = post_id_str
+        .parse::<i64>()
+        .map_err(|_| PostError::PostNotFound)?;
 
     let page = state
         .post_service

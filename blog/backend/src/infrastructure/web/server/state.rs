@@ -31,8 +31,8 @@ pub struct AppState {
     pub storage: ObjectStore,
     /// Shared client for outbound calls (Turnstile siteverify).
     pub http_client: reqwest::Client,
-    /// Fixed-window limits for the public auth endpoints.
-    pub auth_rate_limiter: crate::infrastructure::web::api::security::RateLimiter,
+    /// Fixed-window limits for public write endpoints (auth and comments).
+    pub rate_limiter: crate::infrastructure::web::api::security::RateLimiter,
     pub analytics_service: persistence::analytics::AnalyticsServiceImpl,
     pub auth_service: persistence::auth::AuthServiceImpl,
     pub user_service: persistence::user::UserServiceImpl,

@@ -40,7 +40,9 @@ async function fetchCached(cache, key, loader) {
 
 	const request = (async () => {
 		const value = await loader();
-		cache.set(key, value);
+		// A failed load resolves null; caching it would turn a transient 502
+		// into a permanent "end of comments" for the rest of the session.
+		if (value != null) cache.set(key, value);
 		return value;
 	})();
 
@@ -62,27 +64,35 @@ export function createCommentApi() {
 		},
 		async fetchRoots(postId, before = null) {
 			const key = `${postId}:${before == null ? 'start' : before}`;
-			return fetchCached(caches.roots, key, async () => {
-				const url =
-					before == null
-						? `/api/posts/id/${postId}/comments?limit=${rootLimit}`
-						: `/api/posts/id/${postId}/comments?limit=${rootLimit}&before=${before}`;
-				const res = await fetch(url);
-				if (!res.ok) return { items: [], hasMore: false };
-				return toCommentsPage(await res.json());
-			});
+			try {
+				return await fetchCached(caches.roots, key, async () => {
+					const url =
+						before == null
+							? `/api/posts/id/${postId}/comments?limit=${rootLimit}`
+							: `/api/posts/id/${postId}/comments?limit=${rootLimit}&before=${before}`;
+					const res = await fetch(url);
+					if (!res.ok) return null;
+					return toCommentsPage(await res.json());
+				});
+			} catch {
+				return null;
+			}
 		},
 		async fetchReplies(postId, parentId, before = null) {
 			const key = `${postId}:${parentId}:${before == null ? 'start' : before}`;
-			return fetchCached(caches.replies, key, async () => {
-				const url =
-					before == null
-						? `/api/posts/id/${postId}/comments?parent_id=${parentId}&limit=${replyLimit}`
-						: `/api/posts/id/${postId}/comments?parent_id=${parentId}&limit=${replyLimit}&before=${before}`;
-				const res = await fetch(url);
-				if (!res.ok) return { items: [], hasMore: false };
-				return toCommentsPage(await res.json());
-			});
+			try {
+				return await fetchCached(caches.replies, key, async () => {
+					const url =
+						before == null
+							? `/api/posts/id/${postId}/comments?parent_id=${parentId}&limit=${replyLimit}`
+							: `/api/posts/id/${postId}/comments?parent_id=${parentId}&limit=${replyLimit}&before=${before}`;
+					const res = await fetch(url);
+					if (!res.ok) return null;
+					return toCommentsPage(await res.json());
+				});
+			} catch {
+				return null;
+			}
 		},
 		async submitComment({ postId, content, parentId = null, guestIdentity = null }) {
 			const currentUser = authState.user;

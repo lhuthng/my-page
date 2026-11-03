@@ -67,7 +67,7 @@ fn enforce(
     key: String,
     (max_requests, window): (usize, Duration),
 ) -> Result<(), AuthError> {
-    state.auth_rate_limiter.check(&key, max_requests, window)
+    state.rate_limiter.check(&key, max_requests, window)
 }
 
 /// A persistent cookie only when "remember me" was chosen; otherwise the

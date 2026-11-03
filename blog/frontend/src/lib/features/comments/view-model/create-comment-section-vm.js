@@ -97,6 +97,7 @@ export function createCommentSectionViewModel({
 	let popoverAnchorRaf;
 	let activeMentionMatch = null;
 	let activeCommandMatch = null;
+	let fetchGeneration = 0;
 
 	const engine = createCommentSyntaxEngine({
 		mentionDictionary,
@@ -229,29 +230,43 @@ export function createCommentSectionViewModel({
 
 	async function fetchComments() {
 		if (state.comments.fetching) return;
+		const postId = state.postId;
+		const generation = fetchGeneration;
 		state.comments.fetching = true;
-		const page = await api.fetchRoots(
-			state.postId,
-			state.comments.lastId === 0 ? null : state.comments.lastId
-		);
-		page.items = await renderComments(page.items);
-		threadController.updateRoots(page);
-		state.comments.fetching = false;
+		try {
+			const page = await api.fetchRoots(
+				postId,
+				state.comments.lastId === 0 ? null : state.comments.lastId
+			);
+			if (!page || generation !== fetchGeneration) return;
+			page.items = await renderComments(page.items);
+			if (generation !== fetchGeneration) return;
+			threadController.updateRoots(page);
+		} finally {
+			if (generation === fetchGeneration) state.comments.fetching = false;
+		}
 	}
 
 	async function loadMoreReplies(parentId) {
 		const thread = threadController.ensureReplyThread(parentId);
 		if (thread.fetching || thread.endReached) return;
 
+		const postId = state.postId;
+		const generation = fetchGeneration;
 		thread.fetching = true;
-		const page = await api.fetchReplies(
-			state.postId,
-			parentId,
-			thread.lastId === 0 ? null : thread.lastId
-		);
-		page.items = await renderComments(page.items);
-		threadController.updateReplies(parentId, page);
-		thread.fetching = false;
+		try {
+			const page = await api.fetchReplies(
+				postId,
+				parentId,
+				thread.lastId === 0 ? null : thread.lastId
+			);
+			if (!page || generation !== fetchGeneration) return;
+			page.items = await renderComments(page.items);
+			if (generation !== fetchGeneration) return;
+			threadController.updateReplies(parentId, page);
+		} finally {
+			if (generation === fetchGeneration) thread.fetching = false;
+		}
 	}
 
 	async function toggleReplies(comment) {
@@ -780,6 +795,7 @@ export function createCommentSectionViewModel({
 	}
 
 	function resetForPost(postId) {
+		fetchGeneration += 1;
 		state.postId = postId;
 		Object.assign(state.comments, createEmptyState().comments);
 		resetObject(state.replyThreads, {});

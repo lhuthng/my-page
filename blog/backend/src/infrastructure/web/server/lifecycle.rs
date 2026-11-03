@@ -145,7 +145,7 @@ impl<'a> HTTPServer<'a> {
             project_demo_config,
             storage,
             http_client: reqwest::Client::new(),
-            auth_rate_limiter: api::security::RateLimiter::new(),
+            rate_limiter: api::security::RateLimiter::new(),
             analytics_service: persistence::analytics::AnalyticsServiceImpl::new(pool.clone()),
             auth_service: persistence::auth::AuthServiceImpl::new(pool.clone()),
             user_service: persistence::user::UserServiceImpl::new(pool.clone()),

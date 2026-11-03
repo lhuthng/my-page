@@ -1,4 +1,4 @@
-use axum::http::StatusCode;
+use axum::http::{HeaderValue, StatusCode, header::RETRY_AFTER};
 use axum::response::{IntoResponse, Response};
 use tracing::error;
 
@@ -16,6 +16,9 @@ pub enum PostError {
     // InvalidPostContent,
     Validation(String),
     UploadFailed(String),
+    RateLimited {
+        retry_after_secs: u64,
+    },
     InternalError(String),
     Media(MediaError),
 }
@@ -30,6 +33,17 @@ impl IntoResponse for PostError {
     fn into_response(self) -> Response {
         match self {
             PostError::Media(inner) => inner.into_response(),
+            PostError::RateLimited { retry_after_secs } => {
+                let mut response = (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    format!("Too many comments. Try again in {retry_after_secs} seconds."),
+                )
+                    .into_response();
+                if let Ok(value) = HeaderValue::from_str(&retry_after_secs.to_string()) {
+                    response.headers_mut().insert(RETRY_AFTER, value);
+                }
+                response
+            }
             _ => {
                 let (status, body) = match self {
                     PostError::PostNotFound => {
@@ -60,6 +74,7 @@ impl IntoResponse for PostError {
                         }
                     }
                     PostError::Media(_) => unreachable!(),
+                    PostError::RateLimited { .. } => unreachable!(),
                 };
 
                 (status, body).into_response()
