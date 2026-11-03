@@ -6,7 +6,7 @@ import { checkAuthLimit, clientHeaders } from '$lib/server/auth-guards.js';
 // reachable directly, so a check in this proxy alone protects only one path
 // and a token can only be redeemed once.
 export async function POST({ request, fetch, getClientAddress }) {
-	const limited = checkAuthLimit('resend', getClientAddress);
+	const limited = checkAuthLimit('resend', request.headers, getClientAddress);
 	if (limited) return limited;
 
 	const { identifier, captchaToken } = await request.json();
@@ -19,7 +19,7 @@ export async function POST({ request, fetch, getClientAddress }) {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			...clientHeaders(getClientAddress)
+			...clientHeaders(request.headers, getClientAddress)
 		},
 		body: JSON.stringify({ identifier, captchaToken })
 	});

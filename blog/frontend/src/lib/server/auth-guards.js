@@ -13,12 +13,28 @@ const limiters = {
 	resend: createRateLimiter({ maxRequests: 5, windowMs: 10 * 60 * 1000 })
 };
 
-export function clientHeaders(getClientAddress) {
-	const ip = getClientAddress?.();
-	return ip ? { 'x-client-ip': ip } : {};
+// The Bun adapter reports the socket peer, which is nginx (127.0.0.1) in
+// production. Cloudflare's header is the real client; the forwarded address is
+// the fallback for a direct request.
+export function clientAddress(headers, getClientAddress) {
+	const cloudflare = headers.get('cf-connecting-ip')?.trim();
+	if (cloudflare) return cloudflare;
+
+	const forwarded = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+	if (forwarded) return forwarded;
+
+	try {
+		return getClientAddress?.() ?? 'unknown';
+	} catch {
+		return 'unknown';
+	}
 }
 
-export function checkAuthLimit(scope, getClientAddress) {
+export function clientHeaders(headers, getClientAddress) {
+	return { 'x-client-ip': clientAddress(headers, getClientAddress) };
+}
+
+export function checkAuthLimit(scope, headers, getClientAddress) {
 	// Local development restarts the server often; a throttle there only gets
 	// in the way. The backend limits still apply.
 	if (dev) return null;
@@ -26,7 +42,7 @@ export function checkAuthLimit(scope, getClientAddress) {
 	const limiter = limiters[scope];
 	if (!limiter) return null;
 
-	const result = limiter.check(getClientAddress?.() ?? 'unknown');
+	const result = limiter.check(clientAddress(headers, getClientAddress));
 	if (result.allowed) return null;
 
 	const retryAfter = Math.ceil(result.resetAfter / 1000);

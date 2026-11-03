@@ -3,7 +3,7 @@ import { route } from '$lib/server/proxy.js';
 import { checkAuthLimit, clientHeaders } from '$lib/server/auth-guards.js';
 
 export async function POST({ request, fetch, getClientAddress }) {
-	const limited = checkAuthLimit('reset', getClientAddress);
+	const limited = checkAuthLimit('reset', request.headers, getClientAddress);
 	if (limited) return limited;
 
 	const { token, password } = await request.json();
@@ -16,7 +16,7 @@ export async function POST({ request, fetch, getClientAddress }) {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
-			...clientHeaders(getClientAddress)
+			...clientHeaders(request.headers, getClientAddress)
 		},
 		body: JSON.stringify({ token, password })
 	});
