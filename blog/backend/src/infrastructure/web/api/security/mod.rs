@@ -77,7 +77,10 @@ impl RateLimiter {
         let window_ms = i64::try_from(window.as_millis()).unwrap_or(i64::MAX);
         let cutoff = now - window_ms;
 
-        let mut hits = self.hits.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut hits = self
+            .hits
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         if hits.len() > 10_000 {
             hits.retain(|_, stamps| stamps.last().is_some_and(|last| *last > cutoff));
@@ -153,13 +156,10 @@ pub async fn verify_turnstile(
         return Err(AuthError::CaptchaUnavailable);
     }
 
-    let payload = response
-        .json::<TurnstileResponse>()
-        .await
-        .map_err(|err| {
-            error!("Turnstile verification response was not JSON: {err}");
-            AuthError::CaptchaUnavailable
-        })?;
+    let payload = response.json::<TurnstileResponse>().await.map_err(|err| {
+        error!("Turnstile verification response was not JSON: {err}");
+        AuthError::CaptchaUnavailable
+    })?;
 
     if payload.success {
         Ok(())

@@ -25,10 +25,8 @@ fn auth_config() -> AuthConfig {
 }
 
 async fn fixture() -> (sqlx::SqlitePool, AuthServiceImpl, PathBuf) {
-    let path = std::env::temp_dir().join(format!(
-        "auth_session_expiry_{}.db",
-        uuid::Uuid::new_v4()
-    ));
+    let path =
+        std::env::temp_dir().join(format!("auth_session_expiry_{}.db", uuid::Uuid::new_v4()));
 
     let options = format!("sqlite://{}", path.display())
         .parse::<SqliteConnectOptions>()
@@ -68,10 +66,11 @@ async fn fixture() -> (sqlx::SqlitePool, AuthServiceImpl, PathBuf) {
 }
 
 async fn session_hours(pool: &sqlx::SqlitePool) -> i64 {
-    let expires_at: String = sqlx::query_scalar("SELECT expires_at FROM sessions WHERE user_id = 1")
-        .fetch_one(pool)
-        .await
-        .unwrap();
+    let expires_at: String =
+        sqlx::query_scalar("SELECT expires_at FROM sessions WHERE user_id = 1")
+            .fetch_one(pool)
+            .await
+            .unwrap();
     let expires_at = DateTime::parse_from_rfc3339(&expires_at).unwrap();
     (expires_at.with_timezone(&Utc) - Utc::now()).num_hours()
 }

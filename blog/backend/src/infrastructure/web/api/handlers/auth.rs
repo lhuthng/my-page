@@ -17,8 +17,7 @@ use crate::{
     application::{
         commands::auth::{
             LoginCommand, LogoutCommand, RefreshAccessTokenCommand, RequestPasswordResetCommand,
-            ResendVerificationCommand, ResetPasswordCommand,
-            VerifyEmailCommand,
+            ResendVerificationCommand, ResetPasswordCommand, VerifyEmailCommand,
         },
         services::auth::AuthService,
     },
@@ -121,7 +120,11 @@ pub async fn login(
 ) -> Result<impl IntoResponse, AuthError> {
     verify_captcha(&state, &headers, payload.captcha_token.as_deref()).await?;
 
-    enforce(&state, security::client_key("login", &headers), LOGIN_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::client_key("login", &headers),
+        LOGIN_IP_LIMIT,
+    )?;
     enforce(
         &state,
         security::identifier_key("login", &payload.username),
@@ -141,8 +144,8 @@ pub async fn login(
         .await
     {
         Ok(LoginResult::Authenticated(auth_tokens)) => {
-            let max_age = remember
-                .then(|| CookieDuration::hours(state.config.auth.remember_expire_hours));
+            let max_age =
+                remember.then(|| CookieDuration::hours(state.config.auth.remember_expire_hours));
             let jar = jar.add(refresh_cookie(auth_tokens.refresh_token, max_age));
             let body = Json(LoginResponse::new(auth_tokens.access_token));
             Ok((jar, (StatusCode::OK, body)))
@@ -201,7 +204,11 @@ pub async fn register(
 ) -> Result<Json<RegisterResponse>, AuthError> {
     verify_captcha(&state, &headers, payload.captcha_token.as_deref()).await?;
 
-    enforce(&state, security::client_key("register", &headers), REGISTER_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::client_key("register", &headers),
+        REGISTER_IP_LIMIT,
+    )?;
     enforce(
         &state,
         security::identifier_key("register", &payload.email),
@@ -303,7 +310,11 @@ pub async fn verify_email(
     headers: HeaderMap,
     Query(query): Query<VerifyEmailQuery>,
 ) -> Result<Json<VerifyEmailResponse>, AuthError> {
-    enforce(&state, security::client_key("verify", &headers), VERIFY_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::client_key("verify", &headers),
+        VERIFY_IP_LIMIT,
+    )?;
 
     state
         .auth_service
@@ -330,7 +341,11 @@ pub async fn resend_verification(
 ) -> Result<Json<VerifyEmailResponse>, AuthError> {
     verify_captcha(&state, &headers, payload.captcha_token.as_deref()).await?;
 
-    enforce(&state, security::client_key("resend", &headers), RESEND_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::client_key("resend", &headers),
+        RESEND_IP_LIMIT,
+    )?;
     enforce(
         &state,
         security::identifier_key("resend", &payload.identifier),
@@ -381,7 +396,11 @@ pub async fn request_password_reset(
 ) -> Result<Json<PasswordResetResponse>, AuthError> {
     verify_captcha(&state, &headers, payload.captcha_token.as_deref()).await?;
 
-    enforce(&state, security::client_key("forgot", &headers), FORGOT_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::client_key("forgot", &headers),
+        FORGOT_IP_LIMIT,
+    )?;
     enforce(
         &state,
         security::identifier_key("forgot", &format!("{}|{}", payload.username, payload.email)),
@@ -423,7 +442,11 @@ pub async fn reset_password(
     headers: HeaderMap,
     Json(payload): Json<ResetPasswordPayload>,
 ) -> Result<Json<PasswordResetResponse>, AuthError> {
-    enforce(&state, security::client_key("reset", &headers), RESET_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::client_key("reset", &headers),
+        RESET_IP_LIMIT,
+    )?;
     enforce(
         &state,
         security::identifier_key("reset", &payload.token),
@@ -475,9 +498,8 @@ mod tests {
 
     #[test]
     fn remember_me_sets_a_persistent_cookie() {
-        let cookie =
-            refresh_cookie("token-value".to_string(), Some(CookieDuration::hours(2160)))
-                .to_string();
+        let cookie = refresh_cookie("token-value".to_string(), Some(CookieDuration::hours(2160)))
+            .to_string();
         assert!(cookie.contains("Max-Age=7776000"));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("Secure"));

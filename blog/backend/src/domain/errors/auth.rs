@@ -26,14 +26,22 @@ impl From<String> for AuthError {
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
         let (status, body, retry_after) = match self {
-            AuthError::UserAlreadyExists => {
-                (StatusCode::CONFLICT, "User already exists".to_string(), None)
+            AuthError::UserAlreadyExists => (
+                StatusCode::CONFLICT,
+                "User already exists".to_string(),
+                None,
+            ),
+            AuthError::InvalidCredentials => (
+                StatusCode::UNAUTHORIZED,
+                "Invalid credentials".to_string(),
+                None,
+            ),
+            AuthError::InvalidToken => {
+                (StatusCode::UNAUTHORIZED, "Invalid tokens".to_string(), None)
             }
-            AuthError::InvalidCredentials => {
-                (StatusCode::UNAUTHORIZED, "Invalid credentials".to_string(), None)
+            AuthError::ExpiredToken => {
+                (StatusCode::UNAUTHORIZED, "Expired tokens".to_string(), None)
             }
-            AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid tokens".to_string(), None),
-            AuthError::ExpiredToken => (StatusCode::UNAUTHORIZED, "Expired tokens".to_string(), None),
             // 403 is reserved for "credentials are right, email is not verified"
             // so the login form can tell it apart by status alone.
             AuthError::EmailNotVerified { email_sent } => (
