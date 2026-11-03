@@ -2,37 +2,26 @@
 	import { authState } from '$lib/auth/user.svelte.js';
 	import { env as publicEnv } from '$env/dynamic/public';
 	import SideBarItem from './SideBarItem.svelte';
-	import AboutButton from './buttons/AboutButton.svelte';
-	import AudiobookButton from './buttons/AudiobookButton.svelte';
-	import BlogButton from './buttons/BlogButton.svelte';
-	import DashboardButton from './buttons/DashboardButton.svelte';
+	import { publicNavItems } from './navigation.js';
 	import FacebookButton from './buttons/FacebookButton.svelte';
 	import GithubButton from './buttons/GithubButton.svelte';
-	import HomeButton from './buttons/HomeButton.svelte';
 	import LinkedinButton from './buttons/LinkedinButton.svelte';
-	import ProjectButton from './buttons/ProjectButton.svelte';
-	import SeriesButton from './buttons/SeriesButton.svelte';
 
 	let { route } = $props();
-
-	const routes = [
-		[HomeButton, 'Home', '/', ''],
-		[BlogButton, 'Posts', '/posts', 'posts'],
-		[ProjectButton, 'Projects', '/projects', 'projects'],
-		[SeriesButton, 'Series', '/series', 'series'],
-		[AudiobookButton, 'Audiobooks', '/audiobooks', 'audiobooks'],
-		[AboutButton, 'About', '/about', 'about'],
-		[DashboardButton, 'Dashboard', '/dashboard', 'dashboard', true]
-	];
 </script>
 
 <div
 	class="sticky-below-header hidden sm:block sticky self-start mb-2 lg:mb-4 w-12 min-w-12 lg:w-46 lg:min-w-46 drop-shadow-sm space-y-2 lg:space-y-4 transition-transform duration-200"
 >
 	<ul class="space-y-2 bg-white p-2 rounded-xl" id="side-bar">
-		{#each routes as [Icon, text, path, routeName, secret], index}
-			{#if !secret || authState.isMod}
-				<SideBarItem icon={Icon} label={text} href={path} active={routeName === route} />
+		{#each publicNavItems as item (item.path)}
+			{#if !item.secret || authState.isMod}
+				<SideBarItem
+					icon={item.icon}
+					label={item.label}
+					href={item.path}
+					active={item.route === route}
+				/>
 			{/if}
 		{/each}
 	</ul>

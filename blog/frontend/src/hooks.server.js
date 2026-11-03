@@ -126,6 +126,7 @@ async function populateUser(event) {
 	event.locals.accessToken = null;
 	event.locals.user = null;
 	event.locals.role = null;
+	event.locals.lang = 'en';
 
 	if (!refreshToken) return;
 
@@ -263,7 +264,12 @@ export async function handle({ event, resolve }) {
 
 	const noindex = isNoindexPath(event.url.pathname);
 	const response = await resolve(event, {
-		transformPageChunk: !dev ? ({ html }) => hardenHtml(html) : undefined
+		// Page loads can set `locals.lang`; the audiobook detail page uses it so
+		// Vietnamese books are not announced to screen readers as English.
+		transformPageChunk: ({ html }) => {
+			const localized = html.replace('%lang%', event.locals.lang ?? 'en');
+			return dev ? localized : hardenHtml(localized);
+		}
 	});
 
 	return applySecurityHeaders(response, event, noindex || response.status >= 400, personalized);

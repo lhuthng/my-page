@@ -4,25 +4,20 @@
 	import { logout, authState } from '$lib/auth/user.svelte.js';
 	import { useDebounce } from '$lib/utils/debounce';
 	import { draw, fly } from 'svelte/transition';
+	import { prefersReducedMotion } from 'svelte/motion';
 	import Portal from '$lib/components/shell/Portal.svelte';
 	import SearchButton from './buttons/SearchButton.svelte';
-	import AboutButton from './buttons/AboutButton.svelte';
-	import BlogButton from './buttons/BlogButton.svelte';
-	import DashboardButton from './buttons/DashboardButton.svelte';
 	import FacebookButton from './buttons/FacebookButton.svelte';
 	import GithubButton from './buttons/GithubButton.svelte';
-	import HomeButton from './buttons/HomeButton.svelte';
 	import NotificationBell from './NotificationBell.svelte';
 	import { notificationState, startNotificationPolling } from '$lib/notifications/store.svelte.js';
 	import LinkedinButton from './buttons/LinkedinButton.svelte';
-	import ProjectButton from './buttons/ProjectButton.svelte';
 	import PBody from './PBody.svelte';
-	import { quadInOut } from 'svelte/easing';
 	import { onMount } from 'svelte';
-	import SeriesButton from './buttons/SeriesButton.svelte';
 	import { widthThreshold } from '$lib/utils';
 	import { win } from '$lib/dom/windows.svelte.js';
 	import { dashboardNavGroups } from '$lib/components/dashboard/navigation.js';
+	import { publicNavItems } from '$lib/components/shell/navigation.js';
 	const { lg } = widthThreshold;
 
 	let displayName = $derived(authState.user?.displayName);
@@ -42,11 +37,56 @@
 	let mainSearchContainer = $state();
 	let menuSearchContainer = $state();
 	let menuToggled = $state(false);
+	let menuButton = $state();
+	let mobileMenu = $state();
+	let currentRoute = $derived($page.url.pathname.split('/')[1]);
+	let reducedMotion = $derived(prefersReducedMotion.current);
 
 	let windowWidth = $state(0);
 
+	const closeMenu = ({ restoreFocus = false } = {}) => {
+		menuToggled = false;
+		if (restoreFocus) menuButton?.focus();
+	};
+
+	const menuFocusables = () => [
+		...(mobileMenu?.querySelectorAll(
+			'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+		) ?? [])
+	];
+
+	const handleGlobalKeydown = (event) => {
+		if (!menuToggled) return;
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closeMenu({ restoreFocus: true });
+			return;
+		}
+		if (event.key !== 'Tab') return;
+
+		const focusables = menuFocusables();
+		if (focusables.length === 0) return;
+		const first = focusables[0];
+		const last = focusables[focusables.length - 1];
+
+		if (event.shiftKey && document.activeElement === menuButton) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			menuButton?.focus();
+		} else if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			menuButton?.focus();
+		}
+	};
+
 	$effect(() => {
-		if (win.isLg) menuToggled = false;
+		if (menuToggled && mobileMenu) mobileMenu.focus();
+	});
+
+	$effect(() => {
+		if (win.isLg) closeMenu();
 	});
 
 	$effect(() => {
@@ -56,6 +96,13 @@
 	});
 
 	const minLength = 3;
+	const searchEndpoints = {
+		User: { path: '/api/users', empty: { users: [] } },
+		Tag: { path: '/api/tags', empty: { tags: [] } },
+		Post: { path: '/api/posts', empty: { posts: [] } }
+	};
+	let searchController;
+	let searchEpoch = 0;
 	let searchData = $state({
 		selection: 'Post',
 		term: '',
@@ -76,6 +123,7 @@
 		}
 		termDebounce.update(searchData._term.trim());
 		if (searchData._term.length < minLength) {
+			searchController?.abort();
 			searchData.status = 'init';
 		} else {
 			searchData.status = 'typing';
@@ -97,53 +145,54 @@
 	};
 
 	const search = async (type, term) => {
-		if (term.length < minLength) {
-			return;
-		}
+		if (term.length < minLength) return;
+		const endpoint = searchEndpoints[type];
+		if (!endpoint) return;
+
+		searchController?.abort();
+		const controller = new AbortController();
+		searchController = controller;
+		const epoch = ++searchEpoch;
+
 		searchData.status = 'fetching';
 		searchData.result = undefined;
-		if (type === 'User') {
-			const res = await fetch(`/api/users?term=${encodeURI(term)}&size=5`, {
-				method: 'GET'
-			});
 
-			if (res.ok) {
-				searchData.result = await res.json();
-			} else {
-				searchData.result = { users: [] };
-			}
-		} else if (type === 'Tag') {
-			const res = await fetch(`/api/tags?term=${encodeURI(term)}&size=5`, {
-				method: 'GET'
+		try {
+			const res = await fetch(`${endpoint.path}?term=${encodeURIComponent(term)}&size=5`, {
+				method: 'GET',
+				signal: controller.signal
 			});
-
-			if (res.ok) {
-				searchData.result = await res.json();
-			} else {
-				searchData.result = { tags: [] };
-			}
-		} else if (type === 'Post') {
-			const res = await fetch(`/api/posts?term=${encodeURI(term)}&size=5`, {
-				method: 'GET'
-			});
-
-			if (res.ok) {
-				searchData.result = await res.json();
-			} else {
-				searchData.result = { posts: [] };
-			}
+			if (epoch !== searchEpoch) return;
+			searchData.result = res.ok ? await res.json() : endpoint.empty;
+		} catch (error) {
+			if (epoch !== searchEpoch || controller.signal.aborted) return;
+			searchData.result = endpoint.empty;
 		}
-		searchData.status = 'fetched';
-	};
-	const routes = [
-		[HomeButton, 'Home', '/', ''],
-		[BlogButton, 'Posts', '/posts', 'posts'],
-		[ProjectButton, 'Projects', '/projects', 'projects'],
-		[AboutButton, 'About', '/about', 'about'],
-		[SeriesButton, 'Series', '/series', 'series'],
-		[DashboardButton, 'Dashboard', '/dashboard', 'dashboard', true]
-	];
 
+		if (epoch === searchEpoch) searchData.status = 'fetched';
+	};
+
+	const searchResultLinks = (container) => [...(container?.querySelectorAll('a[href]') ?? [])];
+
+	const handleSearchInputKeydown = (event) => {
+		if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+		if (searchData.status !== 'fetched') return;
+		const links = searchResultLinks(menuToggled ? menuSearchContainer : mainSearchContainer);
+		if (links.length === 0) return;
+		event.preventDefault();
+		links[event.key === 'ArrowDown' ? 0 : links.length - 1].focus();
+	};
+
+	const handleSearchResultsKeydown = (event) => {
+		if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+		const links = searchResultLinks(event.currentTarget);
+		if (links.length === 0) return;
+		event.preventDefault();
+		const current = links.indexOf(document.activeElement);
+		const delta = event.key === 'ArrowDown' ? 1 : -1;
+		const next = current === -1 ? 0 : (current + delta + links.length) % links.length;
+		links[next].focus();
+	};
 	let mounted = $state();
 	onMount(() => {
 		mounted = true;
@@ -155,10 +204,12 @@
 	});
 
 	afterNavigate(() => {
-		menuToggled = false;
+		closeMenu();
 		searchData._term = '';
 	});
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <header class="site-header fixed w-full bg-white text-dark z-100 shadow-lg">
 	<div class="z-10 flex not-lg:justify-center w-cap-2 p-2 lg:p-4 gap-4">
@@ -182,7 +233,7 @@
 								{#if mounted}
 									<path
 										in:draw={{
-											duration: 700,
+											duration: reducedMotion ? 0 : 700,
 											easing: (t) => {
 												const mid = 0.48;
 												if (t < mid) {
@@ -224,6 +275,7 @@
 						placeholder="Search"
 						autocomplete="off"
 						bind:value={searchData._term}
+						onkeydown={handleSearchInputKeydown}
 					/>
 					<button
 						title="close-btn"
@@ -344,7 +396,11 @@
 		{/if}
 		<button
 			type="button"
-			aria-label="Open Mobile Menu"
+			class="flex h-11 w-11 -mr-2.5 items-center justify-center"
+			aria-label={menuToggled ? 'Close mobile menu' : 'Open mobile menu'}
+			aria-expanded={menuToggled}
+			aria-controls="mobile-menu"
+			bind:this={menuButton}
 			onclick={() => (menuToggled = !menuToggled)}
 		>
 			<svg
@@ -379,15 +435,21 @@
 	<PBody visible={menuToggled}>
 		<button
 			class="full cursor-default!"
-			onclick={() => (menuToggled = false)}
+			aria-label="Close menu"
+			onclick={() => closeMenu({ restoreFocus: true })}
 			title="close-menu-overlay"
 		></button>
 	</PBody>
 	{#if menuToggled}
 		<div
-			in:fly={{ y: -10, duration: 100 }}
+			in:fly={{ y: reducedMotion ? 0 : -10, duration: reducedMotion ? 0 : 100 }}
 			id="mobile-menu"
-			class="z-9 absolute flex flex-col gap-4 items-center w-cap bg-white py-4 rounded-b-lg shadow-lg max-h-[calc(100dvh-4rem)] overflow-y-auto custom-scrollbar"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Site menu"
+			tabindex="-1"
+			bind:this={mobileMenu}
+			class="z-9 absolute flex flex-col gap-4 items-center w-cap bg-white py-4 rounded-b-lg shadow-lg max-h-[calc(100dvh-4rem)] overflow-y-auto custom-scrollbar outline-none"
 		>
 			{#if displayName && username}
 				<div class="flex not-sm:flex-col items-center gap-2">
@@ -423,7 +485,7 @@
 					class="flex w-full max-w-80 flex-col items-center gap-2 sm:w-fit sm:max-w-none sm:flex-row sm:gap-3"
 				>
 					<div class="duo-btn w-full sm:w-fit" data-duo-color="primary">
-						<a class="no-underline!" href={loginHref} onclick={() => (menuToggled = false)}>
+						<a class="no-underline!" href={loginHref} onclick={() => closeMenu()}>
 							<span class="flex items-center justify-center gap-1.5">
 								log in
 								<svg class="fill-white h-6 w-6 shrink-0" viewBox="0 0 24 24">
@@ -436,7 +498,7 @@
 					</div>
 					<span class="text-dark">or</span>
 					<div class="duo-btn w-full sm:w-fit" data-duo-color="primary">
-						<a class="no-underline!" href={registerHref} onclick={() => (menuToggled = false)}>
+						<a class="no-underline!" href={registerHref} onclick={() => closeMenu()}>
 							<span class="flex items-center justify-center gap-1.5">
 								<svg class="fill-white h-6 w-6 shrink-0" viewBox="0 0 24 24">
 									<path
@@ -463,6 +525,7 @@
 								placeholder="Search"
 								autocomplete="off"
 								bind:value={searchData._term}
+								onkeydown={handleSearchInputKeydown}
 							/>
 							<button
 								title="close-btn"
@@ -512,12 +575,17 @@
 				</div>
 				<div class="w-full md:w-1/2 flex not-md:flex-col justify-evenly">
 					<ul class="space-y-2 bg-white p-2 rounded-xl" id="side-bar">
-						{#each routes as [Icon, text, path, routeName, secret], index}
-							{#if !secret || authState.isMod}
+						{#each publicNavItems as item (item.path)}
+							{#if !item.secret || authState.isMod}
+								{@const Icon = item.icon}
 								<li>
-									<a class="flex items-center gap-2 stroke-dark fill-dark" href={path}>
+									<a
+										class="flex items-center gap-2 stroke-dark fill-dark"
+										href={item.path}
+										aria-current={item.route === currentRoute ? 'page' : undefined}
+									>
 										<Icon class="w-6 transition-all duration-100" />
-										<span>{text}</span>
+										<span>{item.label}</span>
 									</a>
 								</li>
 							{/if}
@@ -576,9 +644,10 @@
 {#if searchData.status !== 'init'}
 	<Portal target={menuToggled ? menuSearchContainer : mainSearchContainer}>
 		<div
-			in:fly={{ y: -10, duration: 200 }}
-			out:fly={{ y: 10, duration: 200 }}
+			in:fly={{ y: reducedMotion ? 0 : -10, duration: reducedMotion ? 0 : 200 }}
+			out:fly={{ y: reducedMotion ? 0 : 10, duration: reducedMotion ? 0 : 200 }}
 			class="w-full h-fit bg-white rounded-b-xl px-2 pb-2 lg:p-4"
+			onkeydown={handleSearchResultsKeydown}
 		>
 			{#if searchData.status === 'fetching' || searchData.status === 'typing'}
 				<span>Loading</span>

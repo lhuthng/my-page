@@ -1,12 +1,11 @@
-import MarkdownIt from 'markdown-it';
 import { codeHighlightLazyPlugin } from '$lib/custom-rules/plugins/code-highlight-lazy.js';
-import { mentionProfilePlugin, kaomojiPlugin } from '$lib/custom-rules';
+import { createCommentMarkdown } from './markdown.js';
 
 export function createCommentSyntaxEngine({ mentionDictionary, plugins }) {
-	const markdown = new MarkdownIt()
-		.use(codeHighlightLazyPlugin)
-		.use(mentionProfilePlugin, { mentionDictionary })
-		.use(kaomojiPlugin);
+	const markdown = createCommentMarkdown({
+		mentionDictionary,
+		highlightPlugin: codeHighlightLazyPlugin
+	});
 
 	const pluginMap = new Map(plugins.map((plugin) => [plugin.key, plugin]));
 	const pluginsByType = new Map();

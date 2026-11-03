@@ -1,8 +1,9 @@
 import { fixClientRoute, route } from '$lib/server/proxy.js';
 import { CHAPTER_WINDOW } from '$lib/players/chapter-windows.js';
+import { isVietnameseTranslation } from '$lib/utils/audiobook-tags.js';
 import { error } from '@sveltejs/kit';
 
-export async function load({ fetch, params, setHeaders }) {
+export async function load({ fetch, params, setHeaders, locals }) {
 	// One window of chapters, not the whole book. The player asks for the rest
 	// as the reader reaches them — and for the window a saved position sits in —
 	// so this page stays cheap however long the book is. `track_count` comes
@@ -34,5 +35,8 @@ export async function load({ fetch, params, setHeaders }) {
 		track.url = fixClientRoute(track.url);
 	}
 
-	return { audiobook };
+	const lang = isVietnameseTranslation(audiobook) ? 'vi' : 'en';
+	locals.lang = lang;
+
+	return { audiobook, lang };
 }

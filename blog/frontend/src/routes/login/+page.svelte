@@ -258,7 +258,7 @@
 					/>
 					<button
 						type="button"
-						class="absolute top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer disabled:cursor-not-allowed"
+						class="absolute top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer disabled:cursor-not-allowed after:absolute after:-inset-3 after:content-['']"
 						class:right-20={isLogging}
 						class:right-2={!isLogging}
 						aria-pressed={showPassword}
@@ -291,7 +291,7 @@
 						/>
 						<button
 							type="button"
-							class="absolute right-2 top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer"
+							class="absolute right-2 top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer after:absolute after:-inset-3 after:content-['']"
 							aria-pressed={showRepassword}
 							onclick={() => (showRepassword = !showRepassword)}
 						>

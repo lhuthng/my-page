@@ -34,6 +34,12 @@
 		win.width = innerWidth.current;
 	});
 
+	// Keep the document language in step with the page on client-side
+	// navigation; the server sets it for the initial response.
+	$effect(() => {
+		document.documentElement.lang = $page.data.lang ?? 'en';
+	});
+
 	$effect(() => {
 		if (data?.accessToken?.token) {
 			saveLogin({
@@ -98,8 +104,9 @@
 <div class="fixed w-dvw h-dvh pointer-events-none z-11" bind:this={mDiv}></div>
 <div class="shell relative flex flex-col min-h-screen z-10" bind:this={shell}>
 	<div class="absolute pointer-events-none inset-0 z-50" bind:this={pDiv}></div>
+	<a class="skip-link" href="#main-content">Skip to content</a>
 	<Header />
-	<main class="grow" bind:this={scrollTarget}>
+	<main id="main-content" tabindex="-1" class="grow outline-none" bind:this={scrollTarget}>
 		<div class="relative flex gap-2 lg:gap-4 w-cap">
 			{#if route === 'dashboard'}
 				<!-- The +layout.server.js guard already limits /dashboard to mods+ -->
@@ -141,5 +148,13 @@
 	main {
 		@apply flex bg-background text-dark;
 		padding-top: var(--content-top);
+	}
+
+	.skip-link {
+		@apply fixed top-2 left-2 z-200 -translate-y-20 rounded-lg bg-white px-4 py-2 font-semibold text-dark shadow-lg transition-transform;
+	}
+
+	.skip-link:focus {
+		@apply translate-y-0;
 	}
 </style>

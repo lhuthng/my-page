@@ -18,6 +18,7 @@ import {
 	normalizeAvatarUrl
 } from '../model/view.js';
 import { createCommentSyntaxEngine } from '../syntax/engine.js';
+import { extractMentionUsernames } from '../syntax/markdown.js';
 import { createMentionPlugin } from '../syntax/plugins/mention.js';
 import { createKaomojiCommandPlugin } from '../syntax/plugins/command-kaomoji.js';
 import { createGifCommandPlugin, buildGifMarkdown } from '../syntax/plugins/command-gif.js';
@@ -201,17 +202,6 @@ export function createCommentSectionViewModel({
 			mentionDictionary[username] = profile;
 		}
 		return profile;
-	}
-
-	function extractMentionUsernames(value) {
-		if (!value) return [];
-		const usernames = new Set();
-		const scan = /(^|[\s(>])@([A-Za-z0-9_-]{3,32})\b/g;
-		let match;
-		while ((match = scan.exec(value)) !== null) {
-			if (match[2]) usernames.add(match[2]);
-		}
-		return [...usernames];
 	}
 
 	async function hydrateMentionDictionary(contents) {
