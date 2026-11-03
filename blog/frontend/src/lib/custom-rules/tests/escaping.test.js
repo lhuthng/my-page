@@ -65,7 +65,12 @@ test('youtube rejects ids outside its charset', () => {
 	assert.match(render(':::youtube not/an/id'), /Invalid YouTube video id/);
 });
 
-test('iframe still requires an http(s) source', () => {
-	assert.match(render(':::iframe javascript:alert(1)'), /Invalid iframe source/);
-	assert.match(render(':::iframe https://example.com'), /src="https:\/\/example\.com"/);
+test('iframe only frames allowlisted https origins', () => {
+	assert.match(render(':::iframe javascript:alert(1)'), /Embedded preview blocked/);
+	assert.match(render(':::iframe https://example.com'), /Embedded preview blocked/);
+	assert.match(render(':::iframe http://synrecordia.site/compact'), /Embedded preview blocked/);
+
+	const allowed = render(':::iframe https://synrecordia.site/compact');
+	assert.match(allowed, /src="https:\/\/synrecordia\.site\/compact"/);
+	assert.match(allowed, /sandbox="[^"]*allow-scripts/);
 });

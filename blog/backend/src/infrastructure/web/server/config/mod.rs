@@ -4,4 +4,5 @@ pub mod database;
 pub mod mail;
 pub mod media;
 pub mod project_demo;
+pub mod security;
 pub mod storage;

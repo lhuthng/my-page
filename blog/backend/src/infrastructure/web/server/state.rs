@@ -9,9 +9,11 @@ use crate::infrastructure::{persistence, storage::ObjectStore};
 pub use super::config::mail::{MailConfig, MailTransportConfig};
 pub use super::config::media::{AudioReadMode, AudioStore, MediaConfig};
 pub use super::config::project_demo::ProjectDemoConfig;
+pub use super::config::security::SecurityConfig;
 
 pub struct AppConfig {
     pub auth: AuthConfig,
+    pub security: SecurityConfig,
     pub mail: Option<MailConfig>,
     pub app_base_url: String,
     pub database_source: DatabaseSource,
@@ -27,6 +29,10 @@ pub struct AppState {
     pub media_config: MediaConfig,
     pub project_demo_config: ProjectDemoConfig,
     pub storage: ObjectStore,
+    /// Shared client for outbound calls (Turnstile siteverify).
+    pub http_client: reqwest::Client,
+    /// Fixed-window limits for the public auth endpoints.
+    pub auth_rate_limiter: crate::infrastructure::web::api::security::RateLimiter,
     pub analytics_service: persistence::analytics::AnalyticsServiceImpl,
     pub auth_service: persistence::auth::AuthServiceImpl,
     pub user_service: persistence::user::UserServiceImpl,
@@ -56,6 +62,7 @@ impl AppConfig {
     pub fn from_env() -> Self {
         Self {
             auth: super::config::auth::from_env(),
+            security: SecurityConfig::from_env(),
             mail: super::config::mail::MailConfig::from_env(),
             app_base_url: std::env::var("APP_BASE_URL")
                 .unwrap_or_else(|_| "http://localhost:5000".to_string()),

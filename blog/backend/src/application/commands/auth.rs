@@ -2,6 +2,10 @@
 pub struct LoginCommand {
     pub username: String,
     pub password: String,
+    /// Keeps the refresh cookie across browser restarts and extends the
+    /// server-side session window.
+    #[serde(default)]
+    pub remember: bool,
 }
 
 #[derive(serde::Deserialize)]

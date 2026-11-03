@@ -3,4 +3,5 @@ pub mod layers;
 pub mod middlewares;
 pub mod router;
 pub mod secrets;
+pub mod security;
 pub mod support;

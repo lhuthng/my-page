@@ -706,6 +706,7 @@ dependencies = [
  "base64",
  "bcrypt",
  "chrono",
+ "cookie",
  "dotenvy",
  "futures",
  "glob",

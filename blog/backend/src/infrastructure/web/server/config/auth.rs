@@ -50,10 +50,18 @@ pub fn from_env() -> AuthConfig {
         .parse::<i64>()
         .expect("REFRESH_JWT_EXP_HOURS must be an integer");
 
+    // Only "remember me" logins reach this horizon; a plain login keeps the
+    // session cookie (browser lifetime) and the shorter refresh window.
+    let remember_expire_hours = std::env::var("REMEMBER_ME_EXP_HOURS")
+        .unwrap_or_else(|_| "2160".to_string())
+        .parse::<i64>()
+        .expect("REMEMBER_ME_EXP_HOURS must be an integer");
+
     AuthConfig::new(
         Algorithm::HS256,
         jwt_secret,
         access_expire_hours,
         refresh_expire_hours,
+        remember_expire_hours,
     )
 }

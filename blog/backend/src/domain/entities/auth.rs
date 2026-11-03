@@ -60,6 +60,7 @@ pub struct AuthConfig {
     pub decoding_key: DecodingKey,
     pub access_expire_hours: i64,
     pub refresh_expire_hours: i64,
+    pub remember_expire_hours: i64,
 }
 
 static RE_USERNAME: LazyLock<Regex> =
@@ -93,6 +94,7 @@ impl AuthConfig {
         jwt_key: Vec<u8>,
         access_expire_hours: i64,
         refresh_expire_hours: i64,
+        remember_expire_hours: i64,
     ) -> Self {
         Self {
             algorithm,
@@ -101,6 +103,7 @@ impl AuthConfig {
             decoding_key: DecodingKey::from_secret(&jwt_key),
             access_expire_hours,
             refresh_expire_hours,
+            remember_expire_hours,
         }
     }
 }

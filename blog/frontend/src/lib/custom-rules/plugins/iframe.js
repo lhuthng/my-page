@@ -1,3 +1,5 @@
+import { isAllowedEmbed } from '../embed-origins.js';
+
 export function iframeBlockPlugin(md) {
 	md.block.ruler.before('fence', 'iframe', (state, startLine, endLine, silent) => {
 		const pos = state.bMarks[startLine] + state.tShift[startLine];
@@ -24,8 +26,8 @@ export function iframeBlockPlugin(md) {
 	md.renderer.rules.iframe_block = (tokens, idx) => {
 		const { src, width, height } = tokens[idx].meta;
 
-		if (!src.startsWith('http://') && !src.startsWith('https://')) {
-			return `<p class="text-red-500">Invalid iframe source:</p>`;
+		if (!isAllowedEmbed(src)) {
+			return `<p class="text-red-500">Embedded preview blocked: this host is not allowed.</p>`;
 		}
 
 		const escapedSrc = md.utils.escapeHtml(String(src));
@@ -40,6 +42,8 @@ export function iframeBlockPlugin(md) {
           height="${md.utils.escapeHtml(String(height))}"
           frameborder="0"
           class="w-full"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-presentation"
+          referrerpolicy="strict-origin-when-cross-origin"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowfullscreen
           loading="lazy">

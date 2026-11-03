@@ -1,11 +1,16 @@
 import { fixClientRoute, proxyFallback, route } from '$lib/server/proxy.js';
+import { checkAuthLimit, clientHeaders } from '$lib/server/auth-guards.js';
 
-export async function POST({ request, fetch }) {
+export async function POST({ request, fetch, getClientAddress }) {
+	const limited = checkAuthLimit('login', getClientAddress);
+	if (limited) return limited;
+
 	let res = await proxyFallback({
 		request,
 		params: {
 			path: 'auth/login'
-		}
+		},
+		extraHeaders: clientHeaders(getClientAddress)
 	});
 
 	if (!res.ok) {

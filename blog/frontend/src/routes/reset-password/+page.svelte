@@ -60,6 +60,7 @@
 					<input
 						class="w-full py-1.5 pr-10"
 						placeholder="New password"
+						name="password"
 						type={showPassword ? 'text' : 'password'}
 						autocomplete="new-password"
 						bind:value={password}
@@ -71,7 +72,6 @@
 						aria-pressed={showPassword}
 						disabled={changed}
 						onclick={() => (showPassword = !showPassword)}
-						tabindex="-1"
 					>
 						<Eye class="h-5 w-5" slashed={showPassword} />
 						<span class="sr-only">{showPassword ? 'Hide password' : 'Show password'}</span>
@@ -81,6 +81,7 @@
 					<input
 						class="w-full py-1.5 pr-10"
 						placeholder="Re-password"
+						name="repassword"
 						type={showRepassword ? 'text' : 'password'}
 						autocomplete="new-password"
 						bind:value={repassword}
@@ -103,6 +104,7 @@
 			{#if message}
 				<p
 					in:fly
+					role="alert"
 					class="text-center"
 					class:text-accent-green={status}
 					class:text-accent-red={!status}

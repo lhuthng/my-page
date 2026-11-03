@@ -26,6 +26,7 @@
 	let email = $state('');
 	let showPassword = $state(false);
 	let showRepassword = $state(false);
+	let remember = $state(false);
 	let pending = $state(false);
 	let status = $state(true);
 	let message = $state('');
@@ -64,16 +65,24 @@
 
 	async function handleLogin(e) {
 		e.preventDefault();
-		message = '';
 		resendMessage = '';
 		verificationNeeded = false;
+		if (captchaRequired && !turnstileToken) {
+			status = false;
+			message = 'Please complete the captcha first.';
+			return;
+		}
+		message = '';
 		pending = true;
-		const res = await login(username, password);
+		const res = await login(username, password, { remember, captchaToken: turnstileToken });
 		pending = false;
+		resetTurnstile();
 		if (!res.status) {
 			status = false;
 			message = res.message;
-			verificationNeeded = res.message.toLowerCase().includes('email not verified');
+			// 403 is the backend's "credentials are right, email is not
+			// verified" status; captcha failures answer 400.
+			verificationNeeded = res.httpStatus === 403;
 			if (verificationNeeded) {
 				verificationIdentifier = username.trim();
 			}
@@ -92,10 +101,16 @@
 			message = 'repassword does not match.';
 			return;
 		}
+		if (captchaRequired && !turnstileToken) {
+			status = false;
+			message = 'Please complete the captcha first.';
+			return;
+		}
 		message = '';
 		pending = true;
-		const res = await register(username, password, email);
+		const res = await register(username, password, email, turnstileToken);
 		pending = false;
+		resetTurnstile();
 		if (!res.status) {
 			status = false;
 			registered = false;
@@ -130,10 +145,16 @@
 	}
 
 	async function handleForgotPassword() {
+		if (captchaRequired && !turnstileToken) {
+			forgotStatus = false;
+			forgotMessage = 'Please complete the captcha first.';
+			return;
+		}
 		forgotMessage = '';
 		forgotPending = true;
-		const res = await requestPasswordReset(forgotUsername, forgotEmail);
+		const res = await requestPasswordReset(forgotUsername, forgotEmail, turnstileToken);
 		forgotPending = false;
+		resetTurnstile();
 		forgotStatus = res.status;
 		forgotMessage = res.message;
 	}
@@ -167,12 +188,6 @@
 	$effect(() => {
 		isLogging;
 		resendMessage = '';
-	});
-
-	$effect(() => {
-		if (verificationNeeded) {
-			loadTurnstile();
-		}
 	});
 
 	$effect(() => {
@@ -241,7 +256,10 @@
 					<input
 						class="py-1.5 w-full"
 						placeholder="Username"
+						name="username"
 						autocomplete="username"
+						autocapitalize="none"
+						spellcheck="false"
 						bind:value={username}
 						disabled={isLogged && isLogging}
 					/>
@@ -252,7 +270,9 @@
 						class:pr-28={isLogging}
 						class:pr-10={!isLogging}
 						placeholder="Password"
+						name="password"
 						type={showPassword ? 'text' : 'password'}
+						autocomplete={isLogging ? 'current-password' : 'new-password'}
 						bind:value={password}
 						disabled={isLogged && isLogging}
 					/>
@@ -264,7 +284,6 @@
 						aria-pressed={showPassword}
 						disabled={isLogged && isLogging}
 						onclick={() => (showPassword = !showPassword)}
-						tabindex="-1"
 					>
 						<Eye class="h-5 w-5" slashed={showPassword} />
 						<span class="sr-only">{showPassword ? 'Hide password' : 'Show password'}</span>
@@ -275,7 +294,6 @@
 							class="absolute right-2 top-1/2 -translate-y-1/2 text-primary/80 hover:text-dark cursor-pointer"
 							disabled={isLogged}
 							onclick={toggleForgotPassword}
-							tabindex="-1"
 						>
 							forgot?
 						</button>
@@ -286,7 +304,9 @@
 						<input
 							class="grow py-1.5 pr-10"
 							placeholder="Re-password"
+							name="repassword"
 							type={showRepassword ? 'text' : 'password'}
+							autocomplete="new-password"
 							bind:value={repassword}
 						/>
 						<button
@@ -302,10 +322,25 @@
 						</button>
 					</div>
 					<div class="flex px-2" in:fly={{ x: 10 }}>
-						<input class="grow py-1.5" placeholder="Email" type="email" bind:value={email} />
+						<input
+							class="grow py-1.5"
+							placeholder="Email"
+							name="email"
+							type="email"
+							autocomplete="email"
+							autocapitalize="none"
+							spellcheck="false"
+							bind:value={email}
+						/>
 					</div>
 				{/if}
 			</div>
+			{#if isLogging}
+				<label class="flex w-full items-center gap-3 text-lg text-dark/80">
+					<input type="checkbox" class="h-5 w-5 accent-primary" bind:checked={remember} />
+					<span>Keep me signed in</span>
+				</label>
+			{/if}
 			{#if isLogging && forgotOpen}
 				<div
 					in:fly
@@ -347,6 +382,7 @@
 					</div>
 					{#if forgotMessage}
 						<p
+							role="alert"
 							class="mt-2 text-center"
 							class:text-accent-green={forgotStatus}
 							class:text-accent-red={!forgotStatus}
@@ -358,13 +394,28 @@
 			{/if}
 			{#if message}
 				<div class="w-full">
-					<span class="text-right" class:text-accent-red={!status} class:text-accent-green={status}>
+					<span
+						role="alert"
+						class="text-right"
+						class:text-accent-red={!status}
+						class:text-accent-green={status}
+					>
 						*{message}
 					</span>
 				</div>
 			{/if}
+			{#if captchaRequired}
+				<div class="w-full" bind:this={turnstileHost}></div>
+				{#if !turnstileSiteKey}
+					<p class="w-full text-center text-accent-red">Captcha is not configured yet.</p>
+				{/if}
+			{/if}
 			<div class="w-full duo-btn" data-duo-color="primary">
-				<button class="w-full" type="submit" disabled={pending || (isLogging && isLogged)}>
+				<button
+					class="w-full"
+					type="submit"
+					disabled={pending || (isLogging && isLogged) || (captchaRequired && !turnstileToken)}
+				>
 					{#if isLogging}
 						Log In
 					{:else}
@@ -381,24 +432,19 @@
 						Your account is waiting for an email check. I sent a fresh link if the old one got lost
 						in the mailbox fog.
 					</p>
-					{#if captchaRequired}
-						<div class="mt-3" bind:this={turnstileHost}></div>
-					{/if}
 					<div class="mt-3 duo-btn" data-duo-color="blue">
 						<button
 							type="button"
 							class="w-full"
-							disabled={resendPending || (captchaRequired && !turnstileSiteKey)}
+							disabled={resendPending || (captchaRequired && !turnstileToken)}
 							onclick={handleResendVerification}
 						>
 							{resendPending ? 'Sending...' : 'Send Fresh Link'}
 						</button>
 					</div>
-					{#if captchaRequired && !turnstileSiteKey}
-						<p class="mt-2 text-center text-accent-red">Captcha is not configured yet.</p>
-					{/if}
 					{#if resendMessage}
 						<p
+							role="alert"
 							class="mt-2 text-center"
 							class:text-accent-green={resendStatus}
 							class:text-accent-red={!resendStatus}

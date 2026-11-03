@@ -44,7 +44,7 @@ export function auth() {
 	return authState.auth();
 }
 
-export async function login(username, password) {
+export async function login(username, password, { remember = false, captchaToken } = {}) {
 	let res = await fetch('/api/auth/login', {
 		method: 'POST',
 		headers: {
@@ -52,7 +52,9 @@ export async function login(username, password) {
 		},
 		body: JSON.stringify({
 			username,
-			password
+			password,
+			remember,
+			captchaToken
 		})
 	});
 
@@ -60,6 +62,7 @@ export async function login(username, password) {
 		authState.clearLogin();
 		return {
 			status: false,
+			httpStatus: res.status,
 			message: await res.text()
 		};
 	}
@@ -84,7 +87,7 @@ export async function logout() {
 	authState.clearLogin();
 }
 
-export async function register(username, password, email) {
+export async function register(username, password, email, captchaToken) {
 	const res = await fetch('/api/auth/register', {
 		method: 'POST',
 		headers: {
@@ -93,14 +96,16 @@ export async function register(username, password, email) {
 		body: JSON.stringify({
 			username,
 			password,
-			email
+			email,
+			captchaToken
 		})
 	});
 
 	if (!res.ok) {
 		return {
 			status: false,
-			message: await res.text()
+			httpStatus: res.status,
+			message: await readMessage(res)
 		};
 	}
 
@@ -108,6 +113,15 @@ export async function register(username, password, email) {
 		status: true,
 		success: await res.json()
 	};
+}
+
+async function readMessage(res) {
+	const text = await res.text();
+	try {
+		return JSON.parse(text).message ?? 'Request failed.';
+	} catch {
+		return text || 'Request failed.';
+	}
 }
 
 export async function resendVerification(identifier, captchaToken) {
@@ -135,13 +149,13 @@ export async function resendVerification(identifier, captchaToken) {
 	};
 }
 
-export async function requestPasswordReset(username, email) {
+export async function requestPasswordReset(username, email, captchaToken) {
 	const res = await fetch('/api/auth/forgot-password', {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
 		},
-		body: JSON.stringify({ username, email })
+		body: JSON.stringify({ username, email, captchaToken })
 	});
 
 	let payload;

@@ -1,4 +1,5 @@
 import adapter from 'svelte-adapter-bun';
+import { FRAME_ORIGINS } from './src/lib/custom-rules/embed-origins.js';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -18,7 +19,13 @@ const config = {
 			mode: 'hash',
 			directives: {
 				'script-src': ['self', 'https://challenges.cloudflare.com'],
-				'worker-src': ['self', 'blob:', 'https://challenges.cloudflare.com']
+				'worker-src': ['self', 'blob:', 'https://challenges.cloudflare.com'],
+				// Frames are limited to the players and demo hosts the site
+				// actually uses; the markdown plugin enforces the same list.
+				'frame-src': ['self', ...FRAME_ORIGINS],
+				'object-src': ['none'],
+				'base-uri': ['self'],
+				'form-action': ['self']
 			}
 		}
 	}

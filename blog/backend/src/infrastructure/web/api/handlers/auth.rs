@@ -1,12 +1,14 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::{
     Json,
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use cookie::time::Duration as CookieDuration;
 
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -14,8 +16,8 @@ use validator::Validate;
 use crate::{
     application::{
         commands::auth::{
-            LoginCommand, LogoutCommand, RefreshAccessTokenCommand, RegisterCommand,
-            RequestPasswordResetCommand, ResendVerificationCommand, ResetPasswordCommand,
+            LoginCommand, LogoutCommand, RefreshAccessTokenCommand, RequestPasswordResetCommand,
+            ResendVerificationCommand, ResetPasswordCommand,
             VerifyEmailCommand,
         },
         services::auth::AuthService,
@@ -28,9 +30,62 @@ use crate::{
     },
     infrastructure::{
         mail::{send_password_reset_email, send_verification_email},
-        web::server::AppState,
+        web::{api::security, server::AppState},
     },
 };
+
+const LOGIN_IP_LIMIT: (usize, Duration) = (10, Duration::from_secs(10 * 60));
+const LOGIN_IDENTIFIER_LIMIT: (usize, Duration) = (5, Duration::from_secs(15 * 60));
+const REGISTER_IP_LIMIT: (usize, Duration) = (5, Duration::from_secs(60 * 60));
+const REGISTER_IDENTIFIER_LIMIT: (usize, Duration) = (3, Duration::from_secs(60 * 60));
+const RESEND_IP_LIMIT: (usize, Duration) = (5, Duration::from_secs(10 * 60));
+const RESEND_IDENTIFIER_LIMIT: (usize, Duration) = (3, Duration::from_secs(10 * 60));
+const FORGOT_IP_LIMIT: (usize, Duration) = (5, Duration::from_secs(60 * 60));
+const FORGOT_IDENTIFIER_LIMIT: (usize, Duration) = (3, Duration::from_secs(60 * 60));
+const RESET_IP_LIMIT: (usize, Duration) = (10, Duration::from_secs(60 * 60));
+const RESET_TOKEN_LIMIT: (usize, Duration) = (5, Duration::from_secs(60 * 60));
+const VERIFY_IP_LIMIT: (usize, Duration) = (20, Duration::from_secs(10 * 60));
+
+/// Verify the Turnstile token on this request. Development without a secret
+/// skips it; a release build without one fails closed.
+async fn verify_captcha(
+    state: &AppState,
+    headers: &HeaderMap,
+    token: Option<&str>,
+) -> Result<(), AuthError> {
+    let remote_ip = security::client_ip(headers);
+    security::verify_turnstile(
+        &state.http_client,
+        state.config.security.turnstile_secret.as_deref(),
+        remote_ip.as_deref(),
+        token,
+    )
+    .await
+}
+
+fn enforce(
+    state: &AppState,
+    key: String,
+    (max_requests, window): (usize, Duration),
+) -> Result<(), AuthError> {
+    state.auth_rate_limiter.check(&key, max_requests, window)
+}
+
+/// A persistent cookie only when "remember me" was chosen; otherwise the
+/// cookie is a session cookie and dies with the browser.
+fn refresh_cookie(token: String, max_age: Option<CookieDuration>) -> Cookie<'static> {
+    let mut builder = Cookie::build(("refresh-token", token))
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::Lax)
+        .path("/");
+
+    if let Some(max_age) = max_age {
+        builder = builder.max_age(max_age);
+    }
+
+    builder.build()
+}
 
 #[derive(Debug, Serialize)]
 pub struct LoginResponse {
@@ -47,26 +102,48 @@ impl LoginResponse {
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct LoginPayload {
+    username: String,
+    password: String,
+    #[serde(default)]
+    remember: bool,
+    #[serde(default, alias = "captchaToken")]
+    captcha_token: Option<String>,
+}
+
 #[axum::debug_handler]
 pub async fn login(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
-    Json(payload): Json<LoginCommand>,
+    headers: HeaderMap,
+    Json(payload): Json<LoginPayload>,
 ) -> Result<impl IntoResponse, AuthError> {
+    verify_captcha(&state, &headers, payload.captcha_token.as_deref()).await?;
+
+    enforce(&state, security::client_key("login", &headers), LOGIN_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::identifier_key("login", &payload.username),
+        LOGIN_IDENTIFIER_LIMIT,
+    )?;
+
+    let remember = payload.remember;
+    let command = LoginCommand {
+        username: payload.username,
+        password: payload.password,
+        remember,
+    };
+
     match state
         .auth_service
-        .login(payload, state.config.auth.clone())
+        .login(command, state.config.auth.clone())
         .await
     {
         Ok(LoginResult::Authenticated(auth_tokens)) => {
-            let jar = jar.add(
-                Cookie::build(("refresh-token", auth_tokens.refresh_token))
-                    .http_only(true)
-                    .secure(true)
-                    .same_site(SameSite::Lax)
-                    .path("/")
-                    .build(),
-            );
+            let max_age = remember
+                .then(|| CookieDuration::hours(state.config.auth.remember_expire_hours));
+            let jar = jar.add(refresh_cookie(auth_tokens.refresh_token, max_age));
             let body = Json(LoginResponse::new(auth_tokens.access_token));
             Ok((jar, (StatusCode::OK, body)))
         }
@@ -107,11 +184,30 @@ pub struct VerifyEmailQuery {
     token: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RegisterPayload {
+    username: String,
+    password: String,
+    email: String,
+    #[serde(default, alias = "captchaToken")]
+    captcha_token: Option<String>,
+}
+
 #[axum::debug_handler]
 pub async fn register(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegisterCommand>,
+    headers: HeaderMap,
+    Json(payload): Json<RegisterPayload>,
 ) -> Result<Json<RegisterResponse>, AuthError> {
+    verify_captcha(&state, &headers, payload.captcha_token.as_deref()).await?;
+
+    enforce(&state, security::client_key("register", &headers), REGISTER_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::identifier_key("register", &payload.email),
+        REGISTER_IDENTIFIER_LIMIT,
+    )?;
+
     if payload.username == "me" {
         return Err(AuthError::Validation(
             "\"me\" cannot be a username".to_string(),
@@ -170,16 +266,11 @@ pub async fn refresh_token(
         .await
     {
         Ok(auth_tokens) => {
-            let jar = jar.add(
-                Cookie::build(("refresh-token", auth_tokens.refresh_token))
-                    .http_only(true)
-                    .secure(true)
-                    .same_site(SameSite::Lax)
-                    .path("/")
-                    .build(),
-            );
+            // The browser already holds this cookie with whatever Max-Age the
+            // login chose. Re-setting it here (without Max-Age) would turn a
+            // "remember me" cookie back into a session cookie on first refresh.
             let body = Json(LoginResponse::new(auth_tokens.access_token));
-            Ok((jar, (StatusCode::OK, body)))
+            Ok(body)
         }
         Err(e) => Err(e),
     }
@@ -209,8 +300,11 @@ pub async fn logout(
 #[axum::debug_handler]
 pub async fn verify_email(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(query): Query<VerifyEmailQuery>,
 ) -> Result<Json<VerifyEmailResponse>, AuthError> {
+    enforce(&state, security::client_key("verify", &headers), VERIFY_IP_LIMIT)?;
+
     state
         .auth_service
         .verify_email(VerifyEmailCommand { token: query.token })
@@ -224,13 +318,25 @@ pub async fn verify_email(
 #[derive(Debug, Deserialize)]
 pub struct ResendVerificationPayload {
     identifier: String,
+    #[serde(default, alias = "captchaToken")]
+    captcha_token: Option<String>,
 }
 
 #[axum::debug_handler]
 pub async fn resend_verification(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(payload): Json<ResendVerificationPayload>,
 ) -> Result<Json<VerifyEmailResponse>, AuthError> {
+    verify_captcha(&state, &headers, payload.captcha_token.as_deref()).await?;
+
+    enforce(&state, security::client_key("resend", &headers), RESEND_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::identifier_key("resend", &payload.identifier),
+        RESEND_IDENTIFIER_LIMIT,
+    )?;
+
     let result = state
         .auth_service
         .resend_verification(ResendVerificationCommand {
@@ -263,13 +369,25 @@ pub async fn resend_verification(
 pub struct RequestPasswordResetPayload {
     username: String,
     email: String,
+    #[serde(default, alias = "captchaToken")]
+    captcha_token: Option<String>,
 }
 
 #[axum::debug_handler]
 pub async fn request_password_reset(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(payload): Json<RequestPasswordResetPayload>,
 ) -> Result<Json<PasswordResetResponse>, AuthError> {
+    verify_captcha(&state, &headers, payload.captcha_token.as_deref()).await?;
+
+    enforce(&state, security::client_key("forgot", &headers), FORGOT_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::identifier_key("forgot", &format!("{}|{}", payload.username, payload.email)),
+        FORGOT_IDENTIFIER_LIMIT,
+    )?;
+
     let result = state
         .auth_service
         .request_password_reset(RequestPasswordResetCommand {
@@ -302,8 +420,16 @@ pub struct ResetPasswordPayload {
 #[axum::debug_handler]
 pub async fn reset_password(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(payload): Json<ResetPasswordPayload>,
 ) -> Result<Json<PasswordResetResponse>, AuthError> {
+    enforce(&state, security::client_key("reset", &headers), RESET_IP_LIMIT)?;
+    enforce(
+        &state,
+        security::identifier_key("reset", &payload.token),
+        RESET_TOKEN_LIMIT,
+    )?;
+
     state
         .auth_service
         .reset_password(ResetPasswordCommand {
@@ -334,4 +460,27 @@ pub fn routes(_state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/resend-verification", post(resend_verification))
         .route("/refresh", post(refresh_token))
         .route("/logout", post(logout))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_login_keeps_a_session_cookie() {
+        let cookie = refresh_cookie("token-value".to_string(), None).to_string();
+        assert!(cookie.starts_with("refresh-token=token-value"));
+        assert!(!cookie.contains("Max-Age"));
+    }
+
+    #[test]
+    fn remember_me_sets_a_persistent_cookie() {
+        let cookie =
+            refresh_cookie("token-value".to_string(), Some(CookieDuration::hours(2160)))
+                .to_string();
+        assert!(cookie.contains("Max-Age=7776000"));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("Secure"));
+        assert!(cookie.contains("SameSite=Lax"));
+    }
 }

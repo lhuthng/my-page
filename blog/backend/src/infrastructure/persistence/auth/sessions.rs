@@ -84,6 +84,12 @@ impl AuthServiceImpl {
         let access_token = access_token_res?;
         let (refresh_token, refresh_token_hash) = refresh_token_res;
 
+        let session_hours = if cmd.remember {
+            config.remember_expire_hours
+        } else {
+            config.refresh_expire_hours
+        };
+
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
@@ -99,7 +105,7 @@ impl AuthServiceImpl {
         )
         .bind(user_row.id)
         .bind(refresh_token_hash)
-        .bind((Utc::now() + Duration::hours(config.refresh_expire_hours)).to_rfc3339())
+        .bind((Utc::now() + Duration::hours(session_hours)).to_rfc3339())
         .execute(&mut *tx)
         .await?;
 
