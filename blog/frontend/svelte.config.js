@@ -15,10 +15,16 @@ const config = {
 		// than nonces keep a rendered page cacheable, and SvelteKit hashes its
 		// own bootstrap script. Turnstile is the only third-party script the
 		// site loads.
+		//
+		// `wasm-unsafe-eval` is required to compile WebAssembly at all; it is
+		// not the same as `unsafe-eval`. Without it the v86 player's main
+		// module is fetched, fails to compile, and falls back to a
+		// `v86-fallback.wasm` this repo does not ship, so the real error
+		// surfaces as a confusing 404 for the fallback file.
 		csp: {
 			mode: 'hash',
 			directives: {
-				'script-src': ['self', 'https://challenges.cloudflare.com'],
+				'script-src': ['self', 'wasm-unsafe-eval', 'https://challenges.cloudflare.com'],
 				'worker-src': ['self', 'blob:', 'https://challenges.cloudflare.com'],
 				// Frames are limited to the players and demo hosts the site
 				// actually uses; the markdown plugin enforces the same list.
