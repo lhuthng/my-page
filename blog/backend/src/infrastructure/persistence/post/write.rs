@@ -8,7 +8,9 @@ use crate::application::commands::post::{
 use crate::domain::errors::post::PostError;
 
 use super::PostServiceImpl;
-use super::links::{link_post_media, link_post_tags, resolve_tag_ids};
+use super::links::{
+    link_post_media, link_post_tags, record_slug_change, resolve_tag_ids, sync_content_links,
+};
 
 macro_rules! set_opt {
     ($fields:expr, $( ($str: expr, $opt:expr) ),* ) => {
@@ -70,6 +72,8 @@ impl PostServiceImpl {
         let tag_ids = resolve_tag_ids(&mut tx, &cmd.tags).await?;
         link_post_tags(&mut tx, post_id, &tag_ids).await?;
 
+        sync_content_links(&mut tx, post_id, &content).await?;
+
         tx.commit().await?;
         Ok(post_id)
     }
@@ -101,13 +105,14 @@ impl PostServiceImpl {
         // rather than an `AND user_id = ?` predicate on the UPDATE, because a
         // patch that only changes tags or media never reaches the UPDATE at all
         // and would otherwise skip the check entirely.
-        let current = sqlx::query_as::<_, (i64, Option<String>)>(
-            "SELECT user_id, updated_at FROM posts WHERE id = ?",
+        let current = sqlx::query_as::<_, (i64, Option<String>, String, String)>(
+            "SELECT user_id, updated_at, slug, content_kind FROM posts WHERE id = ?",
         )
         .bind(cmd.post_id)
         .fetch_optional(&mut *tx)
         .await?;
-        let (owner_id, current_updated_at) = current.ok_or(PostError::PostNotFound)?;
+        let (owner_id, current_updated_at, current_slug, content_kind) =
+            current.ok_or(PostError::PostNotFound)?;
         if let Some(required) = cmd.required_author_id
             && required != owner_id
         {
@@ -131,6 +136,11 @@ impl PostServiceImpl {
             .content
             .clone()
             .map(|text| crate::helper::reading_time::estimate_reading_time_minutes(&text));
+
+        // `bind_opt!` moves the optional strings into the query, so capture the
+        // values the link bookkeeping needs first.
+        let new_slug = cmd.slug.clone();
+        let new_content = cmd.content.clone();
 
         set_opt!(
             set_fields,
@@ -171,6 +181,12 @@ impl PostServiceImpl {
         query = query.bind(cmd.post_id);
 
         let new_updated_at: String = query.fetch_one(&mut *tx).await?;
+
+        if let Some(new_slug) = &new_slug {
+            record_slug_change(&mut tx, &content_kind, cmd.post_id, &current_slug, new_slug)
+                .await?;
+        }
+
         if let Some(media_usage) = &cmd.media_usage {
             sqlx::query("DELETE FROM post_media_usages WHERE post_id = ?")
                 .bind(cmd.post_id)
@@ -183,6 +199,24 @@ impl PostServiceImpl {
             let tag_ids = resolve_tag_ids(&mut tx, &tags).await?;
             link_post_tags(&mut tx, cmd.post_id, &tag_ids).await?;
         }
+
+        // A body patch or a media-usage patch invalidates the registry rows.
+        // With no body in the patch, reuse the stored one so media-only saves
+        // still refresh the media entries.
+        if new_content.is_some() || cmd.media_usage.is_some() {
+            let body = match &new_content {
+                Some(content) => content.clone(),
+                None => sqlx::query_scalar::<_, Option<String>>(
+                    "SELECT content FROM posts WHERE id = ?",
+                )
+                .bind(cmd.post_id)
+                .fetch_one(&mut *tx)
+                .await?
+                .unwrap_or_default(),
+            };
+            sync_content_links(&mut tx, cmd.post_id, &body).await?;
+        }
+
         tx.commit().await?;
         Ok(crate::helper::time::normalize_utc_timestamp(new_updated_at))
     }

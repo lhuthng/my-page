@@ -53,31 +53,11 @@ impl PostServiceImpl {
         .fetch_all(&self.pool)
         .await?;
 
-        let len = medium_usage_rows.len();
-
-        let mut medium_urls = vec![String::new(); len];
-
-        let len = len as i64;
-
-        for MediumUsageRow { code, url } in medium_usage_rows {
-            if code < 0 || code > len {
-                return Err(PostError::InternalError(
-                    "Out of range index found".to_string(),
-                ));
-            }
-
-            let index = code;
-
-            if index >= len {
-                return Err(PostError::InternalError(
-                    "Oversized insertion found".to_string(),
-                ));
-            }
-
-            let index = index as usize;
-
-            medium_urls[index] = url;
-        }
+        let medium_urls = crate::infrastructure::persistence::media::media_slots_by_code(
+            medium_usage_rows
+                .into_iter()
+                .map(|MediumUsageRow { code, url }| (code, url)),
+        );
 
         let tags: Vec<String> = sqlx::query_scalar(
             r#"
@@ -267,38 +247,17 @@ impl PostServiceImpl {
         .fetch_all(&self.pool)
         .await?;
 
-        let len = medium_usage_rows.len();
-
-        let mut medium_urls = vec![String::new(); len];
-        let mut medium_short_names = vec![String::new(); len];
-
-        let len = len as i64;
-
-        for MediumUsageWithNameRow {
-            code,
-            url,
-            short_name,
-        } in medium_usage_rows
-        {
-            if code < 0 || code > len {
-                return Err(PostError::InternalError(
-                    "Out of range index found".to_string(),
-                ));
-            }
-
-            let index = code;
-
-            if index >= len {
-                return Err(PostError::InternalError(
-                    "Oversized insertion found".to_string(),
-                ));
-            }
-
-            let index = index as usize;
-
-            medium_urls[index] = url;
-            medium_short_names[index] = short_name;
-        }
+        let slots = crate::infrastructure::persistence::media::media_slots_by_code(
+            medium_usage_rows.into_iter().map(
+                |MediumUsageWithNameRow {
+                     code,
+                     url,
+                     short_name,
+                 }| { (code, (url, short_name)) },
+            ),
+        );
+        let (medium_urls, medium_short_names): (Vec<String>, Vec<String>) =
+            slots.into_iter().unzip();
 
         let cover_url = post_row.cover_url;
         let cover_media_type = post_row.cover_media_type;

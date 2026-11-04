@@ -8,6 +8,20 @@ use crate::domain::errors::post::PostError;
 
 pub(super) static MENTION_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"@([A-Za-z0-9_-]+)").unwrap());
 
+/// Internal content link in a body: a site-relative or absolute URL whose path
+/// is `/<kind>/<slug>`. The optional absolute prefix lets the same scan catch
+/// both `[x](/posts/y)` and `[x](https://host/posts/y)`.
+pub(super) static CONTENT_LINK_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?:https?://[^\s)"'<>]+)?/(posts|projects|games|series)/([A-Za-z0-9_-]+)"#)
+        .unwrap()
+});
+
+/// `:::app <type> <slug>` embed of another content row. `lottie` and
+/// `glb-demo` are left out on purpose: they name media files, which the media
+/// scan already registers.
+pub(super) static APP_EMBED_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r":::app\s+(project|html|v86|jsdos|game)\s+([A-Za-z0-9_-]+)").unwrap());
+
 /// Usernames mentioned in a comment, deduplicated in first-seen order.
 pub(crate) fn mentioned_usernames(content: &str) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
@@ -157,5 +171,188 @@ pub(super) async fn link_post_media(
         query = query.bind(post_id).bind(medium_id).bind(code);
     }
     query.execute(&mut *tx).await?;
+    Ok(())
+}
+
+/// Rebuild the `content_links` rows for one post body.
+///
+/// Media entries come from the resolved `post_media_usages` join rather than
+/// from the `@[img:N]` tokens, so a token always maps to the id the renderer
+/// uses. Content links are resolved by slug at save time and store a snapshot
+/// of the target title and slug, which is what makes a reference survive a
+/// later rename or delete.
+pub(super) async fn sync_content_links(
+    tx: &mut sqlx::SqliteConnection,
+    post_id: i64,
+    content: &str,
+) -> Result<(), PostError> {
+    sqlx::query("DELETE FROM content_links WHERE source_post_id = ? AND field = 'body'")
+        .bind(post_id)
+        .execute(&mut *tx)
+        .await?;
+
+    let media = sqlx::query_as::<_, (i64, String)>(
+        r#"
+        SELECT u.medium_id, m.short_name
+        FROM post_media_usages u
+        JOIN media m ON m.id = u.medium_id
+        WHERE u.post_id = ?
+        "#,
+    )
+    .bind(post_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    for (medium_id, short_name) in media {
+        insert_content_link(
+            tx,
+            post_id,
+            &format!("media:{medium_id}"),
+            "media",
+            medium_id,
+            None,
+            Some(&short_name),
+        )
+        .await?;
+    }
+
+    for cap in CONTENT_LINK_RE.captures_iter(content) {
+        let path_kind = match &cap[1] {
+            "posts" => "post",
+            "projects" => "project",
+            "games" => "game",
+            _ => "series",
+        };
+        let slug = &cap[2];
+
+        if path_kind == "series" {
+            let series =
+                sqlx::query_as::<_, (i64, String)>("SELECT id, title FROM series WHERE slug = ?")
+                    .bind(slug)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            if let Some((series_id, title)) = series {
+                insert_content_link(
+                    tx,
+                    post_id,
+                    &format!("series:{series_id}"),
+                    "series",
+                    series_id,
+                    Some(&title),
+                    Some(slug),
+                )
+                .await?;
+            }
+            continue;
+        }
+
+        link_post_target(tx, post_id, path_kind, slug).await?;
+    }
+
+    for cap in APP_EMBED_RE.captures_iter(content) {
+        let target_kind = if &cap[1] == "game" { "game" } else { "project" };
+        link_post_target(tx, post_id, target_kind, &cap[2]).await?;
+    }
+
+    Ok(())
+}
+
+/// Resolve a slug to the content row of `target_kind` and record the link. The
+/// same `content:{id}` key is used for markdown links and app embeds, so a body
+/// that both links and embeds one project stores a single row.
+///
+/// A slug is globally unique on `posts`, but the kind in the URL still has to
+/// match the row: `/posts/x` must not link a project named `x`.
+async fn link_post_target(
+    tx: &mut sqlx::SqliteConnection,
+    post_id: i64,
+    target_kind: &str,
+    slug: &str,
+) -> Result<(), PostError> {
+    let target = sqlx::query_as::<_, (i64, String)>(
+        "SELECT id, title FROM posts WHERE slug = ? AND content_kind = ?",
+    )
+    .bind(slug)
+    .bind(target_kind)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some((target_id, title)) = target {
+        insert_content_link(
+            tx,
+            post_id,
+            &format!("content:{target_id}"),
+            "content",
+            target_id,
+            Some(&title),
+            Some(slug),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn insert_content_link(
+    tx: &mut sqlx::SqliteConnection,
+    source_post_id: i64,
+    ref_key: &str,
+    target_kind: &str,
+    target_id: i64,
+    target_title: Option<&str>,
+    target_slug: Option<&str>,
+) -> Result<(), PostError> {
+    sqlx::query(
+        r#"
+        INSERT OR REPLACE INTO content_links
+        (source_post_id, field, ref_key, target_kind, target_id, target_title, target_slug)
+        VALUES (?, 'body', ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(source_post_id)
+    .bind(ref_key)
+    .bind(target_kind)
+    .bind(target_id)
+    .bind(target_title)
+    .bind(target_slug)
+    .execute(&mut *tx)
+    .await?;
+    Ok(())
+}
+
+/// Remember the slug an entity moved away from so a stale URL can be
+/// redirected. The newest holder of a slug wins; a slug that is live again is
+/// cleared, because redirect lookups check the live row first anyway.
+pub(super) async fn record_slug_change(
+    tx: &mut sqlx::SqliteConnection,
+    entity_kind: &str,
+    entity_id: i64,
+    old_slug: &str,
+    new_slug: &str,
+) -> Result<(), PostError> {
+    if old_slug == new_slug {
+        return Ok(());
+    }
+
+    sqlx::query("DELETE FROM slug_history WHERE entity_kind = ? AND slug = ?")
+        .bind(entity_kind)
+        .bind(new_slug)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO slug_history (entity_kind, entity_id, slug)
+        VALUES (?, ?, ?)
+        ON CONFLICT(entity_kind, slug) DO UPDATE SET
+            entity_id = excluded.entity_id,
+            created_at = CURRENT_TIMESTAMP
+        "#,
+    )
+    .bind(entity_kind)
+    .bind(entity_id)
+    .bind(old_slug)
+    .execute(&mut *tx)
+    .await?;
+
     Ok(())
 }

@@ -9,6 +9,7 @@ import { appBlockPlugin } from '../../../custom-rules/plugins/app-block.js';
 import { codeHighlightPlugin } from '../../../custom-rules/plugins/code-highlight.js';
 import { iframeBlockPlugin } from '../../../custom-rules/plugins/iframe.js';
 import { kaomojiPlugin } from '../../../custom-rules/plugins/kaomoji.js';
+import { linkHealthPlugin } from '../../../custom-rules/plugins/link-health.js';
 import { mediaWithShortcutPlugin } from '../../../custom-rules/plugins/media-shortcut.js';
 import { namedContainerPlugin } from '../../../custom-rules/plugins/named-container.js';
 import { revealPlugin } from '../../../custom-rules/plugins/reveal.js';
@@ -85,6 +86,7 @@ export function createMarkdownRenderer() {
 		.use(namedContainerPlugin)
 		.use(codeHighlightPlugin)
 		.use(kaomojiPlugin)
+		.use(linkHealthPlugin)
 		.use(anchor, { slugify });
 }
 
@@ -94,8 +96,9 @@ export function createMarkdownRenderer() {
  * @param {MarkdownIt} renderer
  * @param {string} body
  * @param {Record<string, string>} [mediaDictionary] key -> resolved URL
+ * @param {Array<object>} [linkHealth] backend link states for this body
  * @returns {string}
  */
-export function renderBody(renderer, body, mediaDictionary = {}) {
-	return renderer.render(body ?? '', { mediaDictionary });
+export function renderBody(renderer, body, mediaDictionary = {}, linkHealth = []) {
+	return renderer.render(body ?? '', { mediaDictionary, linkHealth });
 }

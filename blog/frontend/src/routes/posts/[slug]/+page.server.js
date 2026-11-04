@@ -1,6 +1,8 @@
 import { buildMediaDictionary } from '$lib/features/editor/media/references.js';
 import { createMarkdownRenderer } from '$lib/features/editor/markdown/renderer.js';
+import { loadLinkHealth } from '$lib/server/link-health.js';
 import { fixClientRoute, route } from '$lib/server/proxy.js';
+import { redirectIfMoved } from '$lib/server/slug-redirect.js';
 import { error } from '@sveltejs/kit';
 
 // One module-scoped renderer, reused across requests.
@@ -35,8 +37,9 @@ export async function load({ locals, fetch, params, setHeaders }) {
 		og_image_url = fixClientRoute(og_image_url);
 
 		const mediaDictionary = buildMediaDictionary(medium_urls, medium_short_names, fixClientRoute);
+		const linkHealth = await loadLinkHealth(fetch, params.slug);
 
-		content = md.render(content, { mediaDictionary });
+		content = md.render(content, { mediaDictionary, linkHealth });
 
 		const series = rest.series;
 		if (series) {
@@ -74,6 +77,8 @@ export async function load({ locals, fetch, params, setHeaders }) {
 	} else {
 		console.log(await res.text());
 	}
+
+	await redirectIfMoved(fetch, 'post', params.slug);
 
 	throw error(404, 'Error');
 }

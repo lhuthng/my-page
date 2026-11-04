@@ -1,6 +1,8 @@
 import { buildMediaDictionary } from '$lib/features/editor/media/references.js';
 import { createMarkdownRenderer } from '$lib/features/editor/markdown/renderer.js';
+import { loadLinkHealth } from '$lib/server/link-health.js';
 import { fixClientRoute, route } from '$lib/server/proxy.js';
+import { redirectIfMoved } from '$lib/server/slug-redirect.js';
 import { error } from '@sveltejs/kit';
 
 // One module-scoped renderer, reused across requests.
@@ -12,6 +14,7 @@ export async function load({ fetch, params, url, setHeaders }) {
 	});
 
 	if (!res.ok) {
+		await redirectIfMoved(fetch, 'project', params.slug);
 		throw error(404, 'Project not found');
 	}
 
@@ -60,8 +63,9 @@ export async function load({ fetch, params, url, setHeaders }) {
 	}
 
 	const mediaDictionary = buildMediaDictionary(medium_urls, medium_short_names, fixClientRoute);
+	const linkHealth = await loadLinkHealth(fetch, params.slug);
 
-	content = md.render(content, { mediaDictionary });
+	content = md.render(content, { mediaDictionary, linkHealth });
 
 	return {
 		content,

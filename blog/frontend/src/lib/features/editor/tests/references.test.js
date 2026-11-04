@@ -53,6 +53,16 @@ test('leaves an index with no matching short name untouched', () => {
 	assert.equal(decodeShortNames('@[img:0] @[img:9]', ['photo']), '@[img:photo] @[img:9]');
 });
 
+test('leaves an index in a blank slot untouched', () => {
+	// The backend keeps a hole where a media row is gone, so a later index keeps
+	// its position; decoding must not rewrite the hole to a broken `@[img:]`.
+	assert.equal(decodeShortNames('@[img:1]', ['photo', '']), '@[img:1]');
+	assert.equal(
+		decodeShortNames('@[img:0] @[img:2]', ['photo', '', 'clip']),
+		'@[img:photo] @[img:clip]'
+	);
+});
+
 test('leaves an already-decoded body untouched', () => {
 	const body = '@[img:my-photo] and :::app lottie spinner';
 	assert.equal(decodeShortNames(body, ['photo', 'clip']), body);
@@ -95,6 +105,17 @@ test('dictionary skips blank short names and handles missing inputs', () => {
 	assert.deepEqual(buildMediaDictionary(['a.png'], [null]), { 0: 'a.png' });
 	assert.deepEqual(buildMediaDictionary([], ['alpha']), {});
 	assert.deepEqual(buildMediaDictionary(undefined, undefined), {});
+});
+
+test('dictionary omits blank slots so the renderer shows a missing image', () => {
+	// An empty-string `src` would render a broken image instead of the
+	// missing-image span, and a blank short name must not take a key either.
+	assert.deepEqual(buildMediaDictionary(['a.png', '', 'c.png'], ['alpha', '', 'gamma']), {
+		0: 'a.png',
+		2: 'c.png',
+		alpha: 'a.png',
+		gamma: 'c.png'
+	});
 });
 
 test('decode round-trips against the dictionary the renderer will use', () => {

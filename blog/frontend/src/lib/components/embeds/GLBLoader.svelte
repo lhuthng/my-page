@@ -10,7 +10,8 @@
 		cameraConfig,
 		toggleWireframe = $bindable(),
 		toggleOrbit = $bindable(),
-		isReady = $bindable()
+		isReady = $bindable(),
+		isMissing = $bindable()
 	} = $props();
 
 	let { position, fov, target, autoRotate } = $state(untrack(() => cameraConfig));
@@ -31,16 +32,22 @@
 	let gltfUrl = $state();
 	$effect(async () => {
 		isReady = false;
+		isMissing = false;
 		if (url) {
 			gltfUrl = url;
 			isReady = true;
 		} else {
 			const tryUrl = `/api/media/i/${name}`;
-			const res = await fetch(tryUrl);
-
-			if (res.ok) {
-				gltfUrl = tryUrl;
-				isReady = true;
+			try {
+				const res = await fetch(tryUrl);
+				if (res.ok) {
+					gltfUrl = tryUrl;
+					isReady = true;
+				} else {
+					isMissing = true;
+				}
+			} catch (_) {
+				isMissing = true;
 			}
 		}
 	});

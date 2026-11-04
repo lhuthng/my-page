@@ -63,19 +63,29 @@ impl MediaServiceImpl {
         .fetch_one(&mut *tx)
         .await?;
 
+        let mut old_cover_archived = false;
+
         if let (Some(id), _, _) = old_cover {
+            // Clear this post's pointer first, so `release_media` does not see
+            // the slot being replaced as a reason to keep the row.
             sqlx::query(
                 r#"
-                DELETE FROM media
+                UPDATE posts
+                SET cover_media_id = NULL
                 WHERE id = ?
                 "#,
             )
-            .bind(id)
+            .bind(cmd.post_id)
             .execute(&mut *tx)
             .await?;
+            old_cover_archived = matches!(
+                super::release_media(&mut tx, id).await?,
+                super::ReleaseOutcome::Archived
+            );
         }
 
-        // Delete old video media (by short_name) to avoid collision on re-upload
+        // Free the old video media (same slot name) to avoid a collision on insert
+        let mut old_video_archived = false;
         let old_video = sqlx::query_as::<_, (i64, String, String)>(
             r#"
             SELECT id, hash, file_type
@@ -87,17 +97,13 @@ impl MediaServiceImpl {
         .fetch_optional(&mut *tx)
         .await?;
         if let Some((old_video_id, _, _)) = old_video {
-            sqlx::query(
-                r#"
-                DELETE FROM media
-                WHERE id = ?
-                "#,
-            )
-            .bind(old_video_id)
-            .execute(&mut *tx)
-            .await?;
+            old_video_archived = matches!(
+                super::release_media(&mut tx, old_video_id).await?,
+                super::ReleaseOutcome::Archived
+            );
         }
 
+        let mut old_thumbnail_archived = false;
         let old_thumbnail = sqlx::query_as::<_, (i64, String, String)>(
             r#"
             SELECT id, hash, file_type
@@ -109,15 +115,10 @@ impl MediaServiceImpl {
         .fetch_optional(&mut *tx)
         .await?;
         if let Some((old_thumbnail_id, _, _)) = old_thumbnail {
-            sqlx::query(
-                r#"
-                DELETE FROM media
-                WHERE id = ?
-                "#,
-            )
-            .bind(old_thumbnail_id)
-            .execute(&mut *tx)
-            .await?;
+            old_thumbnail_archived = matches!(
+                super::release_media(&mut tx, old_thumbnail_id).await?,
+                super::ReleaseOutcome::Archived
+            );
         }
 
         let extension = MediaType::from_str(&content_type)?.get_extension();
@@ -255,7 +256,7 @@ impl MediaServiceImpl {
         }
 
         // Clean up old cover media file from disk
-        if let (_, Some(old_hash), Some(old_file_type)) = old_cover {
+        if !old_cover_archived && let (_, Some(old_hash), Some(old_file_type)) = old_cover {
             let ext = match old_file_type.split('/').nth(1) {
                 Some(e) => format!(".{}", e),
                 None => String::new(),
@@ -283,7 +284,7 @@ impl MediaServiceImpl {
         }
 
         // Clean up old video media file from disk
-        if let Some((_, old_video_hash, old_video_file_type)) = old_video {
+        if !old_video_archived && let Some((_, old_video_hash, old_video_file_type)) = old_video {
             let ext = match old_video_file_type.split('/').nth(1) {
                 Some(e) => format!(".{}", e),
                 None => String::new(),
@@ -301,7 +302,9 @@ impl MediaServiceImpl {
         }
 
         // Clean up old generated thumbnail file from disk
-        if let Some((_, old_thumbnail_hash, old_thumbnail_file_type)) = old_thumbnail {
+        if !old_thumbnail_archived
+            && let Some((_, old_thumbnail_hash, old_thumbnail_file_type)) = old_thumbnail
+        {
             let ext = match old_thumbnail_file_type.split('/').nth(1) {
                 Some(e) => format!(".{}", e),
                 None => String::new(),

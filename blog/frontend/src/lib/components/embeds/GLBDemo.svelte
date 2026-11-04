@@ -9,6 +9,7 @@
 	let toggleWireframe = $state();
 	let toggleOrbit = $state();
 	let isReady = $state(false);
+	let isMissing = $state(false);
 
 	let wireframe = $state(false);
 	let animation = $state(false);
@@ -66,9 +67,16 @@
 				bind:toggleWireframe
 				bind:toggleOrbit
 				bind:isReady
+				bind:isMissing
 			/>
 		</Canvas>
 	</div>
+
+	{#if isMissing}
+		<div class="absolute inset-0 grid place-items-center p-4 text-center text-dark/70">
+			<p>This 3D model is no longer available.</p>
+		</div>
+	{/if}
 
 	<div
 		class="absolute top-0 right-0 w-full pointer-events-none has-focus:*:opacity-100! *:transition-opacity *:duration-200"

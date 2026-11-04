@@ -25,7 +25,10 @@ use crate::{
         api::handlers::post::dto::{PostPatchData, SetRelatedPostsBody},
         api::handlers::post::response::UpdatePostResponse,
         api::handlers::support::cover::{MediumData, extract_medium},
-        api::support::{media_short_names::replace_media_short_names, multipart::FileData},
+        api::support::{
+            media_short_names::{collect_unencoded_media_short_names, replace_media_short_names},
+            multipart::FileData,
+        },
         server::AppState,
     },
 };
@@ -214,6 +217,7 @@ pub async fn update_post(
         let mut media_usage = HashMap::<String, i64>::new();
 
         replace_media_short_names(&mut content, &mut media_usage);
+        collect_unencoded_media_short_names(&content, &mut media_usage);
 
         cmd.content = Some(content);
         cmd.media_usage = Some(media_usage);

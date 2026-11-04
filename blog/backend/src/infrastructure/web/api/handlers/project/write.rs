@@ -28,7 +28,7 @@ use crate::{
         api::support::{
             demo_archive::extract_demo_zip,
             links::validate_demo_url,
-            media_short_names::replace_media_short_names,
+            media_short_names::{collect_unencoded_media_short_names, replace_media_short_names},
             multipart::{parse_multipart, upload_inline_media},
         },
         server::AppState,
@@ -175,6 +175,7 @@ pub async fn new_project(
 
     let mut media_usage = HashMap::<String, i64>::new();
     replace_media_short_names(&mut data.content, &mut media_usage);
+    collect_unencoded_media_short_names(&data.content, &mut media_usage);
 
     let post_id = state
         .post_service

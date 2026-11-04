@@ -71,7 +71,7 @@ export function mediaWithShortcutPlugin(md) {
 			const src = mediaDictionary[value];
 			switch (src) {
 				case undefined:
-					return `<span class="missing-image">${alt}</span>`;
+					return `<span class="missing-image" title="Media &ldquo;${alt}&rdquo; is no longer available">Missing media</span>`;
 				case null:
 					return `<span class="loading-image">${alt}</span>`;
 				default: {

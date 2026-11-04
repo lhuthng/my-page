@@ -46,16 +46,25 @@ impl MediaServiceImpl {
         .fetch_one(&mut *tx)
         .await?;
 
+        let mut old_avatar_archived = false;
+
         if let (Some(id), _, _) = hash_row {
+            // Clear this user's pointer first, so `release_media` does not see
+            // the slot being replaced as a reason to keep the row.
             sqlx::query(
                 r#"
-                DELETE FROM media
-                WHERE id = ?
+                UPDATE user_meta
+                SET avatar_image_id = NULL
+                WHERE user_id = ?
                 "#,
             )
-            .bind(id)
+            .bind(cmd.user_id)
             .execute(&mut *tx)
             .await?;
+            old_avatar_archived = matches!(
+                super::release_media(&mut tx, id).await?,
+                super::ReleaseOutcome::Archived
+            );
         }
 
         let extension = MediaType::from_str(&content_type)?.get_extension();
@@ -127,7 +136,7 @@ impl MediaServiceImpl {
 
         tx.commit().await?;
 
-        if let (_, Some(old_hash), Some(file_type)) = hash_row {
+        if !old_avatar_archived && let (_, Some(old_hash), Some(file_type)) = hash_row {
             let old_hash = match old_hash.split('.').nth(3) {
                 Some(hash) => hash.to_string(),
                 None => {

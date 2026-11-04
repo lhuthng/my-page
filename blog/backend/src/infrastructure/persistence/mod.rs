@@ -1,6 +1,7 @@
 pub mod analytics;
 pub mod audiobook;
 pub mod auth;
+pub mod content_links;
 pub mod dashboard;
 pub mod game;
 pub mod image_convert;
@@ -9,5 +10,6 @@ pub mod newsletter;
 pub mod notification;
 pub mod post;
 pub mod project;
+pub mod redirects;
 pub mod series;
 pub mod user;

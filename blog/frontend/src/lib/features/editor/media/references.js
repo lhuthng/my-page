@@ -69,6 +69,8 @@ export function collectMediaKeys(texts) {
  *
  * An index with no corresponding short name is left exactly as it is rather
  * than being blanked — losing the reference would silently corrupt the body.
+ * A blank slot means the media row is gone (the backend keeps holes so later
+ * indices keep their position), so it is treated the same as a missing one.
  *
  * @param {string} text
  * @param {string[]} shortNames indexed by the stored code
@@ -89,7 +91,7 @@ export function decodeShortNames(text, shortNames) {
 			if (!/^\d+$/.test(key)) continue;
 
 			const replacement = shortNames[Number(key)];
-			if (replacement === undefined || replacement === null) continue;
+			if (!replacement) continue;
 
 			edits.push({
 				index: match.index + match[0].lastIndexOf(key),
@@ -115,6 +117,9 @@ export function decodeShortNames(text, shortNames) {
  * while an in-editor body refers to it by short name, and the same renderer
  * serves both.
  *
+ * Blank slots are skipped rather than registered: an empty `src` renders a
+ * broken image, while an absent key renders the renderer's missing-image span.
+ *
  * @param {string[]} mediumUrls indexed by stored code
  * @param {string[]} [mediumShortNames] parallel to `mediumUrls`
  * @param {(url: string) => string} [resolveUrl] e.g. `fixClientRoute`
@@ -125,6 +130,7 @@ export function buildMediaDictionary(mediumUrls, mediumShortNames, resolveUrl = 
 	if (!mediumUrls?.length) return dictionary;
 
 	mediumUrls.forEach((url, index) => {
+		if (!url) return;
 		dictionary[index.toString()] = resolveUrl(url);
 	});
 	mediumShortNames?.forEach((shortName, index) => {

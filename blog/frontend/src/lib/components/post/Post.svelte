@@ -39,6 +39,12 @@
 			content: '^';
 			@apply absolute inline-block -rotate-30 align-middle text-sm;
 		}
+		& a.missing-link {
+			@apply text-accent-red-dark line-through decoration-dashed;
+		}
+		& .missing-image {
+			@apply inline-flex items-center rounded-md border-2 border-dashed border-accent-red-light-1 bg-accent-red-light-4 px-2 py-0.5 text-sm text-accent-red-dark;
+		}
 		& h1,
 		& h2,
 		& h3 {

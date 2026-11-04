@@ -89,6 +89,8 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
             handlers::dashboard::analytics_routes(state.clone()),
         )
         .nest("/dashboard", handlers::dashboard::routes(state.clone()))
+        .nest("/redirects", handlers::redirects::routes())
+        .nest("/links", handlers::links::routes())
         .route("/health", get(health))
         .merge(graphql_routes)
         // Routers merged with auth layers carry their own wrapped default

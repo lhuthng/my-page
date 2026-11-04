@@ -1,7 +1,11 @@
 <script>
 	import HTMLApp from './HTMLApp.svelte';
 
-	let { name, type, width, height, config, temp } = $props();
+	let { name, type, width, height, config, temp, missing = false } = $props();
+
+	const missingLabel = $derived(
+		type === 'game' ? 'This game is no longer available.' : 'This project is no longer available.'
+	);
 
 	let GLBDemo = $state();
 	let LottieStateSwitcher = $state();
@@ -28,7 +32,15 @@
 	});
 </script>
 
-{#if type === 'html' || type === 'project'}
+{#if missing}
+	<div
+		class="mx-auto grid place-items-center rounded-xl bg-background p-4 text-center text-dark/70"
+		style:width
+		style:height
+	>
+		<p>{missingLabel}</p>
+	</div>
+{:else if type === 'html' || type === 'project'}
 	<HTMLApp {name} {type} {width} {height} {config} />
 {:else if type === 'glb-demo'}
 	{#if GLBDemo}

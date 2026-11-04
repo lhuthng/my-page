@@ -20,7 +20,10 @@ use crate::{
         api::handlers::support::cover::{
             CreateCoverUpload, apply_created_cover_upload, try_collect_create_cover_field,
         },
-        api::support::{media_short_names::replace_media_short_names, multipart::FileData},
+        api::support::{
+            media_short_names::{collect_unencoded_media_short_names, replace_media_short_names},
+            multipart::FileData,
+        },
         server::AppState,
     },
 };
@@ -167,6 +170,7 @@ pub async fn new_post(
 
     let mut media_usage = HashMap::<String, i64>::new();
     replace_media_short_names(&mut content, &mut media_usage);
+    collect_unencoded_media_short_names(&content, &mut media_usage);
 
     let cmd = NewPostCommand {
         user_id: uploader_id,

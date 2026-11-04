@@ -23,13 +23,13 @@ export function pluginExtend(root) {
 		if (container.__mounted) return;
 		container.__mounted = true;
 
-		const { name, type, width, height, config, temp } = container.dataset;
+		const { name, type, width, height, config, temp, missing } = container.dataset;
 
 		appInstances.set(
 			container,
 			mount(App, {
 				target: container,
-				props: { name, type, width, height, config, temp }
+				props: { name, type, width, height, config, temp, missing: missing === 'true' }
 			})
 		);
 	});

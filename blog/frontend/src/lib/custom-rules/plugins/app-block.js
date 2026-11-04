@@ -1,3 +1,5 @@
+import { resolveAppEmbed } from './link-health.js';
+
 export function appBlockPlugin(md) {
 	function normalizeCssSize(value, fallback) {
 		if (!value || value === '_') return fallback;
@@ -30,14 +32,16 @@ export function appBlockPlugin(md) {
 		return true;
 	});
 
-	md.renderer.rules.app_block = (tokens, idx) => {
-		const { type, name, width, height, rest, temp } = tokens[idx].meta;
+	md.renderer.rules.app_block = (tokens, idx, options, env) => {
+		const { type, width, height, rest, temp } = tokens[idx].meta;
+		const embed = resolveAppEmbed(env?.linkHealth, type, tokens[idx].meta.name);
 
 		let dataBlock =
 			`
-      data-name="${md.utils.escapeHtml(name)}" data-type="${md.utils.escapeHtml(type)}" data-width="${md.utils.escapeHtml(width)}" data-height="${md.utils.escapeHtml(height)}" ` +
+      data-name="${md.utils.escapeHtml(embed.name)}" data-type="${md.utils.escapeHtml(type)}" data-width="${md.utils.escapeHtml(width)}" data-height="${md.utils.escapeHtml(height)}" ` +
 			(rest ? `data-config="${md.utils.escapeHtml(rest)}" ` : '') +
-			(temp ? `data-temp="${md.utils.escapeHtml(temp)}" ` : '');
+			(temp ? `data-temp="${md.utils.escapeHtml(temp)}" ` : '') +
+			(embed.missing ? `data-missing="true" ` : '');
 
 		return `
       <div class="w-full">

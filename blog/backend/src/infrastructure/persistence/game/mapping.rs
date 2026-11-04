@@ -132,19 +132,13 @@ impl GameServiceImpl {
         .fetch_all(&self.pool)
         .await?;
 
-        let len = medium_rows.len() as i64;
-        let mut medium_urls = vec![String::new(); medium_rows.len()];
-        let mut medium_short_names = vec![String::new(); medium_rows.len()];
-        for medium in medium_rows {
-            if medium.code < 0 || medium.code >= len {
-                return Err(GameError::InternalError(
-                    "Out of range game media index found".to_string(),
-                ));
-            }
-            let index = medium.code as usize;
-            medium_urls[index] = medium.url;
-            medium_short_names[index] = medium.short_name;
-        }
+        let slots = crate::infrastructure::persistence::media::media_slots_by_code(
+            medium_rows
+                .into_iter()
+                .map(|medium| (medium.code, (medium.url, medium.short_name))),
+        );
+        let (medium_urls, medium_short_names): (Vec<String>, Vec<String>) =
+            slots.into_iter().unzip();
 
         let jsdos_bundle = sqlx::query_as::<_, (String, String, i64, String)>(
             "SELECT storage_key, original_file_name, size_bytes, sha256 FROM game_jsdos_bundles WHERE game_id = ?",
