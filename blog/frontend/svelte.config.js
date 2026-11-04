@@ -21,10 +21,15 @@ const config = {
 		// module is fetched, fails to compile, and falls back to a
 		// `v86-fallback.wasm` this repo does not ship, so the real error
 		// surfaces as a confusing 404 for the fallback file.
+		//
+		// `blob:` is here for AudioWorklet modules. v86's Sound Blaster DAC
+		// builds its processor from an inline string and loads it from a blob
+		// URL, and worklets are checked against `script-src` rather than
+		// `worker-src`, so without this entry games have no sound.
 		csp: {
 			mode: 'hash',
 			directives: {
-				'script-src': ['self', 'wasm-unsafe-eval', 'https://challenges.cloudflare.com'],
+				'script-src': ['self', 'wasm-unsafe-eval', 'blob:', 'https://challenges.cloudflare.com'],
 				'worker-src': ['self', 'blob:', 'https://challenges.cloudflare.com'],
 				// Frames are limited to the players and demo hosts the site
 				// actually uses; the markdown plugin enforces the same list.
