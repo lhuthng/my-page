@@ -22,6 +22,5 @@ export const authorApi = {
 	issueKey: (audiobookId, payload) =>
 		api.post(`author/audiobooks/id/${audiobookId}/keys`, { body: payload }),
 
-	revokeKey: (audiobookId, keyId) =>
-		api.delete(`author/audiobooks/id/${audiobookId}/keys/${keyId}`)
+	revokeKey: (audiobookId, keyId) => api.delete(`author/audiobooks/id/${audiobookId}/keys/${keyId}`)
 };

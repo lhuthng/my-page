@@ -183,13 +183,15 @@ curl -OJ -H "Authorization: Bearer $AUTHOR_KEY" \\
 
 <section class="flex flex-col gap-4 pb-8">
 	<div class="bg-white rounded-xl p-4 flex flex-col gap-1">
-		<a href="/dashboard/audiobooks/id/{audiobookId}" class="text-sm text-dark/50"
-			>← Back to audiobook</a
-		>
+		<a href="/dashboard/audiobooks/id/{audiobookId}" class="text-sm text-dark/50">
+			← Back to audiobook
+		</a>
 		<h1 class="text-2xl font-semibold">Author API</h1>
 		<p class="text-sm text-dark/60">
 			Scripting access to {book ? `“${book.title}”` : 'this book'}. Off by default and switched on
-			per book — book id <span class="font-mono">{audiobookId}</span>.
+			per book — book id
+			<span class="font-mono">{audiobookId}</span>
+			.
 		</p>
 	</div>
 
@@ -207,8 +209,8 @@ curl -OJ -H "Authorization: Bearer $AUTHOR_KEY" \\
 						Anyone holding a key issued below can read and write this book's chapters. Other books
 						are not reachable with the same key.
 					{:else}
-						Off. Nothing under <code class="font-mono">/author</code> answers for this book, and no
-						key can be issued until you switch it on.
+						Off. Nothing under <code class="font-mono">/author</code>
+						answers for this book, and no key can be issued until you switch it on.
 					{/if}
 				</p>
 				{#if settings.key_count > 0}
@@ -245,8 +247,8 @@ curl -OJ -H "Authorization: Bearer $AUTHOR_KEY" \\
 				<div>
 					<h2 class="text-lg font-semibold">Secret keys</h2>
 					<p class="text-sm text-dark/60">
-						A key unlocks <strong>this book only</strong>. Only you, the creator of this book, can
-						issue one.
+						A key unlocks <strong>this book only</strong>
+						. Only you, the creator of this book, can issue one.
 					</p>
 				</div>
 
@@ -351,10 +353,11 @@ curl -OJ -H "Authorization: Bearer $AUTHOR_KEY" \\
 				<div>
 					<h2 class="text-lg font-semibold">Quick guide</h2>
 					<p class="text-sm text-dark/60">
-						Set <code class="font-mono">AUTHOR_KEY</code> to a secret you issued above. The hash in
-						the manifest is the SHA-256 of the file you upload — audio is never transcoded, so it
-						matches your local <code class="font-mono">shasum</code> exactly. Read, diff, then upload
-						only what changed.
+						Set <code class="font-mono">AUTHOR_KEY</code>
+						to a secret you issued above. The hash in the manifest is the SHA-256 of the file you upload
+						— audio is never transcoded, so it matches your local
+						<code class="font-mono">shasum</code>
+						exactly. Read, diff, then upload only what changed.
 					</p>
 				</div>
 
@@ -376,17 +379,20 @@ curl -OJ -H "Authorization: Bearer $AUTHOR_KEY" \\
 				<div class="text-sm text-dark/70 flex flex-col gap-1">
 					<p>
 						<strong>Upload replies:</strong>
-						<code class="font-mono">201 created</code>,
-						<code class="font-mono">200 replaced</code>, or
-						<code class="font-mono">200 unchanged</code> (the slot already holds those exact bytes —
-						nothing is written). A mismatched
-						<code class="font-mono">X-Content-SHA256</code> is rejected with 422 before anything is
-						stored.
+						<code class="font-mono">201 created</code>
+						,
+						<code class="font-mono">200 replaced</code>
+						, or
+						<code class="font-mono">200 unchanged</code>
+						(the slot already holds those exact bytes — nothing is written). A mismatched
+						<code class="font-mono">X-Content-SHA256</code>
+						is rejected with 422 before anything is stored.
 					</p>
 					<p>
-						Chapter numbers are slots you choose, not database ids. A <code class="font-mono"
-							>PUT</code
-						> to the same number is an upsert — safe to retry.
+						Chapter numbers are slots you choose, not database ids. A <code class="font-mono">
+							PUT
+						</code>
+						to the same number is an upsert — safe to retry.
 					</p>
 				</div>
 			</div>
