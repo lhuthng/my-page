@@ -43,6 +43,17 @@ export async function proxyFallback({ request, params, search, extraHeaders }) {
 	const url = `${env.API_URL}/${params.path}${search ?? ''}`;
 	const headers = { ...Object.fromEntries(request.headers), ...extraHeaders };
 
+	// The backend negotiates whatever the browser advertises, and current
+	// browsers advertise `zstd`. Node's fetch decodes gzip, deflate and br but
+	// **not** zstd, so a zstd-compressed body would arrive as raw bytes while
+	// the block below deletes the `content-encoding` header that could have
+	// explained them — the browser then parses binary as JSON and fails with
+	// `Unexpected token '\u0018'`. Advertise only what this hop can actually
+	// decode; compression still happens, it just terminates here.
+	if (headers['accept-encoding']) {
+		headers['accept-encoding'] = 'gzip, deflate, br';
+	}
+
 	const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body != null;
 	if (!hasBody) {
 		delete headers['content-length'];
