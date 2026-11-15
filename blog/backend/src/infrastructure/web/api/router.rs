@@ -78,6 +78,9 @@ pub fn build_router(state: Arc<AppState>) -> Router<()> {
         )
         .nest("/series", handlers::series::routes(state.clone()))
         .nest("/audiobooks", handlers::audiobook::routes(state.clone()))
+        // Opt-in feature: `handlers::author::routes` mounts only /status when
+        // AUTHOR_API_ENABLED is not set, so the rest of /author answers 404.
+        .nest("/author", handlers::author::routes(state.clone()))
         .nest("/mail", handlers::mail::routes(state.clone()))
         .nest("/newsletter", handlers::newsletter::routes(state.clone()))
         .nest(

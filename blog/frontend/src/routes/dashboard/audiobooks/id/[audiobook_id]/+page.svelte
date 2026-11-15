@@ -475,6 +475,9 @@
 		</div>
 
 		<div class="flex items-center gap-2 flex-wrap">
+			<div class="w-fit duo-btn" data-duo-color="light">
+				<a href="/dashboard/audiobooks/id/{audiobookId}/api">Author API</a>
+			</div>
 			{#if audiobook?.status === 'published'}
 				<div class="w-fit duo-btn" data-duo-color="light">
 					<a href="/audiobooks/{audiobook.slug}">View public page</a>

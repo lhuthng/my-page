@@ -1,5 +1,6 @@
 pub mod audiobook;
 pub mod auth;
+pub mod author;
 pub mod game;
 pub mod mail;
 pub mod media;

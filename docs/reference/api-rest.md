@@ -15,6 +15,7 @@ Auth tiers:
 - **mod** — moderator or admin
 - **admin** — admin only
 - **sync** — valid sync key (`bsk_…` bearer)
+- **author-key** — valid author key (`abk_…` bearer), bound to one audiobook
 
 ## Auth — `/auth` (public)
 
@@ -210,6 +211,58 @@ chapter every ten seconds of real playback; each counted report answers
 a caller can tell the two apart. `REPORT_MIN_INTERVAL_MS` in
 `handlers/audiobook/plays.rs` is the floor between two counted reports from one
 listener.
+
+## Author API — `/author` (book-scoped)
+
+Exposure is switched on **per audiobook** by that book's creator
+(`audiobooks.author_api_enabled`, default off). Until it is on, every route for
+that book answers 404 — including with a valid key, which is why the guard's
+refusal is indistinguishable from "no such book".
+
+A key (`abk_…`) is issued against **one** audiobook and can reach nothing else.
+The book id in the path must match the key's book; a mismatch answers 404, not
+403, so a key cannot enumerate other books. Settings and keys are
+session-managed (`JWT + owner`); everything else is used by scripts
+(`author-key`).
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/author/audiobooks/id/{id}/settings` | JWT + owner | `{ enabled, key_count, active_key_count }` |
+| PUT | `/author/audiobooks/id/{id}/settings` | JWT + owner | `{ "enabled": bool }` — the per-book switch |
+| GET | `/author/audiobooks/id/{id}` | author-key | Book + every chapter with `sha256`/`size` (`?offset=`, `?limit=`) |
+| PATCH | `/author/audiobooks/id/{id}` | author-key | title / slug / description / translator / tags |
+| POST | `/author/audiobooks/id/{id}/status` | author-key | `draft` / `published` / `archived` |
+| PUT | `/author/audiobooks/id/{id}/chapters/{number}` | author-key | Idempotent chapter upload (100 MB) |
+| PUT | `/author/audiobooks/id/{id}/chapters` | author-key | Batch chapter metadata (title/duration only) |
+| PATCH | `/author/audiobooks/id/{id}/chapters/{number}` | author-key | Rename / re-duration |
+| DELETE | `/author/audiobooks/id/{id}/chapters/{number}` | author-key | Remove a chapter |
+| GET | `/author/audiobooks/id/{id}/chapters/{number}/audio` | author-key | Download the original bytes |
+| GET | `/author/audiobooks/id/{id}/archive` | author-key | Batch zip (`?numbers=1-50,53`), capped |
+| POST | `/author/audiobooks/id/{id}/keys` | JWT + owner | Issue a key (secret returned once) |
+| GET | `/author/audiobooks/id/{id}/keys` | JWT + owner | List this book's keys |
+| DELETE | `/author/audiobooks/id/{id}/keys/{key_id}` | JWT + owner | Revoke |
+
+`PUT …/chapters/{number}` takes the raw file as the body, with
+`Content-Type: audio/mpeg` and an optional `X-Content-SHA256`, plus
+`?title=` / `?duration_seconds=` / `?filename=`. It answers `201 created`,
+`200 replaced`, or `200 unchanged` when the slot already holds those exact
+bytes — in which case **nothing is written**, not even the zstd chunk pass. A
+declared hash that does not match the received bytes is `422` and nothing is
+stored.
+
+The manifest is the sync plan: audio is never transcoded, so `sha256` is the
+same digest a client computes locally. Read it, diff, upload only what differs.
+Omitting `limit` returns the whole book on purpose — a diff against a partial
+list would silently skip chapters. `chapter_count` and `has_more_chapters` ride
+on every answer.
+
+`/archive` builds the zip in a temp file and refuses (`413`) above
+`AUTHOR_API_MAX_ARCHIVE_BYTES`; narrow it with `?numbers=` or download chapters
+individually. Errors from this whole section are JSON `{ "message": … }`.
+
+Switching `settings.enabled` off does **not** delete keys: they are paused and
+work again when the book is switched back on. Issuing a key while the switch is
+off answers 400 with that instruction.
 
 ## Media — `/media`
 

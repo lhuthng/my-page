@@ -98,6 +98,21 @@ Behavior details and the R2↔fs switch procedure:
 Email is optional — the server starts without mail transport when no mail
 variables are configured.
 
+## Backend — author API
+
+Exposure is **per audiobook, not per deployment**: `audiobooks.author_api_enabled`
+(default `0`) is switched on by the book's creator from that book's dashboard
+page. There is no environment variable that turns the feature on globally, and
+no key can be issued for a book while its switch is off. Only a limit lives
+here.
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `AUTHOR_API_MAX_ARCHIVE_BYTES` | Ceiling on one batch-download zip. The archive is built in a temp file, so this is what protects the VM's disk. | `2147483648` (2 GiB) |
+
+See [../reference/api-rest.md](../reference/api-rest.md) and
+[../reference/auth-and-roles.md](../reference/auth-and-roles.md).
+
 ## Frontend
 
 | Variable | Purpose | Default |
