@@ -1,11 +1,14 @@
 <script>
 	import { fade } from 'svelte/transition';
+	import { getContext } from 'svelte';
+	import { browser } from '$app/environment';
 	import BackButton from '../ui/BackButton.svelte';
 	import JsDosPlayer from './JsDosPlayer.svelte';
 	import V86Player from './V86Player.svelte';
 	import ShimKitPlayer from '$lib/players/ShimKitPlayer.svelte';
 	import WasmShellPlayer from '$lib/players/WasmShellPlayer.svelte';
 	import InviteGate from '$lib/components/game/InviteGate.svelte';
+	import { win } from '$lib/dom/windows.svelte.js';
 
 	// `showBack` and `heading` exist for the embedded form (`:::app game`): an
 	// article supplies its own context, and a heading rendered here would also
@@ -39,6 +42,92 @@
 	let startLabel = $derived(
 		isGame ? 'Start game' : demoType === 'webgl' ? 'Launch WebGL' : 'Start Demo'
 	);
+
+	// --- space requests --------------------------------------------------------------------
+	//
+	// A game the author gave a fixed frame width (`demo_width` in the editor)
+	// can outgrow the viewport with the navigation rail expanded. When that is
+	// the case — and collapsing the rail actually makes the frame fit — this
+	// component claims the compact rail from the layout's context for as long
+	// as it is mounted, and says so with a one-click undo. The user's own
+	// toggle outranks the request (expanding declines it for this session),
+	// and fluid frames (width in %) never ask — they always fit.
+	const navRail = getContext('nav-rail') ?? null;
+
+	let bezel = $state();
+	let spaceRequested = $state(false);
+
+	const requestId = $derived(`game:${slug}`);
+	// A frame in % fills whatever the layout gives and never needs the rail.
+	const fixedFrameWidth = $derived(/^\d+(\.\d+)?px$/.test(width) ? parseFloat(width) : null);
+
+	function releaseSpace() {
+		if (spaceRequested) {
+			navRail?.release(requestId);
+			spaceRequested = false;
+		}
+	}
+
+	function expandBack() {
+		navRail?.decline(requestId);
+		navRail?.release(requestId);
+		spaceRequested = false;
+	}
+
+	function measureFrameSpace() {
+		if (!navRail || !bezel || fixedFrameWidth == null || !isGame || gated) {
+			releaseSpace();
+			return;
+		}
+		// The author's frame is what it is; `max-w-full` means the page never
+		// "overflows" — it squeezes the frame below its suggested width
+		// instead. That squeeze is the signal: compare the suggestion against
+		// the space each rail shape would leave for the content column.
+		// Footprints at `lg` and up, gap included: expanded w-46 (184px) + gap
+		// 16, compact 3.5rem (56px) + gap 16.
+		const fitsExpanded = fixedFrameWidth <= win.width - 200;
+		const fitsCompact = fixedFrameWidth <= win.width - 72;
+		if (fitsExpanded) {
+			// Plenty of room with the rail expanded; the user's preference rules.
+			releaseSpace();
+			return;
+		}
+		if (
+			fitsCompact &&
+			!spaceRequested &&
+			!navCollapseUserCollapsed() &&
+			!navRail.isDeclined(requestId)
+		) {
+			if (browser) {
+				window.__spaceLog = window.__spaceLog || [];
+				window.__spaceLog.push(['request', win.width, fixedFrameWidth]);
+			}
+			navRail.request(requestId, onDeclined);
+			spaceRequested = true;
+		}
+	}
+
+	function navCollapseUserCollapsed() {
+		return navRail.userCollapsed();
+	}
+
+	function onDeclined() {
+		// The rail's toggle declined this request on the user's behalf; remember
+		// it for the session so the page stops claiming the rail.
+		navRail?.decline(requestId);
+		navRail?.release(requestId);
+		spaceRequested = false;
+	}
+
+	$effect(() => {
+		// Re-measure when the viewport changes or the user flips their own
+		// preference; the request lives in this effect's cleanup, so leaving
+		// the page hands the rail back.
+		win.width;
+		navCollapseUserCollapsed();
+		measureFrameSpace();
+		return () => releaseSpace();
+	});
 </script>
 
 <section class="bg-white rounded-xl p-4">
@@ -57,12 +146,32 @@
 	{/if}
 	<div class="mx-auto max-w-full" bind:this={beforeDemoPortal} style:width></div>
 
+	{#if spaceRequested}
+		<!-- The rail was collapsed for this frame; say so, and hand the room
+		     back on one click. -->
+		<div
+			transition:fade={{ duration: 150 }}
+			class="mx-auto max-w-full mb-2 flex items-center justify-between gap-3 rounded-xl border border-dark/15 bg-dark/5 px-3 py-2 text-sm text-dark/80"
+			style:width
+		>
+			<span>Collapsed the navigation to give {title} more room.</span>
+			<button
+				type="button"
+				class="shrink-0 font-semibold text-primary underline hover:text-dark"
+				onclick={expandBack}
+			>
+				Expand
+			</button>
+		</div>
+	{/if}
+
 	<!-- Device bezel: the same gradient faceplate over a dark screen as the
 	     audio player, so the emulator is framed like the rest of the site
 	     instead of sitting in a flat wash. -->
 	<div
 		class="mx-auto max-w-full rounded-2xl border-2 border-dark/20 bg-gradient-to-b from-primary/25 via-background/45 to-secondary/50 p-2 sm:p-3"
 		style:width
+		bind:this={bezel}
 	>
 		<div class="relative overflow-hidden rounded-xl bg-dark shadow-inner" style:height>
 			{#if gated}

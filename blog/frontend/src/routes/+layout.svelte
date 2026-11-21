@@ -5,17 +5,30 @@
 	import Header from '$lib/components/shell/Header.svelte';
 	import NavigationSideBar from '$lib/components/shell/NavigationSideBar.svelte';
 	import DashboardSideBar from '$lib/components/dashboard/DashboardSideBar.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, setContext } from 'svelte';
 	import '../app.css';
 	import { el } from '$lib/dom/elements.svelte.js';
 	import { fade } from 'svelte/transition';
 	import ToTop from '$lib/components/shell/ToTop.svelte';
 	import MiniAudiobookPlayer from '$lib/components/audio/MiniAudiobookPlayer.svelte';
+	import { navCollapse } from '$lib/dom/nav-collapse.svelte.js';
 	import { win } from '$lib/dom/windows.svelte.js';
 	import { canonicalUrl, SITE_NAME, SITE_ORIGIN } from '$lib/config/site.js';
 	import { innerWidth } from 'svelte/reactivity/window';
 
 	let { data, children } = $props();
+
+	// Pages that need more room (a fixed-width game frame overflowing the
+	// expanded rail) claim the compact rail through this context instead of
+	// reaching into the store, so the rail's implementation stays the layout's
+	// business. See `nav-collapse.svelte.js` for the two-layer state.
+	setContext('nav-rail', {
+		request: (id, onDecline) => navCollapse.request(id, onDecline),
+		release: (id) => navCollapse.release(id),
+		isDeclined: (id) => navCollapse.isDeclined(id),
+		decline: (id) => navCollapse.decline(id),
+		userCollapsed: () => navCollapse.userCollapsed
+	});
 
 	let route = $derived($page.url.pathname.split('/')[1]);
 	let noindex = $derived(
