@@ -5,6 +5,7 @@
 	import V86Player from './V86Player.svelte';
 	import ShimKitPlayer from '$lib/players/ShimKitPlayer.svelte';
 	import WasmShellPlayer from '$lib/players/WasmShellPlayer.svelte';
+	import InviteGate from '$lib/components/game/InviteGate.svelte';
 
 	// `showBack` and `heading` exist for the embedded form (`:::app game`): an
 	// article supplies its own context, and a heading rendered here would also
@@ -21,6 +22,8 @@
 		backLabel = 'All projects',
 		showBack = true,
 		heading = 'Demo',
+		accessMode = 'open',
+		entitled = true,
 		children,
 		...rest
 	} = $props();
@@ -28,6 +31,7 @@
 	let loaded = $state(false);
 	let beforeDemoPortal = $state();
 	let afterDemoPortal = $state();
+	let gated = $derived(accessMode === 'invited' && !entitled);
 	let startsOnDemand = $derived(
 		['html5', 'embed', 'webgl', 'jsdos', 'v86', 'shimkit', 'wasmshell'].includes(demoType)
 	);
@@ -61,7 +65,9 @@
 		style:width
 	>
 		<div class="relative overflow-hidden rounded-xl bg-dark shadow-inner" style:height>
-			{#if startsOnDemand && !loaded}
+			{#if gated}
+				<InviteGate {title} {slug} />
+			{:else if startsOnDemand && !loaded}
 				<div class="absolute inset-0 grid place-items-center">
 					<div class="duo-btn" data-duo-color="green">
 						<button onclick={() => (loaded = true)}>{startLabel}</button>

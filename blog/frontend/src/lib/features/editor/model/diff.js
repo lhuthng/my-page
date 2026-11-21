@@ -94,6 +94,11 @@ function buildGamePatch({ baseline, current }) {
 	const baseDemoType = baseline.demoType ?? 'html5';
 	if (current.demoType !== baseDemoType) patch.launcher_type = current.demoType;
 
+	const baseAccessMode = baseline.accessMode ?? 'open';
+	if ((current.accessMode ?? 'open') !== baseAccessMode) {
+		patch.access_mode = current.accessMode ?? 'open';
+	}
+
 	const baseWidth = baseline.demoWidth ?? '100%';
 	if (current.demoWidth !== baseWidth) patch.demo_width = current.demoWidth;
 

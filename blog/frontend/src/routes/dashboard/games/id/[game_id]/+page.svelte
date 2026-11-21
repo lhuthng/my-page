@@ -25,6 +25,7 @@
 		mediumShortNames: data.medium_short_names,
 		mediumUrls: data.medium_urls,
 		demoType: data.launcher_type,
+		accessMode: data.access_mode,
 		demoWidth: data.demo_width,
 		demoHeight: data.demo_height,
 		rawDemoUrl: data.raw_demo_url,

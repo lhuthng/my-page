@@ -7,6 +7,7 @@
 	import PostEditorShell from '../editor/PostEditorShell.svelte';
 	import ConfirmDialog from '../ui/ConfirmDialog.svelte';
 	import ManifestEditor from './ManifestEditor.svelte';
+	import GameInvitations from './GameInvitations.svelte';
 	import { api } from '$lib/api/client.js';
 
 	let { mode = 'create', data, isOwner = true, v86Systems = [], games = [] } = $props();
@@ -285,6 +286,10 @@
 	excerptRows={4}
 	{extraFields}
 />
+
+{#if mode === 'edit' && isOwner}
+	<GameInvitations gameId={data.id} bind:accessMode={vm.entry.accessMode} feedback={vm.feedback} />
+{/if}
 
 {#if mode === 'edit' && isOwner}
 	<section class="rounded-xl border border-accent-red/30 bg-accent-red-light-4 p-4">

@@ -39,6 +39,7 @@ export function createEntryState(kind, initialSeries = []) {
 			...base,
 			postId: '',
 			demoType: 'html5',
+			accessMode: 'open',
 			demoWidth: '100%',
 			demoHeight: '520px',
 			demoUrl: '',
@@ -102,6 +103,7 @@ export function loadEntryState(data, kind) {
 	const demoExtra = {
 		postId: data.postId ?? '',
 		demoType: data.demoType ?? 'html5',
+		accessMode: data.accessMode ?? 'open',
 		demoWidth: data.demoWidth ?? '100%',
 		demoHeight: data.demoHeight ?? '520px',
 		demoUrl: data.rawDemoUrl ?? ''

@@ -13,6 +13,8 @@
 		cheatcode = '',
 		story = '',
 		initialVariant,
+		accessMode = 'open',
+		entitled = true,
 		children
 	} = $props();
 
@@ -34,6 +36,8 @@
 	{initialVariant}
 	{width}
 	{height}
+	{accessMode}
+	{entitled}
 	backHref="/games"
 	backLabel="All games"
 />

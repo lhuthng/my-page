@@ -47,7 +47,9 @@
 		story,
 		related_games,
 		initialVariant,
-		slug
+		slug,
+		access_mode,
+		entitled
 	} = $derived(data);
 
 	let liked = $state();
@@ -197,6 +199,8 @@
 		{instruction}
 		{cheatcode}
 		{story}
+		accessMode={access_mode ?? 'open'}
+		{entitled}
 	/>
 
 	{#if related_games?.length > 0}

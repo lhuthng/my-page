@@ -767,6 +767,7 @@ export function createEditorViewModel({
 			content: entry.body,
 			number_of_files: offlineKeys.length,
 			launcher_type: entry.demoType,
+			access_mode: entry.accessMode ?? 'open',
 			demo_width: entry.demoWidth,
 			demo_height: entry.demoHeight,
 			instruction: entry.instruction ?? '',

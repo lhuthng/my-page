@@ -8,9 +8,13 @@ import { error } from '@sveltejs/kit';
 // One module-scoped renderer, reused across requests.
 const md = createMarkdownRenderer();
 
-export async function load({ fetch, params, url, setHeaders }) {
+export async function load({ fetch, params, url, request, setHeaders }) {
 	const res = await fetch(route(`games/s/${params.slug}`), {
-		method: 'GET'
+		method: 'GET',
+		// The invite cookie is per game (`game-invite-<id>`), and which game is
+		// being served is only known server-side; hand the backend the browser's
+		// cookie jar so its entitlement check can see the invite.
+		headers: { cookie: request.headers.get('cookie') ?? '' }
 	});
 
 	if (!res.ok) {
@@ -18,11 +22,15 @@ export async function load({ fetch, params, url, setHeaders }) {
 		throw error(404, 'Game not found');
 	}
 
-	setHeaders({
-		'cache-control': 'public, max-age=10, s-maxage=60, stale-while-revalidate=300'
-	});
-
 	const data = await res.json();
+	// An invited game's page is per viewer: who may play depends on the
+	// account grant or the invite cookie, so nothing here may be cached shared.
+	setHeaders({
+		'cache-control':
+			data.access_mode === 'invited'
+				? 'private, no-store'
+				: 'public, max-age=10, s-maxage=60, stale-while-revalidate=300'
+	});
 	let {
 		content,
 		author_avatar_url,
