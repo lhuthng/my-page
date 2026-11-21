@@ -28,7 +28,7 @@
 </svelte:head>
 
 <nav
-	class="sticky-below-header hidden lg:block sticky self-start mb-2 lg:mb-4 w-54 min-w-54 drop-shadow-sm"
+	class="sticky-below-header hidden lg:block sticky self-start mb-2 lg:mb-4 w-54 min-w-54 drop-shadow-sm transition-[width,min-width] duration-300 ease-out"
 	class:collapsed={compact}
 >
 	<ul class="space-y-2 bg-white p-2 rounded-xl">
@@ -41,11 +41,18 @@
 			{compact}
 		/>
 		{#each navGroups as group (group.label)}
+			<!-- The group headings fold vertically through the same grid trick as
+			     the item labels. -->
 			<li
-				class="px-2 pt-1 pb-0.5 text-xs font-semibold text-dark/40 uppercase tracking-wide"
-				class:hidden={compact}
+				class="grid transition-[grid-template-rows] duration-200 ease-out"
+				style:grid-template-rows={compact ? '0fr' : '1fr'}
 			>
-				{group.label}
+				<span
+					class="block overflow-hidden px-2 pt-1 pb-0.5 text-xs font-semibold text-dark/40 uppercase tracking-wide"
+					class:hidden={compact}
+				>
+					{group.label}
+				</span>
 			</li>
 			{#each group.items as tab (tab.path)}
 				<SideBarItem
