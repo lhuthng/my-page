@@ -1,7 +1,11 @@
 // Game feature handlers, split by responsibility. This module is the public
 // surface: route handlers for the router plus the wire types their
 // signatures use. Internal helpers stay inside their sub-modules.
+// `pub(crate)`: the v86 serving handlers (handlers/v86) share the resolver
+// for their slug-addressed game routes.
+pub(crate) mod access;
 mod dto;
+mod invitations;
 mod jsdos;
 mod payload;
 mod payload_serve;
@@ -18,11 +22,14 @@ mod tests;
 
 pub use dto::{
     CheckQuery, CheckResponse, CompleteJsDosUploadResponse, CompletePayloadUploadResponse,
-    DeleteGameQuery, FeaturedGamesQuery, FeaturedGamesResponse, GameCard, GameSaveEntry,
-    GameSavesResponse, GameStats, JsDosUploadResponse, LatestGamesQuery, LatestGamesResponse,
-    PayloadUploadResponse, SetGameFeaturedBody, StartJsDosUploadRequest, StartJsDosUploadResponse,
-    StartPayloadUploadRequest, StartPayloadUploadResponse,
+    CreateInvitationRequest, CreateInvitationResponse, DeleteGameQuery, FeaturedGamesQuery,
+    FeaturedGamesResponse, GameCard, GameSaveEntry, GameSavesResponse, GameStats,
+    InvitationsResponse, JsDosUploadResponse, LatestGamesQuery, LatestGamesResponse,
+    PayloadUploadResponse, RedeemInvitationRequest, RedeemInvitationResponse, SetGameFeaturedBody,
+    StartJsDosUploadRequest, StartJsDosUploadResponse, StartPayloadUploadRequest,
+    StartPayloadUploadResponse,
 };
+pub use invitations::{create_invitation, list_invitations, redeem_invitation, revoke_invitation};
 pub use jsdos::{
     abort_jsdos_upload, append_jsdos_chunk, complete_jsdos_upload, get_jsdos_bundle,
     start_jsdos_upload,
@@ -72,6 +79,7 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(put_game_save)
                 .delete(delete_game_save),
         )
+        .route("/s/{game_slug}/invitations/redeem", post(redeem_invitation))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             middlewares::auth::optional_user_guard,
@@ -114,6 +122,14 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .route("/id/{game_id}", delete(delete_game_draft))
                 .route("/id/{game_id}/restore", post(restore_game))
                 .route("/id/{game_id}/cover", patch(change_cover))
+                .route(
+                    "/id/{game_id}/invitations",
+                    get(list_invitations).post(create_invitation),
+                )
+                .route(
+                    "/id/{game_id}/invitations/{invitation_id}",
+                    delete(revoke_invitation),
+                )
                 .layer(middleware::from_fn(middlewares::auth::mod_check))
                 .layer(middleware::from_fn_with_state(
                     state.clone(),
@@ -132,7 +148,9 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                     middlewares::auth::user_guard,
                 )),
         )
-        // public routes
+        // public routes. The optional-auth layer is what makes invited-only
+        // games gateable: the serving handlers below read the viewer (or the
+        // absence of one) to decide between the bytes and a 404.
         .merge(
             Router::new()
                 .route("/s/{game_slug}/jsdos", get(get_jsdos_bundle))
@@ -154,6 +172,10 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 )
                 .route("/latest", get(get_latest_games))
                 .route("/featured", get(get_featured_games))
-                .route("/check", get(check_game)),
+                .route("/check", get(check_game))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::optional_user_guard,
+                )),
         )
 }

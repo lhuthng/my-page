@@ -6,14 +6,21 @@
 use std::{path::Component, sync::Arc};
 
 use axum::{
+    Extension,
     extract::{Path as AxumPath, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::Response,
 };
+use axum_extra::extract::cookie::CookieJar;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
-use crate::{domain::errors::game::GameError, infrastructure::web::server::AppState};
+use crate::{
+    domain::{entities::secret::Claims, errors::game::GameError},
+    infrastructure::web::server::AppState,
+};
+
+use super::access::{entitled, game_access_by_slug};
 
 /// Headers a wasmshell's page requires on its whole prefix (see the gta-vc
 /// hosting README): without them the page is not cross-origin isolated, its
@@ -86,12 +93,24 @@ async fn payload_row(state: &AppState, slug: &str) -> Result<Option<(String, Str
 
 pub async fn get_payload_file(
     State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    jar: CookieJar,
     AxumPath((slug, path)): AxumPath<(String, String)>,
     headers: HeaderMap,
 ) -> Result<Response, GameError> {
     // An empty path is a directory, and a directory is not a file this handler
     // serves; the player boots `<payload>/index.html` by name.
     if path.is_empty() || path.ends_with('/') {
+        return Err(GameError::GameNotFound);
+    }
+    // Invited-only games answer a stranger with the same 404 a draft would,
+    // so the files do not even confirm the game exists.
+    let access = game_access_by_slug(&state.game_service.pool, &slug).await?;
+    let allowed = match &access {
+        Some(access) => entitled(&state, access, opt_claims.as_ref(), &jar).await?,
+        None => false,
+    };
+    if !allowed {
         return Err(GameError::GameNotFound);
     }
     let Some((kind, storage_key)) = payload_row(&state, &slug).await? else {

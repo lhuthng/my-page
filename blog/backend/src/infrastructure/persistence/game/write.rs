@@ -13,15 +13,16 @@ impl GameServiceImpl {
         let game_id: i64 = sqlx::query_scalar(
             r#"
             INSERT INTO games (
-                post_id, launcher_type, demo_width, demo_height, demo_url,
+                post_id, launcher_type, access_mode, demo_width, demo_height, demo_url,
                 instruction, cheatcode, story
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
         .bind(cmd.post_id)
         .bind(cmd.launcher_type)
+        .bind(cmd.access_mode)
         .bind(cmd.demo_width)
         .bind(cmd.demo_height)
         .bind(cmd.demo_url)
@@ -78,6 +79,9 @@ impl GameServiceImpl {
         if cmd.launcher_type.is_some() {
             fields.push("launcher_type = ?");
         }
+        if cmd.access_mode.is_some() {
+            fields.push("access_mode = ?");
+        }
         if cmd.demo_width.is_some() {
             fields.push("demo_width = ?");
         }
@@ -102,6 +106,9 @@ impl GameServiceImpl {
             let sql = format!("UPDATE games SET {} WHERE id = ?", fields.join(", "));
             let mut query = sqlx::query(&sql);
             if let Some(value) = cmd.launcher_type {
+                query = query.bind(value);
+            }
+            if let Some(value) = cmd.access_mode {
                 query = query.bind(value);
             }
             if let Some(value) = cmd.demo_width {

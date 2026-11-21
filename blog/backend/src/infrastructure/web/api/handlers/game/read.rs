@@ -6,6 +6,7 @@ use axum::{
     extract::{Path as AxumPath, Query, State},
     response::IntoResponse,
 };
+use axum_extra::extract::cookie::CookieJar;
 
 use crate::{
     application::{
@@ -48,13 +49,14 @@ pub async fn check_game(
 pub async fn get_game_by_slug(
     State(state): State<Arc<AppState>>,
     Extension(opt_claims): Extension<Option<Claims>>,
+    jar: CookieJar,
     AxumPath(slug): AxumPath<String>,
 ) -> Result<impl IntoResponse, GameError> {
     // The viewer is identified so the response can report `is_owner`. This used
     // to sit behind a `with_draft` flag that also returned the unpublished
     // body; with a single body there is nothing left to gate, so the viewer is
     // simply whoever the token says.
-    let as_id = match opt_claims {
+    let as_id = match &opt_claims {
         Some(claims) => Some(
             claims
                 .user_id
@@ -64,11 +66,23 @@ pub async fn get_game_by_slug(
         None => None,
     };
 
+    // The access facts (mode, owner) come from the same published row the
+    // service is about to fetch; fetching them by slug here keeps the owner
+    // check in `entitled` anchored to the game, never to the viewer.
+    let access = super::access::game_access_by_slug(&state.game_service.pool, &slug).await?;
+
     let game = state
         .game_service
         .get_game_by_slug(GetGameBySlugCommand { slug, as_id })
         .await?;
     let mut response = game_response(game);
+    // Whether the viewer may actually play. The page uses this to decide
+    // between the player and the invitation gate; the serving routes make
+    // their own call so the files stay closed regardless of what this says.
+    response.entitled = match &access {
+        Some(access) => super::access::entitled(&state, access, opt_claims.as_ref(), &jar).await?,
+        None => false,
+    };
     if response.launcher_type == "v86" {
         response.v86_runtime = runtime_descriptor(
             &state.game_service.pool,

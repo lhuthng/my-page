@@ -145,8 +145,17 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 ))
                 .layer(DefaultBodyLimit::max(9 * 1024 * 1024)),
         )
-        // public: published artifacts
-        .route("/systems/public", get(list_public_systems))
-        .route("/assets/systems/{sha256}/{part}", get(get_system_chunk))
-        .route("/snapshots/{sha256}/{part}", get(get_snapshot_blob))
+        // public: published artifacts. optional auth so the snapshot route can
+        // tell a stranger from an invited viewer (invited-only games gate it
+        // exactly like their disk routes).
+        .merge(
+            Router::new()
+                .route("/systems/public", get(list_public_systems))
+                .route("/assets/systems/{sha256}/{part}", get(get_system_chunk))
+                .route("/snapshots/{sha256}/{part}", get(get_snapshot_blob))
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    middlewares::auth::optional_user_guard,
+                )),
+        )
 }

@@ -66,6 +66,7 @@ pub struct Game {
     pub cover_video_type: Option<String>,
     pub og_image_seconds: i64,
     pub demo: GameDemo,
+    pub access_mode: String,
     pub instruction: String,
     pub cheatcode: String,
     pub story: String,

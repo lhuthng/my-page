@@ -23,6 +23,9 @@ pub struct GameData {
     pub tags: Vec<String>,
     pub number_of_files: usize,
     pub launcher_type: String,
+    /// 'open' or 'invited'; absent means 'open'.
+    #[serde(default)]
+    pub access_mode: Option<String>,
     pub demo_width: Option<String>,
     pub demo_height: Option<String>,
     pub demo_url: Option<String>,
@@ -42,6 +45,7 @@ pub struct GamePatchData {
     pub tags: Option<Vec<String>>,
     pub number_of_files: usize,
     pub launcher_type: Option<String>,
+    pub access_mode: Option<String>,
     pub demo_width: Option<String>,
     pub demo_height: Option<String>,
     pub demo_url: Option<String>,
@@ -191,4 +195,51 @@ pub struct FeaturedGamesResponse {
 #[derive(Deserialize)]
 pub struct SetGameFeaturedBody {
     pub is_featured: bool,
+}
+
+// --- invitations ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct RedeemInvitationRequest {
+    pub code: String,
+}
+
+#[derive(Serialize)]
+pub struct RedeemInvitationResponse {
+    pub entitled: bool,
+    pub access_mode: String,
+}
+
+/// What the author's dashboard sees of a code. The raw code is never in this
+/// type - it exists only in the create response, exactly once.
+#[derive(Serialize)]
+pub struct InvitationView {
+    pub id: i64,
+    pub note: String,
+    pub hint: String,
+    /// Redemptions allowed: 1 = single-use, N = N uses, 0 = unlimited.
+    pub max_uses: i64,
+    pub uses_count: i64,
+    pub revoked: bool,
+    pub created_at: String,
+}
+
+#[derive(Serialize)]
+pub struct InvitationsResponse {
+    pub invitations: Vec<InvitationView>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateInvitationRequest {
+    /// 0 means unlimited; anything else is a hard redemption count.
+    pub max_uses: i64,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct CreateInvitationResponse {
+    /// The only time the raw code leaves the server.
+    pub code: String,
+    pub invitation: InvitationView,
 }

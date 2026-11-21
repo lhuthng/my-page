@@ -48,6 +48,12 @@ pub struct GameResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
     pub launcher_type: String,
+    /// 'open' or 'invited'. The page gates the player on this plus `entitled`.
+    pub access_mode: String,
+    /// May this viewer actually play? Pre-computed by the handlers (open
+    /// games, owners and staff are trivially yes; invited games consult
+    /// grants and the invite cookie).
+    pub entitled: bool,
     pub demo_url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_demo_url: Option<String>,
@@ -133,6 +139,10 @@ pub(super) fn game_response(game: Game) -> GameResponse {
         published_at: normalize_optional_utc_timestamp(game.published_at),
         updated_at: normalize_optional_utc_timestamp(game.updated_at),
         launcher_type: game.demo.launcher_type,
+        access_mode: game.access_mode,
+        // The author-facing details view is trivially entitled; the public
+        // by-slug view overwrites this with the real decision.
+        entitled: true,
         raw_demo_url,
         demo_width: game.demo.width,
         demo_height: game.demo.height,

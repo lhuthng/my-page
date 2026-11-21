@@ -184,6 +184,7 @@ impl GameServiceImpl {
                 demo_url: row.demo_url,
                 jsdos_bundle,
             },
+            access_mode: row.access_mode,
             instruction: row.instruction,
             cheatcode: row.cheatcode,
             story: row.story,

@@ -13,6 +13,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use axum_extra::extract::cookie::CookieJar;
 use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -30,6 +31,8 @@ use crate::{
         server::AppState,
     },
 };
+
+use super::access::{entitled, game_access_by_slug};
 
 fn validate_jsdos_bundle(path: &Path, max_files: usize) -> Result<(u64, String), GameError> {
     let mut file = fs::File::open(path)?;
@@ -317,8 +320,19 @@ pub async fn abort_jsdos_upload(
 
 pub async fn get_jsdos_bundle(
     State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    jar: CookieJar,
     AxumPath(slug): AxumPath<String>,
 ) -> Result<Response, GameError> {
+    // Invited-only games answer a stranger with the same 404 a draft would.
+    let access = game_access_by_slug(&state.game_service.pool, &slug).await?;
+    let allowed = match &access {
+        Some(access) => entitled(&state, access, opt_claims.as_ref(), &jar).await?,
+        None => false,
+    };
+    if !allowed {
+        return Err(GameError::GameNotFound);
+    }
     let storage_key: Option<String> = sqlx::query_scalar(
         "SELECT b.storage_key FROM game_jsdos_bundles b JOIN games g ON g.id = b.game_id JOIN posts ON posts.id = g.post_id WHERE posts.slug = ? AND posts.status = 'published' AND g.launcher_type = 'jsdos'",
     )

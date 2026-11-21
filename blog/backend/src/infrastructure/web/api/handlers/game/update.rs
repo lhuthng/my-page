@@ -195,6 +195,8 @@ pub async fn update_game(
             game_id,
             user_id,
             launcher_type: data.launcher_type,
+            access_mode: super::access::normalize_access_mode(data.access_mode.as_deref())
+                .map(Some)?,
             demo_width: data.demo_width,
             demo_height: data.demo_height,
             demo_url,

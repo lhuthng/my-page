@@ -6,22 +6,55 @@ use std::{
 };
 
 use axum::{
+    Extension,
     extract::{Path as AxumPath, State},
     http::{HeaderValue, header},
     response::Response,
 };
+use axum_extra::extract::cookie::CookieJar;
 use tokio_util::io::ReaderStream;
 
+use crate::domain::entities::secret::Claims;
 use crate::domain::errors::project::ProjectError;
 use crate::infrastructure::{storage::ObjectStore, web::server::AppState};
 
 use super::shared::storage_error;
 use super::snapshot_uploads::validate_sha256_hex;
+use crate::infrastructure::web::api::handlers::game::access::{
+    entitled, entitled_with, game_access_by_slug,
+};
+
+/// The invited-only gate for the slug-addressed game routes. Everything the
+/// gate reads lives behind the game handlers' resolver; the error mapping is
+/// the only thing that differs here (ProjectError, not GameError).
+async fn game_gate(
+    state: &AppState,
+    slug: &str,
+    viewer: Option<&Claims>,
+    jar: &CookieJar,
+) -> Result<(), ProjectError> {
+    let access = game_access_by_slug(&state.game_service.pool, slug)
+        .await
+        .map_err(|e| ProjectError::InternalError(e.to_string()))?;
+    let allowed = match &access {
+        Some(access) => entitled(state, access, viewer, jar)
+            .await
+            .map_err(|e| ProjectError::InternalError(e.to_string()))?,
+        None => false,
+    };
+    if allowed {
+        Ok(())
+    } else {
+        Err(ProjectError::ProjectNotFound)
+    }
+}
 
 /// Public serve for the local-storage fallback (no R2 public domain). With R2
 /// configured the descriptor points straight at the bucket instead.
 pub async fn get_snapshot_blob(
     State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    jar: CookieJar,
     AxumPath((sha256, part)): AxumPath<(String, String)>,
 ) -> Result<Response, ProjectError> {
     if part != "state.zst" {
@@ -31,8 +64,9 @@ pub async fn get_snapshot_blob(
     // Only serve digests referenced by a published project, matching the disk
     // and ISO routes. A snapshot is a fully booted machine with the game on
     // it, so a draft's state must not be reachable before the post goes live.
-    let storage_key: Option<String> = sqlx::query_scalar(
-        r#"SELECT s.storage_key FROM game_v86_snapshots s
+    let row: Option<(String, i64, String, i64)> = sqlx::query_as(
+        r#"SELECT s.storage_key, gm.id, gm.access_mode, posts.user_id
+           FROM game_v86_snapshots s
            JOIN games gm ON gm.id = s.game_id
            JOIN posts ON posts.id = gm.post_id
            WHERE s.sha256 = ? AND posts.status = 'published' AND gm.launcher_type = 'v86'
@@ -41,7 +75,23 @@ pub async fn get_snapshot_blob(
     .bind(&sha256)
     .fetch_optional(&state.project_service.pool)
     .await?;
-    let storage_key = storage_key.ok_or(ProjectError::ProjectNotFound)?;
+    let (storage_key, game_id, access_mode, owner_user_id) =
+        row.ok_or(ProjectError::ProjectNotFound)?;
+    // A snapshot carries the whole game disk, so invited-only games gate it
+    // exactly like the disk routes do.
+    let allowed = entitled_with(
+        &state,
+        game_id,
+        &access_mode,
+        owner_user_id,
+        opt_claims.as_ref(),
+        &jar,
+    )
+    .await
+    .map_err(|e| ProjectError::InternalError(e.to_string()))?;
+    if !allowed {
+        return Err(ProjectError::ProjectNotFound);
+    }
     match &state.storage {
         ObjectStore::R2(_) => {
             streamed_object(
@@ -165,8 +215,11 @@ pub async fn get_system_chunk(
 
 pub async fn get_game_chunk(
     State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    jar: CookieJar,
     AxumPath((slug, sha256, part)): AxumPath<(String, String, String)>,
 ) -> Result<Response, ProjectError> {
+    game_gate(&state, &slug, opt_claims.as_ref(), &jar).await?;
     let storage_key: Option<String> = sqlx::query_scalar(
         r#"SELECT iso_storage_key
            FROM (
@@ -211,8 +264,11 @@ pub async fn get_game_chunk(
 
 pub async fn get_game_disk_chunk(
     State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    jar: CookieJar,
     AxumPath((slug, sha256, part)): AxumPath<(String, String, String)>,
 ) -> Result<Response, ProjectError> {
+    game_gate(&state, &slug, opt_claims.as_ref(), &jar).await?;
     let storage_key: Option<String> = sqlx::query_scalar(
         r#"SELECT g.disk_storage_key FROM game_v86_games g
            JOIN games gm ON gm.id = g.game_id
@@ -255,8 +311,11 @@ pub async fn get_game_disk_chunk(
 
 pub async fn get_game_iso(
     State(state): State<Arc<AppState>>,
+    Extension(opt_claims): Extension<Option<Claims>>,
+    jar: CookieJar,
     AxumPath((slug, sha256)): AxumPath<(String, String)>,
 ) -> Result<Response, ProjectError> {
+    game_gate(&state, &slug, opt_claims.as_ref(), &jar).await?;
     let storage_key: Option<String> = sqlx::query_scalar(
         r#"SELECT iso_storage_key
            FROM (
