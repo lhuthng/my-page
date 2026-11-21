@@ -16,6 +16,10 @@ pub struct ProjectDemoConfig {
     pub v86_upload_chunk_size: u64,
     pub v86_download_chunk_size: u64,
     pub v86_assets_dir: PathBuf,
+    pub max_payload_size: u64,
+    pub max_payload_extracted_size: u64,
+    pub payload_chunk_size: u64,
+    pub max_payload_files: usize,
 }
 
 impl ProjectDemoConfig {
@@ -69,6 +73,28 @@ impl ProjectDemoConfig {
         let v86_assets_dir = env::var("PROJECT_V86_ASSETS_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"));
+        // Payload bundles ('shimkit', 'wasmshell'): one zip per game. The cap is
+        // a source port's size — Vice City's bundle is about 700 MB — and the
+        // extracted cap what unpacking may place on disk for one game.
+        let max_payload_size = env::var("PROJECT_PAYLOAD_MAX_BYTES")
+            .unwrap_or_else(|_| (2 * 1024 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_PAYLOAD_MAX_BYTES must be an integer");
+        let max_payload_extracted_size = env::var("PROJECT_PAYLOAD_EXTRACTED_MAX_BYTES")
+            .unwrap_or_else(|_| (4 * 1024 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_PAYLOAD_EXTRACTED_MAX_BYTES must be an integer");
+        let payload_chunk_size = env::var("PROJECT_PAYLOAD_CHUNK_BYTES")
+            .unwrap_or_else(|_| (8 * 1024 * 1024_u64).to_string())
+            .parse::<u64>()
+            .expect("PROJECT_PAYLOAD_CHUNK_BYTES must be an integer");
+        // A source port's bundle holds the whole install plus its block store —
+        // Vice City's is ~2,050 entries — far past the html5 demo's 2,000-file
+        // budget, so payload bundles count against their own cap.
+        let max_payload_files = env::var("PROJECT_PAYLOAD_MAX_FILES")
+            .unwrap_or_else(|_| "20000".to_string())
+            .parse::<usize>()
+            .expect("PROJECT_PAYLOAD_MAX_FILES must be an integer");
 
         Self {
             dir,
@@ -83,6 +109,10 @@ impl ProjectDemoConfig {
             v86_upload_chunk_size,
             v86_download_chunk_size,
             v86_assets_dir,
+            max_payload_size,
+            max_payload_extracted_size,
+            payload_chunk_size,
+            max_payload_files,
         }
     }
 }

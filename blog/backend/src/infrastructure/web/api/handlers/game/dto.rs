@@ -83,6 +83,57 @@ pub struct CompleteJsDosUploadResponse {
     pub sha256: String,
     pub bundle_url: String,
 }
+
+// Payload bundle upload ('shimkit' / 'wasmshell'): the same chunked shape as the
+// js-dos session, sized for bundles a source port ships.
+#[derive(Deserialize)]
+pub struct StartPayloadUploadRequest {
+    pub file_name: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct StartPayloadUploadResponse {
+    pub upload_id: String,
+    pub chunk_size_bytes: u64,
+    pub next_chunk_index: u64,
+    pub expected_size_bytes: u64,
+}
+
+#[derive(Serialize)]
+pub struct PayloadUploadResponse {
+    pub received_size_bytes: u64,
+    pub next_chunk_index: u64,
+}
+
+#[derive(Serialize)]
+pub struct CompletePayloadUploadResponse {
+    pub game_id: i64,
+    pub file_name: String,
+    pub kind: String,
+    pub slug: String,
+    pub title: String,
+    pub size_bytes: u64,
+    pub sha256: String,
+    pub files: usize,
+    pub extracted_bytes: u64,
+    pub payload_url: String,
+}
+
+// Unified payload saves: one guest-written file per row, keyed by its name in
+// the game's own save set.
+#[derive(Serialize)]
+pub struct GameSaveEntry {
+    pub key: String,
+    pub size_bytes: i64,
+    pub sha256: String,
+    pub updated_at: String,
+}
+
+#[derive(Serialize)]
+pub struct GameSavesResponse {
+    pub saves: Vec<GameSaveEntry>,
+}
 #[derive(Deserialize)]
 pub struct DeleteGameQuery {
     pub reason: Option<String>,

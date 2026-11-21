@@ -3,9 +3,12 @@
 // signatures use. Internal helpers stay inside their sub-modules.
 mod dto;
 mod jsdos;
+mod payload;
+mod payload_serve;
 mod publish;
 mod read;
 mod response;
+mod saves;
 mod trash;
 mod update;
 mod write;
@@ -14,20 +17,27 @@ mod write;
 mod tests;
 
 pub use dto::{
-    CheckQuery, CheckResponse, CompleteJsDosUploadResponse, DeleteGameQuery, FeaturedGamesQuery,
-    FeaturedGamesResponse, GameCard, GameStats, JsDosUploadResponse, LatestGamesQuery,
-    LatestGamesResponse, SetGameFeaturedBody, StartJsDosUploadRequest, StartJsDosUploadResponse,
+    CheckQuery, CheckResponse, CompleteJsDosUploadResponse, CompletePayloadUploadResponse,
+    DeleteGameQuery, FeaturedGamesQuery, FeaturedGamesResponse, GameCard, GameSaveEntry,
+    GameSavesResponse, GameStats, JsDosUploadResponse, LatestGamesQuery, LatestGamesResponse,
+    PayloadUploadResponse, SetGameFeaturedBody, StartJsDosUploadRequest, StartJsDosUploadResponse,
+    StartPayloadUploadRequest, StartPayloadUploadResponse,
 };
 pub use jsdos::{
     abort_jsdos_upload, append_jsdos_chunk, complete_jsdos_upload, get_jsdos_bundle,
     start_jsdos_upload,
 };
+pub use payload::{
+    abort_payload_upload, append_payload_chunk, complete_payload_upload, start_payload_upload,
+};
+pub use payload_serve::get_payload_file;
 pub use publish::{publish_game, set_game_featured};
 pub use read::{
     check_game, get_all_games, get_featured_games, get_game_by_slug, get_game_details,
     get_latest_games,
 };
 pub use response::{GameResponse, UpdateGameResponse};
+pub use saves::{delete_game_save, get_game_save, list_game_saves, put_game_save};
 pub use trash::{delete_game_draft, purge_game_now, restore_game};
 pub use update::update_game;
 pub use write::{change_cover, new_game};
@@ -55,6 +65,13 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .put(v86::put_game_save)
                 .delete(v86::delete_game_save),
         )
+        .route("/s/{game_slug}/saves", get(list_game_saves))
+        .route(
+            "/s/{game_slug}/saves/{save_key}",
+            get(get_game_save)
+                .put(put_game_save)
+                .delete(delete_game_save),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             middlewares::auth::optional_user_guard,
@@ -76,6 +93,19 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
                 .route(
                     "/id/{game_id}/jsdos/upload/{upload_id}",
                     delete(abort_jsdos_upload),
+                )
+                .route("/id/{game_id}/payload/upload", post(start_payload_upload))
+                .route(
+                    "/id/{game_id}/payload/upload/{upload_id}/chunk/{chunk_index}",
+                    put(append_payload_chunk),
+                )
+                .route(
+                    "/id/{game_id}/payload/upload/{upload_id}/complete",
+                    post(complete_payload_upload),
+                )
+                .route(
+                    "/id/{game_id}/payload/upload/{upload_id}",
+                    delete(abort_payload_upload),
                 )
                 .route("/all", get(get_all_games))
                 .route("/id/{game_id}", post(publish_game))
@@ -106,6 +136,10 @@ pub fn routes(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .merge(
             Router::new()
                 .route("/s/{game_slug}/jsdos", get(get_jsdos_bundle))
+                .route(
+                    "/s/{game_slug}/payload/{*payload_path}",
+                    get(get_payload_file),
+                )
                 .route(
                     "/s/{game_slug}/v86/{sha256}/full.iso",
                     get(v86::get_game_iso),

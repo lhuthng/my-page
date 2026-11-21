@@ -42,6 +42,9 @@ pub use saves::{delete_game_save, get_game_save, put_game_save};
 pub use serving::{
     get_game_chunk, get_game_disk_chunk, get_game_iso, get_snapshot_blob, get_system_chunk,
 };
+// The raw streaming helpers, shared with the payload launchers' save serving
+// (handlers/game/saves.rs); pub(crate) because they are not routes.
+pub(crate) use serving::{streamed_fs_file, streamed_object};
 pub use snapshot_finalize::{abort_snapshot_upload, complete_snapshot_upload};
 pub use snapshot_uploads::{append_snapshot_chunk, start_snapshot_upload};
 pub use snapshots::{delete_game_snapshot, get_game_snapshot};

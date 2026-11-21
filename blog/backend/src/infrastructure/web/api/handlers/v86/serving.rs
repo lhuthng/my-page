@@ -85,7 +85,9 @@ fn streamed_response(
     response
 }
 
-pub(super) async fn streamed_fs_file(
+// pub(crate): the payload launchers' save serving (handlers/game/saves.rs)
+// streams from the same store, and GameError::Project bridges the error type.
+pub(crate) async fn streamed_fs_file(
     path: PathBuf,
     content_type: &'static str,
     cache_control: &'static str,
@@ -108,7 +110,7 @@ pub(super) async fn streamed_fs_file(
 
 /// Streams an object from the store by key. Keys mirror the R2 layout, so the
 /// same key resolves in either backend.
-pub(super) async fn streamed_object(
+pub(crate) async fn streamed_object(
     storage: &ObjectStore,
     key: &str,
     content_type: &'static str,

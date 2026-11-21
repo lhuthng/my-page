@@ -109,6 +109,16 @@ pub async fn update_game(
                         ));
                     }
                 }
+                // Payload bundles upload through their own chunked session, so
+                // neither a URL nor an inline zip is accepted here either.
+                "shimkit" | "wasmshell" => {
+                    if has_demo_url || parsed.demo_zip.is_some() {
+                        return Err(GameError::InvalidDemo(
+                            "Payload bundles must be uploaded through the payload upload endpoint."
+                                .to_string(),
+                        ));
+                    }
+                }
                 "v86" => {
                     if has_demo_url || parsed.demo_zip.is_some() {
                         return Err(GameError::InvalidDemo(

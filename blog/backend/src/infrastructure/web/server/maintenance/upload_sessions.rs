@@ -170,6 +170,37 @@ pub async fn cleanup_orphaned_uploads(
         clean_game_session(pool, storage, demos_dir, session_id).await;
     }
 
+    // Payload bundles ('shimkit', 'wasmshell'): an expired session's staged
+    // part file is removed and the session expires, then terminal rows age out
+    // like the v86 ones do.
+    let stale_payloads: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT id, temp_storage_key FROM game_payload_upload_sessions
+           WHERE status = 'active' AND expires_at < datetime('now')"#,
+    )
+    .fetch_all(pool)
+    .await?;
+    for (session_id, temp_key) in &stale_payloads {
+        sqlx::query(
+            "UPDATE game_payload_upload_sessions SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        )
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+        let _ = tokio::fs::remove_file(temp_key).await;
+    }
+    let terminal_payloads: Vec<String> = sqlx::query_scalar(
+        r#"SELECT id FROM game_payload_upload_sessions
+           WHERE status != 'active' AND expires_at < datetime('now')"#,
+    )
+    .fetch_all(pool)
+    .await?;
+    for session_id in &terminal_payloads {
+        sqlx::query("DELETE FROM game_payload_upload_sessions WHERE id = ?")
+            .bind(session_id)
+            .execute(pool)
+            .await?;
+    }
+
     // Finished sessions (consumed/aborted/ready/expired) are never removed
     // otherwise; once they age out of the TTL they are safe to drop.
     let terminal_games: Vec<String> = sqlx::query_scalar(
@@ -187,10 +218,10 @@ pub async fn cleanup_orphaned_uploads(
     }
 
     let stale_systems = rows.len();
-    if stale_systems + stale_games.len() > 0 {
+    if stale_systems + stale_games.len() + stale_payloads.len() > 0 {
         println!(
             "Cleaned up {} orphaned upload session(s)",
-            stale_systems + stale_games.len()
+            stale_systems + stale_games.len() + stale_payloads.len()
         );
     }
 

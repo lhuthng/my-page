@@ -103,6 +103,12 @@ pub(super) fn game_response(game: Game) -> GameResponse {
     if game.demo.launcher_type == "jsdos" && jsdos_bundle_url.is_some() {
         demo_url = format!("games/s/{}/jsdos", game.slug);
     }
+    // The payload launchers serve their bundles file by file under one prefix;
+    // the players build their fetches from it (and from the slug, which the
+    // response already carries).
+    if matches!(game.demo.launcher_type.as_str(), "shimkit" | "wasmshell") {
+        demo_url = format!("games/s/{}/payload/", game.slug);
+    }
 
     GameResponse {
         demo_url,
