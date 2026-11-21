@@ -3,12 +3,15 @@
 	import BackButton from '../ui/BackButton.svelte';
 	import JsDosPlayer from './JsDosPlayer.svelte';
 	import V86Player from './V86Player.svelte';
+	import ShimKitPlayer from '$lib/players/ShimKitPlayer.svelte';
+	import WasmShellPlayer from '$lib/players/WasmShellPlayer.svelte';
 
 	// `showBack` and `heading` exist for the embedded form (`:::app game`): an
 	// article supplies its own context, and a heading rendered here would also
 	// be collected as one of the post's headings by `findHeaders`.
 	let {
 		title,
+		slug,
 		demoType = 'html5',
 		demoUrl,
 		v86Runtime,
@@ -25,8 +28,10 @@
 	let loaded = $state(false);
 	let beforeDemoPortal = $state();
 	let afterDemoPortal = $state();
-	let startsOnDemand = $derived(['html5', 'embed', 'webgl', 'jsdos', 'v86'].includes(demoType));
-	let isGame = $derived(demoType === 'jsdos' || demoType === 'v86');
+	let startsOnDemand = $derived(
+		['html5', 'embed', 'webgl', 'jsdos', 'v86', 'shimkit', 'wasmshell'].includes(demoType)
+	);
+	let isGame = $derived(['jsdos', 'v86', 'shimkit', 'wasmshell'].includes(demoType));
 	let startLabel = $derived(
 		isGame ? 'Start game' : demoType === 'webgl' ? 'Launch WebGL' : 'Start Demo'
 	);
@@ -69,6 +74,20 @@
 			{:else if demoType === 'v86'}
 				<div in:fade={{ duration: 250 }} class="h-full w-full">
 					<V86Player {title} runtime={v86Runtime} {...rest} {beforeDemoPortal} {afterDemoPortal} />
+				</div>
+			{:else if demoType === 'shimkit'}
+				<div in:fade={{ duration: 250 }} class="h-full w-full">
+					<ShimKitPlayer {title} {slug} payloadUrl={demoUrl} {beforeDemoPortal} {afterDemoPortal} />
+				</div>
+			{:else if demoType === 'wasmshell'}
+				<div in:fade={{ duration: 250 }} class="h-full w-full">
+					<WasmShellPlayer
+						{title}
+						{slug}
+						payloadUrl={demoUrl}
+						{beforeDemoPortal}
+						{afterDemoPortal}
+					/>
 				</div>
 			{:else if demoType === 'video'}
 				<video class="block h-full w-full bg-black object-contain" src={demoUrl} controls {title}>

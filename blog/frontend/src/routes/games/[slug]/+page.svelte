@@ -46,7 +46,8 @@
 		cheatcode,
 		story,
 		related_games,
-		initialVariant
+		initialVariant,
+		slug
 	} = $derived(data);
 
 	let liked = $state();
@@ -186,6 +187,7 @@
 <article class="flex flex-col gap-4 pb-4 *:drop-shadow-xl">
 	<GameDemo
 		{title}
+		{slug}
 		launcherType={launcher_type}
 		demoUrl={demo_url}
 		v86Runtime={v86_runtime}

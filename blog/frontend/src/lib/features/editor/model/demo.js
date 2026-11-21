@@ -24,6 +24,8 @@ export const GAME_DEMO_TYPES = [
 	{ value: 'webgl', label: 'WebGL', disabled: false },
 	{ value: 'jsdos', label: 'js-dos', disabled: false },
 	{ value: 'v86', label: 'v86', disabled: false },
+	{ value: 'shimkit', label: 'Shim Kit (win32 rehost)', disabled: false },
+	{ value: 'wasmshell', label: 'Web shell (wasm port)', disabled: false },
 	{ value: 'embed', label: 'Embed', disabled: false },
 	{ value: 'download', label: 'Download', disabled: false },
 	{ value: 'video', label: 'Video', disabled: false }
@@ -162,6 +164,17 @@ export function validateDemoFields({
 		case 'jsdos':
 			if (mode === 'create' && !zip) {
 				return { valid: false, error: `A .jsdos bundle is required for js-dos ${kindLabel}.` };
+			}
+			break;
+		case 'shimkit':
+		case 'wasmshell':
+			// A payload bundle uploads through its own chunked session after the
+			// draft exists; the zip the editor holds is what that session sends.
+			if (mode === 'create' && !zip) {
+				return {
+					valid: false,
+					error: `A payload bundle (.zip with bundle.json) is required for ${demoType} ${kindLabel}.`
+				};
 			}
 			break;
 		case 'v86': {

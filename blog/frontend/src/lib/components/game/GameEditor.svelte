@@ -176,7 +176,7 @@
 			{/if}
 		</div>
 	{/if}
-	{#if demoType === 'html5' || demoType === 'webgl' || demoType === 'jsdos' || demoType === 'v86'}
+	{#if demoType === 'html5' || demoType === 'webgl' || demoType === 'jsdos' || demoType === 'v86' || demoType === 'shimkit' || demoType === 'wasmshell'}
 		<div
 			class="rounded-xl border-2 border-dashed border-dark/30 bg-background/20 p-3"
 			ondrop={(e) => {
@@ -191,9 +191,11 @@
 					? 'js-dos bundle'
 					: demoType === 'v86'
 						? 'v86 game ZIP'
-						: demoType === 'html5'
-							? 'HTML5 zip'
-							: 'WebGL zip'}
+						: demoType === 'shimkit' || demoType === 'wasmshell'
+							? 'Payload bundle (zip with bundle.json)'
+							: demoType === 'html5'
+								? 'HTML5 zip'
+								: 'WebGL zip'}
 			</label>
 			<input
 				id="demo-zip"

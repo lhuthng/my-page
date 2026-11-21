@@ -41,7 +41,15 @@ export async function load({ fetch, params, url, setHeaders }) {
 	cover_url = fixClientRoute(cover_url);
 	cover_video_url = fixClientRoute(cover_video_url);
 	og_image_url = fixClientRoute(og_image_url);
-	demo_url = fixClientRoute(demo_url);
+	if (rest.launcher_type === 'shimkit' || rest.launcher_type === 'wasmshell') {
+		// The payload base stays on this origin through the /api proxy on
+		// purpose: the wasmshell bundle frames itself in an iframe that must be
+		// same-origin (its isolation headers and save bridge say so), and
+		// fixClientRoute would point it at the backend origin instead.
+		demo_url = `/api/games/s/${params.slug}/payload/`;
+	} else {
+		demo_url = fixClientRoute(demo_url);
+	}
 	jsdos_bundle_url = fixClientRoute(jsdos_bundle_url);
 	if (rest.v86_runtime) {
 		rest.v86_runtime.base_url = fixClientRoute(rest.v86_runtime.base_url);

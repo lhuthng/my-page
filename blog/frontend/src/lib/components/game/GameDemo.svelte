@@ -3,6 +3,7 @@
 
 	let {
 		title,
+		slug,
 		launcherType = 'html5',
 		demoUrl,
 		v86Runtime,
@@ -26,6 +27,7 @@
 
 <ProjectDemo
 	{title}
+	{slug}
 	demoType={launcherType}
 	{demoUrl}
 	{v86Runtime}

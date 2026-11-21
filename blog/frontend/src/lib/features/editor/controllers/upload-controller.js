@@ -240,5 +240,44 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 		if (!complete.ok) throw new Error(await complete.text());
 	}
 
-	return { prepareV86Artifact, uploadJsDosBundle };
+	// Payload bundles ('shimkit', 'wasmshell'): the same chunked shape as the
+	// js-dos session, against the payload endpoints. These launchers exist only
+	// for games, so the base is always the games router.
+	async function uploadPayloadBundle(projectId, file) {
+		const base = `/api/games/id/${projectId}/payload/upload`;
+		const start = await fetchImpl(base, {
+			method: 'POST',
+			headers: jsonHeaders(),
+			body: JSON.stringify({ file_name: file.name, size_bytes: file.size })
+		});
+		if (!start.ok) throw new Error(await start.text());
+		const session = await start.json();
+		onProgress('Uploading bundle…');
+		for (
+			let index = session.next_chunk_index;
+			index * session.chunk_size_bytes < file.size;
+			index++
+		) {
+			const startByte = index * session.chunk_size_bytes;
+			const chunk = file.slice(
+				startByte,
+				Math.min(startByte + session.chunk_size_bytes, file.size)
+			);
+			const chunkRes = await fetchImpl(`${base}/${session.upload_id}/chunk/${index}`, {
+				method: 'PUT',
+				headers: octetHeaders(),
+				body: chunk
+			});
+			if (!chunkRes.ok) throw new Error(await chunkRes.text());
+			const progress = Math.round(((startByte + chunk.size) / file.size) * 100);
+			onProgress(`Uploading bundle… ${progress}%`);
+		}
+		const complete = await fetchImpl(`${base}/${session.upload_id}/complete`, {
+			method: 'POST',
+			headers: authHeaders()
+		});
+		if (!complete.ok) throw new Error(await complete.text());
+	}
+
+	return { prepareV86Artifact, uploadJsDosBundle, uploadPayloadBundle };
 }

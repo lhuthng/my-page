@@ -373,16 +373,22 @@ export function createEditorViewModel({
 		ui.demoZipError = '';
 		if (!file) return;
 		const isJsDos = entry.demoType === 'jsdos';
-		if (!file.name.toLowerCase().endsWith(isJsDos ? '.jsdos' : '.zip')) {
+		const isPayload = entry.demoType === 'shimkit' || entry.demoType === 'wasmshell';
+		const wanted = isJsDos ? '.jsdos' : '.zip';
+		if (!file.name.toLowerCase().endsWith(wanted)) {
 			ui.demoZipError = isJsDos
 				? 'Only .jsdos bundles are allowed.'
 				: 'Only zip archives are allowed.';
 			return;
 		}
-		if (file.size > 524288000) {
+		// A payload bundle is a source port's whole install, sized like the v86
+		// game artifacts rather than like a js-dos bundle.
+		const cap = isPayload ? 2147483648 : 524288000;
+		const capLabel = isPayload ? '2 GiB' : '500 MiB';
+		if (file.size > cap) {
 			ui.demoZipError = isJsDos
-				? 'The js-dos bundle cannot exceed 500 MB.'
-				: 'The game ZIP cannot exceed 500 MiB.';
+				? `The js-dos bundle cannot exceed ${capLabel}.`
+				: `The bundle cannot exceed ${capLabel}.`;
 			return;
 		}
 		ui.demoZip = file;
@@ -771,14 +777,14 @@ export function createEditorViewModel({
 				.map((link) => ({ id: Number(link.id), title: link.title, slug: link.slug }))
 		};
 		if (v86UploadId) payload.v86_upload_id = v86UploadId;
-		if (!['html5', 'webgl', 'jsdos', 'v86'].includes(entry.demoType)) {
+		if (!['html5', 'webgl', 'jsdos', 'v86', 'shimkit', 'wasmshell'].includes(entry.demoType)) {
 			payload.demo_url = entry.demoUrl;
 		}
 
 		const formData = new FormData();
 		formData.append('game_data', new Blob([JSON.stringify(payload)], { type: 'application/json' }));
 		appendCreateCover(formData, ui.createCoverFile, entry.ogImageSeconds);
-		if (ui.demoZip && entry.demoType !== 'jsdos' && entry.demoType !== 'v86') {
+		if (ui.demoZip && !['jsdos', 'v86', 'shimkit', 'wasmshell'].includes(entry.demoType)) {
 			formData.append('demo_zip', ui.demoZip, ui.demoZip.name);
 		}
 		appendInlineFiles(formData, offlineKeys);
@@ -791,6 +797,9 @@ export function createEditorViewModel({
 			try {
 				if (entry.demoType === 'jsdos' && ui.demoZip) {
 					await upload.uploadJsDosBundle('game', id, ui.demoZip);
+				}
+				if (['shimkit', 'wasmshell'].includes(entry.demoType) && ui.demoZip) {
+					await upload.uploadPayloadBundle(id, ui.demoZip);
 				}
 			} catch (error) {
 				await deleteEntryDraft('game', id, auth(), fetchImpl);
@@ -886,7 +895,7 @@ export function createEditorViewModel({
 
 		const formData = new FormData();
 		formData.append('game_data', new Blob([JSON.stringify(patch)], { type: 'application/json' }));
-		if (ui.demoZip && entry.demoType !== 'jsdos' && entry.demoType !== 'v86') {
+		if (ui.demoZip && !['jsdos', 'v86', 'shimkit', 'wasmshell'].includes(entry.demoType)) {
 			formData.append('demo_zip', ui.demoZip, ui.demoZip.name);
 		}
 		appendInlineFiles(formData, offlineKeys);
@@ -901,6 +910,9 @@ export function createEditorViewModel({
 			try {
 				if (entry.demoType === 'jsdos' && ui.demoZip) {
 					await upload.uploadJsDosBundle(kind, entry.id, ui.demoZip);
+				}
+				if (['shimkit', 'wasmshell'].includes(entry.demoType) && ui.demoZip) {
+					await upload.uploadPayloadBundle(entry.id, ui.demoZip);
 				}
 			} catch (error) {
 				reportSaveFailure(error?.message ?? 'Game upload failed.', saveGame);

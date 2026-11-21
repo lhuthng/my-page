@@ -42,6 +42,7 @@
 {#if state === 'ready'}
 	<ProjectDemo
 		title={game.title ?? name}
+		slug={game.slug ?? name}
 		demoType={game.launcher_type ?? 'html5'}
 		demoUrl={game.demo_url}
 		v86Runtime={game.v86_runtime}
