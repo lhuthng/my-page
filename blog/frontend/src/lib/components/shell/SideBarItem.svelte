@@ -3,14 +3,16 @@
 	// NavigationSideBar and the dashboard's DashboardSideBar so hover, selected
 	// and label behaviour can never drift apart. `icon` is a component (the
 	// shell button icons render `<button><svg/></button>`, the dashboard-only
-	// ones a bare `<svg>`; both colorings are covered below).
-	let { icon: Icon, label, href, active = false } = $props();
+	// ones a bare `<svg>`; both colorings are covered below). `compact` is the
+	// user's manual collapse at `lg` and up: the label hides and the tooltip
+	// carries the name, exactly like the below-`lg` rail looks.
+	let { icon: Icon, label, href, active = false, compact = false } = $props();
 </script>
 
-<li class={active ? 'selected' : undefined}>
-	<a {href} aria-current={active ? 'page' : undefined}>
-		<Icon class="w-8 transition-all duration-100" />
-		<span class="not-lg:hidden min-w-0 truncate">{label}</span>
+<li class:compact class={active ? 'selected' : undefined}>
+	<a {href} aria-current={active ? 'page' : undefined} title={compact ? label : undefined}>
+		<Icon class="w-8 shrink-0 transition-all duration-100" />
+		<span class="not-lg:hidden min-w-0 truncate" class:hidden={compact}>{label}</span>
 	</a>
 </li>
 
@@ -26,5 +28,19 @@
 	}
 	li.selected {
 		@apply bg-dark text-white hover:bg-dark/90 [&>a>button]:fill-white [&>a>button]:stroke-white [&>a>svg]:fill-white [&>a>svg]:stroke-white;
+	}
+	/* The collapsed rail must look exactly like the below-`lg` compact bar —
+	   the user's reference. The wide-row padding (`lg:px-2`) is what leaks in
+	   at `lg` and shoves every icon past its pill, so compact rows keep the
+	   4px padding the compact bar uses. */
+	li.compact > a {
+		@apply px-1;
+	}
+	/* The collapsed rail must look exactly like the below-`lg` compact bar —
+	   the user's reference. The wide-row padding (`lg:px-2`) is what leaks in
+	   at `lg` and shoves every icon past its pill, so compact rows keep the
+	   4px padding the tablet bar uses. */
+	li.compact > a {
+		@apply px-1;
 	}
 </style>
