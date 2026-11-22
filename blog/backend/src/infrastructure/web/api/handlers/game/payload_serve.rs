@@ -137,6 +137,19 @@ pub async fn get_payload_file(
     let size = file.metadata().await?.len();
     let mut builder = Response::builder();
 
+    // The storage key ends in the zip's sha256, which is the bundle's
+    // identity: the shell reads it here and versions every asset URL with it,
+    // so a re-uploaded bundle gets fresh URLs instead of colliding with the
+    // browser's cached copy of the previous revision.
+    let bundle_sha = storage_key
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    if let Ok(value) = HeaderValue::from_str(&bundle_sha) {
+        builder = builder.header("x-bundle-sha", value);
+    }
+
     // Pre-compressed members: the browser inflates them because the header says
     // brotli, which is the whole trick the bundle's block store relies on.
     let is_block = path.starts_with("blocks/");

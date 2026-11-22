@@ -38,6 +38,8 @@
 		choices = [],
 		onChoice = null,
 		choiceConfirm = 'Switching will reboot the game — progress in the current session is lost. Continue?',
+		onPreload = null,
+		preloading = false,
 		legend = [],
 		legendNote = '',
 		progress = null,
@@ -88,6 +90,31 @@
 					</label>
 				</div>
 			</Popover>
+		{/if}
+
+		{#if onPreload}
+			<button
+				type="button"
+				class="icon-toggle"
+				aria-label="Preload the full game"
+				title="Preload the full game: fetch every archive block into memory up front, so gameplay never waits on the network (several hundred MB of RAM)"
+				disabled={preloading || !running}
+				onclick={() => onPreload()}
+			>
+				<svg
+					class="h-6 w-6"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path d="M12 3v12" />
+					<path d="m7 10 5 5 5-5" />
+					<path d="M5 21h14" />
+				</svg>
+			</button>
 		{/if}
 
 		<button

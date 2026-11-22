@@ -22,6 +22,7 @@
 	let phase = $state('loading');
 	let running = $state(false);
 	let error = $state('');
+	let preload = $state({ active: false, done: 0, total: 0 });
 
 	const src = $derived(
 		shellEntryUrl(payloadUrl ?? `/api/games/s/${encodeURIComponent(slug)}/payload/`, entry)
@@ -30,6 +31,17 @@
 		slug,
 		onDiagnostic: (line) => {
 			diagnostic = line;
+		},
+		onPreload: (message) => {
+			if (message.type === 'preload:progress') {
+				preload = { active: true, done: message.done, total: message.total };
+			} else if (message.type === 'preload:done') {
+				preload = { active: false, done: message.total ?? preload.total, total: preload.total };
+				diagnostic = `Full game preloaded (${preload.total} blocks), gameplay no longer waits on the network.`;
+			} else if (message.type === 'preload:error') {
+				preload = { active: false, done: 0, total: 0 };
+				diagnostic = `Preload failed: ${message.message}`;
+			}
 		}
 	});
 
@@ -65,6 +77,9 @@
 		async restart() {
 			bridge.restart();
 		},
+		async preload() {
+			bridge.preload();
+		},
 		async saveNow() {
 			bridge.post({ type: 'saves:export-request' });
 		},
@@ -98,6 +113,9 @@
 	{error}
 	saveAvailable
 	saveMessage={diagnostic}
+	onPreload={() => player.preload().catch(() => {})}
+	preloading={preload.active}
+	progress={preload.active ? Math.round((preload.done / Math.max(preload.total, 1)) * 100) : null}
 	{legend}
 	legendNote="Saves persist in this browser on their own. Signed in, they also mirror to your account; the save button forces a mirror right now."
 >

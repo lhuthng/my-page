@@ -21,9 +21,10 @@ export function shellEntryUrl(payloadUrl, entry) {
 
 export class WasmShellBridge {
 	/** @param {string} slug the game's slug; save files are keyed by it */
-	constructor({ slug, onDiagnostic = () => {} }) {
+	constructor({ slug, onDiagnostic = () => {}, onPreload = () => {} }) {
 		this.slug = slug;
 		this.onDiagnostic = onDiagnostic;
+		this.onPreload = onPreload;
 		this.frame = null;
 		this.ready = false;
 		this.imported = false;
@@ -70,7 +71,18 @@ export class WasmShellBridge {
 			await this.importCloudSaves();
 		} else if (message.type === 'saves:changed') {
 			await this.mirrorChanged(message.files ?? []);
+		} else if (
+			message.type === 'preload:progress' ||
+			message.type === 'preload:done' ||
+			message.type === 'preload:error'
+		) {
+			this.onPreload(message);
 		}
+	}
+
+	/** Asks the shell to fetch every archive member into its session cache. */
+	preload() {
+		this.post({ type: 'preload:start' });
 	}
 
 	/** Replays the account's save files into the shell before it boots. */
