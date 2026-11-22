@@ -41,6 +41,7 @@ pub(crate) struct GameContentRow {
     pub(crate) og_image_seconds: i64,
     pub(crate) launcher_type: String,
     pub(crate) access_mode: String,
+    pub(crate) capture_mouse: i64,
     pub(crate) demo_width: Option<String>,
     pub(crate) demo_height: Option<String>,
     pub(crate) demo_url: Option<String>,

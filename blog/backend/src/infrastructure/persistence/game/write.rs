@@ -13,16 +13,17 @@ impl GameServiceImpl {
         let game_id: i64 = sqlx::query_scalar(
             r#"
             INSERT INTO games (
-                post_id, launcher_type, access_mode, demo_width, demo_height, demo_url,
+                post_id, launcher_type, access_mode, capture_mouse, demo_width, demo_height, demo_url,
                 instruction, cheatcode, story
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING id
             "#,
         )
         .bind(cmd.post_id)
         .bind(cmd.launcher_type)
         .bind(cmd.access_mode)
+        .bind(cmd.capture_mouse)
         .bind(cmd.demo_width)
         .bind(cmd.demo_height)
         .bind(cmd.demo_url)
@@ -82,6 +83,9 @@ impl GameServiceImpl {
         if cmd.access_mode.is_some() {
             fields.push("access_mode = ?");
         }
+        if cmd.capture_mouse.is_some() {
+            fields.push("capture_mouse = ?");
+        }
         if cmd.demo_width.is_some() {
             fields.push("demo_width = ?");
         }
@@ -109,6 +113,9 @@ impl GameServiceImpl {
                 query = query.bind(value);
             }
             if let Some(value) = cmd.access_mode {
+                query = query.bind(value);
+            }
+            if let Some(value) = cmd.capture_mouse {
                 query = query.bind(value);
             }
             if let Some(value) = cmd.demo_width {

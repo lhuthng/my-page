@@ -26,6 +26,9 @@ pub struct GameData {
     /// 'open' or 'invited'; absent means 'open'.
     #[serde(default)]
     pub access_mode: Option<String>,
+    /// May the engine take the pointer exclusively while playing; absent means no.
+    #[serde(default)]
+    pub capture_mouse: Option<bool>,
     pub demo_width: Option<String>,
     pub demo_height: Option<String>,
     pub demo_url: Option<String>,
@@ -46,6 +49,7 @@ pub struct GamePatchData {
     pub number_of_files: usize,
     pub launcher_type: Option<String>,
     pub access_mode: Option<String>,
+    pub capture_mouse: Option<bool>,
     pub demo_width: Option<String>,
     pub demo_height: Option<String>,
     pub demo_url: Option<String>,

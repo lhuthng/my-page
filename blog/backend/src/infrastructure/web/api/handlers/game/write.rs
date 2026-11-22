@@ -184,6 +184,7 @@ pub async fn new_game(
             post_id,
             launcher_type: data.launcher_type,
             access_mode: super::access::normalize_access_mode(data.access_mode.as_deref())?,
+            capture_mouse: data.capture_mouse.unwrap_or(false),
             demo_width: data.demo_width,
             demo_height: data.demo_height,
             demo_url: validate_demo_url(data.demo_url, GameError::InvalidDemo)?,

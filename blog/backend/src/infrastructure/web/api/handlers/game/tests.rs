@@ -406,6 +406,52 @@ async fn an_open_game_serves_its_payload_with_no_credentials() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
+/// The editor's mouse-capture checkbox survives a PATCH and comes back on the
+/// details response the editor and the game page both read.
+#[tokio::test]
+async fn capture_mouse_round_trips_through_the_editor() {
+    let pool = invite_pool().await;
+    seed_game(&pool, "open").await;
+    let dir = std::env::temp_dir().join(format!("game-capture-{}", uuid::Uuid::new_v4()));
+    tokio::fs::create_dir_all(&dir).await.unwrap();
+    let bearer = format!("Bearer {}", mint(1, "moderator"));
+    let headers = [
+        ("authorization".to_string(), bearer),
+        (
+            "content-type".to_string(),
+            "multipart/form-data; boundary=testboundary".to_string(),
+        ),
+    ];
+    let patch = |capture_mouse: bool| {
+        let json = format!(r#"{{"number_of_files":0,"capture_mouse":{capture_mouse}}}"#);
+        format!(
+            "--testboundary\r\nContent-Disposition: form-data; name=\"game_data\"\r\nContent-Type: application/json\r\n\r\n{json}\r\n--testboundary--\r\n"
+        )
+    };
+
+    let response = request(
+        pool.clone(),
+        dir.clone(),
+        "PATCH",
+        "/id/1",
+        &headers,
+        Some(patch(true)),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = request(pool.clone(), dir.clone(), "GET", "/id/1", &headers, None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let details: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(details["capture_mouse"], true);
+
+    let response = request(pool, dir, "PATCH", "/id/1", &headers, Some(patch(false))).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
 #[tokio::test]
 async fn an_invited_game_hides_its_payload_from_strangers() {
     let pool = invite_pool().await;

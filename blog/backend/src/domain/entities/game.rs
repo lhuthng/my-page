@@ -67,6 +67,9 @@ pub struct Game {
     pub og_image_seconds: i64,
     pub demo: GameDemo,
     pub access_mode: String,
+    /// Whether the game may take the pointer exclusively while playing
+    /// (camera control). The player grants the frame `pointer-lock` on this.
+    pub capture_mouse: bool,
     pub instruction: String,
     pub cheatcode: String,
     pub story: String,

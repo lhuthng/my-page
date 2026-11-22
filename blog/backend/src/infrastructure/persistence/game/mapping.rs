@@ -185,6 +185,7 @@ impl GameServiceImpl {
                 jsdos_bundle,
             },
             access_mode: row.access_mode,
+            capture_mouse: row.capture_mouse != 0,
             instruction: row.instruction,
             cheatcode: row.cheatcode,
             story: row.story,

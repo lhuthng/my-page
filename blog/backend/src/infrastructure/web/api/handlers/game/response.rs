@@ -50,6 +50,9 @@ pub struct GameResponse {
     pub launcher_type: String,
     /// 'open' or 'invited'. The page gates the player on this plus `entitled`.
     pub access_mode: String,
+    /// Whether the game may capture the pointer while playing; the player
+    /// grants the frame the `pointer-lock` permission on this.
+    pub capture_mouse: bool,
     /// May this viewer actually play? Pre-computed by the handlers (open
     /// games, owners and staff are trivially yes; invited games consult
     /// grants and the invite cookie).
@@ -140,6 +143,7 @@ pub(super) fn game_response(game: Game) -> GameResponse {
         updated_at: normalize_optional_utc_timestamp(game.updated_at),
         launcher_type: game.demo.launcher_type,
         access_mode: game.access_mode,
+        capture_mouse: game.capture_mouse,
         // The author-facing details view is trivially entitled; the public
         // by-slug view overwrites this with the real decision.
         entitled: true,
