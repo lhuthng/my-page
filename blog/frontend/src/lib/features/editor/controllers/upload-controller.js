@@ -22,6 +22,32 @@
 // atomically, so concurrent PUTs are safe (mirrors the systems-image upload).
 const ZSTD_WORKERS = 4;
 const UPLOAD_CONCURRENCY = 8;
+
+// A chunk PUT is idempotent (each index overwrites), so a transient gateway
+// error in front of the backend — a 502 from the CDN or nginx, seen once on a
+// long upload — only needs a short retry, not a failed transfer of several
+// hundred megabytes. Only the retry of a whole request is safe this way;
+// anything streaming or half-written must not reuse it.
+const CHUNK_ATTEMPTS = 3;
+const CHUNK_RETRY_MS = 1500;
+
+async function putChunk(fetchImpl, onProgress, url, headers, chunk, label) {
+	let last;
+	for (let attempt = 1; attempt <= CHUNK_ATTEMPTS; attempt++) {
+		try {
+			const res = await fetchImpl(url, { method: 'PUT', headers, body: chunk });
+			if (res.ok) return;
+			last = new Error(`${res.status} ${await res.text().catch(() => '')}`);
+		} catch (error) {
+			last = error;
+		}
+		if (attempt < CHUNK_ATTEMPTS) {
+			onProgress(`${label} a request failed, retrying (${attempt} of ${CHUNK_ATTEMPTS - 1})…`);
+			await new Promise((resolve) => setTimeout(resolve, CHUNK_RETRY_MS * attempt));
+		}
+	}
+	throw last;
+}
 import {
 	buildGame,
 	buildLauncherIsos,
@@ -224,12 +250,14 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 				startByte,
 				Math.min(startByte + session.chunk_size_bytes, file.size)
 			);
-			const chunkRes = await fetchImpl(`${base}/${session.upload_id}/chunk/${index}`, {
-				method: 'PUT',
-				headers: octetHeaders(),
-				body: chunk
-			});
-			if (!chunkRes.ok) throw new Error(await chunkRes.text());
+			await putChunk(
+				fetchImpl,
+				onProgress,
+				`${base}/${session.upload_id}/chunk/${index}`,
+				octetHeaders(),
+				chunk,
+				'Uploading game'
+			);
 			const progress = Math.round(((startByte + chunk.size) / file.size) * 100);
 			onProgress(`Uploading game… ${progress}%`);
 		}
@@ -263,12 +291,14 @@ export function createUploadController({ authHeader, fetchImpl = fetch, onProgre
 				startByte,
 				Math.min(startByte + session.chunk_size_bytes, file.size)
 			);
-			const chunkRes = await fetchImpl(`${base}/${session.upload_id}/chunk/${index}`, {
-				method: 'PUT',
-				headers: octetHeaders(),
-				body: chunk
-			});
-			if (!chunkRes.ok) throw new Error(await chunkRes.text());
+			await putChunk(
+				fetchImpl,
+				onProgress,
+				`${base}/${session.upload_id}/chunk/${index}`,
+				octetHeaders(),
+				chunk,
+				'Uploading bundle'
+			);
 			const progress = Math.round(((startByte + chunk.size) / file.size) * 100);
 			onProgress(`Uploading bundle… ${progress}%`);
 		}
