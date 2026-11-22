@@ -197,11 +197,16 @@ pub async fn get_payload_file(
     response.headers_mut().insert(
         header::CACHE_CONTROL,
         // Block members are content-defined (an archive's member N is the same
-        // bytes in every build of that archive), so they cache forever; the
-        // bundle root is re-uploaded in place, so everything else revalidates
-        // quickly.
+        // bytes in every build of that archive) and are always fetched whole,
+        // so they cache forever at every hop. Everything else that streams is
+        // read by Range - and a caching CDN strips Range on a cache miss and
+        // returns the whole file, which breaks the read - so those responses
+        // must be uncacheable end to end. Small files (< 1 MiB) are only ever
+        // fetched whole and may cache briefly.
         HeaderValue::from_static(if is_block {
             "public, max-age=31536000, immutable"
+        } else if size >= 1024 * 1024 {
+            "private, no-store"
         } else {
             "public, max-age=300"
         }),
