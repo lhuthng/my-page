@@ -9,12 +9,7 @@ import { validateBasicsFields, validatePatchFieldsMap } from '../model/validate.
 import { createFeedback } from './feedback.svelte.js';
 import { collectMediaKeys } from '../media/references.js';
 import { createMediaDictionary } from '../media/dictionary.svelte.js';
-import {
-	checkSlugAvailable,
-	createEntry,
-	patchEntry,
-	publishEntry
-} from '../data/editor-api.js';
+import { checkSlugAvailable, createEntry, patchEntry, publishEntry } from '../data/editor-api.js';
 import { saveLocalDraft, loadLocalDraft, clearLocalDraft } from '../data/local-draft.js';
 import { createUploadController } from '../controllers/upload-controller.js';
 import {
