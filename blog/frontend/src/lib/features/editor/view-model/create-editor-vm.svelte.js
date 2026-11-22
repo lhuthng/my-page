@@ -13,8 +13,7 @@ import {
 	checkSlugAvailable,
 	createEntry,
 	patchEntry,
-	publishEntry,
-	deleteEntryDraft
+	publishEntry
 } from '../data/editor-api.js';
 import { saveLocalDraft, loadLocalDraft, clearLocalDraft } from '../data/local-draft.js';
 import { createUploadController } from '../controllers/upload-controller.js';
@@ -804,7 +803,13 @@ export function createEditorViewModel({
 					await upload.uploadPayloadBundle(id, ui.demoZip);
 				}
 			} catch (error) {
-				await deleteEntryDraft('game', id, auth(), fetchImpl);
+				// The draft stays. Everything but the bundle is already saved
+				// server-side, and the backend may still be finishing an upload
+				// whose response was lost to a gateway timeout — deleting the
+				// draft here would orphan exactly that upload into the trash
+				// (seen live: a 700 MB bundle landing on a trashed game).
+				// Saving again with the zip selected retries the bundle
+				// upload against the existing id.
 				reportSaveFailure(error?.message ?? 'Game upload failed.', submitGame);
 				return;
 			}
