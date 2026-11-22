@@ -768,6 +768,7 @@ export function createEditorViewModel({
 			number_of_files: offlineKeys.length,
 			launcher_type: entry.demoType,
 			access_mode: entry.accessMode ?? 'open',
+			capture_mouse: entry.captureMouse ?? false,
 			demo_width: entry.demoWidth,
 			demo_height: entry.demoHeight,
 			instruction: entry.instruction ?? '',

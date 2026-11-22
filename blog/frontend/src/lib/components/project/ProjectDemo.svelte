@@ -27,6 +27,7 @@
 		heading = 'Demo',
 		accessMode = 'open',
 		entitled = true,
+		captureMouse = false,
 		children,
 		...rest
 	} = $props();
@@ -200,6 +201,7 @@
 						{title}
 						{slug}
 						payloadUrl={demoUrl}
+						{captureMouse}
 						{beforeDemoPortal}
 						{afterDemoPortal}
 					/>

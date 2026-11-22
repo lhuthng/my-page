@@ -15,6 +15,7 @@
 		initialVariant,
 		accessMode = 'open',
 		entitled = true,
+		captureMouse = false,
 		children
 	} = $props();
 
@@ -38,6 +39,7 @@
 	{height}
 	{accessMode}
 	{entitled}
+	{captureMouse}
 	backHref="/games"
 	backLabel="All games"
 />

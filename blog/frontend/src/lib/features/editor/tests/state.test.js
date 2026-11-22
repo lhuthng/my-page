@@ -82,6 +82,7 @@ test('loadEntryState maps a game including launcher and body fields', () => {
 		...loadedPost(),
 		postId: 9,
 		demoType: 'v86',
+		captureMouse: true,
 		rawDemoUrl: '',
 		v86SystemVersionId: 3,
 		v86Manifest: 'exe=a.exe',
@@ -94,11 +95,27 @@ test('loadEntryState maps a game including launcher and body fields', () => {
 	const { entry, baseline } = loadEntryState(data, 'game');
 
 	assert.equal(entry.demoType, 'v86');
+	assert.equal(entry.captureMouse, true);
 	assert.equal(entry.v86SystemVersionId, '3', 'should be stringified for the <select> binding');
 	assert.equal(entry.instruction, 'Arrows to move');
 	assert.deepEqual(entry.relatedGames, [{ id: 2, title: 'Other', slug: 'other' }]);
 
 	assert.ok(isPatchEmpty(buildPatch({ baseline, current: entry, kind: 'game' })));
+});
+
+test('a game save that flips mouse capture diffs once and then settles', () => {
+	const { entry, baseline } = loadEntryState({ ...loadedPost(), demoType: 'wasmshell' }, 'game');
+
+	const edited = { ...entry, captureMouse: true };
+	assert.deepEqual(buildPatch({ baseline, current: edited, kind: 'game' }), {
+		capture_mouse: true
+	});
+
+	const nextBaseline = refreshBaseline(baseline, edited, { updatedAt: baseline.updatedAt });
+	assert.ok(
+		isPatchEmpty(buildPatch({ baseline: nextBaseline, current: edited, kind: 'game' })),
+		'refreshBaseline must fold captureMouse back, or every later save re-sends it'
+	);
 });
 
 test('loadEntryState defaults an empty links list to the GitHub placeholder', () => {

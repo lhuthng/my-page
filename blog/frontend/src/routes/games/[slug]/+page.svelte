@@ -49,7 +49,8 @@
 		initialVariant,
 		slug,
 		access_mode,
-		entitled
+		entitled,
+		capture_mouse
 	} = $derived(data);
 
 	let liked = $state();
@@ -200,6 +201,7 @@
 		{cheatcode}
 		{story}
 		accessMode={access_mode ?? 'open'}
+		captureMouse={capture_mouse ?? false}
 		{entitled}
 	/>
 

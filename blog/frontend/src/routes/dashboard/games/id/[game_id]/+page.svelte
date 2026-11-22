@@ -26,6 +26,7 @@
 		mediumUrls: data.medium_urls,
 		demoType: data.launcher_type,
 		accessMode: data.access_mode,
+		captureMouse: data.capture_mouse ?? false,
 		demoWidth: data.demo_width,
 		demoHeight: data.demo_height,
 		rawDemoUrl: data.raw_demo_url,

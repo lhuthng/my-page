@@ -99,6 +99,11 @@ function buildGamePatch({ baseline, current }) {
 		patch.access_mode = current.accessMode ?? 'open';
 	}
 
+	const baseCaptureMouse = baseline.captureMouse ?? false;
+	if ((current.captureMouse ?? false) !== baseCaptureMouse) {
+		patch.capture_mouse = current.captureMouse ?? false;
+	}
+
 	const baseWidth = baseline.demoWidth ?? '100%';
 	if (current.demoWidth !== baseWidth) patch.demo_width = current.demoWidth;
 

@@ -129,6 +129,15 @@
 			/>
 		</div>
 	</div>
+	{#if demoType === 'wasmshell'}
+		<label class="flex items-center gap-2 text-sm text-dark/70">
+			<input type="checkbox" bind:checked={vm.entry.captureMouse} disabled={!isOwner} />
+			Capture the mouse while playing
+			<span class="text-dark/40">
+				(camera-control games; a click inside the game takes the pointer, Esc gives it back)
+			</span>
+		</label>
+	{/if}
 	{#if demoType === 'embed' || demoType === 'download' || demoType === 'video'}
 		<div class="flex flex-col gap-1">
 			<label class="text-sm font-medium text-dark/60" for="demo-url">{urlLabel}</label>

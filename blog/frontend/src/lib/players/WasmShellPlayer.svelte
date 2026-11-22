@@ -11,6 +11,7 @@
 		slug,
 		payloadUrl,
 		entry = 'index.html',
+		captureMouse = false,
 		beforeDemoPortal,
 		afterDemoPortal
 	} = $props();
@@ -44,8 +45,14 @@
 	const player = $state({
 		// The chrome duck-types the v86 surface: fullscreen and restart act on
 		// the frame and the shell around it, saves go through the bridge.
+		// `shell` is bound by the chrome (GamePlayerChrome's `bind:this`), so
+		// it needs a real setter — a getter alone left the fullscreen button
+		// acting on nothing.
 		get shell() {
 			return shell;
+		},
+		set shell(value) {
+			shell = value;
 		},
 		async toggleFullscreen() {
 			if (!shell) return;
@@ -66,6 +73,14 @@
 		}
 	});
 
+	// The bundle's page answers the F8+F9 combo itself (the embedding player
+	// gets no keydowns from a focused frame); the legend only explains it.
+	const legend = $derived([
+		{ keys: ['Click'], text: 'Interact with the game' },
+		...(captureMouse ? [{ keys: ['Esc'], text: 'Release the captured mouse' }] : []),
+		{ keys: ['F8', 'F9'], text: 'Toggle fullscreen' }
+	]);
+
 	onMount(() => {
 		bridge.attach(frame);
 		return () => bridge.detach();
@@ -83,10 +98,7 @@
 	{error}
 	saveAvailable
 	saveMessage={diagnostic}
-	legend={[
-		{ keys: ['Click'], text: 'Interact with the game' },
-		{ keys: ['F8', 'F9'], text: 'Toggle fullscreen' }
-	]}
+	{legend}
 	legendNote="Saves persist in this browser on their own. Signed in, they also mirror to your account; the save button forces a mirror right now."
 >
 	<iframe
@@ -94,6 +106,6 @@
 		{src}
 		title={`${title} game`}
 		class="h-full! w-full! border-0 bg-black"
-		allow="autoplay; fullscreen"
+		allow={`autoplay; fullscreen${captureMouse ? '; pointer-lock' : ''}`}
 	></iframe>
 </GamePlayerChrome>

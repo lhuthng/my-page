@@ -40,6 +40,7 @@ export function createEntryState(kind, initialSeries = []) {
 			postId: '',
 			demoType: 'html5',
 			accessMode: 'open',
+			captureMouse: false,
 			demoWidth: '100%',
 			demoHeight: '520px',
 			demoUrl: '',
@@ -104,6 +105,7 @@ export function loadEntryState(data, kind) {
 		postId: data.postId ?? '',
 		demoType: data.demoType ?? 'html5',
 		accessMode: data.accessMode ?? 'open',
+		captureMouse: data.captureMouse ?? false,
 		demoWidth: data.demoWidth ?? '100%',
 		demoHeight: data.demoHeight ?? '520px',
 		demoUrl: data.rawDemoUrl ?? ''
@@ -178,6 +180,8 @@ export function refreshBaseline(baseline, entry, serverResponse = {}) {
 		...(entry.demoType !== undefined
 			? {
 					demoType: entry.demoType,
+					accessMode: entry.accessMode,
+					captureMouse: entry.captureMouse ?? false,
 					demoWidth: entry.demoWidth,
 					demoHeight: entry.demoHeight,
 					demoUrl: entry.demoUrl,
