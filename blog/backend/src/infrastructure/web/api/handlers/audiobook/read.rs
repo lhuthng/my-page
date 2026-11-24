@@ -146,16 +146,34 @@ pub async fn get_public_audiobook(
     Path(slug): Path<String>,
     Query(query): Query<TrackWindowQuery>,
 ) -> Result<impl IntoResponse, AudiobookError> {
-    // A limit is what makes this a windowed read. Without one the answer is the
-    // whole chapter list — an offset alone still moves the window's start.
-    let tracks_limit = query
-        .tracks_limit
-        .map(|limit| clamp_page_size(Some(limit), TRACK_WINDOW_DEFAULT, TRACK_WINDOW_MAX));
+    if query.chapter_number.is_some_and(|number| number < 1) {
+        return Err(AudiobookError::Validation(
+            "chapter_number must be 1 or greater.".to_string(),
+        ));
+    }
+    if query.chapter_number.is_some() && query.tracks_offset.is_some() {
+        return Err(AudiobookError::Validation(
+            "chapter_number and tracks_offset cannot be used together.".to_string(),
+        ));
+    }
+
+    let tracks_limit = if query.chapter_number.is_some() {
+        Some(clamp_page_size(
+            query.tracks_limit,
+            TRACK_WINDOW_DEFAULT,
+            TRACK_WINDOW_MAX,
+        ))
+    } else {
+        query
+            .tracks_limit
+            .map(|limit| clamp_page_size(Some(limit), TRACK_WINDOW_DEFAULT, TRACK_WINDOW_MAX))
+    };
 
     let audiobook = state
         .audiobook_service
         .get_public_audiobook(GetPublicAudiobookCommand {
             slug,
+            chapter_number: query.chapter_number,
             tracks_offset: clamp_offset(query.tracks_offset),
             tracks_limit,
         })

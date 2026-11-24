@@ -160,6 +160,24 @@ impl Fixture {
             .unwrap()
     }
 
+    async fn make_unplayable(&self, track_id: i64) {
+        let mut conn = self.service.pool.acquire().await.unwrap();
+        // Simulate a dangling media reference without cascading away the chapter.
+        sqlx::query("PRAGMA foreign_keys = OFF")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE audiobook_tracks SET media_id = -1 WHERE id = ?")
+            .bind(track_id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+
     async fn track_numbers(&self, audiobook_id: i64) -> Vec<(String, i64)> {
         let details = self
             .service
@@ -641,6 +659,7 @@ async fn publishing_requires_a_track_and_gates_the_public_feed() {
         .service
         .get_public_audiobook(GetPublicAudiobookCommand {
             slug: "publish-book".to_string(),
+            chapter_number: None,
             tracks_offset: 0,
             tracks_limit: None,
         })
@@ -657,18 +676,22 @@ async fn publishing_requires_a_track_and_gates_the_public_feed() {
 #[tokio::test]
 async fn unpublished_audiobooks_are_not_reachable_publicly() {
     let fx = fixture("hidden").await;
-    fx.create("draft-book", &[]).await;
+    let book = fx.create("draft-book", &[]).await;
+    fx.add_track(book, "Chapter 1050", 1, Some(1050)).await;
 
-    let err = fx
-        .service
-        .get_public_audiobook(GetPublicAudiobookCommand {
-            slug: "draft-book".to_string(),
-            tracks_offset: 0,
-            tracks_limit: None,
-        })
-        .await
-        .unwrap_err();
-    assert!(matches!(err, AudiobookError::NotFound), "got {err:?}");
+    for chapter_number in [None, Some(1050)] {
+        let err = fx
+            .service
+            .get_public_audiobook(GetPublicAudiobookCommand {
+                slug: "draft-book".to_string(),
+                chapter_number,
+                tracks_offset: 0,
+                tracks_limit: chapter_number.map(|_| 20),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AudiobookError::NotFound), "got {err:?}");
+    }
     fx.cleanup().await;
 }
 
@@ -694,6 +717,7 @@ async fn public_chapter_windows_page_a_book_without_loading_it_all() {
         fx.service
             .get_public_audiobook(GetPublicAudiobookCommand {
                 slug: "window-book".to_string(),
+                chapter_number: None,
                 tracks_offset: offset,
                 tracks_limit: limit,
             })
@@ -705,6 +729,7 @@ async fn public_chapter_windows_page_a_book_without_loading_it_all() {
     // player can line it up with the rows it has not fetched yet.
     let middle = window(&fx, 2, Some(2)).await;
     assert_eq!(middle.track_count, 5);
+    assert_eq!(middle.tracks_offset, 2);
     assert_eq!(
         middle.tracks.iter().map(|t| t.number).collect::<Vec<_>>(),
         vec![3, 4]
@@ -714,6 +739,7 @@ async fn public_chapter_windows_page_a_book_without_loading_it_all() {
     // The last window is short, and says the book ends there.
     let last = window(&fx, 4, Some(2)).await;
     assert_eq!(last.tracks.len(), 1);
+    assert_eq!(last.tracks_offset, 4);
     assert_eq!(last.tracks[0].number, 5);
     assert!(!last.has_more_tracks);
 
@@ -721,6 +747,7 @@ async fn public_chapter_windows_page_a_book_without_loading_it_all() {
     // player paging on `has_more_tracks` would loop forever.
     let past = window(&fx, 9, Some(2)).await;
     assert!(past.tracks.is_empty());
+    assert_eq!(past.tracks_offset, 9);
     assert_eq!(past.track_count, 5);
     assert!(!past.has_more_tracks);
 
@@ -728,9 +755,162 @@ async fn public_chapter_windows_page_a_book_without_loading_it_all() {
     // not been taught to page keeps working.
     let whole = window(&fx, 0, None).await;
     assert_eq!(whole.tracks.len(), 5);
+    assert_eq!(whole.tracks_offset, 0);
     assert_eq!(whole.track_count, 5);
     assert!(!whole.has_more_tracks);
 
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn public_chapter_lookup_aligns_gapped_windows() {
+    let fx = fixture("chapter-window").await;
+    let book = fx.create("chapter-book", &[]).await;
+    for (seed, number) in (1..=23)
+        .chain(std::iter::once(1050))
+        .chain(1051..=1071)
+        .enumerate()
+    {
+        fx.add_track(book, &format!("Chapter {number}"), seed as u8, Some(number))
+            .await;
+    }
+    fx.service
+        .change_audiobook_status(ChangeAudiobookStatusCommand {
+            audiobook_id: book,
+            user_id: 1,
+            is_admin: false,
+            status: "published".to_string(),
+        })
+        .await
+        .unwrap();
+
+    async fn chapter(
+        fx: &Fixture,
+        number: i64,
+        limit: Option<i64>,
+    ) -> Result<AudiobookDetails, AudiobookError> {
+        fx.service
+            .get_public_audiobook(GetPublicAudiobookCommand {
+                slug: "chapter-book".to_string(),
+                chapter_number: Some(number),
+                tracks_offset: 0,
+                tracks_limit: limit,
+            })
+            .await
+    }
+
+    let first = chapter(&fx, 1, Some(20)).await.unwrap();
+    assert_eq!(first.tracks_offset, 0);
+    assert_eq!(first.track_count, 45);
+    assert_eq!(first.tracks.len(), 20);
+    assert_eq!(first.tracks[0].number, 1);
+    assert_eq!(first.tracks[19].number, 20);
+    assert!(first.has_more_tracks);
+
+    let middle = chapter(&fx, 1050, Some(20)).await.unwrap();
+    assert_eq!(middle.tracks_offset, 20);
+    assert_eq!(middle.track_count, 45);
+    let mut expected = vec![21, 22, 23, 1050];
+    expected.extend(1051..=1066);
+    assert_eq!(
+        middle.tracks.iter().map(|t| t.number).collect::<Vec<_>>(),
+        expected
+    );
+    assert!(middle.has_more_tracks);
+
+    let defaulted = chapter(&fx, 1050, None).await.unwrap();
+    assert_eq!(defaulted.tracks_offset, 20);
+    assert_eq!(defaulted.tracks.len(), 20);
+
+    let last = chapter(&fx, 1071, Some(20)).await.unwrap();
+    assert_eq!(last.tracks_offset, 40);
+    assert_eq!(last.track_count, 45);
+    assert_eq!(
+        last.tracks.iter().map(|t| t.number).collect::<Vec<_>>(),
+        vec![1067, 1068, 1069, 1070, 1071]
+    );
+    assert!(!last.has_more_tracks);
+
+    let err = chapter(&fx, 1049, Some(20)).await.unwrap_err();
+    assert!(
+        matches!(err, AudiobookError::ChapterNotFound),
+        "got {err:?}"
+    );
+    fx.cleanup().await;
+}
+
+#[tokio::test]
+async fn public_windows_filter_unplayable_tracks_before_pagination() {
+    let fx = fixture("playable-window").await;
+    let book = fx.create("playable-book", &[]).await;
+    let mut tracks = Vec::new();
+    for number in 1..=5 {
+        tracks.push(
+            fx.add_track(
+                book,
+                &format!("Chapter {number}"),
+                number as u8,
+                Some(number),
+            )
+            .await,
+        );
+    }
+    fx.make_unplayable(tracks[1]).await;
+    fx.make_unplayable(tracks[3]).await;
+    fx.service
+        .change_audiobook_status(ChangeAudiobookStatusCommand {
+            audiobook_id: book,
+            user_id: 1,
+            is_admin: false,
+            status: "published".to_string(),
+        })
+        .await
+        .unwrap();
+
+    async fn window(
+        fx: &Fixture,
+        chapter_number: Option<i64>,
+        offset: i64,
+        limit: Option<i64>,
+    ) -> Result<AudiobookDetails, AudiobookError> {
+        fx.service
+            .get_public_audiobook(GetPublicAudiobookCommand {
+                slug: "playable-book".to_string(),
+                chapter_number,
+                tracks_offset: offset,
+                tracks_limit: limit,
+            })
+            .await
+    }
+
+    let first = window(&fx, None, 0, Some(2)).await.unwrap();
+    assert_eq!(first.tracks_offset, 0);
+    assert_eq!(first.track_count, 3);
+    assert_eq!(
+        first.tracks.iter().map(|t| t.number).collect::<Vec<_>>(),
+        vec![1, 3]
+    );
+    assert!(first.has_more_tracks);
+
+    let last = window(&fx, None, 2, Some(2)).await.unwrap();
+    assert_eq!(last.tracks_offset, 2);
+    assert_eq!(last.track_count, 3);
+    assert_eq!(last.tracks.len(), 1);
+    assert_eq!(last.tracks[0].number, 5);
+    assert!(!last.has_more_tracks);
+
+    let exact = window(&fx, Some(5), 0, Some(2)).await.unwrap();
+    assert_eq!(exact.tracks_offset, 2);
+    assert_eq!(exact.track_count, 3);
+    assert_eq!(exact.tracks.len(), 1);
+    assert_eq!(exact.tracks[0].number, 5);
+    assert!(!exact.has_more_tracks);
+
+    let err = window(&fx, Some(2), 0, Some(2)).await.unwrap_err();
+    assert!(
+        matches!(err, AudiobookError::ChapterNotFound),
+        "got {err:?}"
+    );
     fx.cleanup().await;
 }
 
@@ -1233,6 +1413,7 @@ async fn play_reports_accumulate_without_a_cap() {
         .service
         .get_public_audiobook(GetPublicAudiobookCommand {
             slug: "plays-book".to_string(),
+            chapter_number: None,
             tracks_offset: 0,
             tracks_limit: None,
         })

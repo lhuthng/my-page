@@ -94,6 +94,8 @@ pub struct AudiobookDetails {
     /// The window of chapters this answer carries, in play order. The editor
     /// gets all of them; the public feed gets the window it asked for.
     pub tracks: Vec<AudiobookTrack>,
+    /// Zero-based playable ordinal at which this window starts.
+    pub tracks_offset: i64,
     /// Every playable chapter in the book, not just the ones in `tracks`. The
     /// player renders a row per chapter and needs the total to know where the
     /// list ends before the later windows have arrived.

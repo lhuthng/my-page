@@ -23,6 +23,7 @@ pub struct GetAudiobookCommand {
 
 pub struct GetPublicAudiobookCommand {
     pub slug: String,
+    pub chapter_number: Option<i64>,
     /// Index of the first chapter to return, counting from the top of the
     /// chapter order.
     pub tracks_offset: i64,

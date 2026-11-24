@@ -291,6 +291,7 @@ impl AudiobookServiceImpl {
             owner_display_name: row.9,
             tags,
             tracks,
+            tracks_offset: 0,
             track_count,
             has_more_tracks: false,
             created_at: row.10,
@@ -330,11 +331,18 @@ impl AudiobookServiceImpl {
         // added between them cannot make the player render a row that never
         // fills in — the two answers describe the same book at the same moment.
         let track_count = Self::count_playable_tracks(&mut tx, row.0).await?;
-        let tracks =
-            Self::load_track_window(&mut tx, row.0, cmd.tracks_offset, cmd.tracks_limit).await?;
+        let (tracks_offset, tracks_limit) = if let Some(chapter_number) = cmd.chapter_number {
+            let limit = cmd.tracks_limit.unwrap_or(20).clamp(1, 200);
+            let ordinal = Self::playable_chapter_ordinal(&mut tx, row.0, chapter_number).await?;
+            let offset = ordinal - ordinal % limit;
+            (offset, Some(limit))
+        } else {
+            (cmd.tracks_offset, cmd.tracks_limit)
+        };
+        let tracks = Self::load_track_window(&mut tx, row.0, tracks_offset, tracks_limit).await?;
         tx.commit().await?;
 
-        let has_more_tracks = cmd.tracks_offset + (tracks.len() as i64) < track_count;
+        let has_more_tracks = tracks_offset + (tracks.len() as i64) < track_count;
 
         Ok(AudiobookDetails {
             id: row.0,
@@ -349,6 +357,7 @@ impl AudiobookServiceImpl {
             owner_display_name: row.9,
             tags,
             tracks,
+            tracks_offset,
             track_count,
             has_more_tracks,
             created_at: row.10,

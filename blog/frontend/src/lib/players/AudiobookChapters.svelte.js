@@ -3,21 +3,19 @@
  *
  * The public detail endpoint returns a window of chapters rather than the whole
  * book, and this is the client half of that: it knows how many chapters there
- * are, keeps the ones that have arrived, and hands out the reachable-gap view
- * the chapter list renders. Everything about *which* chapters exist and *where*
- * they sit comes from `chapter-windows.js`; what lives here is the fetching and
- * the reactive bookkeeping.
+ * are, keeps the ones that have arrived, and resolves chapter numbers to their
+ * true playlist ordinals. Everything about which windows exist comes from
+ * `chapter-windows.js`; what lives here is fetching and reactive bookkeeping.
  *
- * A window that fails to arrive is not an error state the listener has to
- * confront: `ensure` resolves `false`, the chapter stays a gap, and scrolling
- * to it (or playing into it) asks again. Losing one request must never take
- * playback down, so nothing here throws.
+ * A failed window resolves `false` so the list can offer a retry without
+ * disturbing playback. Nothing here throws, and playing into a missing window
+ * asks for it again.
  */
 import {
 	CHAPTER_WINDOW,
 	PREFETCH_AHEAD,
 	missingWindows,
-	planRows,
+	validateChapterJump,
 	windowStart
 } from './chapter-windows.js';
 import { fixUrl } from '$lib/utils/media-path.js';
@@ -56,16 +54,6 @@ export class AudiobookChapters {
 	/** Every chapter of the book is in `tracks`. */
 	get complete() {
 		return this.total > 0 && missingWindows(this.total, this.loaded, this.#size).length === 0;
-	}
-
-	/** What the chapter list renders: chapters, skeletons, and reachable gaps. */
-	get rows() {
-		return planRows({
-			total: this.total,
-			loaded: this.loaded,
-			pending: this.pending,
-			size: this.#size
-		});
 	}
 
 	trackAt(index) {
@@ -108,9 +96,37 @@ export class AudiobookChapters {
 	 * doing, so those two ask for the rest deliberately.
 	 */
 	ensureAll() {
-		if (this.total <= 0) return Promise.resolve();
+		if (this.total <= 0) return Promise.resolve([]);
 		const wanted = missingWindows(this.total, this.loaded, this.#size);
 		return Promise.all(wanted.map((start) => this.ensure(start)));
+	}
+
+	async jumpToNumber(number) {
+		if (!Number.isSafeInteger(number) || number < 1) return { status: 'invalid' };
+
+		const cached = this.tracks.findIndex((track) => track?.number === number);
+		if (cached >= 0) {
+			return { status: 'found', ordinal: cached, offset: windowStart(cached, this.#size) };
+		}
+		if (this.complete) return { status: 'not-found' };
+
+		try {
+			const response = await fetch(
+				`${this.#base}/audiobooks/public/s/${encodeURIComponent(this.#slug)}` +
+					`?chapter_number=${number}&tracks_limit=${this.#size}`
+			);
+			if (response.status === 404) return { status: 'not-found' };
+			if (!response.ok) return { status: 'error' };
+
+			const { audiobook } = await response.json();
+			const jump = validateChapterJump(audiobook, number, this.#size);
+			if (!jump) return { status: 'error' };
+
+			this.seed(jump.offset, audiobook.tracks, jump.total);
+			return { status: 'found', ordinal: jump.ordinal, offset: jump.offset };
+		} catch {
+			return { status: 'error' };
+		}
 	}
 
 	/**

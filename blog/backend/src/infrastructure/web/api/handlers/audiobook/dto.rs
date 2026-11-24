@@ -16,12 +16,12 @@ pub struct SlugQuery {
 
 /// Window selector for the public detail feed.
 ///
-/// Both fields are optional on purpose: a caller that sends neither keeps the
-/// old whole-list answer, while the players send both so a 2000-chapter book
-/// arrives a window at a time. `tracks_offset` on its own is meaningful too —
-/// it is how the players ask for the window a saved position sits in.
+/// The selectors are optional on purpose: a caller that sends neither keeps the
+/// old whole-list answer. Offset/limit callers page as before; `chapter_number`
+/// selects the aligned window containing an exact chapter.
 #[derive(Deserialize)]
 pub struct TrackWindowQuery {
+    pub chapter_number: Option<i64>,
     pub tracks_offset: Option<i64>,
     pub tracks_limit: Option<i64>,
 }

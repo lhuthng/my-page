@@ -10,6 +10,7 @@ use crate::domain::errors::media::MediaError;
 #[allow(dead_code)]
 pub enum AudiobookError {
     NotFound,
+    ChapterNotFound,
     Duplication,
     PermissionDenied,
     Validation(String),
@@ -50,6 +51,9 @@ impl IntoResponse for AudiobookError {
                 let (status, body) = match self {
                     AudiobookError::NotFound => {
                         (StatusCode::NOT_FOUND, "Audiobook not found.".to_string())
+                    }
+                    AudiobookError::ChapterNotFound => {
+                        (StatusCode::NOT_FOUND, "Chapter not found.".to_string())
                     }
                     AudiobookError::Duplication => {
                         (StatusCode::CONFLICT, "Duplication detected.".to_string())

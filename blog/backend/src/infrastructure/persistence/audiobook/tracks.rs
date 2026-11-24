@@ -88,9 +88,9 @@ impl AudiobookServiceImpl {
                    m.short_name, m.file_type,
                    COALESCE(t.updated_at, t.created_at)
             FROM audiobook_tracks t
-            LEFT JOIN media m ON m.id = t.media_id
+            INNER JOIN media m ON m.id = t.media_id
             WHERE t.audiobook_id = ?
-            ORDER BY t.number ASC
+            ORDER BY t.number ASC, t.id ASC
             LIMIT ? OFFSET ?
             "#,
         )
@@ -101,6 +101,46 @@ impl AudiobookServiceImpl {
         .await?;
 
         Ok(playable_tracks(rows))
+    }
+
+    pub(super) async fn playable_chapter_ordinal(
+        tx: &mut Transaction<'_, Sqlite>,
+        audiobook_id: i64,
+        chapter_number: i64,
+    ) -> Result<i64, AudiobookError> {
+        let chapter: Option<(i64, i64)> = sqlx::query_as(
+            r#"
+            SELECT t.id, t.number
+            FROM audiobook_tracks t
+            INNER JOIN media m ON m.id = t.media_id
+            WHERE t.audiobook_id = ? AND t.number = ?
+            ORDER BY t.number ASC, t.id ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(audiobook_id)
+        .bind(chapter_number)
+        .fetch_optional(&mut **tx)
+        .await?;
+        let (chapter_id, chapter_number) = chapter.ok_or(AudiobookError::ChapterNotFound)?;
+
+        let ordinal: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM audiobook_tracks t
+            INNER JOIN media m ON m.id = t.media_id
+            WHERE t.audiobook_id = ?
+              AND (t.number < ? OR (t.number = ? AND t.id < ?))
+            "#,
+        )
+        .bind(audiobook_id)
+        .bind(chapter_number)
+        .bind(chapter_number)
+        .bind(chapter_id)
+        .fetch_one(&mut **tx)
+        .await?;
+
+        Ok(ordinal)
     }
 
     /// Playable chapters in a book.

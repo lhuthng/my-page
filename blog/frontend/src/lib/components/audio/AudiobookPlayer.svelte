@@ -1,9 +1,16 @@
 <script>
-	import { onMount, untrack, flushSync } from 'svelte';
+	import { onMount, untrack, flushSync, tick } from 'svelte';
 	import { AudiobookPlayer } from '$lib/players/AudiobookPlayer.svelte.js';
 	import { audiobookSession } from '$lib/players/AudiobookSession.svelte.js';
 	import { audiobooks } from '$lib/api/audiobooks.js';
 	import { formatClock, percentOf } from '$lib/utils/duration.js';
+	import {
+		clampPage,
+		pageCount,
+		pageStart,
+		parseChapterNumber,
+		windowCount
+	} from '$lib/players/chapter-windows.js';
 
 	let {
 		tracks = [],
@@ -76,7 +83,24 @@
 					restart: 'Nghe lại',
 					playlist: 'Chương',
 					chapterCount: (n) => `${n} chương`,
-					loadingChapters: (from, to) => `Đang tải chương ${from}–${to}…`,
+					goToChapter: 'Tới chương',
+					chapterNumber: 'Số chương',
+					go: 'Đi',
+					loading: 'Đang tải…',
+					jumpInvalid: 'Nhập số chương nguyên dương.',
+					jumpNotFound: (n) => `Không tìm thấy chương ${n}. Số chương có thể bị bỏ qua.`,
+					jumpError: 'Không thể tải chương này lúc này. Hãy thử lại.',
+					jumpFound: (n) => `Đã tìm thấy chương ${n}.`,
+					firstPage: 'Trang đầu',
+					previousPage: 'Trang trước',
+					nextPage: 'Trang sau',
+					lastPage: 'Trang cuối',
+					pageOf: (page, total) => `Trang ${page} / ${total}`,
+					loadingPage: (page) => `Đang tải trang ${page}…`,
+					loadingAllChapters: 'Đang tải toàn bộ chương để tìm kiếm và sắp xếp…',
+					pageError: 'Không thể tải trang này. Hãy thử lại.',
+					wholeBookError: 'Một số chương chưa tải được. Hãy thử lại.',
+					retry: 'Thử lại',
 					plays: 'Lượt nghe',
 					sortToHigh: 'Sắp xếp chương từ thấp lên cao',
 					sortToLow: 'Sắp xếp chương từ cao xuống thấp',
@@ -89,6 +113,7 @@
 					playing: 'Đang phát',
 					paused: 'Tạm dừng',
 					showCurrentChapter: 'Xem chương đang phát',
+					currentChapterShown: 'Đã hiển thị chương đang phát.',
 					trackError: {
 						aborted: 'Phát bị hủy bỏ.',
 						network: 'Lỗi mạng khi tải chương này.',
@@ -125,7 +150,24 @@
 					restart: 'Restart',
 					playlist: 'Chapters',
 					chapterCount: (n) => `${n} chapter${n === 1 ? '' : 's'}`,
-					loadingChapters: (from, to) => `Loading chapters ${from}–${to}…`,
+					goToChapter: 'Go to chapter',
+					chapterNumber: 'Chapter number',
+					go: 'Go',
+					loading: 'Loading…',
+					jumpInvalid: 'Enter a positive whole chapter number.',
+					jumpNotFound: (n) => `Chapter ${n} was not found. Chapter numbers may have gaps.`,
+					jumpError: 'Could not load that chapter right now. Try again.',
+					jumpFound: (n) => `Chapter ${n} found.`,
+					firstPage: 'First page',
+					previousPage: 'Previous page',
+					nextPage: 'Next page',
+					lastPage: 'Last page',
+					pageOf: (page, total) => `Page ${page} of ${total}`,
+					loadingPage: (page) => `Loading page ${page}…`,
+					loadingAllChapters: 'Loading all chapters for search and sorting…',
+					pageError: 'Could not load this page. Try again.',
+					wholeBookError: 'Some chapters could not be loaded. Try again.',
+					retry: 'Try again',
 					plays: 'Plays',
 					sortToHigh: 'Sort chapters low to high',
 					sortToLow: 'Sort chapters high to low',
@@ -138,6 +180,7 @@
 					playing: 'Playing',
 					paused: 'Paused',
 					showCurrentChapter: 'Show the chapter that is playing',
+					currentChapterShown: 'Showing the chapter that is playing.',
 					trackError: {
 						aborted: 'Playback aborted.',
 						network: 'Network error while loading this track.',
@@ -232,11 +275,20 @@
 	/** The chapter row that plays while it is on screen. */
 	const pinnedTrack = $derived(pinnedEdge === null ? null : current);
 
-	/** Take the reader back to the chapter that is playing. */
-	function returnToPlayhead() {
-		playlistEl
-			?.querySelector(`[data-track-index="${player.index}"]`)
-			?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+	async function showCurrentChapter() {
+		if (!chapterSource) {
+			playlistEl?.querySelector(`[data-track-index="${player.index}"]`)?.scrollIntoView({
+				block: 'center',
+				behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+			});
+			return;
+		}
+		chapterQuery = '';
+		sortAsc = true;
+		const shown = await goToPage(Math.floor(player.index / chapterSource.size) + 1, {
+			focusIndex: player.index
+		});
+		if (shown) navigationMessage = t.currentChapterShown;
 	}
 
 	/**
@@ -295,33 +347,6 @@
 			update: (isActive) => (isActive ? start() : stop()),
 			destroy: stop
 		};
-	}
-
-	/**
-	 * Fetch a window once the row standing in for it scrolls into view.
-	 *
-	 * The list shows one reachable row per unloaded stretch, so this is what
-	 * turns "scroll down the chapter list" into "load the next window" — without
-	 * ever painting a row per chapter of a long book.
-	 */
-	function windowRow(node, start) {
-		let observer = null;
-
-		const watch = (value) => {
-			observer?.disconnect();
-			observer = null;
-			if (value == null) return;
-			observer = new IntersectionObserver(
-				(entries) => {
-					if (entries.some((entry) => entry.isIntersecting)) chapterSource?.ensure(value);
-				},
-				{ root: node.closest('ol'), rootMargin: '160px 0px' }
-			);
-			observer.observe(node);
-		};
-
-		watch(start);
-		return { update: watch, destroy: () => observer?.disconnect() };
 	}
 
 	$effect(() => {
@@ -461,6 +486,16 @@
 
 	let sortAsc = $state(true);
 	let chapterQuery = $state('');
+	let page = $state(1);
+	let jumpInput = $state('');
+	let jumpPending = $state(false);
+	let jumpError = $state('');
+	let navigationMessage = $state('');
+	let highlightedIndex = $state(null);
+	let pageError = $state(false);
+	let wholeBookLoading = $state(false);
+	let wholeBookError = $state(false);
+	let navigationVersion = 0;
 
 	/** Small edit-distance helper for forgiving chapter-title searches. */
 	function levenshtein(left, right) {
@@ -507,87 +542,213 @@
 		return distance <= Math.max(2, Math.ceil(query.length * 0.4)) ? 3 + distance : null;
 	}
 
-	const displayTracks = $derived.by(() => {
-		const ordered = sortAsc ? tracks : [...tracks].reverse();
+	const pageSize = $derived(chapterSource?.size ?? Math.max(1, tracks.length));
+	const browsingWholeBook = $derived(
+		Boolean(chapterSource) && (!sortAsc || chapterQuery.trim() !== '')
+	);
+	const wholeBookBusy = $derived(
+		Boolean(chapterSource && browsingWholeBook && !chapterSource.complete)
+	);
+
+	const orderedTracks = $derived.by(() => {
+		const arrived = chapterSource
+			? chapterSource.loaded.flatMap((start) =>
+					Array.from({ length: windowCount(start, chapterSource.total, pageSize) }, (_, offset) => {
+						const index = start + offset;
+						return { track: chapterSource.trackAt(index), index };
+					}).filter(({ track }) => track)
+				)
+			: tracks.map((track, index) => ({ track, index }));
+		const ordered = sortAsc ? arrived : [...arrived].reverse();
 		const query = normalizeSearchText(chapterQuery.trim());
 		if (!query) return ordered;
 
 		return ordered
-			.map((track, order) => ({ track, order, score: chapterSearchScore(track, query) }))
-			.filter((result) => result.score !== null)
+			.map((entry, order) => ({ ...entry, order, score: chapterSearchScore(entry.track, query) }))
+			.filter(({ score }) => score !== null)
 			.sort((a, b) => a.score - b.score || a.order - b.order)
-			.map((result) => result.track);
+			.map(({ track, index }) => ({ track, index }));
 	});
 
-	/**
-	 * Whether the reader is browsing the book as a whole — a search, or the
-	 * reversed order. Both are deliberate "show me the list" acts, so they ask
-	 * the source for every remaining window rather than filtering the chapters
-	 * that happen to have arrived.
-	 */
-	const browsingWholeBook = $derived(
-		Boolean(chapterSource) && (!sortAsc || chapterQuery.trim() !== '')
+	const visiblePageCount = $derived(
+		pageCount(browsingWholeBook ? orderedTracks.length : totalChapters, pageSize)
+	);
+	const displayPage = $derived(
+		clampPage(page, browsingWholeBook ? orderedTracks.length : totalChapters, pageSize)
+	);
+	const pageBusy = $derived(
+		Boolean(
+			chapterSource &&
+			!browsingWholeBook &&
+			chapterSource.pending.includes(pageStart(displayPage, pageSize))
+		)
 	);
 
-	$effect(() => {
-		if (browsingWholeBook) chapterSource?.ensureAll();
-	});
-
-	/** A rendered chapter: its slot in the book, and the chapter itself. */
-	const chapterRow = (row) => ({
-		kind: 'chapter',
-		index: row.index,
-		track: chapterSource.trackAt(row.index)
-	});
-
-	/**
-	 * The rows the list renders: one per chapter, plus a skeleton row for a
-	 * window in flight and a single reachable row for each stretch of chapters
-	 * nobody has asked for yet. A chapter still on its way keeps its place, so
-	 * the numbers never shift under the reader.
-	 */
 	const playlistRows = $derived.by(() => {
 		if (!chapterSource) {
-			return displayTracks.map((track) => ({
+			return orderedTracks.map(({ track, index }) => ({ kind: 'chapter', track, index }));
+		}
+
+		if (browsingWholeBook) {
+			const start = pageStart(displayPage, pageSize);
+			return orderedTracks.slice(start, start + pageSize).map(({ track, index }) => ({
 				kind: 'chapter',
-				index: tracks.indexOf(track),
-				track
+				track,
+				index
 			}));
 		}
 
-		// Ascending is the source's own order, so its rows come through as they
-		// are — the waiting ones included. Those rows are the handles that fetch
-		// the rest of the book, so dropping them would leave the list showing
-		// whatever the page happened to load first, with no way to reach the
-		// chapters behind it.
-		if (!browsingWholeBook) {
-			return chapterSource.rows.map((row) => (row.kind === 'chapter' ? chapterRow(row) : row));
-		}
-
-		// Whole-book mode reads the source too, not the playlist the page was
-		// rendered with: a chapter that arrived in a later window is just as
-		// much a chapter of this book, and its slot is the source's to name.
-		// Descending reverses the waiting rows as well, because the chapters
-		// they stand for are the ones the top of that list is waiting for.
-		const arrived = chapterSource.rows.filter((row) => row.kind === 'chapter').map(chapterRow);
-		const ordered = sortAsc ? arrived : arrived.reverse();
-
-		// A search is answered from the chapters that are here — it does not wait
-		// on the rest, so it gets no waiting rows and no false "no match" — and
-		// still asks for the whole book, so browsing is never partial.
-		if (chapterQuery.trim()) {
-			const query = normalizeSearchText(chapterQuery);
-			return ordered
-				.filter((row) => row.track)
-				.map((row, order) => ({ row, order, score: chapterSearchScore(row.track, query) }))
-				.filter(({ score }) => score !== null)
-				.sort((a, b) => a.score - b.score || a.order - b.order)
-				.map(({ row }) => row);
-		}
-
-		const waiting = chapterSource.rows.filter((row) => row.kind !== 'chapter');
-		return sortAsc ? [...ordered, ...waiting] : [...waiting.reverse(), ...ordered];
+		const start = pageStart(displayPage, pageSize);
+		return Array.from({ length: windowCount(start, totalChapters, pageSize) }, (_, offset) => {
+			const index = start + offset;
+			const track = chapterSource.trackAt(index);
+			return track ? { kind: 'chapter', track, index } : { kind: 'skeleton', index };
+		});
 	});
+
+	$effect(() => {
+		const clamped = clampPage(
+			page,
+			browsingWholeBook ? orderedTracks.length : totalChapters,
+			pageSize
+		);
+		if (page !== clamped) page = clamped;
+	});
+
+	$effect(() => {
+		if (!browsingWholeBook || !chapterSource) {
+			wholeBookLoading = false;
+			return;
+		}
+		if (untrack(() => chapterSource.complete)) {
+			wholeBookLoading = false;
+			wholeBookError = false;
+			return;
+		}
+
+		let cancelled = false;
+		wholeBookLoading = true;
+		wholeBookError = false;
+		untrack(() => chapterSource.ensureAll()).then((results) => {
+			if (cancelled) return;
+			wholeBookLoading = false;
+			wholeBookError = results.some((ready) => !ready);
+		});
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (highlightedIndex === null) return;
+		const timer = setTimeout(() => (highlightedIndex = null), 2500);
+		return () => clearTimeout(timer);
+	});
+
+	async function revealChapter(index) {
+		highlightedIndex = index;
+		await tick();
+		const row = playlistEl?.querySelector(`[data-track-index="${index}"]`);
+		row?.scrollIntoView({
+			block: 'center',
+			behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+		});
+		row?.querySelector('button')?.focus({ preventScroll: true });
+	}
+
+	async function goToPage(nextPage, { focusIndex = null } = {}) {
+		if (!chapterSource) return false;
+		const target = clampPage(
+			nextPage,
+			browsingWholeBook ? orderedTracks.length : totalChapters,
+			pageSize
+		);
+		const version = ++navigationVersion;
+		page = target;
+		pageError = false;
+		highlightedIndex = null;
+		jumpError = '';
+		navigationMessage = '';
+		jumpPending = false;
+
+		if (browsingWholeBook) {
+			await tick();
+			if (version !== navigationVersion) return false;
+			playlistEl?.scrollTo({ top: 0 });
+			if (focusIndex !== null) await revealChapter(focusIndex);
+			return version === navigationVersion;
+		}
+
+		const ready = await chapterSource.ensure(pageStart(target, pageSize));
+		if (version !== navigationVersion) return false;
+		if (!ready) {
+			pageError = true;
+			return false;
+		}
+		await tick();
+		if (version !== navigationVersion) return false;
+		playlistEl?.scrollTo({ top: 0 });
+		if (focusIndex !== null) await revealChapter(focusIndex);
+		return version === navigationVersion;
+	}
+
+	function updateChapterQuery(value) {
+		navigationVersion += 1;
+		chapterQuery = value;
+		page = 1;
+		pageError = false;
+		highlightedIndex = null;
+		jumpError = '';
+		navigationMessage = '';
+		jumpPending = false;
+	}
+
+	async function jumpToChapter(event) {
+		event.preventDefault();
+		const number = parseChapterNumber(jumpInput);
+		if (number === null) {
+			navigationVersion += 1;
+			jumpPending = false;
+			jumpError = t.jumpInvalid;
+			return;
+		}
+
+		const version = ++navigationVersion;
+		jumpPending = true;
+		jumpError = '';
+		navigationMessage = '';
+		pageError = false;
+		highlightedIndex = null;
+		chapterQuery = '';
+		sortAsc = true;
+
+		const result = await chapterSource.jumpToNumber(number);
+		if (version !== navigationVersion) return;
+		jumpPending = false;
+
+		if (result.status === 'not-found') {
+			jumpError = t.jumpNotFound(number);
+			return;
+		}
+		if (result.status !== 'found') {
+			jumpError = t.jumpError;
+			return;
+		}
+
+		page = clampPage(Math.floor(result.ordinal / pageSize) + 1, totalChapters, pageSize);
+		await revealChapter(result.ordinal);
+		navigationMessage = t.jumpFound(number);
+	}
+
+	async function retryWholeBook() {
+		const version = navigationVersion;
+		wholeBookLoading = true;
+		wholeBookError = false;
+		const results = await chapterSource.ensureAll();
+		if (version !== navigationVersion) return;
+		wholeBookLoading = false;
+		wholeBookError = results.some((ready) => !ready);
+	}
 
 	// FLIP: measure before the reorder, flush the DOM, then play from old → new.
 	function toggleSort() {
@@ -596,7 +757,14 @@
 					[...playlistEl.children].map((li) => [li.dataset.trackId, li.getBoundingClientRect().top])
 				)
 			: null;
+		navigationVersion += 1;
 		sortAsc = !sortAsc;
+		page = 1;
+		pageError = false;
+		highlightedIndex = null;
+		jumpError = '';
+		navigationMessage = '';
+		jumpPending = false;
 		if (!first || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 		flushSync();
 		for (const li of playlistEl.children) {
@@ -944,6 +1112,30 @@
 				</div>
 			</div>
 
+			{#if chapterSource}
+				<form onsubmit={jumpToChapter} class="flex flex-col gap-2 sm:flex-row sm:items-end">
+					<label class="grow">
+						<span class="mb-1 block text-sm font-medium text-dark/70">{t.goToChapter}</span>
+						<input
+							type="text"
+							inputmode="numeric"
+							autocomplete="off"
+							bind:value={jumpInput}
+							placeholder={t.chapterNumber}
+							aria-label={t.chapterNumber}
+							class="w-full rounded-lg border-2 border-dark/15 bg-white px-3 py-2 text-sm text-dark outline-none placeholder:text-dark/40 focus:border-primary"
+						/>
+					</label>
+					<button
+						type="submit"
+						disabled={jumpPending}
+						class="min-h-11 rounded-lg bg-primary px-5 text-sm font-semibold text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						{jumpPending ? t.loading : t.go}
+					</button>
+				</form>
+			{/if}
+
 			<label class="relative block">
 				<span class="sr-only">{t.searchLabel}</span>
 				<svg
@@ -958,14 +1150,93 @@
 				<input
 					type="search"
 					value={chapterQuery}
-					oninput={(event) => (chapterQuery = event.currentTarget.value)}
+					oninput={(event) => updateChapterQuery(event.currentTarget.value)}
 					placeholder={t.searchPlaceholder}
 					aria-label={t.searchAria}
 					class="w-full rounded-lg border-2 border-dark/15 bg-white py-2 pr-3 pl-9 text-sm text-dark outline-none placeholder:text-dark/40 focus:border-primary"
 				/>
 			</label>
+
+			{#if jumpError}
+				<p class="text-sm text-accent-red" role="alert">{jumpError}</p>
+			{/if}
+
+			{#if chapterSource}
+				<nav class="flex flex-wrap items-center justify-between gap-2" aria-label={t.playlist}>
+					{#if visiblePageCount > 0}
+						<div class="flex flex-wrap items-center gap-1">
+							<button
+								class="min-h-11 rounded-lg border border-dark/15 bg-white px-3 text-sm font-medium text-dark hover:bg-dark/5 disabled:cursor-not-allowed disabled:opacity-40"
+								disabled={wholeBookBusy || displayPage <= 1}
+								onclick={() => goToPage(1)}
+							>
+								{t.firstPage}
+							</button>
+							<button
+								class="min-h-11 rounded-lg border border-dark/15 bg-white px-3 text-sm font-medium text-dark hover:bg-dark/5 disabled:cursor-not-allowed disabled:opacity-40"
+								disabled={wholeBookBusy || displayPage <= 1}
+								onclick={() => goToPage(displayPage - 1)}
+							>
+								{t.previousPage}
+							</button>
+							<span class="min-w-24 px-2 text-center text-sm text-dark/60 tabular-nums">
+								{wholeBookLoading ? t.loading : t.pageOf(displayPage, visiblePageCount)}
+							</span>
+							<button
+								class="min-h-11 rounded-lg border border-dark/15 bg-white px-3 text-sm font-medium text-dark hover:bg-dark/5 disabled:cursor-not-allowed disabled:opacity-40"
+								disabled={wholeBookBusy || displayPage >= visiblePageCount}
+								onclick={() => goToPage(displayPage + 1)}
+							>
+								{t.nextPage}
+							</button>
+							<button
+								class="min-h-11 rounded-lg border border-dark/15 bg-white px-3 text-sm font-medium text-dark hover:bg-dark/5 disabled:cursor-not-allowed disabled:opacity-40"
+								disabled={wholeBookBusy || displayPage >= visiblePageCount}
+								onclick={() => goToPage(visiblePageCount)}
+							>
+								{t.lastPage}
+							</button>
+						</div>
+					{/if}
+					<button
+						class="min-h-11 rounded-lg border border-dark/15 bg-white px-3 text-sm font-medium text-dark hover:bg-dark/5"
+						onclick={showCurrentChapter}
+					>
+						{t.showCurrentChapter}
+					</button>
+				</nav>
+			{/if}
+
+			<p class="sr-only" role="status" aria-live="polite">
+				{pageBusy ? t.loadingPage(displayPage) : navigationMessage}
+			</p>
+
+			{#if wholeBookLoading && playlistRows.length > 0}
+				<p class="text-sm text-dark/55" role="status">{t.loadingAllChapters}</p>
+			{/if}
+			{#if wholeBookError}
+				<p class="flex flex-wrap items-center gap-2 text-sm text-accent-red" role="alert">
+					{t.wholeBookError}
+					<button class="font-semibold underline" onclick={retryWholeBook}>{t.retry}</button>
+				</p>
+			{/if}
+			{#if pageError}
+				<p class="flex flex-wrap items-center gap-2 text-sm text-accent-red" role="alert">
+					{t.pageError}
+					<button class="font-semibold underline" onclick={() => goToPage(displayPage)}>
+						{t.retry}
+					</button>
+				</p>
+			{/if}
+
 			{#if playlistRows.length === 0}
-				<p class="py-6 text-center text-sm text-dark/55">{t.noMatch}</p>
+				{#if wholeBookLoading}
+					<p class="py-6 text-center text-sm text-dark/55" role="status">
+						{t.loadingAllChapters}
+					</p>
+				{:else if !browsingWholeBook || chapterSource?.complete}
+					<p class="py-6 text-center text-sm text-dark/55">{t.noMatch}</p>
+				{/if}
 			{:else}
 				<!-- The wrapper is what the now-playing bar is positioned against, so the
 				     bar can overlay an edge of the list without taking a row of its own
@@ -974,17 +1245,21 @@
 					<ol
 						bind:this={playlistEl}
 						class="custom-scrollbar flex flex-col max-h-96 overflow-y-auto divide-y divide-dark/10"
+						aria-busy={pageBusy || wholeBookLoading ? 'true' : undefined}
 					>
-						{#each playlistRows as row (row.kind === 'chapter' ? `chapter-${row.index}` : `waiting-${row.start ?? 'rest'}`)}
+						{#each playlistRows as row (row.kind === 'chapter' ? `chapter-${row.index}` : `skeleton-${row.index}`)}
 							{#if row.kind === 'chapter' && row.track}
 								{@const index = row.index}
 								{@const track = row.track}
 								{@const active = isCurrent(track)}
 								<li data-track-index={index} data-track-id={track.id} use:observeRow={active}>
 									<button
-										class="flex w-full items-center gap-3 border-l-2 px-2 py-2 text-left transition-colors {active
-											? 'border-primary bg-primary/10'
-											: 'border-transparent hover:bg-dark/5'}"
+										class="flex w-full items-center gap-3 border-l-2 px-2 py-2 text-left transition-colors {highlightedIndex ===
+										index
+											? 'border-primary bg-primary/20'
+											: active
+												? 'border-primary bg-primary/10'
+												: 'border-transparent hover:bg-dark/5'}"
 										onclick={() => player.load(index, { play: true })}
 										aria-current={active ? 'true' : undefined}
 										aria-busy={player.pendingIndex === index ? 'true' : undefined}
@@ -1047,23 +1322,20 @@
 									</button>
 								</li>
 							{:else}
-								<!-- A window in flight, or a stretch of chapters nobody has
-							     fetched: the row is the handle that fetches it, and it turns
-							     into chapters as they arrive. -->
-								<li
-									class="flex w-full items-center gap-3 px-2 py-2"
-									use:windowRow={row.start ?? row.index}
-								>
+								<!-- Loading rows keep the selected page steady while it arrives. -->
+								<li class="flex w-full items-center gap-3 px-2 py-2" aria-hidden="true">
 									<span
-										class="grow min-w-0 flex flex-col gap-1.5 animate-pulse motion-reduce:animate-none"
+										class="grow min-w-0 flex flex-col gap-1.5 {pageBusy
+											? 'animate-pulse motion-reduce:animate-none'
+											: ''}"
 										aria-hidden="true"
 									>
 										<span class="h-4 w-3/5 rounded-full bg-dark/10"></span>
 										<span class="h-3 w-1/3 rounded-full bg-dark/10 md:hidden"></span>
 									</span>
-									{#if row.kind === 'gap' && row.start != null}
+									{#if row.kind === 'skeleton' && row.index === pageStart(displayPage, pageSize) && pageBusy}
 										<span class="shrink-0 text-sm text-dark/45 tabular-nums">
-											{t.loadingChapters(row.start + 1, row.start + row.count)}
+											{t.loadingPage(displayPage)}
 										</span>
 									{/if}
 								</li>
@@ -1079,7 +1351,7 @@
 							<div class="flex items-center gap-2 py-1">
 								<button
 									class="grow min-w-0 flex items-center gap-3 py-1 text-left"
-									onclick={returnToPlayhead}
+									onclick={showCurrentChapter}
 									title={t.showCurrentChapter}
 								>
 									<svg
