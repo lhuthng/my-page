@@ -3,6 +3,7 @@ import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'api.dart';
 import 'app_shell.dart';
@@ -10,6 +11,7 @@ import 'audio_handler.dart';
 import 'player_controller.dart';
 import 'progress_store.dart';
 import 'theme.dart';
+import 'updater.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +27,8 @@ Future<void> main() async {
   );
   final progress = ProgressStore();
   await progress.load();
+  final packageInfo = await PackageInfo.fromPlatform();
+  final updater = UpdateController(currentVersion: packageInfo.version);
   final player = PlayerController(api: AudiobookApi(), progress: progress);
   final audioHandler = AudiobookAudioHandler(player);
   await AudioService.init(
@@ -44,13 +48,18 @@ Future<void> main() async {
   );
   final session = await AudioSession.instance;
   await session.configure(AudioSessionConfiguration.speech());
-  runApp(AudiobooksApp(player: player));
+  runApp(AudiobooksApp(player: player, updater: updater));
 }
 
 class AudiobooksApp extends StatelessWidget {
-  const AudiobooksApp({super.key, required this.player});
+  const AudiobooksApp({
+    super.key,
+    required this.player,
+    required this.updater,
+  });
 
   final PlayerController player;
+  final UpdateController updater;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +67,7 @@ class AudiobooksApp extends StatelessWidget {
       title: 'Audiobooks',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(),
-      home: AppShell(player: player),
+      home: AppShell(player: player, updater: updater),
     );
   }
 }

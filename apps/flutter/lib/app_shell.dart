@@ -6,11 +6,13 @@ import 'screens/about_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/player_screen.dart';
 import 'theme.dart';
+import 'updater.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.player});
+  const AppShell({super.key, required this.player, required this.updater});
 
   final PlayerController player;
+  final UpdateController updater;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -82,7 +84,10 @@ class _AppShellState extends State<AppShell> {
             onOpenPlayer: () => _go(0),
             onOpenAbout: () => _go(2),
           ),
-          AboutScreen(onBack: () => _go(1)),
+          AboutScreen(
+            updater: widget.updater,
+            onBack: () => _go(1),
+          ),
         ],
       ),
     );

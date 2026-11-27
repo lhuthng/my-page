@@ -1,15 +1,14 @@
 name: Release Audiobooks
 
-# Tags of the form v1.2.3 build the macOS app and attach the zipped .app to a
-# GitHub Release. The blog deploy pipeline (deploy.yml) is unrelated and does
-# not cover apps/macos.
+# Tags of the form v1.2.3 build the Flutter macOS app and attach the zipped
+# .app to a GitHub Release. The blog deploy pipeline (deploy.yml) is unrelated.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build a release for (e.g. v0.1.0)"
+        description: "Existing tag to build a release for (e.g. v0.11.0)"
         required: true
 
 permissions:
@@ -21,66 +20,58 @@ concurrency:
 
 jobs:
   build:
-    # macos-15 matches LSMinimumSystemVersion 15.0 in Scripts/bundle.sh and
-    # ships an Xcode toolchain, so Scripts/toolchain-env.sh takes its Xcode
-    # path and no SDK pinning is needed here.
     runs-on: macos-15
-    # The package lives in apps/macos, and the repo root has an unrelated
-    # Scripts/emergency directory, so every run step is pinned to the app
-    # directory instead of relying on the default working directory.
     defaults:
       run:
-        working-directory: apps/macos
+        working-directory: apps/flutter
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Release notes compare against the previous tag.
+          fetch-depth: 0
 
-      # The tag drives the bundle version so the shipped CFBundleShortVersionString
-      # matches the release. workflow_dispatch builds the tag named in the input.
       - name: Resolve version
         id: version
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           case "$TAG" in
-            v[0-9]*) ;;
+            v[0-9]*.[0-9]*.[0-9]*) ;;
             *) echo "::error::tag '$TAG' must look like v1.2.3"; exit 1 ;;
           esac
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Show the toolchain
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.1
+          cache: true
+
+      - name: Build the macOS app
         run: |
-          # No xcode-select needed: runners already point DEVELOPER_DIR at the
-          # default Xcode, which is the path Scripts/toolchain-env.sh prefers.
-          xcodebuild -version
-          swift --version
+          flutter pub get
+          flutter build macos --release \
+            --build-name=${{ steps.version.outputs.version }} \
+            --build-number=${{ github.run_number }}
 
-      - name: Build the app bundle
-        env:
-          AUDIOBOOKS_VERSION: ${{ steps.version.outputs.version }}
-        run: ./Scripts/toolchain-env.sh ./Scripts/bundle.sh
-
-      # Ad-hoc signing means Gatekeeper will quarantine the download, so the
-      # zip is the honest artifact: recipients right-click Open on first launch.
-      # Notarization needs an Apple Developer ID and is deliberately out of
-      # scope here.
       - name: Verify the bundle
         run: |
-          APP="build/Audiobooks.app"
-          test -x "$APP/Contents/MacOS/Audiobooks"
+          APP="build/macos/Build/Products/Release/audiobooks.app"
+          test -x "$APP/Contents/MacOS/audiobooks"
           codesign --verify --deep --strict "$APP"
-          plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist"
+          test "$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")" = "${{ steps.version.outputs.version }}"
 
       - name: Package
         id: package
         run: |
-          # Zip from inside build/ so the archive holds Audiobooks.app at its
-          # root. Zipping the build/ path instead would nest it as
-          # build/Audiobooks.app, which is what a recipient sees on extract.
-          cd build
-          # -y keeps symlinks inside the bundle as symlinks in the zip.
-          zip -qry "../Audiobooks-${{ steps.version.outputs.version }}.app.zip" Audiobooks.app
-          cd ..
-          echo "asset=apps/macos/Audiobooks-${{ steps.version.outputs.version }}.app.zip" >> "$GITHUB_OUTPUT"
+          cd build/macos/Build/Products/Release
+          # Keep the .app at the archive root. The capitalised name also lets
+          # the existing SwiftUI updater find the bundle it expects.
+          mv audiobooks.app Audiobooks.app
+          ditto -c -k --sequesterRsrc --keepParent Audiobooks.app \
+            "$GITHUB_WORKSPACE/apps/flutter/Audiobooks-${{ steps.version.outputs.version }}.app.zip"
+          echo "asset=apps/flutter/Audiobooks-${{ steps.version.outputs.version }}.app.zip" >> "$GITHUB_OUTPUT"
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2

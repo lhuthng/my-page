@@ -1,15 +1,22 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../theme.dart';
+import '../updater.dart';
 import '../widgets/controls.dart';
 
 class AboutScreen extends StatelessWidget {
-  const AboutScreen({super.key, required this.onBack});
+  const AboutScreen({
+    super.key,
+    required this.updater,
+    required this.onBack,
+  });
 
+  final UpdateController updater;
   final VoidCallback onBack;
 
-  static const String version = '0.1.0';
   static const String summary =
       'A cross-platform player for the audiobooks on Huu Thang\'s Blog.';
   static const String tagline =
@@ -107,9 +114,9 @@ class AboutScreen extends StatelessWidget {
                                 color: Colors.white.withValues(alpha: 0.35),
                               ),
                             ),
-                            child: const Text(
-                              version,
-                              style: TextStyle(
+                            child: Text(
+                              updater.currentVersion,
+                              style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                                 fontFeatures: [FontFeature.tabularFigures()],
@@ -174,6 +181,10 @@ class AboutScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              if (Platform.isMacOS) ...[
+                const SizedBox(height: 12),
+                _UpdateRow(updater: updater),
+              ],
             ],
           ),
         ),
@@ -218,6 +229,133 @@ class AboutScreen extends StatelessWidget {
   }
 }
 
+class _UpdateRow extends StatelessWidget {
+  const _UpdateRow({required this.updater});
+
+  final UpdateController updater;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: updater,
+      builder: (context, _) {
+        final release = updater.release;
+        final available = updater.phase == UpdatePhase.available;
+        final failed = updater.phase == UpdatePhase.failed;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.dark.withValues(alpha: 0.14)),
+          ),
+          child: Column(
+            children: [
+              Text(
+                _status(release),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.dark,
+                ),
+              ),
+              if (available && release != null) ...[
+                if (release.size != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_sizeLabel(release.size!)} to download',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.dark.withValues(alpha: 0.55),
+                    ),
+                  ),
+                ],
+                if (release.notes != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.dark.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      release.notes!,
+                      maxLines: 6,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        height: 1.35,
+                        color: AppTheme.dark.withValues(alpha: 0.65),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+              if (updater.phase == UpdatePhase.downloading) ...[
+                const SizedBox(height: 8),
+                ProgressBar(fraction: updater.progress, height: 5),
+              ],
+              const SizedBox(height: 10),
+              if (available)
+                PillButton(
+                  title: 'Install and restart',
+                  filled: true,
+                  onPressed: () => updater.install(release!),
+                )
+              else if (!updater.isBusy)
+                PillButton(
+                  title: 'Check for updates',
+                  onPressed: () => updater.check(),
+                ),
+              if (failed && updater.message != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  updater.message!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 10,
+                    height: 1.35,
+                    color: AppTheme.dark.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _status(UpdateRelease? release) {
+    return switch (updater.phase) {
+      UpdatePhase.checking => 'Checking…',
+      UpdatePhase.upToDate =>
+        'Audiobooks ${updater.currentVersion} is up to date',
+      UpdatePhase.available => 'Version ${release?.version ?? ''} is available',
+      UpdatePhase.downloading =>
+        'Downloading… ${(updater.progress * 100).round()}%',
+      UpdatePhase.installing => 'Installing…',
+      UpdatePhase.failed => 'Update check failed',
+      UpdatePhase.idle => 'Audiobooks ${updater.currentVersion}',
+    };
+  }
+
+  String _sizeLabel(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (bytes >= 1024) return '${(bytes / 1024).round()} KB';
+    return '$bytes B';
+  }
+}
+
 class _LinkChip extends StatelessWidget {
   const _LinkChip({
     required this.icon,
@@ -248,7 +386,8 @@ class _LinkChip extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 13, color: filled ? Colors.white : AppTheme.dark),
+              Icon(icon,
+                  size: 13, color: filled ? Colors.white : AppTheme.dark),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
