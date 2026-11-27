@@ -1,7 +1,8 @@
 name: Release Audiobooks
 
-# Tags of the form v1.2.3 build the Flutter macOS app and attach the zipped
-# .app to a GitHub Release. The blog deploy pipeline (deploy.yml) is unrelated.
+# Tags of the form v1.2.3 build the Flutter macOS app and Android APK, then
+# attach both to one GitHub Release. The blog deploy pipeline (deploy.yml) is
+# unrelated.
 on:
   push:
     tags: ["v*"]
@@ -19,17 +20,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: macos-15
-    defaults:
-      run:
-        working-directory: apps/flutter
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
-        with:
-          # Release notes compare against the previous tag.
-          fetch-depth: 0
-
       - name: Resolve version
         id: version
         run: |
@@ -40,6 +36,15 @@ jobs:
           esac
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  macos:
+    needs: prepare
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: apps/flutter
+    steps:
+      - uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -52,7 +57,7 @@ jobs:
         run: |
           flutter pub get
           flutter build macos --release \
-            --build-name=${{ steps.version.outputs.version }} \
+            --build-name=${{ needs.prepare.outputs.version }} \
             --build-number=${{ github.run_number }}
 
       - name: Verify the bundle
@@ -60,23 +65,80 @@ jobs:
           APP="build/macos/Build/Products/Release/audiobooks.app"
           test -x "$APP/Contents/MacOS/audiobooks"
           codesign --verify --deep --strict "$APP"
-          test "$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")" = "${{ steps.version.outputs.version }}"
+          test "$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")" = "${{ needs.prepare.outputs.version }}"
 
       - name: Package
-        id: package
         run: |
           cd build/macos/Build/Products/Release
           # Keep the .app at the archive root. The capitalised name also lets
           # the existing SwiftUI updater find the bundle it expects.
           mv audiobooks.app Audiobooks.app
           ditto -c -k --sequesterRsrc --keepParent Audiobooks.app \
-            "$GITHUB_WORKSPACE/apps/flutter/Audiobooks-${{ steps.version.outputs.version }}.app.zip"
-          echo "asset=apps/flutter/Audiobooks-${{ steps.version.outputs.version }}.app.zip" >> "$GITHUB_OUTPUT"
+            "$GITHUB_WORKSPACE/apps/flutter/Audiobooks-${{ needs.prepare.outputs.version }}.app.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: apps/flutter/Audiobooks-${{ needs.prepare.outputs.version }}.app.zip
+          if-no-files-found: error
+
+  android:
+    needs: prepare
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/flutter
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.1
+          cache: true
+
+      - name: Build the Android APK
+        run: |
+          flutter pub get
+          # The template signs release with the debug key so this APK can be
+          # sideloaded directly. Replace that with a release keystore before
+          # distributing through Play.
+          flutter build apk --release \
+            --build-name=${{ needs.prepare.outputs.version }} \
+            --build-number=${{ github.run_number }}
+
+      - name: Package
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "Audiobooks-${{ needs.prepare.outputs.version }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apps/flutter/Audiobooks-${{ needs.prepare.outputs.version }}.apk
+          if-no-files-found: error
+
+  publish:
+    needs: [prepare, macos, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Audiobooks ${{ steps.version.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Audiobooks ${{ needs.prepare.outputs.version }}
           generate_release_notes: true
-          files: ${{ steps.package.outputs.asset }}
+          files: |
+            dist/*.app.zip
+            dist/*.apk

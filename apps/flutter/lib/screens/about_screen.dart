@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../theme.dart';
 import '../updater.dart';
 import '../widgets/controls.dart';
+import '../widgets/logo_mark.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({
@@ -87,10 +88,9 @@ class AboutScreen extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          const Icon(
-                            Icons.headphones_rounded,
-                            size: 64,
-                            color: Colors.white,
+                          const SizedBox(
+                            width: 108,
+                            child: LogoMark(color: Colors.white),
                           ),
                           const SizedBox(height: 12),
                           const Text(
