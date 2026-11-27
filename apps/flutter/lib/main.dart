@@ -1,9 +1,13 @@
+import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'api.dart';
 import 'app_shell.dart';
+import 'audio_handler.dart';
+import 'player_controller.dart';
 import 'progress_store.dart';
 import 'theme.dart';
 
@@ -21,14 +25,32 @@ Future<void> main() async {
   );
   final progress = ProgressStore();
   await progress.load();
-  runApp(AudiobooksApp(api: AudiobookApi(), progress: progress));
+  final player = PlayerController(api: AudiobookApi(), progress: progress);
+  final audioHandler = AudiobookAudioHandler(player);
+  await AudioService.init(
+    builder: () => audioHandler,
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'site.huuthangle.audiobooks.audio',
+      androidNotificationChannelName: 'Audiobook playback',
+      androidNotificationChannelDescription:
+          'Controls for the current audiobook',
+      notificationColor: Color(0xFF7A86B6),
+      androidStopForegroundOnPause: false,
+      fastForwardInterval: Duration(seconds: 30),
+      rewindInterval: Duration(seconds: 15),
+      artDownscaleWidth: 600,
+      artDownscaleHeight: 600,
+    ),
+  );
+  final session = await AudioSession.instance;
+  await session.configure(AudioSessionConfiguration.speech());
+  runApp(AudiobooksApp(player: player));
 }
 
 class AudiobooksApp extends StatelessWidget {
-  const AudiobooksApp({super.key, required this.api, required this.progress});
+  const AudiobooksApp({super.key, required this.player});
 
-  final AudiobookApi api;
-  final ProgressStore progress;
+  final PlayerController player;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +58,7 @@ class AudiobooksApp extends StatelessWidget {
       title: 'Audiobooks',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(),
-      home: AppShell(api: api, progress: progress),
+      home: AppShell(player: player),
     );
   }
 }

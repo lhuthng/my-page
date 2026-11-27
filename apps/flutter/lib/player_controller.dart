@@ -135,8 +135,8 @@ class PlayerController extends ChangeNotifier {
         index = match >= 0
             ? match
             : store.total == 0
-            ? 0
-            : saved.trackIndex.clamp(0, store.total - 1);
+                ? 0
+                : saved.trackIndex.clamp(0, store.total - 1);
         resumeAt = saved.time > 3 ? saved.time : null;
         if (saved.rate >= 0.5 && saved.rate <= 3) _rate = saved.rate;
       }
@@ -166,7 +166,7 @@ class PlayerController extends ChangeNotifier {
     if (time == null) return;
     _clearResumePrompt();
     await seek(time);
-    await player.play();
+    await play();
     notifyListeners();
   }
 
@@ -202,13 +202,25 @@ class PlayerController extends ChangeNotifier {
     await _load(autoplay: true);
   }
 
+  Future<void> play() async {
+    if (currentTrack == null) return;
+    _clearResumePrompt();
+    await player.play();
+  }
+
+  Future<void> pause() => player.pause();
+
+  Future<void> stop() async {
+    await player.pause();
+    _saveProgress();
+  }
+
   Future<void> togglePlayPause() async {
     if (currentTrack == null) return;
     if (_isPlaying) {
-      await player.pause();
+      await pause();
     } else {
-      _clearResumePrompt();
-      await player.play();
+      await play();
     }
   }
 
@@ -229,9 +241,8 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> seek(double seconds) async {
-    final double clamped = seconds
-        .clamp(0, _duration > 0 ? _duration : 0)
-        .toDouble();
+    final double clamped =
+        seconds.clamp(0, _duration > 0 ? _duration : 0).toDouble();
     _position = clamped;
     _lastSaved = clamped;
     notifyListeners();
@@ -241,9 +252,7 @@ class PlayerController extends ChangeNotifier {
 
   void scrubPreview(double seconds) {
     _scrubbing = true;
-    _scrubTarget = seconds
-        .clamp(0, _duration > 0 ? _duration : 0)
-        .toDouble();
+    _scrubTarget = seconds.clamp(0, _duration > 0 ? _duration : 0).toDouble();
     _position = _scrubTarget;
     notifyListeners();
   }
@@ -341,12 +350,9 @@ class PlayerController extends ChangeNotifier {
     final track = currentTrack;
     if (book == null || track == null) return;
     if (track.id != _lastBeaconTrackId) return;
-    api
-        .recordPlay(audiobookId: book.id, trackId: track.id)
-        .then((total) {
-          if (total != null) _chapters?.setPlayCount(track.id, total);
-        })
-        .ignore();
+    api.recordPlay(audiobookId: book.id, trackId: track.id).then((total) {
+      if (total != null) _chapters?.setPlayCount(track.id, total);
+    }).ignore();
   }
 
   void _maybeSaveProgress() {

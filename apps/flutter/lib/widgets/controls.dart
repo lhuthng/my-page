@@ -338,12 +338,13 @@ class _MarqueeLineState extends State<MarqueeLine>
 
   @override
   Widget build(BuildContext context) {
+    final style = widget.style.copyWith(height: 1.2);
     return SizedBox(
       height: widget.height,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final painter = TextPainter(
-            text: TextSpan(text: widget.text, style: widget.style),
+            text: TextSpan(text: widget.text, style: style),
             maxLines: 1,
             textDirection: TextDirection.ltr,
           )..layout();
@@ -356,7 +357,7 @@ class _MarqueeLineState extends State<MarqueeLine>
                 widget.text,
                 maxLines: 1,
                 overflow: TextOverflow.clip,
-                style: widget.style,
+                style: style,
               ),
             );
           }
@@ -377,7 +378,7 @@ class _MarqueeLineState extends State<MarqueeLine>
                 child: Text(
                   widget.text,
                   maxLines: 1,
-                  style: widget.style,
+                  style: style,
                 ),
               ),
             ),

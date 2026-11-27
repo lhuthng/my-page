@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
 
-import 'api.dart';
 import 'models.dart';
 import 'player_controller.dart';
-import 'progress_store.dart';
 import 'screens/about_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/player_screen.dart';
 import 'theme.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.api, required this.progress});
+  const AppShell({super.key, required this.player});
 
-  final AudiobookApi api;
-  final ProgressStore progress;
+  final PlayerController player;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -27,21 +24,22 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    _player = PlayerController(api: widget.api, progress: widget.progress);
+    _player = widget.player;
     _player.addListener(_guardPlayerPage);
   }
 
   @override
   void dispose() {
     _player.removeListener(_guardPlayerPage);
-    _player.dispose();
     _pages.dispose();
     super.dispose();
   }
 
   void _guardPlayerPage() {
     if (_page != 0) return;
-    if (_player.opening || _player.book != null || _player.error != null) return;
+    if (_player.opening || _player.book != null || _player.error != null) {
+      return;
+    }
     _go(1);
   }
 
@@ -78,7 +76,7 @@ class _AppShellState extends State<AppShell> {
         children: [
           PlayerScreen(player: _player, onBack: () => _go(1)),
           LibraryScreen(
-            api: widget.api,
+            api: _player.api,
             player: _player,
             onOpenBook: _openBook,
             onOpenPlayer: () => _go(0),
